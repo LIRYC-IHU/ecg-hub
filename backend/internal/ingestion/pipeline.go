@@ -1,0 +1,144 @@
+// Package ingestion handles ECG file reception and routing through the processing pipeline.
+// The FTP server receives files and pushes them onto an IngestQueue.
+// The Dispatcher (Story 2.3) consumes the queue and routes each file to the correct vendor adapter.
+package ingestion
+
+import (
+	"context"
+	"log/slog"
+	"sync"
+
+	"github.com/LIRYC-IHU/ecg-hub/internal/module"
+)
+
+// IngestItem represents a file received by the FTP server, ready for ingestion.
+// Data holds the complete file bytes — partial uploads (dropped connections) are never
+// included; the FTP layer discards them before pushing.
+type IngestItem struct {
+	// Filename is the base filename as uploaded by the FTP client (e.g. "ecg_20240312.xml").
+	Filename string
+	// Data is the complete raw file content.
+	Data []byte
+}
+
+// IngestQueue carries IngestItems from the FTP receiver to the ingestion pipeline.
+// It is a buffered channel — the buffer absorbs bursts of simultaneous uploads
+// without blocking the FTP layer.
+type IngestQueue chan IngestItem
+
+// NewIngestQueue creates an IngestQueue with the given buffer size.
+// A bufSize of 0 creates an unbuffered channel (synchronous — use for testing only).
+func NewIngestQueue(bufSize int) IngestQueue {
+	return make(IngestQueue, bufSize)
+}
+
+// RoutedItem is produced by the Dispatcher after a file has been successfully matched
+// to a vendor module and parsed. Story 2.4 consumes this queue to persist the file
+// and metadata to disk and database.
+type RoutedItem struct {
+	// IngestItem is the original file received from the FTP server.
+	IngestItem IngestItem
+	// Meta is the normalized ECG metadata extracted by the vendor module.
+	Meta *module.ECGMetadata
+	// ModuleName is the Name() of the module that processed this file.
+	ModuleName string
+}
+
+// RoutedQueue carries RoutedItems from the adapter routing step to the storage step.
+// Files that cannot be routed (unknown extension or parse failure) are not pushed here;
+// they are logged for quarantine (Story 6.1).
+type RoutedQueue chan RoutedItem
+
+// NewRoutedQueue creates a RoutedQueue with the given buffer size.
+// A bufSize of 0 creates an unbuffered channel (synchronous — use for testing only).
+func NewRoutedQueue(bufSize int) RoutedQueue {
+	return make(RoutedQueue, bufSize)
+}
+
+// Dispatcher consumes IngestItems from the IngestQueue, routes each file to the
+// correct vendor adapter via the Router, and pushes successfully-routed items onto
+// the RoutedQueue. Files that cannot be routed or fail to parse are sent to the
+// optional QuarantineRecorder and not forwarded.
+type Dispatcher struct {
+	ingest     IngestQueue
+	routed     RoutedQueue
+	router     *Router
+	quarantine QuarantineRecorder // optional; nil disables quarantine recording
+	ctx        context.Context
+	cancel     context.CancelFunc
+	startOnce  sync.Once
+	done       chan struct{}
+}
+
+// NewDispatcher creates a Dispatcher. Call Start() exactly once to begin consuming
+// the IngestQueue.
+func NewDispatcher(ingest IngestQueue, routed RoutedQueue, router *Router) *Dispatcher {
+	ctx, cancel := context.WithCancel(context.Background())
+	return &Dispatcher{
+		ingest: ingest,
+		routed: routed,
+		router: router,
+		ctx:    ctx,
+		cancel: cancel,
+		done:   make(chan struct{}),
+	}
+}
+
+// WithQuarantineRecorder attaches a QuarantineRecorder to the Dispatcher.
+// When set, failed files are recorded (disk + DB) instead of just logged.
+// Returns d for chaining.
+func (d *Dispatcher) WithQuarantineRecorder(q QuarantineRecorder) *Dispatcher {
+	d.quarantine = q
+	return d
+}
+
+// Start launches the dispatcher goroutine. Safe to call multiple times — only the
+// first call starts the goroutine (subsequent calls are no-ops via sync.Once).
+func (d *Dispatcher) Start() {
+	d.startOnce.Do(func() { go d.run() })
+}
+
+// Stop signals the dispatcher goroutine to exit via context cancellation.
+// Returns immediately — use Done() to wait for the goroutine to exit.
+func (d *Dispatcher) Stop() { d.cancel() }
+
+// Done returns a channel that is closed when the dispatcher goroutine has exited.
+// Use after Stop() to confirm clean shutdown.
+func (d *Dispatcher) Done() <-chan struct{} { return d.done }
+
+// run is the dispatcher main loop. It reads from IngestQueue, routes each item,
+// and pushes successfully-routed items onto RoutedQueue.
+func (d *Dispatcher) run() {
+	defer close(d.done)
+	for {
+		select {
+		case <-d.ctx.Done():
+			// Log any items left in the ingest queue that will not be processed.
+			if n := len(d.ingest); n > 0 {
+				slog.Warn("ingestion: dispatcher stopped with unprocessed items",
+					"count", n)
+			}
+			return
+		case item := <-d.ingest:
+			ri, reason, ok := d.router.Route(d.ctx, item)
+			if !ok {
+				if d.quarantine != nil {
+					if err := d.quarantine.Record(d.ctx, item.Filename, item.Data, reason); err != nil {
+						slog.Error("ingestion: quarantine record failed",
+							"filename", item.Filename, "error", err)
+					}
+				}
+				continue
+			}
+			select {
+			case d.routed <- ri:
+				slog.Info("ingestion: item routed",
+					"filename", ri.IngestItem.Filename,
+					"module", ri.ModuleName)
+			default:
+				slog.Error("ingestion: routed queue full, dropping item",
+					"filename", ri.IngestItem.Filename)
+			}
+		}
+	}
+}
