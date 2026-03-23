@@ -6,6 +6,7 @@ import (
 
 	config "github.com/LIRYC-IHU/ecg-hub/internal/config"
 	dbpkg "github.com/LIRYC-IHU/ecg-hub/internal/db"
+	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
 )
 
 func main() {
@@ -44,4 +45,6 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Step 2c: Create user repository — used by auth providers to register logins in DB.
+	userRepo := repository.NewUserRepo(gormDB)
 }
