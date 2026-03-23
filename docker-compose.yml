@@ -1,0 +1,50 @@
+services:
+  # db:
+  #   image: postgres:16-alpine
+  #   environment:
+  #     POSTGRES_DB: ecghub
+  #     POSTGRES_USER: ${DB_USER}
+  #     POSTGRES_PASSWORD: ${DB_PASSWORD}
+  #   volumes:
+  #     - postgres-data:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ecghub"]
+  #     interval: 5s
+  #     timeout: 5s
+  #     retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    env_file: .env
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      # IT: replace named volumes below with bind mounts to mount external storage, e.g.:
+      # - ecg-storage:/data/ecg
+      # - ecg-quarantine:/data/ecg-quarantine
+    expose:
+      - "4444"
+    ports:
+      - "2121:2121"
+      - "30000-30010:30000-30010"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+
+volumes:
+  # postgres-data:
+  # IT: to use an external pre-created volume, replace with:
+  #   ecg-storage:
+  #     external: true
+  #     name: my-ecg-volume
+  ecg-storage:
+  ecg-quarantine:
