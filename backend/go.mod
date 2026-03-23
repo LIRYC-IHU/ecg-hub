@@ -3,12 +3,16 @@ module github.com/LIRYC-IHU/ecg-hub
 go 1.25.1
 
 require (
+	github.com/apaladiychuk/go-dicom v0.0.6
+	github.com/apaladiychuk/go-netdicom v0.0.3
 	github.com/coreos/go-oidc/v3 v3.17.0
+	github.com/fclairamb/ftpserverlib v0.30.0
 	github.com/go-ldap/ldap/v3 v3.4.13
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
 	github.com/labstack/echo/v4 v4.15.1
 	github.com/pressly/goose/v3 v3.27.0
+	github.com/spf13/afero v1.15.0
 	github.com/spf13/viper v1.21.0
 	github.com/suyashkumar/dicom v1.1.0
 	github.com/swaggo/echo-swagger v1.5.2
@@ -32,6 +36,7 @@ require (
 	github.com/go-openapi/swag v0.22.3 // indirect
 	github.com/go-sql-driver/mysql v1.9.3 // indirect
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
+	github.com/gobwas/glob v0.0.0-20170212200151-51eb1ee00b6d // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/pgx/v5 v5.8.0 // indirect
@@ -49,7 +54,6 @@ require (
 	github.com/sagikazarmark/locafero v0.11.0 // indirect
 	github.com/sethvargo/go-retry v0.3.0 // indirect
 	github.com/sourcegraph/conc v0.3.1-0.20240121214520-5f936abd7ae8 // indirect
-	github.com/spf13/afero v1.15.0 // indirect
 	github.com/spf13/cast v1.10.0 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
