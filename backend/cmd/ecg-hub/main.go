@@ -9,6 +9,8 @@ import (
 	config "github.com/LIRYC-IHU/ecg-hub/internal/config"
 	dbpkg "github.com/LIRYC-IHU/ecg-hub/internal/db"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
+	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 )
 
 func main() {
@@ -57,5 +59,41 @@ func main() {
 		slog.Error("FATAL: " + err.Error())
 		os.Exit(1)
 	}
+	e := echo.New()
+	e.HideBanner = true
 
+	// Middleware: recover from panics, structured logging.
+	e.Use(middleware.Recover())
+	e.Use(middleware.RequestLoggerWithConfig(middleware.RequestLoggerConfig{
+		LogStatus: true,
+		LogURI:    true,
+		LogMethod: true,
+		LogValuesFunc: func(c echo.Context, v middleware.RequestLoggerValues) error {
+			slog.Info("request",
+				"method", v.Method,
+				"uri", v.URI,
+				"status", v.Status,
+			)
+			return nil
+		},
+	}))
+
+	// Step 4: Register all API routes (Story 1.5).
+	// Build ECGBridge — maps vendor names to conversion binaries.
+	// Add new vendors here when ecg-bridge publishes new tools.
+	binaries := map[string]string{
+		"philips": envOr("BRIDGE_PHILIPS_TO_FDA", "philips-to-fda"),
+		// "muse":  envOr("BRIDGE_MUSE_TO_FDA", "muse-to-fda"),   // uncomment when available
+		// "mfer":  envOr("BRIDGE_MFER_TO_FDA", "mfer-to-fda"),   // uncomment when available
+		// "dicom": envOr("BRIDGE_DICOM_TO_FDA", "dicom-to-fda"), // uncomment when published
+	}
+
+}
+
+// envOr returns the value of the environment variable key, or fallback if unset or empty.
+func envOr(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
 }
