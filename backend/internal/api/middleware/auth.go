@@ -1,0 +1,125 @@
+package middleware
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"strings"
+
+	"github.com/labstack/echo/v4"
+
+	"github.com/LIRYC-IHU/ecg-hub/internal/auth"
+)
+
+// Echo context keys for authenticated user data.
+// Downstream handlers must use these constants — never raw strings.
+const (
+	CtxKeyUserID = "user_id"
+	CtxKeyRole   = "role"
+)
+
+// RoleResolver resolves the current role for a user from persistent storage.
+// Implemented by repository.UserRepo — injected to avoid import cycles.
+type RoleResolver interface {
+	GetCurrentRole(ctx context.Context, externalID string) (string, error)
+}
+
+// AuthMiddleware validates the JWT on every request.
+// Token resolution order: HttpOnly cookie "jwt" → Authorization: Bearer header.
+// Role resolution: DB (live, reflects admin changes immediately) → JWT fallback.
+// On success it injects CtxKeyUserID and CtxKeyRole into the Echo context.
+// On failure it returns 401 {"code":"UNAUTHENTICATED","message":"..."}.
+//
+// Apply to protected route groups only — /healthz and /swagger must remain public.
+func AuthMiddleware(provider auth.Provider, roleResolver RoleResolver) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			rawToken := extractToken(c)
+			if rawToken == "" {
+				return c.JSON(http.StatusUnauthorized, APIError("UNAUTHENTICATED", "missing or invalid token"))
+			}
+
+			claims, err := provider.ValidateToken(c.Request().Context(), rawToken)
+			if err != nil {
+				return c.JSON(http.StatusUnauthorized, APIError("UNAUTHENTICATED", "invalid or expired token"))
+			}
+
+			// Resolve role from DB so admin changes take effect immediately,
+			// without requiring the user to log out and back in.
+			role := claims.Role
+			if dbRole, err := roleResolver.GetCurrentRole(c.Request().Context(), claims.Sub); err == nil && dbRole != "" {
+				role = dbRole
+			}
+
+			c.Set(CtxKeyUserID, claims.Sub)
+			c.Set(CtxKeyRole, role)
+			return next(c)
+		}
+	}
+}
+
+// extractToken returns the raw JWT from the request.
+// Prefers the HttpOnly "jwt" cookie (browser flow); falls back to Authorization: Bearer (API clients).
+func extractToken(c echo.Context) string {
+	if cookie, err := c.Cookie("jwt"); err == nil && cookie.Value != "" {
+		return cookie.Value
+	}
+	header := c.Request().Header.Get("Authorization")
+	if strings.HasPrefix(header, "Bearer ") {
+		return strings.TrimPrefix(header, "Bearer ")
+	}
+	return ""
+}
+
+// RequireRole returns a middleware that enforces a minimum role level.
+// Role hierarchy: "admin" satisfies any required role, including "reader".
+// On failure it returns 403 {"code":"INSUFFICIENT_ROLE","message":"..."}.
+//
+// Must be applied AFTER AuthMiddleware (requires CtxKeyRole to be set).
+func RequireRole(required string) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			userRole, _ := c.Get(CtxKeyRole).(string)
+			if !roleAllowed(userRole, required) {
+				return c.JSON(http.StatusForbidden, APIError("INSUFFICIENT_ROLE", fmt.Sprintf("requires %s role", required)))
+			}
+			return next(c)
+		}
+	}
+}
+
+// RequirePermission returns a middleware that checks whether the authenticated user's role
+// has the specified permission. Must be applied AFTER AuthMiddleware.
+// Returns 403 if the role lacks the permission.
+func RequirePermission(checker interface {
+	HasPermission(ctx context.Context, role, permission string) bool
+}, permission string) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			role, _ := c.Get(CtxKeyRole).(string)
+			if !checker.HasPermission(c.Request().Context(), role, permission) {
+				return c.JSON(http.StatusForbidden, APIError("FORBIDDEN", fmt.Sprintf("requires permission %s", permission)))
+			}
+			return next(c)
+		}
+	}
+}
+
+// roleAllowed returns true if userRole meets the required role level.
+// Role hierarchy: admin > writer > reader.
+func roleAllowed(userRole, required string) bool {
+	const (
+		roleReader = 1
+		roleWriter = 2
+		roleAdmin  = 3
+	)
+	level := map[string]int{"reader": roleReader, "writer": roleWriter, "admin": roleAdmin}
+	return level[userRole] >= level[required]
+}
+
+// APIError builds the standard ECG Hub error response body.
+// Format: {"code": "...", "message": "..."} — defined in architecture doc.
+// Exported so handlers and other packages share a single implementation.
+func APIError(code, message string) map[string]string {
+	return map[string]string{"code": code, "message": message}
+}
