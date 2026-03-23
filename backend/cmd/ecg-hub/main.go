@@ -1,9 +1,11 @@
 package main
 
 import (
+	"context"
 	"log/slog"
 	"os"
 
+	"github.com/LIRYC-IHU/ecg-hub/internal/auth"
 	config "github.com/LIRYC-IHU/ecg-hub/internal/config"
 	dbpkg "github.com/LIRYC-IHU/ecg-hub/internal/db"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
@@ -47,4 +49,13 @@ func main() {
 
 	// Step 2c: Create user repository — used by auth providers to register logins in DB.
 	userRepo := repository.NewUserRepo(gormDB)
+
+	// Step 3: Initialize auth provider — OIDC or LDAP (Story 1.4).
+	// The server must not start if the auth provider cannot be initialized (fail-fast).
+	authProvider, err := auth.New(context.Background(), cfg, userRepo)
+	if err != nil {
+		slog.Error("FATAL: " + err.Error())
+		os.Exit(1)
+	}
+
 }
