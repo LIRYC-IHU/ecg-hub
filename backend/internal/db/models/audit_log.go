@@ -11,10 +11,10 @@ import (
 // Valid actions: "patient_search", "patient_ecg_list", "ecg_download", "quarantine_decision", "hl7_force"
 type AuditLog struct {
 	ID        uint      `gorm:"primaryKey"`
-	CreatedAt time.Time
+	CreatedAt time.Time `gorm:"index"`
 	// No UpdatedAt — audit logs are append-only. UpdatedAt is intentionally absent.
-	UserID     string         `gorm:"not null"`
+	UserID     string         `gorm:"not null;index"`
 	Action     string         `gorm:"not null"`
-	ResourceID string         `gorm:"not null"`
+	ResourceID string         `gorm:"not null;index"`
 	Details    datatypes.JSON `gorm:"type:jsonb;not null;default:'{}'"`
 }
