@@ -21,7 +21,7 @@ type Patient struct {
 
 	// Fields populated by HL7 enrichment — may be empty until HL7 succeeds.
 	FirstName   string
-	LastName    string
+	LastName    string `gorm:"index"`
 	DateOfBirth *time.Time
 	Gender      string
 
