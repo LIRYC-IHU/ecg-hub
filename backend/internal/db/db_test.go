@@ -1,9 +1,7 @@
 package db
 
 import (
-	"database/sql"
 	"os"
-	"strings"
 	"testing"
 
 	"github.com/LIRYC-IHU/ecg-hub/internal/config"
@@ -27,28 +25,12 @@ func TestOpen_EmptyURL(t *testing.T) {
 	}
 }
 
-func TestMigrationFiles_ValidGooseHeaders(t *testing.T) {
-	entries, err := migrationFS.ReadDir("migrations")
-	if err != nil {
-		t.Fatalf("failed to read embedded migrations: %v", err)
-	}
-	if len(entries) == 0 {
-		t.Fatal("no migration files found in embedded FS")
-	}
-	for _, e := range entries {
-		t.Run(e.Name(), func(t *testing.T) {
-			content, err := migrationFS.ReadFile("migrations/" + e.Name())
-			if err != nil {
-				t.Fatalf("failed to read %s: %v", e.Name(), err)
-			}
-			body := string(content)
-			if !strings.Contains(body, "-- +goose Up") {
-				t.Errorf("%s missing '-- +goose Up' annotation", e.Name())
-			}
-			if !strings.Contains(body, "-- +goose Down") {
-				t.Errorf("%s missing '-- +goose Down' annotation", e.Name())
-			}
-		})
+func TestOpen_DBUnreachable(t *testing.T) {
+	// 127.0.0.1:9999 is always refused (no server listening) — no real DB needed.
+	cfg := &config.Config{DatabaseURL: "postgres://user:pass@127.0.0.1:9999/nonexistent"}
+	_, err := Open(cfg)
+	if err == nil {
+		t.Fatal("expected error for unreachable DB, got nil")
 	}
 }
 
@@ -61,18 +43,21 @@ func TestRunMigrations_CreatesAllTables(t *testing.T) {
 		t.Skipf("TEST_DATABASE_URL not set — skipping integration test")
 	}
 
-	sqlDB, err := sql.Open("pgx", dsn)
+	db, err := Open(&config.Config{DatabaseURL: dsn})
 	if err != nil {
-		t.Fatalf("sql.Open: %v", err)
+		t.Fatalf("Open: %v", err)
 	}
-	defer sqlDB.Close()
-
-	if err := RunMigrations(sqlDB); err != nil {
+	if err := RunMigrations(db); err != nil {
 		t.Fatalf("RunMigrations: %v", err)
 	}
 
-	// Verify all expected tables exist.
-	tables := []string{"patients", "ecgs", "audit_logs", "ecg_buffer", "goose_db_version"}
+	sqlDB, _ := db.DB()
+	defer sqlDB.Close()
+
+	tables := []string{
+		"patients", "ecgs", "audit_logs", "quarantine_entries",
+		"export_jobs", "export_job_ecgs", "roles", "role_permissions", "ecg_hub_users",
+	}
 	for _, table := range tables {
 		var exists bool
 		row := sqlDB.QueryRow(
@@ -95,26 +80,48 @@ func TestRunMigrations_IdempotentOnRestart(t *testing.T) {
 		t.Skipf("TEST_DATABASE_URL not set — skipping integration test")
 	}
 
-	sqlDB, err := sql.Open("pgx", dsn)
+	db, err := Open(&config.Config{DatabaseURL: dsn})
 	if err != nil {
-		t.Fatalf("sql.Open: %v", err)
+		t.Fatalf("Open: %v", err)
 	}
+	sqlDB, _ := db.DB()
 	defer sqlDB.Close()
 
 	// Run twice — second run must not return an error.
-	if err := RunMigrations(sqlDB); err != nil {
+	if err := RunMigrations(db); err != nil {
 		t.Fatalf("first RunMigrations: %v", err)
 	}
-	if err := RunMigrations(sqlDB); err != nil {
+	if err := RunMigrations(db); err != nil {
 		t.Fatalf("second RunMigrations (idempotency check): %v", err)
 	}
 }
 
-func TestOpen_DBUnreachable(t *testing.T) {
-	// 127.0.0.1:9999 is always refused (no server listening) — no real DB needed.
-	cfg := &config.Config{DatabaseURL: "postgres://user:pass@127.0.0.1:9999/nonexistent"}
-	_, err := Open(cfg)
-	if err == nil {
-		t.Fatal("expected error for unreachable DB, got nil")
+func TestRunMigrations_SeedsBuiltinRoles(t *testing.T) {
+	dsn := os.Getenv("TEST_DATABASE_URL")
+	if dsn == "" {
+		t.Skipf("TEST_DATABASE_URL not set — skipping integration test")
+	}
+
+	db, err := Open(&config.Config{DatabaseURL: dsn})
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	sqlDB, _ := db.DB()
+	defer sqlDB.Close()
+
+	if err := RunMigrations(db); err != nil {
+		t.Fatalf("RunMigrations: %v", err)
+	}
+
+	for _, role := range []string{"admin", "reader", "writer"} {
+		var count int
+		row := sqlDB.QueryRow(`SELECT COUNT(*) FROM roles WHERE name = $1`, role)
+		if err := row.Scan(&count); err != nil {
+			t.Errorf("checking role %s: %v", role, err)
+			continue
+		}
+		if count != 1 {
+			t.Errorf("role %s: expected 1, got %d", role, count)
+		}
 	}
 }
