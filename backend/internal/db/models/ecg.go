@@ -13,9 +13,9 @@ type ECG struct {
 	Vendor           string     `gorm:"not null"`
 	FilePath         string     `gorm:"not null"`
 	OriginalFilename string     `gorm:"not null"`
-	IngestedAt       time.Time  `gorm:"not null;autoCreateTime"`
-	RecordedAt       *time.Time // acquisition timestamp from device file; nil for legacy records
-	HL7Status        string     `gorm:"not null;default:'pending'"` // "pending"|"success"|"hl7_exhausted" — CHECK constraint in DB
+	IngestedAt       time.Time  `gorm:"not null;autoCreateTime;index"`
+	RecordedAt       *time.Time `gorm:"index"` // acquisition timestamp from device file; nil for legacy records
+	HL7Status        string     `gorm:"not null;default:'pending';index"` // "pending"|"success"|"hl7_exhausted" — CHECK constraint in DB
 	HL7RetryCount    int        `gorm:"not null;default:0"`         // incremented by retry job (Story 4.2)
 	Extra            map[string]any `gorm:"type:jsonb;serializer:json"` // editable vendor metadata
 }
