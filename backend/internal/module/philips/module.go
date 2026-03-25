@@ -15,6 +15,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"strings"
 	"time"
@@ -46,10 +47,18 @@ func (m *Module) Validate(data []byte) error {
 	}
 	var doc philipsDoc
 	if err := xml.Unmarshal(data, &doc); err != nil {
+		slog.Debug("philips: validate: xml unmarshal failed", "error", err)
 		return fmt.Errorf("philips: validate: not a valid Philips XML: %w", err)
 	}
+	slog.Debug("philips: validate: xml parsed",
+		"xml_name_space", doc.XMLName.Space,
+		"xml_name_local", doc.XMLName.Local,
+		"patient_id", doc.Patient.General.PatientID,
+		"doc_type", doc.DocInfo.DocType,
+		"doc_version", doc.DocInfo.DocVersion,
+	)
 	if doc.Patient.General.PatientID == "" {
-		return fmt.Errorf("philips: validate: missing patientid")
+		return fmt.Errorf("philips: validate: missing patientid (namespace mismatch or missing field)")
 	}
 	return nil
 }
