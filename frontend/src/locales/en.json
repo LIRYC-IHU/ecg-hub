@@ -1,0 +1,206 @@
+{
+  "search": {
+    "placeholder": "Search patient by name or identifier…",
+    "noResults": "No patients found",
+    "loading": "Searching…"
+  },
+  "sort": {
+    "newest": "Most recent",
+    "oldest": "Oldest",
+    "nameAZ": "Name A → Z",
+    "nameZA": "Name Z → A",
+    "idAsc": "ID ascending",
+    "idDesc": "ID descending"
+  },
+  "patient": {
+    "notFound": "Patient not found",
+    "ecgs": "ECGs",
+    "expandAll": "Expand all",
+    "collapseAll": "Collapse all",
+    "colName": "Name",
+    "colId": "Identifier",
+    "colEcgs": "ECGs",
+    "colLastActivity": "Last activity"
+  },
+  "ecg": {
+    "download": "Download",
+    "delete": "Delete",
+    "deleteConfirm": "Permanently delete this ECG?",
+    "downloadOriginal": "Original format",
+    "downloadXmlfda": "XMLFDA format",
+    "vendor": "Vendor",
+    "date": "Date",
+    "hl7Status": "HL7 Status",
+    "status": {
+      "pending": "Pending",
+      "success": "Enriched",
+      "hl7_exhausted": "HL7 exhausted"
+    },
+    "meta": {
+      "title": "Metadata",
+      "save": "Save",
+      "saving": "Saving…",
+      "saved": "Metadata saved",
+      "saveError": "Error saving metadata",
+      "loading": "Loading…",
+      "noWrite": "Read-only",
+      "fields": {
+        "recorded_at": "Recording date",
+        "last_name": "Last name",
+        "first_name": "First name",
+        "sex": "Sex",
+        "device_model": "Device model",
+        "lead_count": "Leads",
+        "duration_seconds": "Duration (s)",
+        "sample_rate": "Sample rate (Hz)",
+        "document_type": "Document type",
+        "document_version": "Document version"
+      }
+    }
+  },
+  "export": {
+    "selected": "{{count}} ECG selected",
+    "selected_other": "{{count}} ECGs selected",
+    "clearSelection": "Deselect all",
+    "exportZip": "Export as ZIP",
+    "exporting": "Exporting…",
+    "jobStarted": "Export started — {{count}} ECG(s) queued",
+    "jobError": "Failed to start export",
+    "preparing": "Preparing…",
+    "progress": "{{percent}}% in progress",
+    "done": "Download ZIP",
+    "error": "Export error",
+    "overlayTitle": "Export in progress",
+    "overlayComplete": "Export complete",
+    "overlayFailed": "Export failed",
+    "dismiss": "Dismiss"
+  },
+  "admin": {
+    "quarantine": {
+      "title": "Quarantine",
+      "empty": "No files in quarantine",
+      "delete": "Delete",
+      "deleteConfirm": "Permanently delete this file?",
+      "deleted": "File deleted",
+      "deleteError": "Error deleting file",
+      "colFilename": "Filename",
+      "colReceivedAt": "Received at",
+      "colReason": "Reason"
+    },
+    "system": {
+      "title": "System state",
+      "operational": "All systems operational",
+      "degraded": "System degraded"
+    },
+    "hl7": {
+      "forceRetry": "Force HL7 retry"
+    },
+    "users": {
+      "colUser": "User",
+      "colEmail": "Email",
+      "colCurrentRole": "Current role",
+      "colChangeRole": "Change role",
+      "noUsers": "No users",
+      "apply": "Apply",
+      "selectRole": "— select —",
+      "noRole": "none",
+      "requires": "Requires",
+      "errorBanner": "Unable to load users — check that OIDC_ADMIN_CLIENT_SECRET is configured and that the OIDC client has view-users / manage-users rights on the realm.",
+      "roleDesc": {
+        "reader": "Read-only — consultation and ECG download",
+        "writer": "Read + ECG deletion",
+        "admin": "Full access — administration, audit, role management"
+      }
+    },
+    "appUsers": {
+      "title": "Users — role assignment",
+      "subtitle": "Authenticated users (source: DB)",
+      "searchPlaceholder": "Search by username, provider or role…",
+      "colUser": "Username",
+      "colProvider": "Provider",
+      "colRole": "Current role",
+      "noUsers": "No users have logged in yet",
+      "oidcNote": "For OIDC users with a Keycloak realm role, that role takes priority over this setting."
+    },
+    "audit": {
+      "title": "Audit log",
+      "subtitle": "Traceability of user actions",
+      "filterUser": "Filter by user…",
+      "allActions": "All actions",
+      "entries": "entries",
+      "exportCSV": "Export CSV",
+      "colDate": "Date",
+      "colUser": "User",
+      "colAction": "Action",
+      "colResource": "Resource",
+      "noEntries": "No entries",
+      "show": "Show…",
+      "hide": "Hide"
+    },
+    "roles": {
+      "title": "Roles & Permissions",
+      "subtitle": "Configure roles and their associated permissions",
+      "create": "New role",
+      "newRole": "New role",
+      "namePlaceholder": "Role name (e.g. nurse)",
+      "descPlaceholder": "Description",
+      "noRoles": "No roles",
+      "selectRole": "Select a role",
+      "saved": "Permissions saved",
+      "saveError": "Error saving permissions",
+      "errorNoPermission": "At least one permission must be selected",
+      "errorLastAdminRole": "Cannot save — at least one role must keep the \"Manage roles\" permission",
+      "created": "Role \"{{name}}\" created",
+      "createError": "Error creating role",
+      "deleted": "Role deleted",
+      "deleteError": "Error deleting role",
+      "deleteConfirm": "Delete role \"{{name}}\"?",
+      "group": {
+        "patient": "Patient",
+        "ecg": "ECG",
+        "quarantine": "Quarantine",
+        "admin": "Administration"
+      },
+      "perm": {
+        "patient_read": "View patients",
+        "ecg_read": "View ECG metadata",
+        "ecg_write": "Edit ECG metadata",
+        "ecg_download": "Download ECGs",
+        "ecg_delete": "Delete ECGs",
+        "ecg_force_hl7": "Force HL7 retry",
+        "quarantine_read": "View quarantine",
+        "quarantine_delete": "Delete quarantine files",
+        "admin_users": "Manage roles",
+        "admin_audit": "View audit logs",
+        "admin_system": "View system status"
+      }
+    }
+  },
+  "nav": {
+    "patients": "Patients",
+    "users": "Rights",
+    "appUsers": "Users",
+    "roles": "Roles",
+    "audit": "Audit",
+    "system": "System",
+    "quarantine": "Quarantine"
+  },
+  "auth": {
+    "login": "Login",
+    "logout": "Logout",
+    "unauthorized": "Unauthorized",
+    "ssoLogin": "Sign in with SSO",
+    "username": "Username",
+    "password": "Password",
+    "signingIn": "Signing in…",
+    "invalidCredentials": "Invalid credentials"
+  },
+  "common": {
+    "loading": "Loading…",
+    "error": "An error occurred",
+    "confirm": "Confirm",
+    "cancel": "Cancel",
+    "close": "Close",
+    "delete": "Delete"
+  }
+}
