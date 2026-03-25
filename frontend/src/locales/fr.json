@@ -1,0 +1,206 @@
+{
+  "search": {
+    "placeholder": "Rechercher un patient par nom ou identifiant…",
+    "noResults": "Aucun patient trouvé",
+    "loading": "Recherche en cours…"
+  },
+  "sort": {
+    "newest": "Plus récents",
+    "oldest": "Plus anciens",
+    "nameAZ": "Nom A → Z",
+    "nameZA": "Nom Z → A",
+    "idAsc": "ID croissant",
+    "idDesc": "ID décroissant"
+  },
+  "patient": {
+    "notFound": "Patient introuvable",
+    "ecgs": "ECGs",
+    "expandAll": "Tout ouvrir",
+    "collapseAll": "Tout fermer",
+    "colName": "Nom",
+    "colId": "Identifiant",
+    "colEcgs": "ECGs",
+    "colLastActivity": "Dernière activité"
+  },
+  "ecg": {
+    "download": "Télécharger",
+    "delete": "Supprimer",
+    "deleteConfirm": "Supprimer définitivement cet ECG ?",
+    "downloadOriginal": "Format original",
+    "downloadXmlfda": "Format XMLFDA",
+    "vendor": "Vendeur",
+    "date": "Date",
+    "hl7Status": "Statut HL7",
+    "status": {
+      "pending": "En attente",
+      "success": "Enrichi",
+      "hl7_exhausted": "HL7 épuisé"
+    },
+    "meta": {
+      "title": "Métadonnées",
+      "save": "Enregistrer",
+      "saving": "Enregistrement…",
+      "saved": "Métadonnées enregistrées",
+      "saveError": "Erreur lors de l'enregistrement",
+      "loading": "Chargement…",
+      "noWrite": "Lecture seule",
+      "fields": {
+        "recorded_at": "Date d'enregistrement",
+        "last_name": "Nom",
+        "first_name": "Prénom",
+        "sex": "Sexe",
+        "device_model": "Modèle appareil",
+        "lead_count": "Dérivations",
+        "duration_seconds": "Durée (s)",
+        "sample_rate": "Fréquence (Hz)",
+        "document_type": "Type document",
+        "document_version": "Version document"
+      }
+    }
+  },
+  "export": {
+    "selected": "{{count}} ECG sélectionné",
+    "selected_other": "{{count}} ECGs sélectionnés",
+    "clearSelection": "Tout désélectionner",
+    "exportZip": "Exporter en ZIP",
+    "exporting": "Export…",
+    "jobStarted": "Export lancé — {{count}} ECG(s) en cours de traitement",
+    "jobError": "Échec du lancement de l'export",
+    "preparing": "Préparation…",
+    "progress": "{{percent}}% en cours",
+    "done": "Télécharger le ZIP",
+    "error": "Erreur lors de l'export",
+    "overlayTitle": "Export en cours",
+    "overlayComplete": "Export terminé",
+    "overlayFailed": "Export échoué",
+    "dismiss": "Fermer"
+  },
+  "admin": {
+    "quarantine": {
+      "title": "Quarantaine",
+      "empty": "Aucun fichier en quarantaine",
+      "delete": "Supprimer",
+      "deleteConfirm": "Supprimer définitivement ce fichier ?",
+      "deleted": "Fichier supprimé",
+      "deleteError": "Erreur lors de la suppression",
+      "colFilename": "Nom de fichier",
+      "colReceivedAt": "Reçu le",
+      "colReason": "Raison"
+    },
+    "system": {
+      "title": "État du système",
+      "operational": "Tous les systèmes opérationnels",
+      "degraded": "Système dégradé"
+    },
+    "hl7": {
+      "forceRetry": "Forcer la tentative HL7"
+    },
+    "users": {
+      "colUser": "Utilisateur",
+      "colEmail": "Email",
+      "colCurrentRole": "Rôle actuel",
+      "colChangeRole": "Changer le rôle",
+      "noUsers": "Aucun utilisateur",
+      "apply": "Appliquer",
+      "selectRole": "— sélectionner —",
+      "noRole": "aucun",
+      "requires": "Nécessite",
+      "errorBanner": "Impossible de charger les utilisateurs — vérifier que OIDC_ADMIN_CLIENT_SECRET est configuré et que le client OIDC a les droits view-users / manage-users sur le realm.",
+      "roleDesc": {
+        "reader": "Lecture seule — consultation et téléchargement ECG",
+        "writer": "Lecture + suppression d'ECG",
+        "admin": "Accès complet — administration, audit, gestion des rôles"
+      }
+    },
+    "appUsers": {
+      "title": "Utilisateurs — attribution des rôles",
+      "subtitle": "Utilisateurs authentifiés (source: DB)",
+      "searchPlaceholder": "Rechercher par identifiant, fournisseur ou rôle…",
+      "colUser": "Identifiant",
+      "colProvider": "Fournisseur",
+      "colRole": "Rôle actuel",
+      "noUsers": "Aucun utilisateur connecté",
+      "oidcNote": "Pour les utilisateurs OIDC avec un rôle Keycloak, ce rôle a la priorité sur le réglage ci-dessus."
+    },
+    "audit": {
+      "title": "Journal d'audit",
+      "subtitle": "Traçabilité des actions utilisateurs",
+      "filterUser": "Filtrer par utilisateur…",
+      "allActions": "Toutes les actions",
+      "entries": "entrées",
+      "exportCSV": "Exporter CSV",
+      "colDate": "Date",
+      "colUser": "Utilisateur",
+      "colAction": "Action",
+      "colResource": "Ressource",
+      "noEntries": "Aucune entrée",
+      "show": "Afficher…",
+      "hide": "Masquer"
+    },
+    "roles": {
+      "title": "Rôles & Permissions",
+      "subtitle": "Configurez les rôles et leurs permissions associées",
+      "create": "Nouveau rôle",
+      "newRole": "Nouveau rôle",
+      "namePlaceholder": "Nom du rôle (ex: infirmière)",
+      "descPlaceholder": "Description",
+      "noRoles": "Aucun rôle",
+      "selectRole": "Sélectionner un rôle",
+      "saved": "Permissions enregistrées",
+      "saveError": "Erreur lors de la sauvegarde",
+      "errorNoPermission": "Au moins une permission doit être sélectionnée",
+      "errorLastAdminRole": "Impossible — au moins un rôle doit conserver la permission « Gérer les rôles »",
+      "created": "Rôle \"{{name}}\" créé",
+      "createError": "Erreur lors de la création",
+      "deleted": "Rôle supprimé",
+      "deleteError": "Erreur lors de la suppression",
+      "deleteConfirm": "Supprimer le rôle \"{{name}}\" ?",
+      "group": {
+        "patient": "Patient",
+        "ecg": "ECG",
+        "quarantine": "Quarantaine",
+        "admin": "Administration"
+      },
+      "perm": {
+        "patient_read": "Consulter les patients",
+        "ecg_read": "Voir les métadonnées ECG",
+        "ecg_write": "Modifier les métadonnées ECG",
+        "ecg_download": "Télécharger les ECG",
+        "ecg_delete": "Supprimer les ECG",
+        "ecg_force_hl7": "Forcer la tentative HL7",
+        "quarantine_read": "Voir la quarantaine",
+        "quarantine_delete": "Supprimer des fichiers en quarantaine",
+        "admin_users": "Gérer les rôles",
+        "admin_audit": "Voir les audits",
+        "admin_system": "Voir l'état système"
+      }
+    }
+  },
+  "nav": {
+    "patients": "Patients",
+    "users": "Droits",
+    "appUsers": "Utilisateurs",
+    "roles": "Rôles",
+    "audit": "Audit",
+    "system": "Système",
+    "quarantine": "Quarantaine"
+  },
+  "auth": {
+    "login": "Connexion",
+    "logout": "Déconnexion",
+    "unauthorized": "Accès non autorisé",
+    "ssoLogin": "Se connecter avec SSO",
+    "username": "Nom d'utilisateur",
+    "password": "Mot de passe",
+    "signingIn": "Connexion en cours…",
+    "invalidCredentials": "Identifiants invalides"
+  },
+  "common": {
+    "loading": "Chargement…",
+    "error": "Une erreur est survenue",
+    "confirm": "Confirmer",
+    "cancel": "Annuler",
+    "close": "Fermer",
+    "delete": "Supprimer"
+  }
+}
