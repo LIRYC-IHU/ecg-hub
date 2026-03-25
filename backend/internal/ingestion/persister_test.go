@@ -43,14 +43,27 @@ func (m *mockECGRepo) Insert(ecg *models.ECG) error {
 	return m.err
 }
 
-type mockPatRepo struct {
-	upserted []string
-	err      error
+type upsertCall struct {
+	patientID, firstName, lastName, gender string
 }
 
-func (m *mockPatRepo) UpsertByPatientID(id string) error {
-	m.upserted = append(m.upserted, id)
+type mockPatRepo struct {
+	calls []upsertCall
+	err   error
+}
+
+func (m *mockPatRepo) UpsertWithDemographics(patientID, firstName, lastName, gender string) error {
+	m.calls = append(m.calls, upsertCall{patientID, firstName, lastName, gender})
 	return m.err
+}
+
+// upserted returns just the patient IDs for backward-compatible assertions.
+func (m *mockPatRepo) upserted() []string {
+	ids := make([]string, len(m.calls))
+	for i, c := range m.calls {
+		ids[i] = c.patientID
+	}
+	return ids
 }
 
 // ─── Helper to build a RoutedItem ─────────────────────────────────────────────
@@ -65,6 +78,16 @@ func makeRoutedItem(patientID, vendor, filename string, recordedAt time.Time) Ro
 			RecordedAt: recordedAt,
 		},
 	}
+}
+
+func makeRoutedItemWithDemographics(patientID, vendor, filename string, recordedAt time.Time, firstName, lastName, sex string) RoutedItem {
+	ri := makeRoutedItem(patientID, vendor, filename, recordedAt)
+	ri.Meta.Extra = map[string]any{
+		"first_name": firstName,
+		"last_name":  lastName,
+		"sex":        sex,
+	}
+	return ri
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
@@ -92,8 +115,8 @@ func TestPersister_Persist_Success(t *testing.T) {
 	}
 
 	// Patient upsert called
-	if len(patRepo.upserted) != 1 || patRepo.upserted[0] != "P001" {
-		t.Errorf("patient upsert = %v, want [P001]", patRepo.upserted)
+	if ids := patRepo.upserted(); len(ids) != 1 || ids[0] != "P001" {
+		t.Errorf("patient upsert = %v, want [P001]", ids)
 	}
 
 	// ECG inserted with correct fields
@@ -133,7 +156,7 @@ func TestPersister_Persist_VolumeError_Skips(t *testing.T) {
 	}
 
 	// No DB calls should have been made
-	if len(patRepo.upserted) != 0 {
+	if ids := patRepo.upserted(); len(ids) != 0 {
 		t.Errorf("patient upsert should not be called on volume error")
 	}
 	if len(ecgRepo.inserted) != 0 {
@@ -196,6 +219,37 @@ func TestPersister_RoutesItemFromQueue(t *testing.T) {
 				return // success
 			}
 		}
+	}
+}
+
+func TestPersister_Persist_Demographics_FromECG(t *testing.T) {
+	vol := &mockVolume{}
+	ecgRepo := &mockECGRepo{}
+	patRepo := &mockPatRepo{}
+
+	ts := time.Date(2025, 1, 20, 9, 1, 20, 0, time.UTC)
+	ri := makeRoutedItemWithDemographics("BS1170", "philips", "BS1170.xml", ts, "Jean Michel", "BLIN", "Male")
+
+	p := NewPersister(make(RoutedQueue, 1), vol, ecgRepo, patRepo)
+	if err := p.persist(ri); err != nil {
+		t.Fatalf("persist returned error: %v", err)
+	}
+
+	if len(patRepo.calls) != 1 {
+		t.Fatalf("expected 1 upsert call, got %d", len(patRepo.calls))
+	}
+	c := patRepo.calls[0]
+	if c.patientID != "BS1170" {
+		t.Errorf("patientID = %q, want BS1170", c.patientID)
+	}
+	if c.firstName != "Jean Michel" {
+		t.Errorf("firstName = %q, want Jean Michel", c.firstName)
+	}
+	if c.lastName != "BLIN" {
+		t.Errorf("lastName = %q, want BLIN", c.lastName)
+	}
+	if c.gender != "Male" {
+		t.Errorf("gender = %q, want Male", c.gender)
 	}
 }
 
