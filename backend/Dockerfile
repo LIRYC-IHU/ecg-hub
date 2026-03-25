@@ -2,16 +2,23 @@
 FROM golang:1.25-alpine AS builder
 
 RUN apk add --no-cache git ca-certificates
+RUN apk add --no-cache make
 
 WORKDIR /app
 
 COPY go.mod go.sum ./
-COPY ./bin_converter ./
+COPY ./converter-fda ./
 RUN go mod download
 
 COPY . .
 
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /bin/ecg-hub ./cmd/ecg-hub
+
+# Install ecg-convertor tools
+
+WORKDIR /app/converter-fda
+
+RUN make
 
 # Install ecg-bridge conversion tools (GOPATH=/go in golang:alpine image → binaries land in /go/bin/).
 # Add more RUN lines here as new tools are published in github.com/LIRYC-IHU/ecg-bridge.
@@ -28,7 +35,7 @@ WORKDIR /app
 
 COPY --from=builder /bin/ecg-hub /app/ecg-hub
 # Copy ecg-bridge binaries from /go/bin (golang:alpine GOPATH=/go).
-COPY --from=builder /app/bin_converter/* /usr/local/bin/.
+COPY --from=builder /app/converter-fda/bin/* /usr/local/bin/.
 # COPY --from=builder /go/bin/muse-to-fda /usr/local/bin/muse-to-fda
 
 EXPOSE 4444
