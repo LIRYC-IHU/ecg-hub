@@ -1,0 +1,118 @@
+package handlers
+
+import (
+	"context"
+	"net/http"
+	"strconv"
+
+	"github.com/labstack/echo/v4"
+
+	mw "github.com/LIRYC-IHU/ecg-hub/internal/api/middleware"
+	"github.com/LIRYC-IHU/ecg-hub/internal/auth"
+	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
+)
+
+type roleRepoIface interface {
+	List(ctx context.Context) ([]repository.Role, error)
+	Create(ctx context.Context, name, description string, permissions []string) (*repository.Role, error)
+	Update(ctx context.Context, id uint, description string, permissions []string) error
+	Delete(ctx context.Context, id uint) error
+	AnyOtherRoleHasPermission(ctx context.Context, permission string, excludeRoleID uint) (bool, error)
+}
+
+type roleRequest struct {
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	Permissions []string `json:"permissions"`
+}
+
+// ListRolesHandler returns all roles with their permissions.
+// GET /api/v1/admin/roles
+func ListRolesHandler(repo roleRepoIface) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		roles, err := repo.List(c.Request().Context())
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, mw.APIError("INTERNAL", err.Error()))
+		}
+		return c.JSON(http.StatusOK, map[string]any{
+			"data":  roles,
+			"total": len(roles),
+		})
+	}
+}
+
+// CreateRoleHandler creates a new role with permissions.
+// POST /api/v1/admin/roles
+func CreateRoleHandler(repo roleRepoIface, checker *auth.PermissionChecker) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		var req roleRequest
+		if err := c.Bind(&req); err != nil {
+			return c.JSON(http.StatusBadRequest, mw.APIError("BAD_REQUEST", "invalid body"))
+		}
+		if req.Name == "" {
+			return c.JSON(http.StatusBadRequest, mw.APIError("BAD_REQUEST", "name is required"))
+		}
+		role, err := repo.Create(c.Request().Context(), req.Name, req.Description, req.Permissions)
+		if err != nil {
+			return c.JSON(http.StatusConflict, mw.APIError("CONFLICT", err.Error()))
+		}
+		checker.Invalidate(role.Name)
+		return c.JSON(http.StatusCreated, role)
+	}
+}
+
+// UpdateRoleHandler replaces the description and permissions of an existing role.
+// PUT /api/v1/admin/roles/:id
+// Returns 400 if permissions list is empty — every role must have at least one permission.
+func UpdateRoleHandler(repo roleRepoIface, checker *auth.PermissionChecker) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+		if err != nil {
+			return c.JSON(http.StatusBadRequest, mw.APIError("BAD_REQUEST", "invalid id"))
+		}
+		var req roleRequest
+		if err := c.Bind(&req); err != nil {
+			return c.JSON(http.StatusBadRequest, mw.APIError("BAD_REQUEST", "invalid body"))
+		}
+		if len(req.Permissions) == 0 {
+			return c.JSON(http.StatusBadRequest, mw.APIError("BAD_REQUEST", "permissions must not be empty"))
+		}
+		// Prevent removing admin.users if no other role has it — would lock out role management.
+		hasAdminUsers := false
+		for _, p := range req.Permissions {
+			if p == "admin.users" {
+				hasAdminUsers = true
+				break
+			}
+		}
+		if !hasAdminUsers {
+			covered, err := repo.AnyOtherRoleHasPermission(c.Request().Context(), "admin.users", uint(id))
+			if err != nil {
+				return c.JSON(http.StatusInternalServerError, mw.APIError("INTERNAL", err.Error()))
+			}
+			if !covered {
+				return c.JSON(http.StatusUnprocessableEntity, mw.APIError("LAST_ADMIN_ROLE", "at least one role must keep the admin.users permission"))
+			}
+		}
+		if err := repo.Update(c.Request().Context(), uint(id), req.Description, req.Permissions); err != nil {
+			return c.JSON(http.StatusInternalServerError, mw.APIError("INTERNAL", err.Error()))
+		}
+		checker.Invalidate(req.Name)
+		return c.NoContent(http.StatusNoContent)
+	}
+}
+
+// DeleteRoleHandler deletes a role by ID.
+// DELETE /api/v1/admin/roles/:id
+func DeleteRoleHandler(repo roleRepoIface, checker *auth.PermissionChecker) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+		if err != nil {
+			return c.JSON(http.StatusBadRequest, mw.APIError("BAD_REQUEST", "invalid id"))
+		}
+		if err := repo.Delete(c.Request().Context(), uint(id)); err != nil {
+			return c.JSON(http.StatusInternalServerError, mw.APIError("INTERNAL", err.Error()))
+		}
+		return c.NoContent(http.StatusNoContent)
+	}
+}
