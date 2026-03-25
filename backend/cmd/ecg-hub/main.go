@@ -18,6 +18,7 @@ import (
 	"github.com/LIRYC-IHU/ecg-hub/internal/hl7"
 	"github.com/LIRYC-IHU/ecg-hub/internal/ingestion"
 	"github.com/LIRYC-IHU/ecg-hub/internal/module"
+	_ "github.com/LIRYC-IHU/ecg-hub/internal/module/dicom"
 	_ "github.com/LIRYC-IHU/ecg-hub/internal/module/philips"
 	"github.com/LIRYC-IHU/ecg-hub/internal/storage"
 	"github.com/LIRYC-IHU/ecg-hub/internal/webhook"
