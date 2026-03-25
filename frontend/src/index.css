@@ -1,0 +1,77 @@
+@import "tailwindcss";
+
+/*
+ * ECG Hub — Design System: Direction A (Minimal Clinical)
+ *
+ * Tailwind v4 theme tokens — registered via @theme so utility classes
+ * like bg-background, text-foreground, border-border are available.
+ *
+ * Primary blue : #2563eb  (blue-600)
+ * Background   : #FFFFFF
+ * Foreground   : #111827  (gray-900)
+ * Muted bg     : #F3F4F6  (gray-100)
+ * Border       : #E5E7EB  (gray-200)
+ * Patient rows : h-11 (44px)
+ * ECG sub-rows : h-9  (36px)
+ */
+
+@theme {
+  --color-background: #ffffff;
+  --color-foreground: #111827;
+
+  --color-primary: #2563eb;
+  --color-primary-foreground: #ffffff;
+
+  --color-secondary: #f3f4f6;
+  --color-secondary-foreground: #111827;
+
+  --color-muted: #f3f4f6;
+  --color-muted-foreground: #6b7280;
+
+  --color-accent: #f3f4f6;
+  --color-accent-foreground: #111827;
+
+  --color-destructive: #ef4444;
+  --color-destructive-foreground: #ffffff;
+
+  --color-border: #e5e7eb;
+  --color-input: #e5e7eb;
+  --color-ring: #2563eb;
+
+  --color-card: #ffffff;
+  --color-card-foreground: #111827;
+
+  --color-popover: #ffffff;
+  --color-popover-foreground: #111827;
+
+  --color-success: #16a34a;
+  --color-success-foreground: #ffffff;
+
+  --color-warning: #d97706;
+  --color-warning-foreground: #ffffff;
+
+  --color-quarantine: #f59e0b;
+  --color-quarantine-foreground: #ffffff;
+
+  --radius: 0.5rem;
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+  body {
+    background-color: var(--color-background);
+    color: var(--color-foreground);
+    font-synthesis: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+@layer utilities {
+  .skeleton {
+    @apply animate-pulse bg-muted rounded;
+  }
+}
