@@ -18,6 +18,7 @@ import (
 	"github.com/LIRYC-IHU/ecg-hub/internal/hl7"
 	"github.com/LIRYC-IHU/ecg-hub/internal/ingestion"
 	"github.com/LIRYC-IHU/ecg-hub/internal/module"
+	_ "github.com/LIRYC-IHU/ecg-hub/internal/module/philips"
 	"github.com/LIRYC-IHU/ecg-hub/internal/storage"
 	"github.com/LIRYC-IHU/ecg-hub/internal/webhook"
 	"github.com/labstack/echo/v4"
@@ -25,7 +26,11 @@ import (
 )
 
 func main() {
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	logLevel := slog.LevelInfo
+	if os.Getenv("LOG_LEVEL") == "debug" {
+		logLevel = slog.LevelDebug
+	}
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel}))
 	slog.SetDefault(logger)
 
 	// Step 1: Load and validate configuration (FR31, NFR-R3).
