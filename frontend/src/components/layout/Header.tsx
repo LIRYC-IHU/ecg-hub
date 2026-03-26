@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useLocation } from "react-router-dom";
-import { ChevronDown, LogOut, Activity } from "lucide-react";
+import { ChevronDown, LogOut, Activity, Sun, Monitor, Moon } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useTheme } from "../../hooks/useTheme";
 
 interface HeaderProps {
   userId: string;
@@ -34,6 +35,7 @@ export function Header({
   const { t } = useTranslation();
   const location = useLocation();
   const [open, setOpen] = useState(false);
+  const { theme, setTheme } = useTheme();
 
   const breadcrumb = t(BREADCRUMBS[location.pathname] ?? "");
 
@@ -72,6 +74,28 @@ export function Header({
               }`}
             >
               {l.toUpperCase()}
+            </button>
+          ))}
+        </div>
+
+        {/* Theme toggle */}
+        <div className="flex bg-muted rounded-full p-0.5">
+          {([
+            { value: "light" as const, Icon: Sun },
+            { value: "system" as const, Icon: Monitor },
+            { value: "dark" as const, Icon: Moon },
+          ]).map(({ value, Icon }) => (
+            <button
+              key={value}
+              onClick={() => setTheme(value)}
+              className={`p-1.5 rounded-full transition-all ${
+                theme === value
+                  ? "bg-card text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+              aria-label={value}
+            >
+              <Icon className="w-3.5 h-3.5" />
             </button>
           ))}
         </div>

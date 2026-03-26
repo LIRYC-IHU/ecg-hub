@@ -103,7 +103,7 @@ export function EcgRow({ ecg, isSelected, onToggle, canForceHL7, canDelete, canR
         {/* Vendor — DICOM sources get a distinct cyan badge */}
         <span className={`text-[11px] px-2 py-0.5 rounded w-fit font-medium ${
           ecg.vendor === 'dicom'
-            ? 'bg-cyan-500/10 text-cyan-700 dark:text-cyan-400'
+            ? 'bg-dicom/10 text-dicom'
             : 'bg-primary/5 text-primary/80'
         }`}>
           {ecg.vendor}
@@ -285,7 +285,7 @@ function MetaPanel({ ecgId, canWrite }: MetaPanelProps) {
             disabled={!isDirty || saveMutation.isPending}
             className="flex items-center gap-1.5 text-xs bg-primary text-primary-foreground px-3 py-1.5 rounded-lg hover:bg-primary/90 disabled:opacity-40 transition-colors"
           >
-            {saveMutation.isPending && <Spinner size={11} className="text-white" />}
+            {saveMutation.isPending && <Spinner size={11} className="text-primary-foreground" />}
             {saveMutation.isPending ? t('ecg.meta.saving') : t('ecg.meta.save')}
           </button>
           {isDirty && !saveMutation.isPending && (

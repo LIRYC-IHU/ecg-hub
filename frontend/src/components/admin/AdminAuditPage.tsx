@@ -24,7 +24,7 @@ const actionConfig: Record<ActionKey, { icon: React.ElementType; label: string; 
   download:             { icon: Download,  label: 'download',            cls: 'bg-success/10 text-success' },
   hl7_force:            { icon: RefreshCw, label: 'hl7_force',           cls: 'bg-warning/10 text-warning' },
   delete:               { icon: Trash2,    label: 'delete',              cls: 'bg-destructive/10 text-destructive' },
-  quarantine_decision:  { icon: Shield,    label: 'quarantine_decision', cls: 'bg-purple-50 text-purple-700' },
+  quarantine_decision:  { icon: Shield,    label: 'quarantine_decision', cls: 'bg-quarantine/10 text-quarantine' },
 }
 
 export function AdminAuditPage() {

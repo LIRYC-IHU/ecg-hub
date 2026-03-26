@@ -6,9 +6,9 @@ import { Spinner } from '../ui/Spinner'
 import { useNotification } from '../../context/NotificationContext'
 
 const roleBadgeClass: Record<string, string> = {
-  admin:  'bg-red-50 text-red-700',
-  writer: 'bg-orange-50 text-orange-700',
-  reader: 'bg-blue-50 text-blue-700',
+  admin:  'bg-destructive/10 text-destructive',
+  writer: 'bg-warning/10 text-warning',
+  reader: 'bg-primary/10 text-primary',
   '':     'bg-muted text-muted-foreground',
 }
 
@@ -70,12 +70,12 @@ export function AdminUsersPage() {
       </div>
 
       {isError && (
-        <div className="border border-orange-200 bg-orange-50 rounded-lg p-4 text-sm text-orange-800">
+        <div className="border border-warning/20 bg-warning/10 rounded-lg p-4 text-sm text-warning">
           {t('admin.users.errorBanner')}
         </div>
       )}
 
-      <div className="border rounded-lg bg-white overflow-hidden shadow-sm">
+      <div className="border rounded-lg bg-card overflow-hidden shadow-sm">
         <table className="w-full text-sm">
           <thead className="bg-muted/30 border-b">
             <tr>
@@ -117,7 +117,7 @@ export function AdminUsersPage() {
                     <select
                       value={selected ?? ''}
                       onChange={(e) => handleRoleChange(user.id, e.target.value)}
-                      className="border rounded px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-primary bg-white"
+                      className="border rounded px-2 py-1 text-xs outline-none focus:ring-1 focus:ring-primary bg-card"
                     >
                       <option value="">{t('admin.users.selectRole')}</option>
                       {roles.map((r) => (
@@ -130,14 +130,14 @@ export function AdminUsersPage() {
                       <button
                         onClick={() => handleApply(user.id)}
                         disabled={mutation.isPending}
-                        className="text-xs px-2.5 py-1 rounded bg-primary text-white hover:bg-primary/90 disabled:opacity-50 transition-colors flex items-center gap-1.5"
+                        className="text-xs px-2.5 py-1 rounded bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors flex items-center gap-1.5"
                       >
-                        {mutation.isPending ? <Spinner size={11} className="text-white" /> : null}
+                        {mutation.isPending ? <Spinner size={11} className="text-primary-foreground" /> : null}
                         {t('admin.users.apply')}
                       </button>
                     )}
-                    {fb === 'ok' && <span className="text-xs text-green-600 ml-2">✓</span>}
-                    {fb === 'err' && <span className="text-xs text-red-600 ml-2">✗</span>}
+                    {fb === 'ok' && <span className="text-xs text-success ml-2">✓</span>}
+                    {fb === 'err' && <span className="text-xs text-destructive ml-2">✗</span>}
                   </td>
                 </tr>
               )

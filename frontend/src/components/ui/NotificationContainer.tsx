@@ -5,10 +5,10 @@ import { useNotification, type NotifType, type Notification } from '../../contex
 import { useExportWebSocket } from '../../hooks/useExportWebSocket'
 
 const styles: Record<Exclude<NotifType, 'progress'>, string> = {
-  success: 'bg-green-50 border-green-200 text-green-800',
-  info:    'bg-blue-50  border-blue-200  text-blue-800',
-  warn:    'bg-orange-50 border-orange-200 text-orange-800',
-  error:   'bg-red-50   border-red-200   text-red-800',
+  success: 'bg-success/10 border-success/20 text-success',
+  info:    'bg-primary/10 border-primary/20 text-primary',
+  warn:    'bg-warning/10 border-warning/20 text-warning',
+  error:   'bg-destructive/10 border-destructive/20 text-destructive',
 }
 
 const icons: Record<Exclude<NotifType, 'progress'>, string> = {

@@ -8,9 +8,9 @@ interface Props {
 // 8px colored dot per UX spec (Direction A).
 // Color-blind safe: shape (dot vs dash) + title tooltip for screen readers.
 const dotColor: Record<ECG['hl7_status'], string> = {
-  pending: 'bg-gray-400',
-  success: 'bg-green-600',
-  hl7_exhausted: 'bg-amber-600',
+  pending: 'bg-muted-foreground',
+  success: 'bg-success',
+  hl7_exhausted: 'bg-warning',
 }
 
 export function HL7StatusIcon({ status }: Props) {
