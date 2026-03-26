@@ -18,7 +18,7 @@ export function PatientRow({ patient, isExpanded, onClick }: PatientRowProps) {
     <button
       onClick={onClick}
       aria-expanded={isExpanded}
-      className="w-full grid grid-cols-[1fr_160px_80px_160px_32px] gap-4 px-4 py-3 items-center hover:bg-muted/30 transition-colors text-left border-b border-border"
+      className="w-full grid grid-cols-[1fr_160px_80px_160px_32px] gap-4 px-4 py-3 items-center hover:bg-muted/30 transition-colors text-left border-b border-border cursor-pointer"
     >
       <span className="text-sm font-medium text-foreground">
         {patient.last_name}, {patient.first_name}
