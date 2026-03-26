@@ -69,9 +69,18 @@ export function downloadECG(id: number): void {
 }
 
 // downloadECGXMLFDA triggers a browser file download of the ECG converted to FDA HL7 v3 aECG XML.
-// Only call this for vendors listed in XMLFDA_SUPPORTED_VENDORS (currently: philips).
 export function downloadECGXMLFDA(id: number): void {
   window.location.href = `${BASE_URL}/api/v1/ecgs/${id}/download?format=xmlfda`
+}
+
+// downloadECGFormat triggers a browser download for a specific export format.
+// format = "original" | "xmlfda" | "dicom" | ...
+export function downloadECGFormat(id: number, format: string): void {
+  if (format === 'original') {
+    window.location.href = `${BASE_URL}/api/v1/ecgs/${id}/download`
+  } else {
+    window.location.href = `${BASE_URL}/api/v1/ecgs/${id}/download?format=${encodeURIComponent(format)}`
+  }
 }
 
 export interface AdminStats {
@@ -157,10 +166,17 @@ export async function fetchWebhookStatus(): Promise<WebhookStatus> {
   return res.json()
 }
 
+export interface ExportFormat {
+  id: string       // "original" | "xmlfda" | "dicom"
+  label: string    // human-readable label
+  extension: string
+}
+
 export interface ModuleStatus {
   name: string
   extensions: string[]
   status: string // "ok" or error message
+  formats: ExportFormat[]
 }
 
 export async function fetchModules(): Promise<ModuleStatus[]> {
@@ -380,7 +396,7 @@ export async function patchECGMetadata(
 
 export interface ExportJobRequest {
   ecg_ids: number[]
-  format?: 'original' | 'xmlfda'
+  format?: string
 }
 
 export interface ExportJobResponse {

@@ -2,12 +2,10 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Download, FileText, RefreshCw, Trash2, ChevronDown, ChevronUp } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { downloadECG, downloadECGXMLFDA, fetchECGMeta, forceHL7, deleteECG, patchECGMetadata } from '../../lib/api'
+import { downloadECG, downloadECGFormat, fetchECGMeta, fetchModules, forceHL7, deleteECG, patchECGMetadata } from '../../lib/api'
 import { Spinner } from '../ui/Spinner'
 import { useNotification } from '../../context/NotificationContext'
 import type { ECG, ECGFieldDef } from '../../types'
-
-const XMLFDA_SUPPORTED_VENDORS = ['philips']
 
 const hl7StatusConfig: Record<string, { dot: string; label: string }> = {
   success:      { dot: 'bg-success',          label: 'Envoyé'     },
@@ -32,6 +30,17 @@ export function EcgRow({ ecg, isSelected, onToggle, canForceHL7, canDelete, canR
   const { notify } = useNotification()
   const queryClient = useQueryClient()
   const [forced, setForced] = useState(false)
+
+  // Load module formats once (deduplicated by React Query across all rows).
+  const { data: modules } = useQuery({
+    queryKey: ['modules'],
+    queryFn: fetchModules,
+    staleTime: 5 * 60_000,
+  })
+  // Non-original formats available for this ECG's vendor.
+  const extraFormats = (modules ?? [])
+    .find((m) => m.name === ecg.vendor)
+    ?.formats.filter((f) => f.id !== 'original') ?? []
   const [deleted, setDeleted] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [expanded, setExpanded] = useState(false)
@@ -121,16 +130,17 @@ export function EcgRow({ ecg, isSelected, onToggle, canForceHL7, canDelete, canR
             <Download className="w-3.5 h-3.5 text-muted-foreground" />
           </button>
 
-          {/* Download XMLFDA */}
-          {XMLFDA_SUPPORTED_VENDORS.includes(ecg.vendor) && (
+          {/* Download converted formats (from module capabilities) */}
+          {extraFormats.map((fmt) => (
             <button
-              onClick={() => downloadECGXMLFDA(ecg.id)}
+              key={fmt.id}
+              onClick={() => downloadECGFormat(ecg.id, fmt.id)}
               className="p-1.5 rounded hover:bg-muted transition-colors"
-              title={t('ecg.downloadXmlfda')}
+              title={fmt.label}
             >
               <FileText className="w-3.5 h-3.5 text-muted-foreground" />
             </button>
-          )}
+          ))}
 
           {/* Force HL7 */}
           {canForceHL7 && ecg.hl7_status === 'hl7_exhausted' && !forced && (

@@ -11,7 +11,7 @@ import {
   Activity,
   Clock,
   AlertTriangle,
-  Puzzle,
+  FileType,
   Radio,
   HardDrive,
 } from 'lucide-react'
@@ -96,34 +96,49 @@ export function AdminSystemPage() {
             </div>
 
             {health.data && (
-              <div className="space-y-2">
-                {services.map((svc) => (
-                  <div key={svc.name} className="flex items-center gap-3 px-3 py-2 rounded-lg bg-muted/30">
-                    <svc.icon className="w-4 h-4 text-muted-foreground" />
-                    <span className="text-sm text-foreground flex-1">{svc.name}</span>
-                    {svc.label && (
-                      <span className="text-[10px] font-mono text-muted-foreground">{svc.label}</span>
-                    )}
-                    <div className={`w-2 h-2 rounded-full ${svc.ok ? 'bg-success' : 'bg-muted-foreground'}`} />
-                    <span className={`text-[11px] font-medium ${svc.ok ? 'text-success' : 'text-muted-foreground'}`}>
-                      {svc.ok ? 'OK' : (svc.label === 'Désactivé' ? '—' : 'KO')}
-                    </span>
+              <div className="space-y-4">
+                {/* Infrastructure */}
+                <div>
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-2 px-1">
+                    Infrastructure
+                  </p>
+                  <div className="space-y-1">
+                    {services.map((svc) => (
+                      <div key={svc.name} className="flex items-center gap-3 px-3 py-2 rounded-lg bg-muted/30">
+                        <svc.icon className="w-4 h-4 text-muted-foreground" />
+                        <span className="text-sm text-foreground flex-1">{svc.name}</span>
+                        {svc.label && (
+                          <span className="text-[10px] font-mono text-muted-foreground">{svc.label}</span>
+                        )}
+                        <div className={`w-2 h-2 rounded-full ${svc.ok ? 'bg-success' : 'bg-muted-foreground'}`} />
+                        <span className={`text-[11px] font-medium ${svc.ok ? 'text-success' : 'text-muted-foreground'}`}>
+                          {svc.ok ? 'OK' : (svc.label === 'Désactivé' ? '—' : 'KO')}
+                        </span>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                </div>
 
-                {/* Active modules */}
+                {/* Formats ECG */}
                 {!modulesQuery.isLoading && modulesQuery.data && modulesQuery.data.length > 0 && (
-                  modulesQuery.data.map((m) => (
-                    <div key={m.name} className="flex items-center gap-3 px-3 py-2 rounded-lg bg-muted/30">
-                      <Puzzle className="w-4 h-4 text-muted-foreground" />
-                      <span className="text-sm text-foreground flex-1 capitalize">{m.name}</span>
-                      <span className="text-[10px] font-mono text-muted-foreground">{m.extensions.join(', ')}</span>
-                      <div className={`w-2 h-2 rounded-full ${m.status === 'ok' ? 'bg-success' : 'bg-warning'}`} />
-                      <span className={`text-[11px] font-medium ${m.status === 'ok' ? 'text-success' : 'text-warning'}`}>
-                        {m.status === 'ok' ? 'OK' : 'ERR'}
-                      </span>
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-2 px-1">
+                      Formats ECG supportés
+                    </p>
+                    <div className="space-y-1">
+                      {modulesQuery.data.map((m) => (
+                        <div key={m.name} className="flex items-center gap-3 px-3 py-2 rounded-lg bg-muted/30">
+                          <FileType className="w-4 h-4 text-muted-foreground" />
+                          <span className="text-sm text-foreground flex-1 capitalize">{m.name}</span>
+                          <span className="text-[10px] font-mono text-muted-foreground">{m.extensions.join(', ')}</span>
+                          <div className={`w-2 h-2 rounded-full ${m.status === 'ok' ? 'bg-success' : 'bg-warning'}`} />
+                          <span className={`text-[11px] font-medium ${m.status === 'ok' ? 'text-success' : 'text-warning'}`}>
+                            {m.status === 'ok' ? 'OK' : 'ERR'}
+                          </span>
+                        </div>
+                      ))}
                     </div>
-                  ))
+                  </div>
                 )}
               </div>
             )}

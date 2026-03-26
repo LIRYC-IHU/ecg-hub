@@ -32,7 +32,7 @@ type ecgInserter interface {
 
 // patientUpserter is the repository interface for patient upsert (implemented by *repository.PatientRepository).
 type patientUpserter interface {
-	UpsertByPatientID(patientID string) error
+	UpsertWithDemographics(patientID, firstName, lastName, gender string) error
 }
 
 // Persister consumes RoutedItems from the RoutedQueue, renames and writes each
@@ -148,7 +148,10 @@ func (p *Persister) persist(ri RoutedItem) error {
 		return fmt.Errorf("persister: write file: %w", err)
 	}
 
-	if err := p.patRepo.UpsertByPatientID(ri.Meta.PatientID); err != nil {
+	firstName, _ := ri.Meta.Extra["first_name"].(string)
+	lastName, _  := ri.Meta.Extra["last_name"].(string)
+	gender, _    := ri.Meta.Extra["sex"].(string) // Philips uses "sex"; HL7 normalises to "gender"
+	if err := p.patRepo.UpsertWithDemographics(ri.Meta.PatientID, firstName, lastName, gender); err != nil {
 		return fmt.Errorf("persister: upsert patient: %w", err)
 	}
 

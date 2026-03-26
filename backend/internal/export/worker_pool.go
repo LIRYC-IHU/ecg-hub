@@ -16,12 +16,23 @@ import (
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
 )
 
+// batchConverter converts a single ECG file to the requested format.
+type batchConverter interface {
+	Convert(ctx context.Context, sourcePath, vendor, format string, patient *models.Patient) ([]byte, error)
+	SupportsFormat(vendor, format string) bool
+}
+
+// patientFetcher retrieves patient demographics by patient_id for converter metadata.
+type patientFetcher interface {
+	FindByPatientID(patientID string) (*models.Patient, error)
+}
+
 // Job represents a batch export request to be processed by the worker pool.
 type Job struct {
 	ID     string
 	UserID string
 	ECGIDs []uint
-	Format string // "original" or "xmlfda"
+	Format string // "original" or "xmlfda" or "dicom"
 }
 
 // WorkerPool processes batch export jobs concurrently (FR19, NFR-SC3).
@@ -33,6 +44,9 @@ type WorkerPool struct {
 
 	exportRepo *repository.ExportJobRepository
 	ecgRepo    *repository.ECGRepository
+
+	bridge     batchConverter // nil → all formats fall back to original
+	patFetcher patientFetcher // nil → conversion proceeds without demographics
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -56,6 +70,13 @@ func NewWorkerPool(cfg config.ExportConfig, exportRepo *repository.ExportJobRepo
 		ctx:        ctx,
 		cancel:     cancel,
 	}
+}
+
+// WithConverterDeps attaches a bridge and patient fetcher for format conversion in batch exports.
+func (p *WorkerPool) WithConverterDeps(b batchConverter, pf patientFetcher) *WorkerPool {
+	p.bridge = b
+	p.patFetcher = pf
+	return p
 }
 
 // Start launches the worker goroutines and ensures the temp directory exists.
@@ -122,7 +143,7 @@ func (p *WorkerPool) processJob(job Job) {
 	}
 
 	zipPath := filepath.Join(tmpExportDir(), job.ID+".zip")
-	if err := buildZIP(job, ecgs, zipPath, p.exportRepo); err != nil {
+	if err := buildZIP(job, ecgs, zipPath, p.exportRepo, p.bridge, p.patFetcher, job.Format); err != nil {
 		// Remove any partial ZIP left on disk before marking the job failed.
 		os.Remove(zipPath)
 		p.failJob(job.ID, err.Error())
@@ -144,7 +165,7 @@ func (p *WorkerPool) processJob(job Job) {
 
 // buildZIP assembles a ZIP archive at zipPath from the given ECGs.
 // It updates processed_count in the DB after each file.
-func buildZIP(job Job, ecgs []models.ECG, zipPath string, exportRepo *repository.ExportJobRepository) error {
+func buildZIP(job Job, ecgs []models.ECG, zipPath string, exportRepo *repository.ExportJobRepository, bridge batchConverter, pf patientFetcher, format string) error {
 	f, err := os.Create(zipPath)
 	if err != nil {
 		return fmt.Errorf("create zip file: %w", err)
@@ -159,28 +180,72 @@ func buildZIP(job Job, ecgs []models.ECG, zipPath string, exportRepo *repository
 	for i, ecg := range ecgs {
 		name := safeZIPName(ecg.OriginalFilename, ecg.ID, nameCount)
 
-		src, openErr := os.Open(ecg.FilePath)
-		if openErr != nil {
-			return fmt.Errorf("open ecg %d (%s): %w", ecg.ID, ecg.FilePath, openErr)
-		}
+		// Determine whether to convert or copy original.
+		useConvert := format != "original" && bridge != nil && bridge.SupportsFormat(ecg.Vendor, format)
 
-		w, createErr := zw.Create(name)
-		if createErr != nil {
-			src.Close()
-			return fmt.Errorf("create zip entry %s: %w", name, createErr)
-		}
+		if useConvert {
+			// Fetch patient demographics for metadata enrichment (nil is OK).
+			var patient *models.Patient
+			if pf != nil {
+				patient, _ = pf.FindByPatientID(ecg.PatientID)
+			}
 
-		if _, copyErr := io.Copy(w, src); copyErr != nil {
+			converted, convErr := bridge.Convert(context.Background(), ecg.FilePath, ecg.Vendor, format, patient)
+			if convErr != nil {
+				return fmt.Errorf("convert ecg %d (%s) to %s: %w", ecg.ID, ecg.FilePath, format, convErr)
+			}
+
+			// Replace the extension in the zip entry name.
+			if newExt := outputExtension(format); newExt != "" {
+				origExt := filepath.Ext(name)
+				base := name[:len(name)-len(origExt)]
+				name = base + newExt
+			}
+
+			w, createErr := zw.Create(name)
+			if createErr != nil {
+				return fmt.Errorf("create zip entry %s: %w", name, createErr)
+			}
+			if _, writeErr := w.Write(converted); writeErr != nil {
+				return fmt.Errorf("write converted ecg %d to zip: %w", ecg.ID, writeErr)
+			}
+		} else {
+			src, openErr := os.Open(ecg.FilePath)
+			if openErr != nil {
+				return fmt.Errorf("open ecg %d (%s): %w", ecg.ID, ecg.FilePath, openErr)
+			}
+
+			w, createErr := zw.Create(name)
+			if createErr != nil {
+				src.Close()
+				return fmt.Errorf("create zip entry %s: %w", name, createErr)
+			}
+
+			if _, copyErr := io.Copy(w, src); copyErr != nil {
+				src.Close()
+				return fmt.Errorf("copy ecg %d to zip: %w", ecg.ID, copyErr)
+			}
 			src.Close()
-			return fmt.Errorf("copy ecg %d to zip: %w", ecg.ID, copyErr)
 		}
-		src.Close()
 
 		// Update progress after each file — best-effort, do not abort on DB error.
 		_ = exportRepo.Update(job.ID, map[string]any{"processed_count": i + 1})
 	}
 
 	return nil
+}
+
+// outputExtension returns the output file extension for a given format.
+// Returns "" for unknown formats (keep original extension).
+func outputExtension(format string) string {
+	switch format {
+	case "xmlfda":
+		return ".xml"
+	case "dicom":
+		return ".dcm"
+	default:
+		return ""
+	}
 }
 
 // safeZIPName returns a collision-free filename for use inside the ZIP archive.

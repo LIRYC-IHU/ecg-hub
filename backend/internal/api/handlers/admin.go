@@ -106,9 +106,10 @@ func ForceHL7Handler(db *gorm.DB) echo.HandlerFunc {
 func ModulesHandler(activeModules []module.Module) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		type moduleStatus struct {
-			Name       string   `json:"name"`
-			Extensions []string `json:"extensions"`
-			Status     string   `json:"status"` // "ok" or error message
+			Name       string               `json:"name"`
+			Extensions []string             `json:"extensions"`
+			Status     string               `json:"status"` // "ok" or error message
+			Formats    []module.ExportFormat `json:"formats"`
 		}
 		result := make([]moduleStatus, 0, len(activeModules))
 		for _, m := range activeModules {
@@ -120,6 +121,7 @@ func ModulesHandler(activeModules []module.Module) echo.HandlerFunc {
 				Name:       m.Name(),
 				Extensions: m.AcceptedExtensions(),
 				Status:     status,
+				Formats:    m.SupportedFormats(),
 			})
 		}
 		return c.JSON(http.StatusOK, result)

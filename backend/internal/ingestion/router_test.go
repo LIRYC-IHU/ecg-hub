@@ -23,7 +23,10 @@ type stubModule struct {
 func (s *stubModule) Name() string                { return s.name }
 func (s *stubModule) AcceptedExtensions() []string { return s.extensions }
 func (s *stubModule) Health() error                { return nil }
-func (s *stubModule) Validate(_ []byte) error      { return nil }
+func (s *stubModule) SupportedFormats() []module.ExportFormat {
+	return []module.ExportFormat{{ID: "original", Label: "Original", Extension: ""}}
+}
+func (s *stubModule) Validate(_ []byte) error { return nil }
 func (s *stubModule) Parse(_ context.Context, _ []byte) (*module.ECGMetadata, error) {
 	return s.meta, s.parseErr
 }
@@ -51,7 +54,10 @@ type panicModule struct{ name string }
 func (p *panicModule) Name() string                { return p.name }
 func (p *panicModule) AcceptedExtensions() []string { return []string{".panic"} }
 func (p *panicModule) Health() error                { return nil }
-func (p *panicModule) Validate(_ []byte) error      { return nil }
+func (p *panicModule) SupportedFormats() []module.ExportFormat {
+	return []module.ExportFormat{{ID: "original", Label: "Original", Extension: ".panic"}}
+}
+func (p *panicModule) Validate(_ []byte) error { return nil }
 func (p *panicModule) Parse(_ context.Context, _ []byte) (*module.ECGMetadata, error) {
 	panic("intentional panic in test")
 }

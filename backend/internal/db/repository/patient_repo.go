@@ -63,13 +63,28 @@ func (r *PatientRepository) UpdateDemographics(patientID string, d *hl7.PatientD
 	return nil
 }
 
-// UpsertByPatientID inserts a patient row if it does not already exist.
-// ON CONFLICT (patient_id) DO NOTHING — existing patients are not touched.
-func (r *PatientRepository) UpsertByPatientID(patientID string) error {
-	patient := models.Patient{PatientID: patientID, Extra: datatypes.JSON([]byte("{}"))}
-	result := r.db.Clauses(clause.OnConflict{DoNothing: true}).Create(&patient)
+// UpsertWithDemographics inserts a patient row with demographics sourced from the ECG file.
+// ON CONFLICT (patient_id): updates first_name/last_name/gender only when hl7_source is empty,
+// so that HL7-enriched patients are never overwritten by a subsequent ECG ingestion.
+func (r *PatientRepository) UpsertWithDemographics(patientID, firstName, lastName, gender string) error {
+	patient := models.Patient{
+		PatientID: patientID,
+		FirstName: firstName,
+		LastName:  lastName,
+		Gender:    gender,
+		Extra:     datatypes.JSON([]byte("{}")),
+	}
+	result := r.db.Clauses(clause.OnConflict{
+		Columns: []clause.Column{{Name: "patient_id"}},
+		DoUpdates: clause.Assignments(map[string]any{
+			"first_name": gorm.Expr(`CASE WHEN patients.hl7_source = '' THEN EXCLUDED.first_name ELSE patients.first_name END`),
+			"last_name":  gorm.Expr(`CASE WHEN patients.hl7_source = '' THEN EXCLUDED.last_name  ELSE patients.last_name  END`),
+			"gender":     gorm.Expr(`CASE WHEN patients.hl7_source = '' THEN EXCLUDED.gender     ELSE patients.gender     END`),
+			"updated_at": gorm.Expr(`CASE WHEN patients.hl7_source = '' THEN NOW()               ELSE patients.updated_at END`),
+		}),
+	}).Create(&patient)
 	if result.Error != nil {
-		return fmt.Errorf("patient_repo: upsert: %w", result.Error)
+		return fmt.Errorf("patient_repo: upsert with demographics: %w", result.Error)
 	}
 	return nil
 }

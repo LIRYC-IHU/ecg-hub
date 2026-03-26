@@ -18,6 +18,8 @@ import (
 	"github.com/LIRYC-IHU/ecg-hub/internal/hl7"
 	"github.com/LIRYC-IHU/ecg-hub/internal/ingestion"
 	"github.com/LIRYC-IHU/ecg-hub/internal/module"
+	_ "github.com/LIRYC-IHU/ecg-hub/internal/module/dicom"
+	_ "github.com/LIRYC-IHU/ecg-hub/internal/module/philips"
 	"github.com/LIRYC-IHU/ecg-hub/internal/storage"
 	"github.com/LIRYC-IHU/ecg-hub/internal/webhook"
 	"github.com/labstack/echo/v4"
@@ -25,7 +27,11 @@ import (
 )
 
 func main() {
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
+	logLevel := slog.LevelInfo
+	if os.Getenv("LOG_LEVEL") == "debug" {
+		logLevel = slog.LevelDebug
+	}
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel}))
 	slog.SetDefault(logger)
 
 	// Step 1: Load and validate configuration (FR31, NFR-R3).
@@ -88,10 +94,9 @@ func main() {
 	// Build ECGBridge — maps vendor names to conversion binaries.
 	// Add new vendors here when ecg-bridge publishes new tools.
 	binaries := map[string]string{
-		"philips": envOr("BRIDGE_PHILIPS_TO_FDA", "philips-to-fda"),
-		// "muse":  envOr("BRIDGE_MUSE_TO_FDA", "muse-to-fda"),   // uncomment when available
-		// "mfer":  envOr("BRIDGE_MFER_TO_FDA", "mfer-to-fda"),   // uncomment when available
-		// "dicom": envOr("BRIDGE_DICOM_TO_FDA", "dicom-to-fda"), // uncomment when published
+		"philips:xmlfda": envOr("BRIDGE_PHILIPS_TO_FDA", "philips-to-fda"),
+		"philips:dicom":  envOr("BRIDGE_PHILIPS_TO_DICOM", "philips-to-dicom"),
+		"dicom:xmlfda":   envOr("BRIDGE_DICOM_TO_FDA", "dicom-to-fda"),
 	}
 
 	bridge := export.NewECGBridge(binaries, 5*time.Second)
@@ -137,6 +142,7 @@ func main() {
 	}
 	exportRepo := repository.NewExportJobRepository(gormDB)
 	exportPool := export.NewWorkerPool(cfg.Export, exportRepo, repository.NewECGRepository(gormDB))
+	exportPool.WithConverterDeps(bridge, repository.NewPatientRepository(gormDB))
 	exportPool.Start()
 	defer exportPool.Stop()
 

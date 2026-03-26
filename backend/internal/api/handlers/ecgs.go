@@ -79,8 +79,9 @@ func downloadECGHandler(repo ecgByIDFinder, patRepo patientByIDFinder, bridge ex
 
 		userID, _ := c.Get(mw.CtxKeyUserID).(string)
 
-		if c.QueryParam("format") == "xmlfda" {
-			return handleXMLFDADownload(c, ecg, uint(id), userID, patRepo, bridge, db)
+		format := c.QueryParam("format")
+		if format == "xmlfda" || format == "dicom" {
+			return handleConvertDownload(c, ecg, uint(id), userID, patRepo, bridge, format, db)
 		}
 
 		// Original format path.
@@ -278,14 +279,15 @@ func buildMetaValues(ecg *models.ECG) map[string]any {
 	return values
 }
 
-// handleXMLFDADownload converts the ECG to FDA HL7 v3 aECG XML and streams the result.
-func handleXMLFDADownload(
+// handleConvertDownload converts the ECG to the requested format and streams the result.
+func handleConvertDownload(
 	c echo.Context,
 	ecg *models.ECG,
 	id uint,
 	userID string,
 	patRepo patientByIDFinder,
 	bridge export.Converter,
+	format string,
 	db *gorm.DB,
 ) error {
 	// Load patient demographics (nil is acceptable — conversion continues without enrichment, NFR-R2).
@@ -295,30 +297,33 @@ func handleXMLFDADownload(
 			"patient_id", ecg.PatientID, "error", patErr)
 	}
 
-	xmlData, convErr := bridge.ConvertToXMLFDA(c.Request().Context(), ecg.FilePath, ecg.Vendor, patient)
+	outData, convErr := bridge.Convert(c.Request().Context(), ecg.FilePath, ecg.Vendor, format, patient)
 	if convErr != nil {
 		if errors.Is(convErr, export.ErrFormatNotSupported) {
 			return c.JSON(http.StatusUnprocessableEntity,
-				mw.APIError("FORMAT_NOT_SUPPORTED", "XMLFDA conversion is not yet supported for this ECG vendor"))
+				mw.APIError("FORMAT_NOT_SUPPORTED", "conversion is not yet supported for this ECG vendor/format"))
 		}
-		return c.JSON(http.StatusBadGateway, mw.APIError("CONVERSION_FAILED", "XMLFDA conversion failed"))
+		return c.JSON(http.StatusBadGateway, mw.APIError("CONVERSION_FAILED", "ECG conversion failed"))
 	}
 
 	// Audit log is non-blocking (NFR-R2).
 	if db != nil {
 		_ = mw.WriteAuditLog(c.Request().Context(), db, userID, "ecg_download",
-			strconv.FormatUint(uint64(id), 10), map[string]any{"format": "xmlfda", "vendor": ecg.Vendor})
+			strconv.FormatUint(uint64(id), 10), map[string]any{"format": format, "vendor": ecg.Vendor})
 	}
 
-	// Output filename: strip extension, append .xml; fallback for empty original name.
+	outExt := map[string]string{"xmlfda": ".xml", "dicom": ".dcm"}[format]
+	contentType := map[string]string{"xmlfda": "application/xml", "dicom": "application/dicom"}[format]
+
+	// Output filename: strip original extension, append new one; fallback for empty original name.
 	ext := filepath.Ext(ecg.OriginalFilename)
 	base := ecg.OriginalFilename[:len(ecg.OriginalFilename)-len(ext)]
 	if base == "" {
 		base = "ecg"
 	}
-	xmlName := base + ".xml"
+	outName := base + outExt
 	// Use mime.FormatMediaType so special characters in the filename are properly encoded.
-	disp := mime.FormatMediaType("attachment", map[string]string{"filename": xmlName})
+	disp := mime.FormatMediaType("attachment", map[string]string{"filename": outName})
 	c.Response().Header().Set("Content-Disposition", disp)
-	return c.Blob(http.StatusOK, "application/xml", xmlData)
+	return c.Blob(http.StatusOK, contentType, outData)
 }

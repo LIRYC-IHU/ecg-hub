@@ -66,6 +66,13 @@ type ECGMetadata struct {
 	Extra map[string]any
 }
 
+// ExportFormat describes one output format this module can produce via the converter bridge.
+type ExportFormat struct {
+	ID        string `json:"id"`        // "original" | "xmlfda" | "dicom"
+	Label     string `json:"label"`     // human-readable label for the UI
+	Extension string `json:"extension"` // output file extension (e.g. ".xml", ".dcm")
+}
+
 // Module is the unified contract every vendor format must satisfy.
 // It consolidates file parsing, metadata management, and patient operations
 // into a single interface — replacing the separate Adapter + FileUpdater split.
@@ -83,6 +90,11 @@ type Module interface {
 	// Return nil when healthy, a descriptive error otherwise.
 	// Modules with no external dependencies should always return nil.
 	Health() error
+
+	// SupportedFormats returns the export formats this module can produce.
+	// "original" is always included — it represents the unmodified source file.
+	// Other formats require a matching binary registered in the ECGBridge.
+	SupportedFormats() []ExportFormat
 
 	// Validate checks whether data is a well-formed file for this vendor format
 	// without fully parsing metadata. Lighter than Parse — used for quick rejection

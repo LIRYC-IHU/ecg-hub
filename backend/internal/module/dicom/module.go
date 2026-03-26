@@ -40,6 +40,14 @@ func (m *Module) AcceptedExtensions() []string { return []string{".dcm", ".dicom
 // Health always returns nil — the DICOM module has no external dependencies.
 func (m *Module) Health() error { return nil }
 
+// SupportedFormats returns the export formats this module can produce.
+func (m *Module) SupportedFormats() []module.ExportFormat {
+	return []module.ExportFormat{
+		{ID: "original", Label: "Original (DICOM ECG)", Extension: ".dcm"},
+		{ID: "xmlfda", Label: "FDA HL7 aECG XML", Extension: ".xml"},
+	}
+}
+
 // Validate checks that data contains a valid DICOM file by verifying the
 // 128-byte preamble followed by the "DICM" magic word (bytes 128–131).
 // This is a lightweight check — no full parse is performed.

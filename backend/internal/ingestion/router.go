@@ -70,11 +70,18 @@ func (r *Router) probeModule(ext string, data []byte) (module.Module, bool) {
 			}
 		}
 	}
+	slog.Debug("ingestion: probeModule",
+		"ext", ext,
+		"registered_modules", moduleNames(r.modules),
+		"candidates", len(candidates))
 	if len(candidates) == 0 {
 		return nil, false
 	}
 	for _, m := range candidates {
-		if m.Validate(data) == nil {
+		err := m.Validate(data)
+		slog.Debug("ingestion: module validate",
+			"module", m.Name(), "ext", ext, "valid", err == nil, "error", err)
+		if err == nil {
 			return m, true
 		}
 	}
@@ -82,4 +89,12 @@ func (r *Router) probeModule(ext string, data []byte) (module.Module, bool) {
 	slog.Warn("ingestion: no candidate validated content, falling back to first",
 		"ext", ext, "first", candidates[0].Name())
 	return candidates[0], true
+}
+
+func moduleNames(modules []module.Module) []string {
+	names := make([]string, len(modules))
+	for i, m := range modules {
+		names[i] = m.Name()
+	}
+	return names
 }
