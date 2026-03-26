@@ -8,7 +8,7 @@ import { useNotification } from '../../context/NotificationContext'
 
 const providerColors: Record<string, string> = {
   oidc:  'bg-primary/10 text-primary',
-  ldap:  'bg-purple-50 text-purple-700',
+  ldap:  'bg-ldap/10 text-ldap',
   local: 'bg-muted text-muted-foreground',
 }
 
@@ -93,7 +93,7 @@ export function AdminAppUsersPage() {
       </div>
 
       {isError && (
-        <div className="border border-orange-200 bg-orange-50 rounded-lg px-4 py-3 text-sm text-orange-800 mb-4">
+        <div className="border border-warning/20 bg-warning/10 rounded-lg px-4 py-3 text-sm text-warning mb-4">
           {t('common.error')}
         </div>
       )}
@@ -183,7 +183,7 @@ export function AdminAppUsersPage() {
                     disabled={isPending}
                     className="text-xs bg-primary text-primary-foreground px-2.5 py-1 rounded font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center gap-1"
                   >
-                    {isPending && <Spinner size={11} className="text-white" />}
+                    {isPending && <Spinner size={11} className="text-primary-foreground" />}
                     {t('admin.users.apply')}
                   </button>
                 )}

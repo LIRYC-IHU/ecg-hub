@@ -1,18 +1,15 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 /*
  * ECG Hub — Design System: Direction A (Minimal Clinical)
  *
  * Tailwind v4 theme tokens — registered via @theme so utility classes
  * like bg-background, text-foreground, border-border are available.
  *
- * Primary blue : #2563eb  (blue-600)
- * Background   : #FFFFFF
- * Foreground   : #111827  (gray-900)
- * Muted bg     : #F3F4F6  (gray-100)
- * Border       : #E5E7EB  (gray-200)
- * Patient rows : h-11 (44px)
- * ECG sub-rows : h-9  (36px)
+ * Light / Dark palettes defined below.
+ * Dark mode activated via .dark class on <html>.
  */
 
 @theme {
@@ -53,6 +50,12 @@
   --color-quarantine: #f59e0b;
   --color-quarantine-foreground: #ffffff;
 
+  --color-dicom: #0891b2;
+  --color-dicom-foreground: #ffffff;
+
+  --color-ldap: #7c3aed;
+  --color-ldap-foreground: #ffffff;
+
   --radius: 0.5rem;
 }
 
@@ -67,6 +70,53 @@
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+  }
+
+  .dark {
+    color-scheme: dark;
+
+    --color-background: #0f172a;
+    --color-foreground: #e2e8f0;
+
+    --color-primary: #3b82f6;
+    --color-primary-foreground: #ffffff;
+
+    --color-secondary: #1e293b;
+    --color-secondary-foreground: #e2e8f0;
+
+    --color-muted: #1e293b;
+    --color-muted-foreground: #94a3b8;
+
+    --color-accent: #1e293b;
+    --color-accent-foreground: #e2e8f0;
+
+    --color-destructive: #f87171;
+    --color-destructive-foreground: #ffffff;
+
+    --color-border: #334155;
+    --color-input: #334155;
+    --color-ring: #3b82f6;
+
+    --color-card: #1e293b;
+    --color-card-foreground: #e2e8f0;
+
+    --color-popover: #1e293b;
+    --color-popover-foreground: #e2e8f0;
+
+    --color-success: #22c55e;
+    --color-success-foreground: #ffffff;
+
+    --color-warning: #f59e0b;
+    --color-warning-foreground: #ffffff;
+
+    --color-quarantine: #fbbf24;
+    --color-quarantine-foreground: #111827;
+
+    --color-dicom: #22d3ee;
+    --color-dicom-foreground: #0f172a;
+
+    --color-ldap: #a78bfa;
+    --color-ldap-foreground: #0f172a;
   }
 }
 
