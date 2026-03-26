@@ -39,6 +39,15 @@ func (m *Module) AcceptedExtensions() []string { return []string{".xml"} }
 // Health always returns nil — the Philips module has no external dependencies.
 func (m *Module) Health() error { return nil }
 
+// SupportedFormats returns the export formats this module can produce.
+func (m *Module) SupportedFormats() []module.ExportFormat {
+	return []module.ExportFormat{
+		{ID: "original", Label: "Original (SierraECG XML)", Extension: ".xml"},
+		{ID: "xmlfda", Label: "FDA HL7 aECG XML", Extension: ".xml"},
+		{ID: "dicom", Label: "DICOM ECG", Extension: ".dcm"},
+	}
+}
+
 // Validate checks that data is a non-empty Philips SierraECG XML file with a patient ID.
 // Lighter than Parse — used for quick format rejection before persisting.
 func (m *Module) Validate(data []byte) error {

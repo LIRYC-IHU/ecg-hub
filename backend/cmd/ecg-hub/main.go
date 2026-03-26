@@ -94,10 +94,9 @@ func main() {
 	// Build ECGBridge — maps vendor names to conversion binaries.
 	// Add new vendors here when ecg-bridge publishes new tools.
 	binaries := map[string]string{
-		"philips": envOr("BRIDGE_PHILIPS_TO_FDA", "philips-to-fda"),
-		// "muse":  envOr("BRIDGE_MUSE_TO_FDA", "muse-to-fda"),   // uncomment when available
-		// "mfer":  envOr("BRIDGE_MFER_TO_FDA", "mfer-to-fda"),   // uncomment when available
-		// "dicom": envOr("BRIDGE_DICOM_TO_FDA", "dicom-to-fda"), // uncomment when published
+		"philips:xmlfda": envOr("BRIDGE_PHILIPS_TO_FDA", "philips-to-fda"),
+		"philips:dicom":  envOr("BRIDGE_PHILIPS_TO_DICOM", "philips-to-dicom"),
+		"dicom:xmlfda":   envOr("BRIDGE_DICOM_TO_FDA", "dicom-to-fda"),
 	}
 
 	bridge := export.NewECGBridge(binaries, 5*time.Second)
@@ -143,6 +142,7 @@ func main() {
 	}
 	exportRepo := repository.NewExportJobRepository(gormDB)
 	exportPool := export.NewWorkerPool(cfg.Export, exportRepo, repository.NewECGRepository(gormDB))
+	exportPool.WithConverterDeps(bridge, repository.NewPatientRepository(gormDB))
 	exportPool.Start()
 	defer exportPool.Stop()
 
