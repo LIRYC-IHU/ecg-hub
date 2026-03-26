@@ -82,7 +82,8 @@ export function EcgRow({ ecg, isSelected, onToggle, canForceHL7, canDelete, canR
     <div className="border-b border-border last:border-0">
       {/* Main row */}
       <div
-        className={`grid grid-cols-[32px_140px_80px_120px_1fr_auto] gap-3 px-6 py-2.5 items-center transition-colors ${
+        onClick={onToggle}
+        className={`grid grid-cols-[32px_140px_80px_120px_1fr_auto] gap-3 px-6 py-2.5 items-center transition-colors cursor-pointer ${
           isSelected ? 'bg-primary/5' : 'hover:bg-muted/20'
         }`}
       >
@@ -120,7 +121,7 @@ export function EcgRow({ ecg, isSelected, onToggle, canForceHL7, canDelete, canR
         </span>
 
         {/* Actions */}
-        <div className="flex items-center gap-1 shrink-0">
+        <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
           {/* Download original */}
           <button
             onClick={() => downloadECG(ecg.id)}
