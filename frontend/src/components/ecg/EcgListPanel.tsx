@@ -11,6 +11,7 @@ interface Props {
   patient: Patient;
   selectedECGs: Set<number>;
   onToggleECG: (ecgId: number) => void;
+  onToggleMultipleECGs: (ecgIds: number[], selected: boolean) => void;
   canForceHL7?: boolean;
   canDelete?: boolean;
   canRead?: boolean;
@@ -21,6 +22,7 @@ export function EcgListPanel({
   patient,
   selectedECGs,
   onToggleECG,
+  onToggleMultipleECGs,
   canForceHL7,
   canDelete,
   canRead,
@@ -38,6 +40,21 @@ export function EcgListPanel({
     <div className="border border-border ml-5 -mt-px">
       {/* Filter bar */}
       <div className="bg-muted/30 px-6 py-2 flex items-center gap-3 border-b border-border flex-wrap">
+        {!isLoading && ecgs.length > 0 && (
+          <input
+            type="checkbox"
+            checked={ecgs.every((e) => selectedECGs.has(e.id))}
+            onChange={(e) =>
+              onToggleMultipleECGs(
+                ecgs.map((ecg) => ecg.id),
+                e.target.checked,
+              )
+            }
+            className="w-4 h-4 rounded border-border accent-primary cursor-pointer"
+            aria-label={t("ecg.selectAll")}
+            title={t("ecg.selectAll")}
+          />
+        )}
         <input
           type="date"
           value={filters.from ?? ""}
