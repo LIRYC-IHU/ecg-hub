@@ -11,6 +11,7 @@ interface PatientTableProps {
   isLoading: boolean;
   selectedECGs: Set<number>;
   onToggleECG: (ecgId: number) => void;
+  onToggleMultipleECGs: (ecgIds: number[], selected: boolean) => void;
   canDelete?: boolean;
   canForceHL7?: boolean;
   canRead?: boolean;
@@ -22,12 +23,13 @@ export function PatientTable({
   isLoading,
   selectedECGs,
   onToggleECG,
+  onToggleMultipleECGs,
   canDelete,
   canForceHL7,
   canRead,
   canWrite,
 }: PatientTableProps) {
-  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const { t } = useTranslation();
 
   if (isLoading)
@@ -61,16 +63,22 @@ export function PatientTable({
         <div key={patient.id}>
           <PatientRow
             patient={patient}
-            isExpanded={expandedId === patient.id}
+            isExpanded={expandedIds.has(patient.id)}
             onClick={() =>
-              setExpandedId(expandedId === patient.id ? null : patient.id)
+              setExpandedIds((prev) => {
+                const next = new Set(prev);
+                if (next.has(patient.id)) next.delete(patient.id);
+                else next.add(patient.id);
+                return next;
+              })
             }
           />
-          {expandedId === patient.id && (
+          {expandedIds.has(patient.id) && (
             <EcgListPanel
               patient={patient}
               selectedECGs={selectedECGs}
               onToggleECG={onToggleECG}
+              onToggleMultipleECGs={onToggleMultipleECGs}
               canForceHL7={canForceHL7}
               canDelete={canDelete}
               canRead={canRead}
