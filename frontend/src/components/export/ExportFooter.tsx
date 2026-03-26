@@ -1,78 +1,76 @@
-import { useState } from 'react'
-import { Archive } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
-import { useMutation, useQuery } from '@tanstack/react-query'
-import { createExportJob, fetchModules } from '../../lib/api'
-import type { ExportFormat } from '../../lib/api'
-import { useNotification } from '../../context/NotificationContext'
+import { useState } from "react";
+import { Archive } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { createExportJob, fetchModules } from "../../lib/api";
+import type { ExportFormat } from "../../lib/api";
+import { useNotification } from "../../context/NotificationContext";
 
 interface Props {
-  count: number
-  ecgIds: number[]
-  onClear: () => void
+  count: number;
+  ecgIds: number[];
+  onClear: () => void;
 }
 
 // ExportFooter appears contextually at the bottom when ≥1 ECG is selected.
 // Clicking "Export ZIP" calls POST /api/v1/exports and enqueues a background ZIP job.
 export function ExportFooter({ count, ecgIds, onClear }: Props) {
-  const { t } = useTranslation()
-  const { notify, notifyProgress } = useNotification()
-  const [selectedFormat, setSelectedFormat] = useState('original')
+  const { t } = useTranslation();
+  const { notify, notifyProgress } = useNotification();
+  const [selectedFormat, setSelectedFormat] = useState("original");
 
   // Fetch modules to build the format list. Deduplicate by format ID across all modules.
   const { data: modules } = useQuery({
-    queryKey: ['modules'],
+    queryKey: ["modules"],
     queryFn: fetchModules,
     staleTime: 5 * 60_000,
-  })
+  });
 
   // Collect unique formats across all modules (original always first).
-  const availableFormats: ExportFormat[] = []
-  const seen = new Set<string>()
+  const availableFormats: ExportFormat[] = [];
+  const seen = new Set<string>();
   for (const mod of modules ?? []) {
     for (const fmt of mod.formats ?? []) {
       if (!seen.has(fmt.id)) {
-        seen.add(fmt.id)
-        availableFormats.push(fmt)
+        seen.add(fmt.id);
+        availableFormats.push(fmt);
       }
     }
   }
   // Fallback when modules haven't loaded yet.
   if (availableFormats.length === 0) {
-    availableFormats.push({ id: 'original', label: 'Original', extension: '' })
+    availableFormats.push({ id: "original", label: "Original", extension: "" });
   }
 
   const exportMutation = useMutation({
     mutationFn: () =>
       createExportJob({
         ecg_ids: ecgIds,
-        format: selectedFormat === 'original' ? undefined : selectedFormat,
+        format: selectedFormat === "original" ? undefined : selectedFormat,
       }),
     onSuccess: (response) => {
-      notifyProgress(response.id, t('export.overlayTitle'))
+      notifyProgress(response.id, t("export.overlayTitle"));
       // Defer clear so React flushes the notification render before unmounting
       // this component (both updates would otherwise batch into the same pass).
-      setTimeout(onClear, 100)
+      setTimeout(onClear, 100);
     },
     onError: () => {
-      notify('error', t('export.jobError', "Échec du lancement de l'export"))
+      notify("error", t("export.jobError", "Échec du lancement de l'export"));
     },
-  })
+  });
 
   return (
-    <div className="border-t border-border bg-card/90 backdrop-blur-sm px-6 py-3 flex items-center justify-between shrink-0">
+    <div className="fixed bottom-0 left-52 right-0 z-20 border-t border-border bg-card/90 backdrop-blur-sm px-6 py-3 flex items-center justify-between shrink-0 ">
       <div className="flex items-center gap-2 text-sm text-foreground">
         <Archive className="w-4 h-4 text-primary" />
-        <span className="font-medium">
-          {t('export.selected', { count })}
-        </span>
+        <span className="font-medium">{t("export.selected", { count })}</span>
       </div>
       <div className="flex items-center gap-3">
         <button
           onClick={onClear}
           className="text-xs text-muted-foreground hover:text-foreground transition-colors"
         >
-          {t('export.clearSelection', 'Tout désélectionner')}
+          {t("export.clearSelection", "Tout désélectionner")}
         </button>
         {availableFormats.length > 1 && (
           <select
@@ -95,10 +93,10 @@ export function ExportFooter({ count, ecgIds, onClear }: Props) {
         >
           <Archive className="w-4 h-4" />
           {exportMutation.isPending
-            ? t('export.exporting', 'Export…')
-            : t('export.exportZip')}
+            ? t("export.exporting", "Export…")
+            : t("export.exportZip")}
         </button>
       </div>
     </div>
-  )
+  );
 }

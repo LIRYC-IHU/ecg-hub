@@ -18,8 +18,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /bin/ecg-hub ./cmd/ecg
 
 WORKDIR /app/converter-fda
 
-RUN make
-
+RUN make re
 # Install ecg-bridge conversion tools (GOPATH=/go in golang:alpine image → binaries land in /go/bin/).
 # Add more RUN lines here as new tools are published in github.com/LIRYC-IHU/ecg-bridge.
 # RUN go install github.com/LIRYC-IHU/ecg-bridge/cmd/philips-to-fda@latest

@@ -1,50 +1,81 @@
-import { useState } from 'react'
-import { useTranslation } from 'react-i18next'
-import { useECGs } from '../../hooks/useECGs'
-import { EcgRow } from './EcgRow'
-import { Spinner } from '../ui/Spinner'
-import { EmptyState } from '../ui/EmptyState'
-import type { ECGFilters } from '../../lib/api'
-import type { Patient } from '../../types'
+import { useState } from "react";
+import { useTranslation } from "react-i18next";
+import { useECGs } from "../../hooks/useECGs";
+import { EcgRow } from "./EcgRow";
+import { Spinner } from "../ui/Spinner";
+import { EmptyState } from "../ui/EmptyState";
+import type { ECGFilters } from "../../lib/api";
+import type { Patient } from "../../types";
 
 interface Props {
-  patient: Patient
-  selectedECGs: Set<number>
-  onToggleECG: (ecgId: number) => void
-  canForceHL7?: boolean
-  canDelete?: boolean
-  canRead?: boolean
-  canWrite?: boolean
+  patient: Patient;
+  selectedECGs: Set<number>;
+  onToggleECG: (ecgId: number) => void;
+  onToggleMultipleECGs: (ecgIds: number[], selected: boolean) => void;
+  canForceHL7?: boolean;
+  canDelete?: boolean;
+  canRead?: boolean;
+  canWrite?: boolean;
 }
 
-export function EcgListPanel({ patient, selectedECGs, onToggleECG, canForceHL7, canDelete, canRead, canWrite }: Props) {
-  const { t } = useTranslation()
-  const [filters, setFilters] = useState<ECGFilters>({})
-  const { ecgs, total, isLoading } = useECGs(patient.id, filters)
+export function EcgListPanel({
+  patient,
+  selectedECGs,
+  onToggleECG,
+  onToggleMultipleECGs,
+  canForceHL7,
+  canDelete,
+  canRead,
+  canWrite,
+}: Props) {
+  const { t } = useTranslation();
+  const [filters, setFilters] = useState<ECGFilters>({});
+  const { ecgs, total, isLoading } = useECGs(patient.id, filters);
 
   function handleFilterChange(patch: Partial<ECGFilters>) {
-    setFilters((prev) => ({ ...prev, ...patch }))
+    setFilters((prev) => ({ ...prev, ...patch }));
   }
 
   return (
-    <div className="border-b border-border">
+    <div className="border border-border ml-5 -mt-px">
       {/* Filter bar */}
       <div className="bg-muted/30 px-6 py-2 flex items-center gap-3 border-b border-border flex-wrap">
+        {!isLoading && ecgs.length > 0 && (
+          <input
+            type="checkbox"
+            checked={ecgs.every((e) => selectedECGs.has(e.id))}
+            onChange={(e) =>
+              onToggleMultipleECGs(
+                ecgs.map((ecg) => ecg.id),
+                e.target.checked,
+              )
+            }
+            className="w-4 h-4 rounded border-border accent-primary cursor-pointer"
+            aria-label={t("ecg.selectAll")}
+            title={t("ecg.selectAll")}
+          />
+        )}
         <input
           type="date"
-          value={filters.from ?? ''}
-          onChange={(e) => handleFilterChange({ from: e.target.value || undefined })}
+          value={filters.from ?? ""}
+          onChange={(e) =>
+            handleFilterChange({ from: e.target.value || undefined })
+          }
           className="text-xs bg-card border border-border rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring/20"
         />
         <input
           type="date"
-          value={filters.to ?? ''}
-          onChange={(e) => handleFilterChange({ to: e.target.value || undefined })}
+          value={filters.to ?? ""}
+          onChange={(e) =>
+            handleFilterChange({ to: e.target.value || undefined })
+          }
           className="text-xs bg-card border border-border rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring/20"
         />
         <select
-          value={filters.vendor ?? ''}
-          onChange={(e) => handleFilterChange({ vendor: e.target.value || undefined })}
+          value={filters.vendor ?? ""}
+          onChange={(e) =>
+            handleFilterChange({ vendor: e.target.value || undefined })
+          }
           className="text-xs bg-card border border-border rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring/20"
         >
           <option value="">Toutes sources</option>
@@ -52,14 +83,19 @@ export function EcgListPanel({ patient, selectedECGs, onToggleECG, canForceHL7, 
           <option value="philips">Philips</option>
         </select>
         <select
-          value={filters.hl7_status ?? ''}
-          onChange={(e) => handleFilterChange({ hl7_status: (e.target.value as ECGFilters['hl7_status']) || undefined })}
+          value={filters.hl7_status ?? ""}
+          onChange={(e) =>
+            handleFilterChange({
+              hl7_status:
+                (e.target.value as ECGFilters["hl7_status"]) || undefined,
+            })
+          }
           className="text-xs bg-card border border-border rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring/20"
         >
-          <option value="">{t('ecg.hl7Status')}</option>
-          <option value="pending">{t('ecg.status.pending')}</option>
-          <option value="success">{t('ecg.status.success')}</option>
-          <option value="hl7_exhausted">{t('ecg.status.hl7_exhausted')}</option>
+          <option value="">{t("ecg.hl7Status")}</option>
+          <option value="pending">{t("ecg.status.pending")}</option>
+          <option value="success">{t("ecg.status.success")}</option>
+          <option value="hl7_exhausted">{t("ecg.status.hl7_exhausted")}</option>
         </select>
       </div>
 
@@ -92,5 +128,5 @@ export function EcgListPanel({ patient, selectedECGs, onToggleECG, canForceHL7, 
         </>
       )}
     </div>
-  )
+  );
 }
