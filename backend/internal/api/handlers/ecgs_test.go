@@ -43,6 +43,14 @@ type stubConverter struct {
 	err  error
 }
 
+func (s *stubConverter) Convert(_ context.Context, _, _, _ string, _ *models.Patient) ([]byte, error) {
+	return s.data, s.err
+}
+
+func (s *stubConverter) SupportsFormat(_, _ string) bool {
+	return s.err == nil
+}
+
 func (s *stubConverter) ConvertToXMLFDA(_ context.Context, _, _ string, _ *models.Patient) ([]byte, error) {
 	return s.data, s.err
 }
