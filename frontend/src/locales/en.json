@@ -27,6 +27,7 @@
     "delete": "Delete",
     "deleteConfirm": "Permanently delete this ECG?",
     "downloadOriginal": "Original format",
+    "downloadError": "Download failed",
     "downloadXmlfda": "XMLFDA format",
     "vendor": "Vendor",
     "date": "Date",

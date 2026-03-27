@@ -27,6 +27,7 @@
     "delete": "Supprimer",
     "deleteConfirm": "Supprimer définitivement cet ECG ?",
     "downloadOriginal": "Format original",
+    "downloadError": "Erreur lors du téléchargement",
     "downloadXmlfda": "Format XMLFDA",
     "vendor": "Vendeur",
     "date": "Date",
