@@ -124,7 +124,11 @@ export function EcgRow({ ecg, isSelected, onToggle, canForceHL7, canDelete, canR
         <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
           {/* Download original */}
           <button
-            onClick={() => downloadECG(ecg.id)}
+            onClick={() => {
+              downloadECG(ecg.id).catch((err: { message?: string }) => {
+                notify('error', err?.message ?? t('ecg.downloadError'))
+              })
+            }}
             className="p-1.5 rounded hover:bg-muted transition-colors"
             title={t('ecg.downloadOriginal')}
           >
@@ -135,7 +139,11 @@ export function EcgRow({ ecg, isSelected, onToggle, canForceHL7, canDelete, canR
           {extraFormats.map((fmt) => (
             <button
               key={fmt.id}
-              onClick={() => downloadECGFormat(ecg.id, fmt.id)}
+              onClick={() => {
+                downloadECGFormat(ecg.id, fmt.id).catch((err: { message?: string }) => {
+                  notify('error', err?.message ?? t('ecg.downloadError'))
+                })
+              }}
               className="p-1.5 rounded hover:bg-muted transition-colors"
               title={fmt.label}
             >
