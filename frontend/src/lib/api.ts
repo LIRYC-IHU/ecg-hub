@@ -61,25 +61,43 @@ export async function fetchECGs(
   return res.json()
 }
 
+// triggerBlobDownload fetches a URL and triggers a browser download from a blob.
+// Unlike window.location.href, this allows catching JSON error responses.
+async function triggerBlobDownload(url: string): Promise<void> {
+  const res = await fetch(url)
+  if (!res.ok) {
+    const err: ErrorResponse = await res.json()
+    throw err
+  }
+  const blob = await res.blob()
+  const disposition = res.headers.get('Content-Disposition') ?? ''
+  const match = disposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/)
+  const filename = match ? match[1].replace(/['"]/g, '') : 'download'
+  const objectUrl = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = objectUrl
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(objectUrl)
+}
+
 // downloadECG triggers a browser file download for the original ECG format.
-// window.location.href sends the JWT cookie automatically; Content-Disposition: attachment
-// causes the browser to save the file rather than navigate.
-export function downloadECG(id: number): void {
-  window.location.href = `${BASE_URL}/api/v1/ecgs/${id}/download`
+export async function downloadECG(id: number): Promise<void> {
+  await triggerBlobDownload(`${BASE_URL}/api/v1/ecgs/${id}/download`)
 }
 
 // downloadECGXMLFDA triggers a browser file download of the ECG converted to FDA HL7 v3 aECG XML.
-export function downloadECGXMLFDA(id: number): void {
-  window.location.href = `${BASE_URL}/api/v1/ecgs/${id}/download?format=xmlfda`
+export async function downloadECGXMLFDA(id: number): Promise<void> {
+  await triggerBlobDownload(`${BASE_URL}/api/v1/ecgs/${id}/download?format=xmlfda`)
 }
 
 // downloadECGFormat triggers a browser download for a specific export format.
 // format = "original" | "xmlfda" | "dicom" | ...
-export function downloadECGFormat(id: number, format: string): void {
+export async function downloadECGFormat(id: number, format: string): Promise<void> {
   if (format === 'original') {
-    window.location.href = `${BASE_URL}/api/v1/ecgs/${id}/download`
+    await triggerBlobDownload(`${BASE_URL}/api/v1/ecgs/${id}/download`)
   } else {
-    window.location.href = `${BASE_URL}/api/v1/ecgs/${id}/download?format=${encodeURIComponent(format)}`
+    await triggerBlobDownload(`${BASE_URL}/api/v1/ecgs/${id}/download?format=${encodeURIComponent(format)}`)
   }
 }
 
