@@ -24,7 +24,7 @@ import (
 //   - Public:    /healthz, /swagger/*
 //   - Auth-only: /api/v1/auth/login (issues the token — no prior token needed)
 //   - Protected: all other /api/v1/* routes require a valid Bearer JWT
-func RegisterRoutes(e *echo.Echo, gormDB *gorm.DB, authProvider auth.Provider, bridge export.Converter, notifier *webhook.Notifier, keycloakAdmin *auth.KeycloakAdminClient, checker *auth.PermissionChecker, userRepo *repository.UserRepo, activeModules []module.Module, dicomStatus handlers.DICOMStatus, ftpStatus handlers.FTPStatus, exportRepo *repository.ExportJobRepository, exportPool *export.WorkerPool) {
+func RegisterRoutes(e *echo.Echo, gormDB *gorm.DB, authProvider auth.Provider, bridge export.Converter, notifier *webhook.Notifier, keycloakAdmin *auth.KeycloakAdminClient, checker *auth.PermissionChecker, userRepo *repository.UserRepo, activeModules []module.Module, dicomStatus handlers.DICOMStatus, ftpStatus handlers.FTPStatus, ectpStatus handlers.ECTPStatus, exportRepo *repository.ExportJobRepository, exportPool *export.WorkerPool) {
 	// Obtain *sql.DB for the healthz ping.
 	var pinger handlers.DBPinger
 	if sqlDB, err := gormDB.DB(); err != nil {
@@ -37,7 +37,7 @@ func RegisterRoutes(e *echo.Echo, gormDB *gorm.DB, authProvider auth.Provider, b
 	roleRepo := repository.NewRoleRepo(gormDB)
 
 	// === Public routes ===
-	e.GET("/healthz", handlers.HealthHandler(pinger, dicomStatus, ftpStatus))
+	e.GET("/healthz", handlers.HealthHandler(pinger, dicomStatus, ftpStatus, ectpStatus))
 	e.GET("/swagger/*", echoSwagger.WrapHandler)
 
 	// === Authentication (public — these endpoints issue JWTs) ===
