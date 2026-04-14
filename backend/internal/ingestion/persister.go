@@ -140,7 +140,16 @@ func buildExtra(meta *module.ECGMetadata) map[string]any {
 //  4. Insert the ECG row
 func (p *Persister) persist(ri RoutedItem) error {
 	ext := strings.ToLower(filepath.Ext(ri.IngestItem.Filename))
-	base := BuildBaseName(ri.Meta.PatientID, ri.Meta.RecordedAt, ri.Meta.VendorName)
+	patientID := ri.Meta.PatientID
+	if patientID == "" {
+		// Module didn't extract a patient ID — fall back to the original filename stem.
+		stem := ri.IngestItem.Filename
+		if e := filepath.Ext(stem); e != "" {
+			stem = stem[:len(stem)-len(e)]
+		}
+		patientID = stem
+	}
+	base := BuildBaseName(patientID, ri.Meta.RecordedAt, ri.Meta.VendorName)
 	filename := UniqueFilename(base, ext, p.volume.Exists)
 
 	fullPath, err := p.volume.Write(filename, ri.IngestItem.Data)
