@@ -126,6 +126,8 @@ export async function fetchHealth(): Promise<{
   dicom_port?: number
   ftp_enabled?: boolean
   ftp_port?: number
+  ectp_enabled?: boolean
+  ectp_port?: number
 }> {
   const res = await fetch(`${BASE_URL}/healthz`)
   return res.json()
