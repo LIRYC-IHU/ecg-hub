@@ -34,6 +34,13 @@ type FTPStatus struct {
 	Port    int
 }
 
+// ECTPStatus carries the ECTP server configuration for the health response.
+// Active when the nihon-kohden module is loaded.
+type ECTPStatus struct {
+	Enabled bool
+	Port    int
+}
+
 // HealthResponse is the JSON body returned by GET /healthz.
 type HealthResponse struct {
 	Status       string `json:"status"`        // "ok" or "degraded"
@@ -42,6 +49,8 @@ type HealthResponse struct {
 	DicomPort    int    `json:"dicom_port"`    // configured port (0 when disabled)
 	FTPEnabled   bool   `json:"ftp_enabled"`   // true when ftp.enabled: true in config
 	FTPPort      int    `json:"ftp_port"`      // configured port (0 when disabled)
+	ECTPEnabled  bool   `json:"ectp_enabled"`  // true when nihon-kohden module is active
+	ECTPPort     int    `json:"ectp_port"`     // ECTP TCP port (0 when disabled)
 }
 
 // HealthHandler returns an Echo handler that checks database connectivity.
@@ -54,7 +63,7 @@ type HealthResponse struct {
 //	@Success		200	{object}	HealthResponse
 //	@Failure		503	{object}	HealthResponse
 //	@Router			/healthz [get]
-func HealthHandler(pinger DBPinger, dicom DICOMStatus, ftp FTPStatus) echo.HandlerFunc {
+func HealthHandler(pinger DBPinger, dicom DICOMStatus, ftp FTPStatus, ectp ECTPStatus) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		ctx, cancel := context.WithTimeout(c.Request().Context(), 3*time.Second)
 		defer cancel()
@@ -68,6 +77,8 @@ func HealthHandler(pinger DBPinger, dicom DICOMStatus, ftp FTPStatus) echo.Handl
 				DicomPort:    dicom.Port,
 				FTPEnabled:   ftp.Enabled,
 				FTPPort:      ftp.Port,
+				ECTPEnabled:  ectp.Enabled,
+				ECTPPort:     ectp.Port,
 			})
 		}
 
@@ -78,6 +89,8 @@ func HealthHandler(pinger DBPinger, dicom DICOMStatus, ftp FTPStatus) echo.Handl
 			DicomPort:    dicom.Port,
 			FTPEnabled:   ftp.Enabled,
 			FTPPort:      ftp.Port,
+			ECTPEnabled:  ectp.Enabled,
+			ECTPPort:     ectp.Port,
 		})
 	}
 }
