@@ -17,6 +17,8 @@ import (
 	"log/slog"
 	"sync"
 	"time"
+
+	"github.com/LIRYC-IHU/ecg-hub/internal/config"
 )
 
 // MetadataPatch carries the editable fields that can be written back to a source file.
@@ -115,6 +117,25 @@ type Module interface {
 	// and returns the modified bytes. The input bytes are not modified.
 	// Used for patient merge or identifier correction on the source file.
 	RenamePatientID(data []byte, newID string) ([]byte, error)
+}
+
+// Startable est optionnelle — modules nécessitant un serveur ou une goroutine.
+type Startable interface {
+	Start(cfg *config.Config) error
+}
+
+// DBAccessor is an optional interface for modules that need a database handle.
+// main.go iterates active modules and calls SetDB before Start.
+// The db value is always *gorm.DB — modules type-assert as needed.
+type DBAccessor interface {
+	SetDB(db any)
+}
+
+// FTPFileTracker is an optional interface for modules that need to record
+// which files arrived via FTP (e.g. for ECTP FILE|ENDS verification).
+// main.go calls RegisterFTPFile for each module that implements this interface.
+type FTPFileTracker interface {
+	RegisterFTPFile(filename string) error
 }
 
 // SafeParse calls m.Parse with panic recovery.
