@@ -19,6 +19,7 @@ func RunMigrations(db *gorm.DB) error {
 		&models.AuditLog{},
 		&models.QuarantineEntry{},
 		&models.ExportJob{},
+		&models.NihonKohdenTransfer{},
 		&repository.RoleRecord{},
 		&repository.RolePermRecord{},
 		&repository.UserRecord{},
