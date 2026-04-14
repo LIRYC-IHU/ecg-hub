@@ -52,12 +52,15 @@ export function AdminSystemPage() {
   const dicomPort    = health.data?.dicom_port ?? 0
   const ftpEnabled   = health.data?.ftp_enabled ?? false
   const ftpPort      = health.data?.ftp_port ?? 0
+  const ectpEnabled  = health.data?.ectp_enabled ?? false
+  const ectpPort     = health.data?.ectp_port ?? 0
 
   const services = [
     { name: 'Base de données', icon: Database, ok: health.data?.database === 'ok', label: undefined },
     { name: 'API REST',        icon: Server,   ok: health.data?.status === 'ok',   label: undefined },
     { name: 'Serveur FTP',     icon: HardDrive, ok: ftpEnabled,                    label: ftpEnabled   ? `:${ftpPort}`   : 'Désactivé' },
     { name: 'Serveur DICOM',   icon: Radio,    ok: dicomEnabled,                   label: dicomEnabled ? `:${dicomPort}` : 'Désactivé' },
+    { name: 'Serveur ECTP',    icon: Activity, ok: ectpEnabled,                    label: ectpEnabled  ? `:${ectpPort}`  : 'Désactivé' },
   ]
 
   function copyToClipboard(text: string) {
