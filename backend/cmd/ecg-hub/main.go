@@ -19,6 +19,7 @@ import (
 	"github.com/LIRYC-IHU/ecg-hub/internal/ingestion"
 	"github.com/LIRYC-IHU/ecg-hub/internal/module"
 	_ "github.com/LIRYC-IHU/ecg-hub/internal/module/dicom"
+	_ "github.com/LIRYC-IHU/ecg-hub/internal/module/nihon-kohden"
 	_ "github.com/LIRYC-IHU/ecg-hub/internal/module/philips"
 	"github.com/LIRYC-IHU/ecg-hub/internal/storage"
 	"github.com/LIRYC-IHU/ecg-hub/internal/webhook"
@@ -131,6 +132,16 @@ func main() {
 	activeModules := module.Active(cfg.Modules.Active)
 	for _, m := range activeModules {
 		slog.Info("module: loaded", "name", m.Name(), "extensions", m.AcceptedExtensions())
+		// Wire DB before Start so modules can build their own repositories.
+		if dba, ok := m.(module.DBAccessor); ok {
+			dba.SetDB(gormDB)
+		}
+		if s, ok := m.(module.Startable); ok {
+			if err := s.Start(cfg); err != nil {
+				slog.Error("FATAL: module start failed", "module", m.Name(), "error", err)
+				os.Exit(1)
+			}
+		}
 	}
 
 	// Step 9: Export worker pool (Story 5.1, FR19, NFR-SC3).
@@ -146,9 +157,19 @@ func main() {
 	exportPool.Start()
 	defer exportPool.Stop()
 
+	// Detect ECTP status from any active module that exposes an ECTP server.
+	ectpStatus := apihandlers.ECTPStatus{}
+	for _, m := range activeModules {
+		if ep, ok := m.(module.ECTPProvider); ok {
+			ectpStatus = apihandlers.ECTPStatus{Enabled: true, Port: ep.ECTPListenPort()}
+			break
+		}
+	}
+
 	api.RegisterRoutes(e, gormDB, authProvider, bridge, webhookNotifier, keycloakAdmin, permChecker, userRepo, activeModules,
 		apihandlers.DICOMStatus{Enabled: cfg.DICOM.Enabled, Port: cfg.DICOM.Port},
 		apihandlers.FTPStatus{Enabled: cfg.FTP.Enabled, Port: cfg.FTP.Port},
+		ectpStatus,
 		exportRepo, exportPool)
 
 	// Step 5: Start FTP ingestion server (Story 2.2).
@@ -159,6 +180,19 @@ func main() {
 		os.Exit(1)
 	}
 	defer ftpServer.Stop()
+
+	// Wire FTP file-received hook for modules that implement FTPFileTracker
+	// (e.g. nihon-kohden uses it for ECTP FILE|ENDS verification).
+	for _, m := range activeModules {
+		if tracker, ok := m.(module.FTPFileTracker); ok {
+			name := m.Name()
+			ftpServer.SetFileReceivedHook(func(filename string) {
+				if err := tracker.RegisterFTPFile(filename); err != nil {
+					slog.Warn("ftp: failed to register transfer", "module", name, "filename", filename, "error", err)
+				}
+			})
+		}
+	}
 
 	// Step 8: Start DICOM C-STORE SCP server (Story 7.1).
 	// Shares the same ftpQueue — DICOM and FTP files flow through the same Dispatcher.
@@ -221,7 +255,7 @@ func main() {
 	persister.Start()
 	defer persister.Stop()
 
-	// Step 8: Start storage janitor — enforces max_size_gb soft cap by rotating oldest files.
+	// Step 9: Start storage janitor — enforces max_size_gb soft cap by rotating oldest files.
 	janitor := storage.NewJanitor(cfg.Storage)
 	janitor.Start(time.Hour)
 	defer janitor.Stop()
