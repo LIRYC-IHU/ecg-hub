@@ -46,6 +46,19 @@ func Load(cfgPath string) (*Config, error) {
 	cfg.HL7Password = os.Getenv("HL7_PASSWORD")
 	cfg.WebhookSecret = os.Getenv("WEBHOOK_SECRET")
 	cfg.OIDCAdminClientSecret = os.Getenv("OIDC_ADMIN_CLIENT_SECRET")
+	if v := os.Getenv("FTP_PUBLIC_HOST"); v != "" {
+		cfg.FTPPublicHost = v
+		cfg.FTP.PublicHost = v
+	}
+
+	if cfg.PACS.Enabled {
+		if polaris, ok := cfg.PACS.Tool["polaris"]; ok {
+			polaris.Ftp.username = os.Getenv("POLARIS_FTP_USERNAME")
+			polaris.Ftp.password = os.Getenv("POLARIS_FTP_PASSWORD")
+			polaris.Port = "30003"
+			cfg.PACS.Tool["polaris"] = polaris
+		}
+	}
 
 	if err := validate(&cfg); err != nil {
 		return nil, err

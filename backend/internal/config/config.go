@@ -46,6 +46,9 @@ type Config struct {
 	// The client ID used is OIDCClientID. Set via OIDC_ADMIN_CLIENT_SECRET env var.
 	// If empty, user/role management endpoints return 503.
 	OIDCAdminClientSecret string
+	// FTPPublicHost overrides ftp.public_host from FTP_PUBLIC_HOST env var.
+	// Required in Docker when FTP clients are on the LAN — set to the Docker host's LAN IP.
+	FTPPublicHost string
 }
 
 // ServerConfig holds HTTP server settings.
@@ -211,8 +214,20 @@ type ModulesConfig struct {
 
 // PACSConfig holds PACS forwarding settings (FR35, Phase 4).
 type PACSConfig struct {
-	Enabled bool `mapstructure:"enabled"`
-	// Protocol selects the forwarding protocol: "ftp" or "dicom".
-	Protocol string `mapstructure:"protocol"`
+	Enabled bool                      `mapstructure:"enabled"`
+	Tool    map[string]PacSConfigTool `mapstructure:"tool"`
+}
+
+// PacSConfigTool holds settings for a specific PACS tool (e.g., Polaris).
+type PacSConfigTool struct {
+	Enabled bool            `mapstructure:"enabled"`
+	Host    string          `mapstructure:"host"`
+	Port    string          `mapstructure:"port"` // For polaria default 30003
+	Ftp     FTPClientConfig `mapstructure:"ftp"`
+}
+
+type FTPClientConfig struct {
 	Host     string `mapstructure:"host"`
+	username string
+	password string
 }
