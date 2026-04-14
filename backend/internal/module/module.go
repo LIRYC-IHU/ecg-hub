@@ -138,6 +138,12 @@ type FTPFileTracker interface {
 	RegisterFTPFile(filename string) error
 }
 
+// ECTPProvider is an optional interface for modules that expose an ECTP TCP server.
+// main.go uses it to populate the health endpoint with ECTP port information.
+type ECTPProvider interface {
+	ECTPListenPort() int
+}
+
 // SafeParse calls m.Parse with panic recovery.
 // If Parse panics, the panic is logged via slog and an error is returned —
 // the caller receives a non-nil error instead of a crashed goroutine.
