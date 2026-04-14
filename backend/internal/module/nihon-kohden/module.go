@@ -36,6 +36,10 @@ func (m *Module) AcceptedExtensions() []string { return []string{".dat", ".DAT"}
 
 func (m *Module) Health() error { return nil }
 
+// ECTPListenPort implements module.ECTPProvider.
+// Returns the TCP port on which the ECTP server listens.
+func (m *Module) ECTPListenPort() int { return ECTPPort }
+
 // SupportedFormats returns the export formats this module can produce.
 func (m *Module) SupportedFormats() []module.ExportFormat {
 	return []module.ExportFormat{
