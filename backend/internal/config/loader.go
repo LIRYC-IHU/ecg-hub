@@ -46,6 +46,18 @@ func Load(cfgPath string) (*Config, error) {
 	cfg.HL7Password = os.Getenv("HL7_PASSWORD")
 	cfg.WebhookSecret = os.Getenv("WEBHOOK_SECRET")
 	cfg.OIDCAdminClientSecret = os.Getenv("OIDC_ADMIN_CLIENT_SECRET")
+	if v := os.Getenv("FTP_PUBLIC_HOST"); v != "" {
+		cfg.FTPPublicHost = v
+		cfg.FTP.PublicHost = v
+	}
+
+	// Populate connector credentials from env vars (NFR-S2).
+	// Convention: <UPPER(name)>_FTP_USERNAME / <UPPER(name)>_FTP_PASSWORD
+	for i, c := range cfg.PACS.Connectors {
+		nameUpper := strings.ToUpper(c.Name)
+		cfg.PACS.Connectors[i].FTPUsername = os.Getenv(nameUpper + "_FTP_USERNAME")
+		cfg.PACS.Connectors[i].FTPPassword = os.Getenv(nameUpper + "_FTP_PASSWORD")
+	}
 
 	if err := validate(&cfg); err != nil {
 		return nil, err

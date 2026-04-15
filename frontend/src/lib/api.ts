@@ -119,6 +119,20 @@ export async function fetchAdminStats(): Promise<AdminStats> {
   return res.json()
 }
 
+export interface ConnectorHealthEntry {
+  name: string
+  status: string // "ok" or error message
+}
+
+export async function fetchConnectors(): Promise<ConnectorHealthEntry[]> {
+  const res = await fetch(`${BASE_URL}/api/v1/admin/connectors`)
+  if (!res.ok) {
+    const err: ErrorResponse = await res.json()
+    throw err
+  }
+  return res.json()
+}
+
 export async function fetchHealth(): Promise<{
   status: string
   database: string
@@ -126,6 +140,9 @@ export async function fetchHealth(): Promise<{
   dicom_port?: number
   ftp_enabled?: boolean
   ftp_port?: number
+  ectp_enabled?: boolean
+  ectp_port?: number
+  connectors?: ConnectorHealthEntry[]
 }> {
   const res = await fetch(`${BASE_URL}/healthz`)
   return res.json()

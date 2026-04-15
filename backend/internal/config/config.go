@@ -46,6 +46,9 @@ type Config struct {
 	// The client ID used is OIDCClientID. Set via OIDC_ADMIN_CLIENT_SECRET env var.
 	// If empty, user/role management endpoints return 503.
 	OIDCAdminClientSecret string
+	// FTPPublicHost overrides ftp.public_host from FTP_PUBLIC_HOST env var.
+	// Required in Docker when FTP clients are on the LAN — set to the Docker host's LAN IP.
+	FTPPublicHost string
 }
 
 // ServerConfig holds HTTP server settings.
@@ -209,10 +212,56 @@ type ModulesConfig struct {
 	Active []string `mapstructure:"active"`
 }
 
-// PACSConfig holds PACS forwarding settings (FR35, Phase 4).
+// PACSConfig holds outbound PACS connector settings (Connector Pack).
 type PACSConfig struct {
-	Enabled bool `mapstructure:"enabled"`
-	// Protocol selects the forwarding protocol: "ftp" or "dicom".
-	Protocol string `mapstructure:"protocol"`
-	Host     string `mapstructure:"host"`
+	Enabled    bool              `mapstructure:"enabled"`
+	Connectors []ConnectorConfig `mapstructure:"connectors"`
+}
+
+// ConnectorConfig holds settings for a single outbound PACS connector.
+type ConnectorConfig struct {
+	Name     string               `mapstructure:"name"`
+	Enabled  bool                 `mapstructure:"enabled"`
+	Protocol string               `mapstructure:"protocol"` // "ectp_ftp" | "dicom"
+	Filters  ConnectorFilters     `mapstructure:"filters"`
+	Retry    ConnectorRetryConfig `mapstructure:"retry"`
+	ECTP     ECTPClientConfig     `mapstructure:"ectp"`
+	FTP      FTPConnectorConfig   `mapstructure:"ftp"`
+
+	// Secrets — populated from env vars after YAML loading (NFR-S2).
+	// Convention: <UPPER(name)>_FTP_USERNAME / <UPPER(name)>_FTP_PASSWORD
+	FTPUsername string
+	FTPPassword string
+}
+
+// ConnectorFilters restricts which ECGs a connector forwards.
+// An empty slice means "accept all" for that dimension.
+type ConnectorFilters struct {
+	// Extensions is the list of lowercase file extensions to forward (e.g. [".dat"]).
+	// Empty = accept all extensions.
+	Extensions []string `mapstructure:"extensions"`
+	// Vendors is the list of vendor names to forward (e.g. ["nihon-kohden"]).
+	// Empty = accept all vendors.
+	Vendors []string `mapstructure:"vendors"`
+}
+
+// ConnectorRetryConfig controls retry behaviour on forwarding failure.
+type ConnectorRetryConfig struct {
+	// MaxAttempts is the total number of attempts before a job is exhausted.
+	MaxAttempts int `mapstructure:"max_attempts"`
+	// Interval is the duration between retry attempts (e.g. "5m").
+	Interval string `mapstructure:"interval"`
+}
+
+// ECTPClientConfig holds settings for the outbound ECTP TCP connection.
+type ECTPClientConfig struct {
+	Host string `mapstructure:"host"`
+	Port int    `mapstructure:"port"`
+}
+
+// FTPConnectorConfig holds settings for the outbound FTP client.
+// Credentials are in ConnectorConfig.FTPUsername / FTPPassword (env vars).
+type FTPConnectorConfig struct {
+	Host string `mapstructure:"host"`
+	Port int    `mapstructure:"port"`
 }

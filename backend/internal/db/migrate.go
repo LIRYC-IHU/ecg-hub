@@ -19,6 +19,8 @@ func RunMigrations(db *gorm.DB) error {
 		&models.AuditLog{},
 		&models.QuarantineEntry{},
 		&models.ExportJob{},
+		&models.NihonKohdenTransfer{},
+		&models.ConnectorJob{},
 		&repository.RoleRecord{},
 		&repository.RolePermRecord{},
 		&repository.UserRecord{},
@@ -98,6 +100,30 @@ func applyConstraints(db *gorm.DB) error {
 				) THEN
 					ALTER TABLE ecg_hub_users ADD CONSTRAINT fk_ecg_hub_users_role_id
 						FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE SET NULL;
+				END IF;
+			END $$`,
+		},
+		{
+			"fk connector_jobs.ecg_id → ecgs.id",
+			`DO $$ BEGIN
+				IF NOT EXISTS (
+					SELECT 1 FROM information_schema.table_constraints
+					WHERE constraint_name = 'fk_connector_jobs_ecg_id' AND table_name = 'connector_jobs'
+				) THEN
+					ALTER TABLE connector_jobs ADD CONSTRAINT fk_connector_jobs_ecg_id
+						FOREIGN KEY (ecg_id) REFERENCES ecgs(id);
+				END IF;
+			END $$`,
+		},
+		{
+			"check connector_jobs.status",
+			`DO $$ BEGIN
+				IF NOT EXISTS (
+					SELECT 1 FROM information_schema.table_constraints
+					WHERE constraint_name = 'chk_connector_jobs_status' AND table_name = 'connector_jobs'
+				) THEN
+					ALTER TABLE connector_jobs ADD CONSTRAINT chk_connector_jobs_status
+						CHECK (status IN ('pending', 'sent', 'failed', 'exhausted'));
 				END IF;
 			END $$`,
 		},

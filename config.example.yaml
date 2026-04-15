@@ -76,6 +76,13 @@ dicom:
 
 pacs:
   enabled: false
+  tool:
+    polaris:
+      enabled: true
+      host: polaris.example.com
+      ftp:
+        host: polaris.example.com
+        # secret set via POLARIS_FTP_USERNAME & POLARIS_FTP_PASSWORD env var
   # protocol: ftp | dicom
   # host: pacs.example.com
 

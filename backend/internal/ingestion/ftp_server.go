@@ -23,9 +23,16 @@ const tlsRequirementExplicit = ftpserver.MandatoryEncryption
 // Server wraps ftpserverlib and pushes received files onto an IngestQueue.
 // It implements ftpserver.MainDriver — one instance per running server.
 type Server struct {
-	cfg   *config.Config
-	queue IngestQueue
-	srv   *ftpserver.FtpServer
+	cfg            *config.Config
+	queue          IngestQueue
+	srv            *ftpserver.FtpServer
+	onFileReceived func(filename string) // optional hook, called after each successful upload
+}
+
+// SetFileReceivedHook registers a callback invoked after each successful FTP upload.
+// Used by modules (e.g. nihon-kohden) to track received filenames for ECTP verification.
+func (s *Server) SetFileReceivedHook(fn func(filename string)) {
+	s.onFileReceived = fn
 }
 
 // New creates a Server. Call Start() to begin accepting connections.
@@ -116,7 +123,7 @@ func (s *Server) AuthUser(_ ftpserver.ClientContext, user, pass string) (ftpserv
 		return nil, fmt.Errorf("ftp: invalid credentials")
 	}
 	slog.Info("ftp: authenticated", "user", user)
-	return &clientDriver{MemMapFs: &afero.MemMapFs{}, queue: s.queue}, nil
+	return &clientDriver{MemMapFs: &afero.MemMapFs{}, queue: s.queue, onFileReceived: s.onFileReceived}, nil
 }
 
 // GetTLSConfig loads the TLS certificate when ftp.tls is enabled.
@@ -143,7 +150,8 @@ func (s *Server) GetTLSConfig() (*tls.Config, error) {
 // only Create and OpenFile are overridden to intercept write operations.
 type clientDriver struct {
 	*afero.MemMapFs
-	queue IngestQueue
+	queue          IngestQueue
+	onFileReceived func(filename string)
 }
 
 // Create intercepts file creation (write path for FTP STOR command).
@@ -152,7 +160,7 @@ func (d *clientDriver) Create(name string) (afero.File, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &ingestFile{File: f, name: name, queue: d.queue}, nil
+	return &ingestFile{File: f, name: name, queue: d.queue, onFileReceived: d.onFileReceived}, nil
 }
 
 // OpenFile intercepts write-mode opens.
@@ -163,7 +171,7 @@ func (d *clientDriver) OpenFile(name string, flag int, perm os.FileMode) (afero.
 	}
 	const writeModes = os.O_WRONLY | os.O_RDWR | os.O_APPEND | os.O_CREATE | os.O_TRUNC
 	if flag&writeModes != 0 {
-		return &ingestFile{File: f, name: name, queue: d.queue}, nil
+		return &ingestFile{File: f, name: name, queue: d.queue, onFileReceived: d.onFileReceived}, nil
 	}
 	return f, nil
 }
@@ -175,9 +183,10 @@ func (d *clientDriver) OpenFile(name string, flag int, perm os.FileMode) (afero.
 // If Close is called with zero bytes buffered (dropped connection), nothing is pushed.
 type ingestFile struct {
 	afero.File
-	name  string
-	queue IngestQueue
-	buf   bytes.Buffer
+	name           string
+	queue          IngestQueue
+	onFileReceived func(filename string)
+	buf            bytes.Buffer
 }
 
 // Write mirrors bytes to both the underlying file and the internal buffer.
@@ -208,6 +217,9 @@ func (f *ingestFile) Close() error {
 	select {
 	case f.queue <- item:
 		slog.Info("ftp: file queued for ingestion", "filename", item.Filename, "bytes", len(item.Data))
+		if f.onFileReceived != nil {
+			f.onFileReceived(item.Filename)
+		}
 	default:
 		slog.Error("ftp: ingest queue full, dropping file", "filename", item.Filename)
 	}

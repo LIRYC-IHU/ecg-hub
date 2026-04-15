@@ -11,6 +11,8 @@ import (
 	apihandlers "github.com/LIRYC-IHU/ecg-hub/internal/api/handlers"
 	"github.com/LIRYC-IHU/ecg-hub/internal/auth"
 	config "github.com/LIRYC-IHU/ecg-hub/internal/config"
+	"github.com/LIRYC-IHU/ecg-hub/internal/connector"
+	"github.com/LIRYC-IHU/ecg-hub/internal/connector/polaris"
 	dbpkg "github.com/LIRYC-IHU/ecg-hub/internal/db"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
 	dicomsrv "github.com/LIRYC-IHU/ecg-hub/internal/dicom"
@@ -19,6 +21,7 @@ import (
 	"github.com/LIRYC-IHU/ecg-hub/internal/ingestion"
 	"github.com/LIRYC-IHU/ecg-hub/internal/module"
 	_ "github.com/LIRYC-IHU/ecg-hub/internal/module/dicom"
+	_ "github.com/LIRYC-IHU/ecg-hub/internal/module/nihon-kohden"
 	_ "github.com/LIRYC-IHU/ecg-hub/internal/module/philips"
 	"github.com/LIRYC-IHU/ecg-hub/internal/storage"
 	"github.com/LIRYC-IHU/ecg-hub/internal/webhook"
@@ -131,6 +134,16 @@ func main() {
 	activeModules := module.Active(cfg.Modules.Active)
 	for _, m := range activeModules {
 		slog.Info("module: loaded", "name", m.Name(), "extensions", m.AcceptedExtensions())
+		// Wire DB before Start so modules can build their own repositories.
+		if dba, ok := m.(module.DBAccessor); ok {
+			dba.SetDB(gormDB)
+		}
+		if s, ok := m.(module.Startable); ok {
+			if err := s.Start(cfg); err != nil {
+				slog.Error("FATAL: module start failed", "module", m.Name(), "error", err)
+				os.Exit(1)
+			}
+		}
 	}
 
 	// Step 9: Export worker pool (Story 5.1, FR19, NFR-SC3).
@@ -146,10 +159,64 @@ func main() {
 	exportPool.Start()
 	defer exportPool.Stop()
 
+	// Detect ECTP status from any active module that exposes an ECTP server.
+	ectpStatus := apihandlers.ECTPStatus{}
+	for _, m := range activeModules {
+		if ep, ok := m.(module.ECTPProvider); ok {
+			ectpStatus = apihandlers.ECTPStatus{Enabled: true, Port: ep.ECTPListenPort()}
+			break
+		}
+	}
+
+	// Story 3.4: Build outbound connector instances from cfg.PACS.
+	// connSettings is used later to wire the Dispatcher + RetryJob after ecgRepo is available.
+	// connCheckers is passed to RegisterRoutes now so /healthz can probe each connector's ECTP port.
+	var connCheckers []apihandlers.ConnectorHealthChecker
+	var connSettings []connector.ConnectorSettings
+	if cfg.PACS.Enabled {
+		for _, connCfg := range cfg.PACS.Connectors {
+			if !connCfg.Enabled {
+				continue
+			}
+			var c connector.Connector
+			switch connCfg.Protocol {
+			case "ectp_ftp":
+				c = polaris.New(connCfg)
+			default:
+				slog.Warn("connector: unknown protocol, skipping",
+					"name", connCfg.Name, "protocol", connCfg.Protocol)
+				continue
+			}
+
+			interval, err := time.ParseDuration(connCfg.Retry.Interval)
+			if err != nil {
+				slog.Error("FATAL: connector: invalid retry interval",
+					"connector", connCfg.Name,
+					"value", connCfg.Retry.Interval,
+					"error", err)
+				os.Exit(1)
+			}
+
+			maxAttempts := connCfg.Retry.MaxAttempts
+			if maxAttempts <= 0 {
+				maxAttempts = 3
+			}
+
+			connSettings = append(connSettings, connector.ConnectorSettings{
+				Connector:   c,
+				Interval:    interval,
+				MaxAttempts: maxAttempts,
+			})
+			connCheckers = append(connCheckers, c)
+			slog.Info("connector: loaded", "name", connCfg.Name, "protocol", connCfg.Protocol)
+		}
+	}
+
 	api.RegisterRoutes(e, gormDB, authProvider, bridge, webhookNotifier, keycloakAdmin, permChecker, userRepo, activeModules,
 		apihandlers.DICOMStatus{Enabled: cfg.DICOM.Enabled, Port: cfg.DICOM.Port},
 		apihandlers.FTPStatus{Enabled: cfg.FTP.Enabled, Port: cfg.FTP.Port},
-		exportRepo, exportPool)
+		ectpStatus,
+		exportRepo, exportPool, connCheckers)
 
 	// Step 5: Start FTP ingestion server (Story 2.2).
 	ftpQueue := ingestion.NewIngestQueue(100)
@@ -159,6 +226,19 @@ func main() {
 		os.Exit(1)
 	}
 	defer ftpServer.Stop()
+
+	// Wire FTP file-received hook for modules that implement FTPFileTracker
+	// (e.g. nihon-kohden uses it for ECTP FILE|ENDS verification).
+	for _, m := range activeModules {
+		if tracker, ok := m.(module.FTPFileTracker); ok {
+			name := m.Name()
+			ftpServer.SetFileReceivedHook(func(filename string) {
+				if err := tracker.RegisterFTPFile(filename); err != nil {
+					slog.Warn("ftp: failed to register transfer", "module", name, "filename", filename, "error", err)
+				}
+			})
+		}
+	}
 
 	// Step 8: Start DICOM C-STORE SCP server (Story 7.1).
 	// Shares the same ftpQueue — DICOM and FTP files flow through the same Dispatcher.
@@ -218,10 +298,27 @@ func main() {
 		}()
 	}
 
+	// Story 3.4: Wire the connector Dispatcher into the Persister and start the RetryJob.
+	// connSettings was populated above (before RegisterRoutes) from cfg.PACS.
+	if len(connSettings) > 0 {
+		connJobRepo := repository.NewConnectorJobRepository(gormDB)
+		connDispatcher := connector.NewDispatcher(connSettings, connJobRepo)
+		persister.WithConnectorDispatcher(connDispatcher)
+
+		// Poll for retriable jobs every minute.
+		connRetryJob := connector.NewRetryJob(connSettings, connJobRepo, ecgRepo, time.Minute)
+		connRetryJob.Start()
+		slog.Info("connector: retry job started", "connectors", len(connSettings))
+		defer func() {
+			connRetryJob.Stop()
+			<-connRetryJob.Done()
+		}()
+	}
+
 	persister.Start()
 	defer persister.Stop()
 
-	// Step 8: Start storage janitor — enforces max_size_gb soft cap by rotating oldest files.
+	// Step 9: Start storage janitor — enforces max_size_gb soft cap by rotating oldest files.
 	janitor := storage.NewJanitor(cfg.Storage)
 	janitor.Start(time.Hour)
 	defer janitor.Stop()

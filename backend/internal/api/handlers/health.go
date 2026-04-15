@@ -34,14 +34,37 @@ type FTPStatus struct {
 	Port    int
 }
 
+// ECTPStatus carries the ECTP server configuration for the health response.
+// Active when the nihon-kohden module is loaded.
+type ECTPStatus struct {
+	Enabled bool
+	Port    int
+}
+
+// ConnectorHealthChecker is the subset of connector.Connector used by HealthHandler.
+// Extracted as a local interface to avoid an import cycle with the connector package.
+type ConnectorHealthChecker interface {
+	Name() string
+	Health() error
+}
+
+// ConnectorHealthEntry carries a single connector's health state in the response.
+type ConnectorHealthEntry struct {
+	Name   string `json:"name"`
+	Status string `json:"status"` // "ok" or error message
+}
+
 // HealthResponse is the JSON body returned by GET /healthz.
 type HealthResponse struct {
-	Status       string `json:"status"`        // "ok" or "degraded"
-	Database     string `json:"database"`      // "ok" or "error"
-	DicomEnabled bool   `json:"dicom_enabled"` // true when dicom.enabled: true in config
-	DicomPort    int    `json:"dicom_port"`    // configured port (0 when disabled)
-	FTPEnabled   bool   `json:"ftp_enabled"`   // true when ftp.enabled: true in config
-	FTPPort      int    `json:"ftp_port"`      // configured port (0 when disabled)
+	Status       string                 `json:"status"`        // "ok" or "degraded"
+	Database     string                 `json:"database"`      // "ok" or "error"
+	DicomEnabled bool                   `json:"dicom_enabled"` // true when dicom.enabled: true in config
+	DicomPort    int                    `json:"dicom_port"`    // configured port (0 when disabled)
+	FTPEnabled   bool                   `json:"ftp_enabled"`   // true when ftp.enabled: true in config
+	FTPPort      int                    `json:"ftp_port"`      // configured port (0 when disabled)
+	ECTPEnabled  bool                   `json:"ectp_enabled"`  // true when nihon-kohden module is active
+	ECTPPort     int                    `json:"ectp_port"`     // ECTP TCP port (0 when disabled)
+	Connectors   []ConnectorHealthEntry `json:"connectors"`    // outbound PACS connectors (empty when none configured)
 }
 
 // HealthHandler returns an Echo handler that checks database connectivity.
@@ -54,10 +77,19 @@ type HealthResponse struct {
 //	@Success		200	{object}	HealthResponse
 //	@Failure		503	{object}	HealthResponse
 //	@Router			/healthz [get]
-func HealthHandler(pinger DBPinger, dicom DICOMStatus, ftp FTPStatus) echo.HandlerFunc {
+func HealthHandler(pinger DBPinger, dicom DICOMStatus, ftp FTPStatus, ectp ECTPStatus, connCheckers []ConnectorHealthChecker) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		ctx, cancel := context.WithTimeout(c.Request().Context(), 3*time.Second)
 		defer cancel()
+
+		connEntries := make([]ConnectorHealthEntry, 0, len(connCheckers))
+		for _, ch := range connCheckers {
+			entry := ConnectorHealthEntry{Name: ch.Name(), Status: "ok"}
+			if err := ch.Health(); err != nil {
+				entry.Status = err.Error()
+			}
+			connEntries = append(connEntries, entry)
+		}
 
 		if err := pinger.PingContext(ctx); err != nil {
 			slog.Warn("health check: database unreachable", "error", err)
@@ -68,6 +100,9 @@ func HealthHandler(pinger DBPinger, dicom DICOMStatus, ftp FTPStatus) echo.Handl
 				DicomPort:    dicom.Port,
 				FTPEnabled:   ftp.Enabled,
 				FTPPort:      ftp.Port,
+				ECTPEnabled:  ectp.Enabled,
+				ECTPPort:     ectp.Port,
+				Connectors:   connEntries,
 			})
 		}
 
@@ -78,6 +113,9 @@ func HealthHandler(pinger DBPinger, dicom DICOMStatus, ftp FTPStatus) echo.Handl
 			DicomPort:    dicom.Port,
 			FTPEnabled:   ftp.Enabled,
 			FTPPort:      ftp.Port,
+			ECTPEnabled:  ectp.Enabled,
+			ECTPPort:     ectp.Port,
+			Connectors:   connEntries,
 		})
 	}
 }

@@ -22,7 +22,7 @@ func TestHealthHandler_Healthy(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
-	handler := HealthHandler(&mockPinger{err: nil}, DICOMStatus{}, FTPStatus{})
+	handler := HealthHandler(&mockPinger{err: nil}, DICOMStatus{}, FTPStatus{}, ECTPStatus{}, nil)
 	if err := handler(c); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -44,7 +44,7 @@ func TestHealthHandler_Degraded(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
-	handler := HealthHandler(&mockPinger{err: fmt.Errorf("connection refused")}, DICOMStatus{}, FTPStatus{})
+	handler := HealthHandler(&mockPinger{err: fmt.Errorf("connection refused")}, DICOMStatus{}, FTPStatus{}, ECTPStatus{}, nil)
 	if err := handler(c); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -66,7 +66,7 @@ func TestHealthHandler_DICOMFields(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
-	handler := HealthHandler(&mockPinger{err: nil}, DICOMStatus{Enabled: true, Port: 11112}, FTPStatus{})
+	handler := HealthHandler(&mockPinger{err: nil}, DICOMStatus{Enabled: true, Port: 11112}, FTPStatus{}, ECTPStatus{}, nil)
 	if err := handler(c); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -85,7 +85,7 @@ func TestHealthHandler_DICOMDisabled(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
-	handler := HealthHandler(&mockPinger{err: nil}, DICOMStatus{Enabled: false, Port: 0}, FTPStatus{})
+	handler := HealthHandler(&mockPinger{err: nil}, DICOMStatus{Enabled: false, Port: 0}, FTPStatus{}, ECTPStatus{}, nil)
 	if err := handler(c); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -101,7 +101,7 @@ func TestHealthHandler_FTPFields(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
-	handler := HealthHandler(&mockPinger{err: nil}, DICOMStatus{}, FTPStatus{Enabled: true, Port: 2121})
+	handler := HealthHandler(&mockPinger{err: nil}, DICOMStatus{}, FTPStatus{Enabled: true, Port: 2121}, ECTPStatus{}, nil)
 	if err := handler(c); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -120,7 +120,7 @@ func TestHealthHandler_FTPDisabled(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
-	handler := HealthHandler(&mockPinger{err: nil}, DICOMStatus{}, FTPStatus{Enabled: false, Port: 0})
+	handler := HealthHandler(&mockPinger{err: nil}, DICOMStatus{}, FTPStatus{Enabled: false, Port: 0}, ECTPStatus{}, nil)
 	if err := handler(c); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -138,7 +138,7 @@ func TestHealthHandler_NoAuthRequired(t *testing.T) {
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
 
-	handler := HealthHandler(&mockPinger{err: nil}, DICOMStatus{}, FTPStatus{})
+	handler := HealthHandler(&mockPinger{err: nil}, DICOMStatus{}, FTPStatus{}, ECTPStatus{}, nil)
 	if err := handler(c); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
