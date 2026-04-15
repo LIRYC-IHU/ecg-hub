@@ -128,6 +128,25 @@ func ModulesHandler(activeModules []module.Module) echo.HandlerFunc {
 	}
 }
 
+// ConnectorsHandler handles GET /api/v1/admin/connectors.
+// Returns the active outbound PACS connector list with their health status.
+// Health() dials the connector's ECTP port — may be slow if unreachable.
+//
+// Requires: RequirePermission(admin.system)
+func ConnectorsHandler(checkers []ConnectorHealthChecker) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		result := make([]ConnectorHealthEntry, 0, len(checkers))
+		for _, ch := range checkers {
+			entry := ConnectorHealthEntry{Name: ch.Name(), Status: "ok"}
+			if err := ch.Health(); err != nil {
+				entry.Status = err.Error()
+			}
+			result = append(result, entry)
+		}
+		return c.JSON(http.StatusOK, result)
+	}
+}
+
 // WebhookStatusHandler handles GET /api/v1/admin/webhook.
 // Returns webhook configuration state (enabled, url, secret_configured).
 // Never exposes the actual secret.
