@@ -109,6 +109,9 @@ func RegisterRoutes(e *echo.Echo, gormDB *gorm.DB, authProvider auth.Provider, b
 	// Active modules — requires admin.system
 	apiV1.GET("/modules", handlers.ModulesHandler(activeModules), mw.RequirePermission(checker, auth.PermAdminSystem))
 
+	// Outbound PACS connectors — requires admin.system
+	apiV1.GET("/admin/connectors", handlers.ConnectorsHandler(connCheckers), mw.RequirePermission(checker, auth.PermAdminSystem))
+
 	// Batch export (FR19, Story 5.1) — requires ecg.download
 	ecgRepo := repository.NewECGRepository(gormDB)
 	apiV1.POST("/exports", handlers.CreateExportHandler(gormDB, exportRepo, ecgRepo, exportPool), mw.RequirePermission(checker, auth.PermECGDownload))
