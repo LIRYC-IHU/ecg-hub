@@ -14,9 +14,10 @@ import {
   FileType,
   Radio,
   HardDrive,
+  Send,
 } from 'lucide-react'
 import { useAdminStats } from '../../hooks/useAdminStats'
-import { fetchWebhookStatus, fetchModules, testWebhook } from '../../lib/api'
+import { fetchWebhookStatus, fetchModules, fetchConnectors, testWebhook } from '../../lib/api'
 import { Spinner } from '../ui/Spinner'
 import { useNotification } from '../../context/NotificationContext'
 
@@ -35,6 +36,13 @@ export function AdminSystemPage() {
     queryKey: ['admin', 'modules'],
     queryFn: fetchModules,
     staleTime: 60_000,
+  })
+
+  const connectorsQuery = useQuery({
+    queryKey: ['admin', 'connectors'],
+    queryFn: fetchConnectors,
+    staleTime: 30_000,
+    refetchInterval: 30_000,
   })
 
   const testMutation = useMutation({
@@ -140,6 +148,35 @@ export function AdminSystemPage() {
                           </span>
                         </div>
                       ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Connecteurs PACS */}
+                {connectorsQuery.data && connectorsQuery.data.length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-2 px-1">
+                      Connecteurs PACS
+                    </p>
+                    <div className="space-y-1">
+                      {connectorsQuery.data.map((conn) => {
+                        const ok = conn.status === 'ok'
+                        return (
+                          <div key={conn.name} className="flex items-center gap-3 px-3 py-2 rounded-lg bg-muted/30">
+                            <Send className="w-4 h-4 text-muted-foreground" />
+                            <span className="text-sm text-foreground flex-1 capitalize">{conn.name}</span>
+                            {!ok && (
+                              <span className="text-[10px] font-mono text-destructive truncate max-w-[180px]" title={conn.status}>
+                                {conn.status}
+                              </span>
+                            )}
+                            <div className={`w-2 h-2 rounded-full ${ok ? 'bg-success' : 'bg-destructive'}`} />
+                            <span className={`text-[11px] font-medium ${ok ? 'text-success' : 'text-destructive'}`}>
+                              {ok ? 'OK' : 'KO'}
+                            </span>
+                          </div>
+                        )
+                      })}
                     </div>
                   </div>
                 )}
