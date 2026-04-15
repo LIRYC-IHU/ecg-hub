@@ -25,6 +25,12 @@ type ecgEnricher interface {
 	Enrich(ctx context.Context, ecgID uint, patientID string) error
 }
 
+// ecgConnectorDispatcher is the optional outbound forwarding interface (implemented by *connector.Dispatcher).
+// When nil, connector forwarding is disabled.
+type ecgConnectorDispatcher interface {
+	Dispatch(ecg *models.ECG, filePath string)
+}
+
 // ecgInserter is the repository interface for ECG persistence (implemented by *repository.ECGRepository).
 type ecgInserter interface {
 	Insert(ecg *models.ECG) error
@@ -38,16 +44,18 @@ type patientUpserter interface {
 // Persister consumes RoutedItems from the RoutedQueue, renames and writes each
 // file to the volume, then inserts the ECG and upserts the patient in PostgreSQL.
 type Persister struct {
-	routed    RoutedQueue
-	volume    fileWriter
-	ecgRepo   ecgInserter
-	patRepo   patientUpserter
-	enricher  ecgEnricher  // nil when HL7 is disabled; guarded by enricherMu (M4)
-	enricherMu sync.RWMutex // guards concurrent read (persist) / write (WithEnricher)
-	ctx       context.Context
-	cancel    context.CancelFunc
-	startOnce sync.Once
-	done      chan struct{}
+	routed         RoutedQueue
+	volume         fileWriter
+	ecgRepo        ecgInserter
+	patRepo        patientUpserter
+	enricher       ecgEnricher          // nil when HL7 is disabled; guarded by enricherMu
+	enricherMu     sync.RWMutex         // guards concurrent read (persist) / write (WithEnricher)
+	dispatcher     ecgConnectorDispatcher // nil when connector forwarding is disabled; guarded by dispatcherMu
+	dispatcherMu   sync.RWMutex           // guards concurrent read (persist) / write (WithConnectorDispatcher)
+	ctx            context.Context
+	cancel         context.CancelFunc
+	startOnce      sync.Once
+	done           chan struct{}
 }
 
 // NewPersister constructs a Persister. Call Start() to begin consuming the queue.
@@ -70,12 +78,23 @@ func (p *Persister) Start() {
 }
 
 // WithEnricher attaches an optional HL7 enricher to the Persister.
-// Safe to call concurrently with running persist goroutines (M4: guarded by enricherMu).
+// Safe to call concurrently with running persist goroutines (guarded by enricherMu).
 // Returns p for chaining.
 func (p *Persister) WithEnricher(e ecgEnricher) *Persister {
 	p.enricherMu.Lock()
 	p.enricher = e
 	p.enricherMu.Unlock()
+	return p
+}
+
+// WithConnectorDispatcher attaches an optional connector dispatcher to the Persister.
+// When set, Dispatch is called fire-and-forget after each successful ECG insert.
+// Safe to call concurrently with running persist goroutines (guarded by dispatcherMu).
+// Returns p for chaining.
+func (p *Persister) WithConnectorDispatcher(d ecgConnectorDispatcher) *Persister {
+	p.dispatcherMu.Lock()
+	p.dispatcher = d
+	p.dispatcherMu.Unlock()
 	return p
 }
 
@@ -180,9 +199,9 @@ func (p *Persister) persist(ri RoutedItem) error {
 		return fmt.Errorf("persister: insert ecg: %w", err)
 	}
 
-	// Fire-and-forget HL7 enrichment (AC #5, #6). Uses context.Background() so the
+	// Fire-and-forget HL7 enrichment. Uses context.Background() so the
 	// goroutine is not cancelled when the persister shuts down (NFR-I3).
-	// M4: read enricher under RLock to prevent data race with WithEnricher.
+	// Read enricher under RLock to prevent data race with WithEnricher.
 	p.enricherMu.RLock()
 	e := p.enricher
 	p.enricherMu.RUnlock()
@@ -192,6 +211,15 @@ func (p *Persister) persist(ri RoutedItem) error {
 				slog.Warn("ingestion: hl7 enrichment error", "ecg_id", ecg.ID, "error", err)
 			}
 		}()
+	}
+
+	// Fire-and-forget connector forwarding. Read dispatcher under RLock to prevent
+	// data race with WithConnectorDispatcher.
+	p.dispatcherMu.RLock()
+	d := p.dispatcher
+	p.dispatcherMu.RUnlock()
+	if d != nil {
+		go d.Dispatch(ecg, fullPath)
 	}
 
 	slog.Info("ingestion: ECG persisted",

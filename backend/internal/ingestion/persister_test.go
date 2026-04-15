@@ -358,6 +358,70 @@ func TestPersister_NilEnricher_DoesNotPanic(t *testing.T) {
 	}
 }
 
+// ─── ConnectorDispatcher integration tests ────────────────────────────────────
+
+type mockDispatcher struct {
+	calls []dispatchCall
+	done  chan struct{}
+}
+
+type dispatchCall struct {
+	ecgID    uint
+	filePath string
+}
+
+func newMockDispatcher() *mockDispatcher {
+	return &mockDispatcher{done: make(chan struct{}, 10)}
+}
+
+func (m *mockDispatcher) Dispatch(ecg *models.ECG, filePath string) {
+	m.calls = append(m.calls, dispatchCall{ecgID: ecg.ID, filePath: filePath})
+	m.done <- struct{}{}
+}
+
+func TestPersister_WithConnectorDispatcher_CalledAfterInsert(t *testing.T) {
+	vol := &mockVolume{}
+	ecgRepo := &mockECGRepo{}
+	patRepo := &mockPatRepo{}
+	disp := newMockDispatcher()
+
+	ts := time.Date(2024, 3, 12, 14, 30, 0, 0, time.UTC)
+	ri := makeRoutedItem("P001", "philips", "ecg.xml", ts)
+
+	p := NewPersister(make(RoutedQueue, 1), vol, ecgRepo, patRepo).WithConnectorDispatcher(disp)
+	if err := p.persist(ri); err != nil {
+		t.Fatalf("persist returned error: %v", err)
+	}
+
+	select {
+	case <-disp.done:
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("dispatcher was not called within 500ms")
+	}
+
+	if len(disp.calls) != 1 {
+		t.Fatalf("dispatcher calls = %d, want 1", len(disp.calls))
+	}
+	if disp.calls[0].filePath == "" {
+		t.Error("dispatcher received empty filePath")
+	}
+}
+
+func TestPersister_NilDispatcher_DoesNotPanic(t *testing.T) {
+	vol := &mockVolume{}
+	ecgRepo := &mockECGRepo{}
+	patRepo := &mockPatRepo{}
+
+	ts := time.Date(2024, 3, 12, 14, 30, 0, 0, time.UTC)
+	ri := makeRoutedItem("P001", "philips", "ecg.xml", ts)
+
+	// No dispatcher wired — must succeed without panic.
+	p := NewPersister(make(RoutedQueue, 1), vol, ecgRepo, patRepo)
+	if err := p.persist(ri); err != nil {
+		t.Fatalf("persist returned error: %v", err)
+	}
+}
+
 // Ensure context is plumbed into persist (compile-time check via interface)
 var _ interface {
 	persist(RoutedItem) error
