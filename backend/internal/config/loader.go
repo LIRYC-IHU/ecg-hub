@@ -51,13 +51,12 @@ func Load(cfgPath string) (*Config, error) {
 		cfg.FTP.PublicHost = v
 	}
 
-	if cfg.PACS.Enabled {
-		if polaris, ok := cfg.PACS.Tool["polaris"]; ok {
-			polaris.Ftp.username = os.Getenv("POLARIS_FTP_USERNAME")
-			polaris.Ftp.password = os.Getenv("POLARIS_FTP_PASSWORD")
-			polaris.Port = "30003"
-			cfg.PACS.Tool["polaris"] = polaris
-		}
+	// Populate connector credentials from env vars (NFR-S2).
+	// Convention: <UPPER(name)>_FTP_USERNAME / <UPPER(name)>_FTP_PASSWORD
+	for i, c := range cfg.PACS.Connectors {
+		nameUpper := strings.ToUpper(c.Name)
+		cfg.PACS.Connectors[i].FTPUsername = os.Getenv(nameUpper + "_FTP_USERNAME")
+		cfg.PACS.Connectors[i].FTPPassword = os.Getenv(nameUpper + "_FTP_PASSWORD")
 	}
 
 	if err := validate(&cfg); err != nil {

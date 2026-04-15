@@ -180,6 +180,87 @@ storage:
 	}
 }
 
+func TestLoad_PACSConnectorConfig(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://test:test@localhost/testdb")
+	t.Setenv("JWT_SECRET", "supersecret")
+	t.Setenv("POLARIS_FTP_USERNAME", "ftpuser")
+	t.Setenv("POLARIS_FTP_PASSWORD", "ftppass")
+
+	cfgPath := writeConfig(t, `
+server:
+  port: 8080
+auth:
+  providers: [oidc]
+storage:
+  volume_path: /data/ecg
+pacs:
+  enabled: true
+  connectors:
+    - name: polaris
+      enabled: true
+      protocol: ectp_ftp
+      filters:
+        extensions: [".DAT", ".dat"]
+        vendors: ["nihon-kohden"]
+      retry:
+        max_attempts: 3
+        interval: 5m
+      ectp:
+        host: 10.0.0.1
+        port: 30003
+      ftp:
+        host: 10.0.0.1
+        port: 21
+`)
+	cfg, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	if !cfg.PACS.Enabled {
+		t.Error("pacs.enabled: expected true")
+	}
+	if len(cfg.PACS.Connectors) != 1 {
+		t.Fatalf("pacs.connectors: expected 1, got %d", len(cfg.PACS.Connectors))
+	}
+
+	c := cfg.PACS.Connectors[0]
+	if c.Name != "polaris" {
+		t.Errorf("connector name: want %q, got %q", "polaris", c.Name)
+	}
+	if !c.Enabled {
+		t.Error("connector enabled: expected true")
+	}
+	if c.Protocol != "ectp_ftp" {
+		t.Errorf("connector protocol: want %q, got %q", "ectp_ftp", c.Protocol)
+	}
+	if len(c.Filters.Extensions) != 2 {
+		t.Errorf("filters.extensions: expected 2, got %d", len(c.Filters.Extensions))
+	}
+	if len(c.Filters.Vendors) != 1 || c.Filters.Vendors[0] != "nihon-kohden" {
+		t.Errorf("filters.vendors: expected [nihon-kohden], got %v", c.Filters.Vendors)
+	}
+	if c.Retry.MaxAttempts != 3 {
+		t.Errorf("retry.max_attempts: want 3, got %d", c.Retry.MaxAttempts)
+	}
+	if c.Retry.Interval != "5m" {
+		t.Errorf("retry.interval: want %q, got %q", "5m", c.Retry.Interval)
+	}
+	if c.ECTP.Host != "10.0.0.1" || c.ECTP.Port != 30003 {
+		t.Errorf("ectp: want 10.0.0.1:30003, got %s:%d", c.ECTP.Host, c.ECTP.Port)
+	}
+	if c.FTP.Host != "10.0.0.1" || c.FTP.Port != 21 {
+		t.Errorf("ftp: want 10.0.0.1:21, got %s:%d", c.FTP.Host, c.FTP.Port)
+	}
+	// Credentials must be populated from env vars, not config.yaml.
+	if c.FTPUsername != "ftpuser" {
+		t.Errorf("FTPUsername: want %q, got %q", "ftpuser", c.FTPUsername)
+	}
+	if c.FTPPassword != "ftppass" {
+		t.Errorf("FTPPassword: want %q, got %q", "ftppass", c.FTPPassword)
+	}
+}
+
 func TestLoad_ConfigFileNotFound(t *testing.T) {
 	// Must not panic — must return a descriptive error.
 	_, err := Load("/nonexistent/path/to/config.yaml")
