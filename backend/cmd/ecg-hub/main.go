@@ -11,6 +11,8 @@ import (
 	apihandlers "github.com/LIRYC-IHU/ecg-hub/internal/api/handlers"
 	"github.com/LIRYC-IHU/ecg-hub/internal/auth"
 	config "github.com/LIRYC-IHU/ecg-hub/internal/config"
+	"github.com/LIRYC-IHU/ecg-hub/internal/connector"
+	"github.com/LIRYC-IHU/ecg-hub/internal/connector/polaris"
 	dbpkg "github.com/LIRYC-IHU/ecg-hub/internal/db"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
 	dicomsrv "github.com/LIRYC-IHU/ecg-hub/internal/dicom"
@@ -166,11 +168,55 @@ func main() {
 		}
 	}
 
+	// Story 3.4: Build outbound connector instances from cfg.PACS.
+	// connSettings is used later to wire the Dispatcher + RetryJob after ecgRepo is available.
+	// connCheckers is passed to RegisterRoutes now so /healthz can probe each connector's ECTP port.
+	var connCheckers []apihandlers.ConnectorHealthChecker
+	var connSettings []connector.ConnectorSettings
+	if cfg.PACS.Enabled {
+		for _, connCfg := range cfg.PACS.Connectors {
+			if !connCfg.Enabled {
+				continue
+			}
+			var c connector.Connector
+			switch connCfg.Protocol {
+			case "ectp_ftp":
+				c = polaris.New(connCfg)
+			default:
+				slog.Warn("connector: unknown protocol, skipping",
+					"name", connCfg.Name, "protocol", connCfg.Protocol)
+				continue
+			}
+
+			interval, err := time.ParseDuration(connCfg.Retry.Interval)
+			if err != nil {
+				slog.Error("FATAL: connector: invalid retry interval",
+					"connector", connCfg.Name,
+					"value", connCfg.Retry.Interval,
+					"error", err)
+				os.Exit(1)
+			}
+
+			maxAttempts := connCfg.Retry.MaxAttempts
+			if maxAttempts <= 0 {
+				maxAttempts = 3
+			}
+
+			connSettings = append(connSettings, connector.ConnectorSettings{
+				Connector:   c,
+				Interval:    interval,
+				MaxAttempts: maxAttempts,
+			})
+			connCheckers = append(connCheckers, c)
+			slog.Info("connector: loaded", "name", connCfg.Name, "protocol", connCfg.Protocol)
+		}
+	}
+
 	api.RegisterRoutes(e, gormDB, authProvider, bridge, webhookNotifier, keycloakAdmin, permChecker, userRepo, activeModules,
 		apihandlers.DICOMStatus{Enabled: cfg.DICOM.Enabled, Port: cfg.DICOM.Port},
 		apihandlers.FTPStatus{Enabled: cfg.FTP.Enabled, Port: cfg.FTP.Port},
 		ectpStatus,
-		exportRepo, exportPool)
+		exportRepo, exportPool, connCheckers)
 
 	// Step 5: Start FTP ingestion server (Story 2.2).
 	ftpQueue := ingestion.NewIngestQueue(100)
@@ -249,6 +295,23 @@ func main() {
 		defer func() {
 			retryJob.Stop()
 			<-retryJob.Done()
+		}()
+	}
+
+	// Story 3.4: Wire the connector Dispatcher into the Persister and start the RetryJob.
+	// connSettings was populated above (before RegisterRoutes) from cfg.PACS.
+	if len(connSettings) > 0 {
+		connJobRepo := repository.NewConnectorJobRepository(gormDB)
+		connDispatcher := connector.NewDispatcher(connSettings, connJobRepo)
+		persister.WithConnectorDispatcher(connDispatcher)
+
+		// Poll for retriable jobs every minute.
+		connRetryJob := connector.NewRetryJob(connSettings, connJobRepo, ecgRepo, time.Minute)
+		connRetryJob.Start()
+		slog.Info("connector: retry job started", "connectors", len(connSettings))
+		defer func() {
+			connRetryJob.Stop()
+			<-connRetryJob.Done()
 		}()
 	}
 
