@@ -1,6 +1,13 @@
 import { useState } from "react";
 import { useLocation } from "react-router-dom";
-import { ChevronDown, LogOut, Activity, Sun, Monitor, Moon } from "lucide-react";
+import {
+  ChevronDown,
+  LogOut,
+  Activity,
+  Sun,
+  Monitor,
+  Moon,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
 
@@ -47,9 +54,11 @@ export function Header({
         <span className="font-semibold text-base text-foreground tracking-tight">
           ECG Hub
         </span>
-        <span className="text-[10px] font-medium bg-primary/10 text-primary px-2 py-0.5 rounded-full">
-          Admin
-        </span>
+        {userId === "admin" && (
+          <span className="text-[10px] font-medium bg-primary/10 text-primary px-2 py-0.5 rounded-full">
+            Admin
+          </span>
+        )}
       </div>
 
       {/* Center: Breadcrumb */}
@@ -80,11 +89,11 @@ export function Header({
 
         {/* Theme toggle */}
         <div className="flex bg-muted rounded-full p-0.5">
-          {([
+          {[
             { value: "light" as const, Icon: Sun },
             { value: "system" as const, Icon: Monitor },
             { value: "dark" as const, Icon: Moon },
-          ]).map(({ value, Icon }) => (
+          ].map(({ value, Icon }) => (
             <button
               key={value}
               onClick={() => setTheme(value)}
