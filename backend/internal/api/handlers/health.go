@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	mw "github.com/LIRYC-IHU/ecg-hub/internal/api/middleware"
 	"github.com/labstack/echo/v4"
 )
 
@@ -67,6 +68,10 @@ type HealthResponse struct {
 	Connectors   []ConnectorHealthEntry `json:"connectors"`    // outbound PACS connectors (empty when none configured)
 }
 
+type HealthResp struct {
+	Status string `json:"status"` // "ok" or "degraded"
+}
+
 // HealthHandler returns an Echo handler that checks database connectivity.
 // Public endpoint — no authentication required (NFR-S3).
 //
@@ -91,11 +96,26 @@ func HealthHandler(pinger DBPinger, dicom DICOMStatus, ftp FTPStatus, ectp ECTPS
 			connEntries = append(connEntries, entry)
 		}
 
-		if err := pinger.PingContext(ctx); err != nil {
-			slog.Warn("health check: database unreachable", "error", err)
-			return c.JSON(http.StatusServiceUnavailable, HealthResponse{
-				Status:       "degraded",
-				Database:     "error",
+		role, _ := c.Get(mw.CtxKeyRole).(string)
+		if role == "admin" {
+			if err := pinger.PingContext(ctx); err != nil {
+				slog.Warn("health check: database unreachable", "error", err)
+				return c.JSON(http.StatusServiceUnavailable, HealthResponse{
+					Status:       "degraded",
+					Database:     "error",
+					DicomEnabled: dicom.Enabled,
+					DicomPort:    dicom.Port,
+					FTPEnabled:   ftp.Enabled,
+					FTPPort:      ftp.Port,
+					ECTPEnabled:  ectp.Enabled,
+					ECTPPort:     ectp.Port,
+					Connectors:   connEntries,
+				})
+			}
+
+			return c.JSON(http.StatusOK, HealthResponse{
+				Status:       "ok",
+				Database:     "ok",
 				DicomEnabled: dicom.Enabled,
 				DicomPort:    dicom.Port,
 				FTPEnabled:   ftp.Enabled,
@@ -105,17 +125,15 @@ func HealthHandler(pinger DBPinger, dicom DICOMStatus, ftp FTPStatus, ectp ECTPS
 				Connectors:   connEntries,
 			})
 		}
+		if err := pinger.PingContext(ctx); err != nil {
+			slog.Warn("health check: database unreachable", "error", err)
+			return c.JSON(http.StatusServiceUnavailable, HealthResp{
+				Status: "degraded",
+			})
+		}
 
-		return c.JSON(http.StatusOK, HealthResponse{
-			Status:       "ok",
-			Database:     "ok",
-			DicomEnabled: dicom.Enabled,
-			DicomPort:    dicom.Port,
-			FTPEnabled:   ftp.Enabled,
-			FTPPort:      ftp.Port,
-			ECTPEnabled:  ectp.Enabled,
-			ECTPPort:     ectp.Port,
-			Connectors:   connEntries,
+		return c.JSON(http.StatusOK, HealthResp{
+			Status: "ok",
 		})
 	}
 }

@@ -24,6 +24,34 @@ type RoleResolver interface {
 	GetCurrentRole(ctx context.Context, externalID string) (string, error)
 }
 
+// Healthz Midleware validates the JWT on the /healthz endpoint
+func HealthzMiddleware(provider auth.Provider, roleResolver RoleResolver) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			rawToken := extractToken(c)
+			if rawToken == "" {
+				return next(c)
+			}
+
+			claims, err := provider.ValidateToken(c.Request().Context(), rawToken)
+			if err != nil {
+				return next(c)
+			}
+
+			// Resolve role from DB so admin changes take effect immediately,
+			// without requiring the user to log out and back in.
+			role := claims.Role
+			if dbRole, err := roleResolver.GetCurrentRole(c.Request().Context(), claims.Sub); err == nil && dbRole != "" {
+				role = dbRole
+			}
+
+			c.Set(CtxKeyUserID, claims.Sub)
+			c.Set(CtxKeyRole, role)
+			return next(c)
+		}
+	}
+}
+
 // AuthMiddleware validates the JWT on every request.
 // Token resolution order: HttpOnly cookie "jwt" → Authorization: Bearer header.
 // Role resolution: DB (live, reflects admin changes immediately) → JWT fallback.

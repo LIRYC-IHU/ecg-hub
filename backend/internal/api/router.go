@@ -37,8 +37,9 @@ func RegisterRoutes(e *echo.Echo, gormDB *gorm.DB, authProvider auth.Provider, b
 	roleRepo := repository.NewRoleRepo(gormDB)
 
 	// === Public routes ===
-	e.GET("/healthz", handlers.HealthHandler(pinger, dicomStatus, ftpStatus, ectpStatus, connCheckers))
-	e.GET("/swagger/*", echoSwagger.WrapHandler)
+	api := e.Group("", mw.HealthzMiddleware(authProvider, userRepo))
+	api.GET("/healthz", handlers.HealthHandler(pinger, dicomStatus, ftpStatus, ectpStatus, connCheckers))
+	api.GET("/swagger/*", echoSwagger.WrapHandler)
 
 	// === Authentication (public — these endpoints issue JWTs) ===
 	e.GET("/api/v1/auth/provider", handlers.AuthProviderHandler(authProvider))
