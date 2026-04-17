@@ -538,6 +538,7 @@ export interface VolumeMetric {
 
 export interface StorageMetricsResp {
   volumes: VolumeMetric[];
+  error?: string;
 }
 // Api for get Metric volume storage place
 export async function fetchStorageMetrics(): Promise<StorageMetricsResp> {

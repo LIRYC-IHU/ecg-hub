@@ -177,6 +177,21 @@
       }
     }
   },
+  "quarantine": {
+    "title": "Quarantaine",
+    "ingested": "Fichiers rejetés lors de l'ingestion",
+    "verify": "Ces fichiers ont été rejetés lors de l'ingestion et nécessitent une vérification manuelle.",
+    "empty": "Aucun fichier en quarantaine",
+    "delete": "Supprimer",
+    "deleteConfirm": "Supprimer définitivement ce fichier ?",
+    "deleted": "Fichier supprimé",
+    "deleteError": "Erreur lors de la suppression",
+    "colFilename": "Nom de fichier",
+    "colReceivedAt": "Reçu le",
+    "colReason": "Raison",
+    "file": "Fichier",
+    "files": "Fichiers"
+  },
   "nav": {
     "patients": "Patients",
     "users": "Droits",
