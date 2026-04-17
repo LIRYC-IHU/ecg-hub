@@ -212,11 +212,13 @@ func main() {
 		}
 	}
 
-	api.RegisterRoutes(e, gormDB, authProvider, bridge, webhookNotifier, keycloakAdmin, permChecker, userRepo, activeModules,
+	router := api.NewRouterConfig(e, gormDB, authProvider, bridge, webhookNotifier, keycloakAdmin, permChecker, userRepo, activeModules,
 		apihandlers.DICOMStatus{Enabled: cfg.DICOM.Enabled, Port: cfg.DICOM.Port},
 		apihandlers.FTPStatus{Enabled: cfg.FTP.Enabled, Port: cfg.FTP.Port},
 		ectpStatus,
-		exportRepo, exportPool, connCheckers)
+		exportRepo, exportPool, connCheckers, cfg)
+
+	router.RegisterRoutes()
 
 	// Step 5: Start FTP ingestion server (Story 2.2).
 	ftpQueue := ingestion.NewIngestQueue(100)
