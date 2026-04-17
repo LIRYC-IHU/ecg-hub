@@ -56,7 +56,7 @@ function PatientsPage({
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [sort, setSort] = useState<SortOption>("created_at|desc");
   const [selectedECGs, setSelectedECGs] = useState<Set<number>>(new Set());
-  const [perPage, setPerPage] = useState<number>(50);
+  const [perPage, setPerPage] = useState<number>(25);
   const [page, setPage] = useState(1);
 
   useEffect(() => {
@@ -142,6 +142,7 @@ function PatientsPage({
           onChange={(e) => setPerPage(Number(e.target.value))}
           className="text-sm bg-card border border-border rounded-lg px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-ring/20"
         >
+          <option value={25}>25 / page</option>
           <option value={50}>50 / page</option>
           <option value={100}>100 / page</option>
           <option value={200}>200 / page</option>
@@ -168,40 +169,44 @@ function PatientsPage({
           canWrite={canWrite}
         />
         {/* Pagination */}
-        {!isLoading && total > perPage && (() => {
-          const totalPages = Math.ceil(total / perPage);
-          return (
-            <div className="flex items-center justify-center gap-2 py-4">
-              <button
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="p-2 rounded-lg border border-border hover:bg-muted transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
+        {!isLoading &&
+          total > perPage &&
+          (() => {
+            const totalPages = Math.ceil(total / perPage);
+            return (
+              <div className="flex items-center justify-center gap-2 py-4">
                 <button
-                  key={p}
-                  onClick={() => setPage(p)}
-                  className={`min-w-[32px] h-8 rounded-lg text-sm font-medium transition-colors ${
-                    p === page
-                      ? "bg-primary text-primary-foreground"
-                      : "border border-border hover:bg-muted"
-                  }`}
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="p-2 rounded-lg border border-border hover:bg-muted transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                 >
-                  {p}
+                  <ChevronLeft className="w-4 h-4" />
                 </button>
-              ))}
-              <button
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
-                className="p-2 rounded-lg border border-border hover:bg-muted transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-          );
-        })()}
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(
+                  (p) => (
+                    <button
+                      key={p}
+                      onClick={() => setPage(p)}
+                      className={`min-w-[32px] h-8 rounded-lg text-sm font-medium transition-colors ${
+                        p === page
+                          ? "bg-primary text-primary-foreground"
+                          : "border border-border hover:bg-muted"
+                      }`}
+                    >
+                      {p}
+                    </button>
+                  ),
+                )}
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages}
+                  className="p-2 rounded-lg border border-border hover:bg-muted transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            );
+          })()}
       </main>
 
       {selectedECGs.size > 0 && (
