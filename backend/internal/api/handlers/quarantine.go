@@ -21,7 +21,7 @@ type QuarantineEntryDTO struct {
 	ID          uint   `json:"id"`
 	Filename    string `json:"filename"`
 	FilePath    string `json:"file_path"`
-	ReceivedAt  string `json:"received_at"`  // RFC3339
+	ReceivedAt  string `json:"received_at"` // RFC3339
 	ErrorReason string `json:"error_reason"`
 }
 
@@ -98,7 +98,11 @@ func DeleteQuarantineHandler(db *gorm.DB) echo.HandlerFunc {
 
 		userID, _ := c.Get(mw.CtxKeyUserID).(string)
 		_ = mw.WriteAuditLog(c.Request().Context(), db, userID, "quarantine_decision",
-			rawID, map[string]any{"action": "delete"})
+			rawID, map[string]any{
+				"action": "delete",
+				"id":     rawID,
+				"file":   filePath,
+			})
 
 		return c.NoContent(http.StatusNoContent)
 	}
