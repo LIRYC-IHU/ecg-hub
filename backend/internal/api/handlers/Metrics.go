@@ -18,6 +18,7 @@ type VolumeMetrics struct {
 
 type StorageMetricsResp struct {
 	Volumes []VolumeMetrics `json:"volumes"`
+	Error   string          `json:"error"`
 }
 
 func gbToBytes(gb int) int64 {
@@ -34,7 +35,9 @@ func VolumeMetricsHandler(cfg *config.Config, db *gorm.DB) echo.HandlerFunc {
 
 		storage_size, err := dirSize(storage.VolumePath)
 		if err != nil {
-			return c.JSON(http.StatusOK, echo.Map{"error": "Failed to get storage metrics"})
+			return c.JSON(http.StatusOK, StorageMetricsResp{
+				Error: "error getting storage metrics",
+			})
 		}
 
 		// log info about the volume metrics
@@ -46,7 +49,9 @@ func VolumeMetricsHandler(cfg *config.Config, db *gorm.DB) echo.HandlerFunc {
 
 		quarantine_size, err := dirSize(storage.QuarantinePath)
 		if err != nil {
-			return c.JSON(http.StatusOK, echo.Map{"error": "Failed to get storage metrics"})
+			return c.JSON(http.StatusOK, StorageMetricsResp{
+				Error: "error getting storage metrics",
+			})
 		}
 		volumes = append(volumes, VolumeMetrics{
 			Name:      "Quarantine",
@@ -55,6 +60,7 @@ func VolumeMetricsHandler(cfg *config.Config, db *gorm.DB) echo.HandlerFunc {
 		})
 		return c.JSON(http.StatusOK, StorageMetricsResp{
 			Volumes: volumes,
+			Error:   "",
 		})
 	}
 

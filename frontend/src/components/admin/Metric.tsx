@@ -26,10 +26,14 @@ function MetricCard() {
       if (!data) {
         setError("Failed to load metrics");
       } else {
-        setVolumes(data.volumes);
+        if (data.error) {
+          setError("Failed to load metrics:" + data.error);
+        } else {
+          setVolumes(data.volumes);
+        }
       }
     } catch (err) {
-      setError("Failed to load metrics");
+      setError("Failed to load metrics:" + err);
     } finally {
       setLoading(false);
     }
