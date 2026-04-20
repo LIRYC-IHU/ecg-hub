@@ -88,7 +88,11 @@ func downloadECGHandler(repo ecgByIDFinder, patRepo patientByIDFinder, bridge ex
 		// Audit log is non-blocking — a failed write must not fail the download (NFR-R2).
 		if db != nil {
 			_ = mw.WriteAuditLog(c.Request().Context(), db, userID, "ecg_download",
-				strconv.FormatUint(id, 10), map[string]any{"format": "original"})
+				strconv.FormatUint(id, 10), map[string]any{
+					"format": "original",
+					"vendor": ecg.Vendor,
+					"file":   ecg.OriginalFilename,
+				})
 		}
 
 		// c.Attachment sets Content-Disposition: attachment; filename="..." and streams the file.
@@ -123,7 +127,10 @@ func DeleteECGHandler(db *gorm.DB) echo.HandlerFunc {
 
 		userID, _ := c.Get(mw.CtxKeyUserID).(string)
 		_ = mw.WriteAuditLog(c.Request().Context(), db, userID, "delete",
-			rawID, map[string]any{"ecg_id": id})
+			rawID, map[string]any{
+				"ecg_id": id,
+				"file":   filePath,
+			})
 
 		return c.NoContent(http.StatusNoContent)
 	}
@@ -251,7 +258,10 @@ func PatchECGMetadataHandler(db *gorm.DB) echo.HandlerFunc {
 
 		userID, _ := c.Get(mw.CtxKeyUserID).(string)
 		_ = mw.WriteAuditLog(c.Request().Context(), db, userID, "ecg_metadata_update",
-			strconv.FormatUint(uint64(id), 10), map[string]any{"fields": changedFields})
+			strconv.FormatUint(uint64(id), 10), map[string]any{
+				"fields": changedFields,
+				"file":   ecg.FilePath,
+			})
 
 		return c.JSON(http.StatusOK, buildMetaValues(ecg))
 	}
@@ -309,7 +319,11 @@ func handleConvertDownload(
 	// Audit log is non-blocking (NFR-R2).
 	if db != nil {
 		_ = mw.WriteAuditLog(c.Request().Context(), db, userID, "ecg_download",
-			strconv.FormatUint(uint64(id), 10), map[string]any{"format": format, "vendor": ecg.Vendor})
+			strconv.FormatUint(uint64(id), 10), map[string]any{
+				"format": format,
+				"vendor": ecg.Vendor,
+				"file":   ecg.OriginalFilename,
+			})
 	}
 
 	outExt := map[string]string{"xmlfda": ".xml", "dicom": ".dcm"}[format]
