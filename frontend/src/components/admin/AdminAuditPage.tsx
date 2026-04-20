@@ -8,8 +8,6 @@ import {
   RefreshCw,
   Trash2,
   Shield,
-  Copy,
-  Check,
 } from "lucide-react";
 import { useAuditLogs } from "../../hooks/useAuditLogs";
 import type { AuditLogFilters } from "../../lib/api";
@@ -57,7 +55,6 @@ export function AdminAuditPage() {
   const [userId, setUserId] = useState("");
   const [action, setAction] = useState("");
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
-  const [copiedId, setCopiedId] = useState<number | null>(null);
 
   const filters: AuditLogFilters = {
     page,
@@ -68,12 +65,6 @@ export function AdminAuditPage() {
 
   const { logs, total, isLoading } = useAuditLogs(filters);
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-
-  function handleCopy(id: number, resourceId: string) {
-    void navigator.clipboard.writeText(resourceId);
-    setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 1500);
-  }
 
   function exportCSV() {
     const header = "date,user,action,resource_id";
