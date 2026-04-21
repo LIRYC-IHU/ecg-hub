@@ -31,7 +31,7 @@ type patientFetcher interface {
 type Job struct {
 	ID     string
 	UserID string
-	ECGIDs []uint
+	ECGIDs []string
 	Format string // "original" or "xmlfda" or "dicom"
 }
 
@@ -192,7 +192,7 @@ func buildZIP(job Job, ecgs []models.ECG, zipPath string, exportRepo *repository
 
 			converted, convErr := bridge.Convert(context.Background(), ecg.FilePath, ecg.Vendor, format, patient)
 			if convErr != nil {
-				return fmt.Errorf("convert ecg %d (%s) to %s: %w", ecg.ID, ecg.FilePath, format, convErr)
+				return fmt.Errorf("convert ecg %s (%s) to %s: %w", ecg.ID, ecg.FilePath, format, convErr)
 			}
 
 			// Replace the extension in the zip entry name.
@@ -207,12 +207,12 @@ func buildZIP(job Job, ecgs []models.ECG, zipPath string, exportRepo *repository
 				return fmt.Errorf("create zip entry %s: %w", name, createErr)
 			}
 			if _, writeErr := w.Write(converted); writeErr != nil {
-				return fmt.Errorf("write converted ecg %d to zip: %w", ecg.ID, writeErr)
+				return fmt.Errorf("write converted ecg %s to zip: %w", ecg.ID, writeErr)
 			}
 		} else {
 			src, openErr := os.Open(ecg.FilePath)
 			if openErr != nil {
-				return fmt.Errorf("open ecg %d (%s): %w", ecg.ID, ecg.FilePath, openErr)
+				return fmt.Errorf("open ecg %s (%s): %w", ecg.ID, ecg.FilePath, openErr)
 			}
 
 			w, createErr := zw.Create(name)
@@ -223,7 +223,7 @@ func buildZIP(job Job, ecgs []models.ECG, zipPath string, exportRepo *repository
 
 			if _, copyErr := io.Copy(w, src); copyErr != nil {
 				src.Close()
-				return fmt.Errorf("copy ecg %d to zip: %w", ecg.ID, copyErr)
+				return fmt.Errorf("copy ecg %s to zip: %w", ecg.ID, copyErr)
 			}
 			src.Close()
 		}
@@ -251,9 +251,9 @@ func outputExtension(format string) string {
 // safeZIPName returns a collision-free filename for use inside the ZIP archive.
 // If the same original filename appears more than once, it appends the ECG ID as a suffix.
 // Falls back to "ecg_{id}" when OriginalFilename is empty.
-func safeZIPName(originalFilename string, ecgID uint, nameCount map[string]int) string {
+func safeZIPName(originalFilename string, ecgID string, nameCount map[string]int) string {
 	if originalFilename == "" {
-		originalFilename = fmt.Sprintf("ecg_%d", ecgID)
+		originalFilename = fmt.Sprintf("ecg_%s", ecgID)
 	}
 	nameCount[originalFilename]++
 	if nameCount[originalFilename] == 1 {
@@ -261,7 +261,7 @@ func safeZIPName(originalFilename string, ecgID uint, nameCount map[string]int) 
 	}
 	ext := filepath.Ext(originalFilename)
 	base := originalFilename[:len(originalFilename)-len(ext)]
-	return fmt.Sprintf("%s_%d%s", base, ecgID, ext)
+	return fmt.Sprintf("%s_%s%s", base, ecgID, ext)
 }
 
 func (p *WorkerPool) failJob(jobID, reason string) {
