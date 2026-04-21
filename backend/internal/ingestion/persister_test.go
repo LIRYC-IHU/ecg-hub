@@ -295,7 +295,7 @@ func TestPersister_CancelledContext_NoProcessing(t *testing.T) {
 
 type mockEnricher struct {
 	calls []struct {
-		ecgID     uint
+		ecgID     string
 		patientID string
 	}
 	done chan struct{}
@@ -305,9 +305,9 @@ func newMockEnricher() *mockEnricher {
 	return &mockEnricher{done: make(chan struct{}, 10)}
 }
 
-func (m *mockEnricher) Enrich(_ context.Context, ecgID uint, patientID string) error {
+func (m *mockEnricher) Enrich(_ context.Context, ecgID string, patientID string) error {
 	m.calls = append(m.calls, struct {
-		ecgID     uint
+		ecgID     string
 		patientID string
 	}{ecgID, patientID})
 	m.done <- struct{}{}
@@ -366,7 +366,7 @@ type mockDispatcher struct {
 }
 
 type dispatchCall struct {
-	ecgID    uint
+	ecgID    string
 	filePath string
 }
 

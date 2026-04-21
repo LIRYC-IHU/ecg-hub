@@ -22,7 +22,7 @@ type fileWriter interface {
 // ecgEnricher is the optional HL7 enrichment interface (implemented by *hl7.Enricher).
 // When nil, enrichment is disabled — ECG hl7_status stays "pending" (AC #6).
 type ecgEnricher interface {
-	Enrich(ctx context.Context, ecgID uint, patientID string) error
+	Enrich(ctx context.Context, ecgID string, patientID string) error
 }
 
 // ecgConnectorDispatcher is the optional outbound forwarding interface (implemented by *connector.Dispatcher).
@@ -44,18 +44,18 @@ type patientUpserter interface {
 // Persister consumes RoutedItems from the RoutedQueue, renames and writes each
 // file to the volume, then inserts the ECG and upserts the patient in PostgreSQL.
 type Persister struct {
-	routed         RoutedQueue
-	volume         fileWriter
-	ecgRepo        ecgInserter
-	patRepo        patientUpserter
-	enricher       ecgEnricher          // nil when HL7 is disabled; guarded by enricherMu
-	enricherMu     sync.RWMutex         // guards concurrent read (persist) / write (WithEnricher)
-	dispatcher     ecgConnectorDispatcher // nil when connector forwarding is disabled; guarded by dispatcherMu
-	dispatcherMu   sync.RWMutex           // guards concurrent read (persist) / write (WithConnectorDispatcher)
-	ctx            context.Context
-	cancel         context.CancelFunc
-	startOnce      sync.Once
-	done           chan struct{}
+	routed       RoutedQueue
+	volume       fileWriter
+	ecgRepo      ecgInserter
+	patRepo      patientUpserter
+	enricher     ecgEnricher            // nil when HL7 is disabled; guarded by enricherMu
+	enricherMu   sync.RWMutex           // guards concurrent read (persist) / write (WithEnricher)
+	dispatcher   ecgConnectorDispatcher // nil when connector forwarding is disabled; guarded by dispatcherMu
+	dispatcherMu sync.RWMutex           // guards concurrent read (persist) / write (WithConnectorDispatcher)
+	ctx          context.Context
+	cancel       context.CancelFunc
+	startOnce    sync.Once
+	done         chan struct{}
 }
 
 // NewPersister constructs a Persister. Call Start() to begin consuming the queue.
@@ -177,8 +177,8 @@ func (p *Persister) persist(ri RoutedItem) error {
 	}
 
 	firstName, _ := ri.Meta.Extra["first_name"].(string)
-	lastName, _  := ri.Meta.Extra["last_name"].(string)
-	gender, _    := ri.Meta.Extra["sex"].(string) // Philips uses "sex"; HL7 normalises to "gender"
+	lastName, _ := ri.Meta.Extra["last_name"].(string)
+	gender, _ := ri.Meta.Extra["sex"].(string) // Philips uses "sex"; HL7 normalises to "gender"
 	if err := p.patRepo.UpsertWithDemographics(ri.Meta.PatientID, firstName, lastName, gender); err != nil {
 		return fmt.Errorf("persister: upsert patient: %w", err)
 	}
