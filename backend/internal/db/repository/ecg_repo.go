@@ -26,9 +26,9 @@ func NewECGRepository(db *gorm.DB) *ECGRepository {
 
 // FindByID returns the ECG with the given primary key.
 // Returns ErrECGNotFound if no record matches.
-func (r *ECGRepository) FindByID(id uint) (*models.ECG, error) {
+func (r *ECGRepository) FindByID(id string) (*models.ECG, error) {
 	var ecg models.ECG
-	if err := r.db.First(&ecg, id).Error; err != nil {
+	if err := r.db.First(&ecg, "id = ?", id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrECGNotFound
 		}
@@ -49,7 +49,7 @@ func (r *ECGRepository) Insert(ecg *models.ECG) error {
 // This is the ONLY single-column update on hl7_status — use UpdateHL7Lifecycle when
 // also updating hl7_retry_count. Both are NFR-R4 exceptions (lifecycle metadata).
 // Valid status values: "pending", "success", "hl7_exhausted".
-func (r *ECGRepository) UpdateHL7Status(ecgID uint, status string) error {
+func (r *ECGRepository) UpdateHL7Status(ecgID string, status string) error {
 	result := r.db.Model(&models.ECG{}).Where("id = ?", ecgID).Update("hl7_status", status)
 	if result.Error != nil {
 		return fmt.Errorf("ecg_repo: update hl7_status: %w", result.Error)
@@ -72,9 +72,9 @@ func (r *ECGRepository) FindPendingHL7(limit int) ([]models.ECG, error) {
 
 // DeleteByID removes the ECG record and returns the file path for physical deletion.
 // This is an admin/writer-only operation (NFR-R4 explicit administrator exception).
-func (r *ECGRepository) DeleteByID(id uint) (string, error) {
+func (r *ECGRepository) DeleteByID(id string) (string, error) {
 	var ecg models.ECG
-	if err := r.db.First(&ecg, id).Error; err != nil {
+	if err := r.db.First(&ecg, "id = ?", id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return "", ErrECGNotFound
 		}
@@ -90,7 +90,7 @@ func (r *ECGRepository) DeleteByID(id uint) (string, error) {
 // UpdateMetadata updates the extra JSONB field and optionally recorded_at.
 // 3rd permitted UPDATE on ecgs after UpdateHL7Status (NFR-R4 exception — editable metadata).
 // recordedAt nil means "do not change the recorded_at column".
-func (r *ECGRepository) UpdateMetadata(ecgID uint, extra map[string]any, recordedAt *time.Time) error {
+func (r *ECGRepository) UpdateMetadata(ecgID string, extra map[string]any, recordedAt *time.Time) error {
 	updates := map[string]any{"extra": extra}
 	if recordedAt != nil {
 		updates["recorded_at"] = recordedAt
@@ -104,7 +104,7 @@ func (r *ECGRepository) UpdateMetadata(ecgID uint, extra map[string]any, recorde
 
 // FindByIDs returns all ECGs whose primary key is in ids.
 // Order is not guaranteed. Returns an empty slice (not an error) if ids is empty.
-func (r *ECGRepository) FindByIDs(ids []uint) ([]models.ECG, error) {
+func (r *ECGRepository) FindByIDs(ids []string) ([]models.ECG, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
@@ -118,7 +118,7 @@ func (r *ECGRepository) FindByIDs(ids []uint) ([]models.ECG, error) {
 // UpdateHL7Lifecycle atomically updates both hl7_status and hl7_retry_count.
 // 2nd permitted UPDATE on ecgs after UpdateHL7Status (NFR-R4 exception — lifecycle metadata).
 // Uses Updates(map) — NOT Updates(struct) — to correctly handle retryCount=0 (zero-value safe).
-func (r *ECGRepository) UpdateHL7Lifecycle(ecgID uint, status string, retryCount int) error {
+func (r *ECGRepository) UpdateHL7Lifecycle(ecgID string, status string, retryCount int) error {
 	result := r.db.Model(&models.ECG{}).Where("id = ?", ecgID).
 		Updates(map[string]any{
 			"hl7_status":      status,

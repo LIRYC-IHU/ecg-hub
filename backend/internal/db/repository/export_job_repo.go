@@ -58,13 +58,13 @@ func (r *ExportJobRepository) Update(id string, updates map[string]any) error {
 }
 
 // SaveECGList bulk-inserts the list of ECG IDs associated with an export job.
-func (r *ExportJobRepository) SaveECGList(jobID string, ecgIDs []uint) error {
+func (r *ExportJobRepository) SaveECGList(jobID string, ecgIDs []string) error {
 	if len(ecgIDs) == 0 {
 		return nil
 	}
 	type row struct {
 		ExportJobID string `gorm:"column:export_job_id"`
-		ECGID       uint   `gorm:"column:ecg_id"`
+		ECGID       string `gorm:"column:ecg_id"`
 	}
 	rows := make([]row, len(ecgIDs))
 	for i, id := range ecgIDs {
@@ -77,8 +77,8 @@ func (r *ExportJobRepository) SaveECGList(jobID string, ecgIDs []uint) error {
 }
 
 // GetECGIDs returns the ordered list of ECG IDs associated with an export job.
-func (r *ExportJobRepository) GetECGIDs(jobID string) ([]uint, error) {
-	var ids []uint
+func (r *ExportJobRepository) GetECGIDs(jobID string) ([]string, error) {
+	var ids []string
 	if err := r.db.Table("export_job_ecgs").
 		Select("ecg_id").
 		Where("export_job_id = ?", jobID).

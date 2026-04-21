@@ -13,9 +13,9 @@ import (
 // Extracted so callers can mock it in unit tests.
 type ConnectorJobRepo interface {
 	Insert(job *models.ConnectorJob) error
-	MarkSent(id uint) error
-	MarkFailed(id uint, errMsg string, nextRetryAt time.Time) error
-	Exhaust(id uint, errMsg string) error
+	MarkSent(id string) error
+	MarkFailed(id string, errMsg string, nextRetryAt time.Time) error
+	Exhaust(id string, errMsg string) error
 	FindPendingRetry(limit int) ([]models.ConnectorJob, error)
 }
 
@@ -38,7 +38,7 @@ func (r *ConnectorJobRepository) Insert(job *models.ConnectorJob) error {
 }
 
 // MarkSent sets status=sent and records sent_at=now for the given job.
-func (r *ConnectorJobRepository) MarkSent(id uint) error {
+func (r *ConnectorJobRepository) MarkSent(id string) error {
 	now := time.Now()
 	result := r.db.Model(&models.ConnectorJob{}).Where("id = ?", id).
 		Updates(map[string]any{
@@ -46,14 +46,14 @@ func (r *ConnectorJobRepository) MarkSent(id uint) error {
 			"sent_at": now,
 		})
 	if result.Error != nil {
-		return fmt.Errorf("connector_job_repo: mark_sent %d: %w", id, result.Error)
+		return fmt.Errorf("connector_job_repo: mark_sent %s: %w", id, result.Error)
 	}
 	return nil
 }
 
 // MarkFailed increments attempts, records the error, and schedules the next retry.
 // The job remains retriable until attempts reaches max_attempts.
-func (r *ConnectorJobRepository) MarkFailed(id uint, errMsg string, nextRetryAt time.Time) error {
+func (r *ConnectorJobRepository) MarkFailed(id string, errMsg string, nextRetryAt time.Time) error {
 	result := r.db.Model(&models.ConnectorJob{}).Where("id = ?", id).
 		Updates(map[string]any{
 			"status":        "failed",
@@ -62,14 +62,14 @@ func (r *ConnectorJobRepository) MarkFailed(id uint, errMsg string, nextRetryAt 
 			"attempts":      gorm.Expr("attempts + 1"),
 		})
 	if result.Error != nil {
-		return fmt.Errorf("connector_job_repo: mark_failed %d: %w", id, result.Error)
+		return fmt.Errorf("connector_job_repo: mark_failed %s: %w", id, result.Error)
 	}
 	return nil
 }
 
 // Exhaust sets status=exhausted and records the final error.
 // Called when attempts has reached max_attempts — no further retries will occur.
-func (r *ConnectorJobRepository) Exhaust(id uint, errMsg string) error {
+func (r *ConnectorJobRepository) Exhaust(id string, errMsg string) error {
 	result := r.db.Model(&models.ConnectorJob{}).Where("id = ?", id).
 		Updates(map[string]any{
 			"status":     "exhausted",
@@ -77,7 +77,7 @@ func (r *ConnectorJobRepository) Exhaust(id uint, errMsg string) error {
 			"attempts":   gorm.Expr("attempts + 1"),
 		})
 	if result.Error != nil {
-		return fmt.Errorf("connector_job_repo: exhaust %d: %w", id, result.Error)
+		return fmt.Errorf("connector_job_repo: exhaust %s: %w", id, result.Error)
 	}
 	return nil
 }

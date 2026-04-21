@@ -12,26 +12,26 @@ import (
 // ─── Mock ────────────────────────────────────────────────────────────────────
 
 type mockConnectorJobRepo struct {
-	inserted       []*models.ConnectorJob
-	markedSent     []uint
-	markedFailed   []markedFailedCall
-	exhausted      []exhaustedCall
-	pendingRetry   []models.ConnectorJob
-	insertErr      error
-	markSentErr    error
-	markFailedErr  error
-	exhaustErr     error
-	pendingErr     error
+	inserted      []*models.ConnectorJob
+	markedSent    []string
+	markedFailed  []markedFailedCall
+	exhausted     []exhaustedCall
+	pendingRetry  []models.ConnectorJob
+	insertErr     error
+	markSentErr   error
+	markFailedErr error
+	exhaustErr    error
+	pendingErr    error
 }
 
 type markedFailedCall struct {
-	id          uint
+	id          string
 	errMsg      string
 	nextRetryAt time.Time
 }
 
 type exhaustedCall struct {
-	id     uint
+	id     string
 	errMsg string
 }
 
@@ -43,7 +43,7 @@ func (m *mockConnectorJobRepo) Insert(job *models.ConnectorJob) error {
 	return nil
 }
 
-func (m *mockConnectorJobRepo) MarkSent(id uint) error {
+func (m *mockConnectorJobRepo) MarkSent(id string) error {
 	if m.markSentErr != nil {
 		return m.markSentErr
 	}
@@ -51,7 +51,7 @@ func (m *mockConnectorJobRepo) MarkSent(id uint) error {
 	return nil
 }
 
-func (m *mockConnectorJobRepo) MarkFailed(id uint, errMsg string, nextRetryAt time.Time) error {
+func (m *mockConnectorJobRepo) MarkFailed(id string, errMsg string, nextRetryAt time.Time) error {
 	if m.markFailedErr != nil {
 		return m.markFailedErr
 	}
@@ -59,7 +59,7 @@ func (m *mockConnectorJobRepo) MarkFailed(id uint, errMsg string, nextRetryAt ti
 	return nil
 }
 
-func (m *mockConnectorJobRepo) Exhaust(id uint, errMsg string) error {
+func (m *mockConnectorJobRepo) Exhaust(id string, errMsg string) error {
 	if m.exhaustErr != nil {
 		return m.exhaustErr
 	}
@@ -84,7 +84,7 @@ var _ repository.ConnectorJobRepo = (*mockConnectorJobRepo)(nil)
 
 func TestMockConnectorJobRepo_Insert(t *testing.T) {
 	m := &mockConnectorJobRepo{}
-	job := &models.ConnectorJob{ECGID: 1, ConnectorName: "polaris", Status: "pending"}
+	job := &models.ConnectorJob{ECGID: "1", ConnectorName: "polaris", Status: "pending"}
 
 	if err := m.Insert(job); err != nil {
 		t.Fatalf("Insert: unexpected error: %v", err)
@@ -109,10 +109,10 @@ func TestMockConnectorJobRepo_Insert_Error(t *testing.T) {
 func TestMockConnectorJobRepo_MarkSent(t *testing.T) {
 	m := &mockConnectorJobRepo{}
 
-	if err := m.MarkSent(42); err != nil {
+	if err := m.MarkSent("42"); err != nil {
 		t.Fatalf("MarkSent: unexpected error: %v", err)
 	}
-	if len(m.markedSent) != 1 || m.markedSent[0] != 42 {
+	if len(m.markedSent) != 1 || m.markedSent[0] != "42" {
 		t.Errorf("MarkSent: expected id 42, got %v", m.markedSent)
 	}
 }
@@ -121,14 +121,14 @@ func TestMockConnectorJobRepo_MarkFailed(t *testing.T) {
 	m := &mockConnectorJobRepo{}
 	next := time.Now().Add(5 * time.Minute)
 
-	if err := m.MarkFailed(7, "timeout", next); err != nil {
+	if err := m.MarkFailed("7", "timeout", next); err != nil {
 		t.Fatalf("MarkFailed: unexpected error: %v", err)
 	}
 	if len(m.markedFailed) != 1 {
 		t.Fatalf("MarkFailed: expected 1 call, got %d", len(m.markedFailed))
 	}
 	c := m.markedFailed[0]
-	if c.id != 7 || c.errMsg != "timeout" {
+	if c.id != "7" || c.errMsg != "timeout" {
 		t.Errorf("MarkFailed: unexpected call %+v", c)
 	}
 	if !c.nextRetryAt.Equal(next) {
@@ -139,19 +139,19 @@ func TestMockConnectorJobRepo_MarkFailed(t *testing.T) {
 func TestMockConnectorJobRepo_Exhaust(t *testing.T) {
 	m := &mockConnectorJobRepo{}
 
-	if err := m.Exhaust(99, "max attempts reached"); err != nil {
+	if err := m.Exhaust("99", "max attempts reached"); err != nil {
 		t.Fatalf("Exhaust: unexpected error: %v", err)
 	}
-	if len(m.exhausted) != 1 || m.exhausted[0].id != 99 {
+	if len(m.exhausted) != 1 || m.exhausted[0].id != "99" {
 		t.Errorf("Exhaust: unexpected calls %+v", m.exhausted)
 	}
 }
 
 func TestMockConnectorJobRepo_FindPendingRetry(t *testing.T) {
 	pending := []models.ConnectorJob{
-		{ID: 1, Status: "failed"},
-		{ID: 2, Status: "failed"},
-		{ID: 3, Status: "failed"},
+		{ID: "1", Status: "failed"},
+		{ID: "2", Status: "failed"},
+		{ID: "3", Status: "failed"},
 	}
 	m := &mockConnectorJobRepo{pendingRetry: pending}
 

@@ -5,24 +5,29 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 	"gorm.io/gorm"
 )
 
 // UserRecord is the GORM model for ecg_hub_users.
 type UserRecord struct {
-	ID         uint      `gorm:"primaryKey"`
-	ExternalID string    `gorm:"uniqueIndex;not null"`
+	ID         string    `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
+	ExternalID string    `gorm:"type:varchar(36);not null;index"`
 	Provider   string    `gorm:"not null;default:'oidc'"`
-	RoleID     *uint     `gorm:"index"`
+	RoleID     string    `gorm:"type:varchar(36);not null;index"`
 	CreatedAt  time.Time `gorm:"autoCreateTime"`
 	LastLogin  time.Time `gorm:"not null"`
+	UpdateJWT  bool      `gorm:"not null;default:false"`
+
+	AuditLog  []models.AuditLog  `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE"`
+	ExportJob []models.ExportJob `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE"`
 }
 
 func (UserRecord) TableName() string { return "ecg_hub_users" }
 
 // AppUser is the application-level representation returned to API callers.
 type AppUser struct {
-	ID         uint      `json:"id"`
+	ID         string    `json:"id"`
 	ExternalID string    `json:"external_id"`
 	Provider   string    `json:"provider"`
 	RoleName   string    `json:"role_name"`
@@ -74,9 +79,9 @@ func (r *UserRepo) UpsertLogin(ctx context.Context, externalID, provider, roleNa
 	updates := map[string]any{"last_login": now}
 	effectiveName := ""
 
-	if rec.RoleID != nil {
+	if rec.RoleID != "" {
 		// User already has a DB-assigned role — UX management takes priority.
-		name, nameErr := r.roleNameByID(ctx, *rec.RoleID)
+		name, nameErr := r.roleNameByID(ctx, rec.RoleID)
 		if nameErr == nil {
 			effectiveName = name
 		}
@@ -85,7 +90,7 @@ func (r *UserRepo) UpsertLogin(ctx context.Context, externalID, provider, roleNa
 	if effectiveName == "" && roleName != "" {
 		// No DB role yet — initialise from provider role.
 		roleID, _, syncErr := r.resolveRole(ctx, roleName, "")
-		if syncErr == nil && roleID != nil {
+		if syncErr == nil && roleID != "" {
 			updates["role_id"] = roleID
 		}
 		effectiveName = roleName
@@ -94,7 +99,7 @@ func (r *UserRepo) UpsertLogin(ctx context.Context, externalID, provider, roleNa
 	if effectiveName == "" {
 		// Last resort: assign reader.
 		roleID, _, _ := r.resolveRole(ctx, "reader", "reader")
-		if roleID != nil {
+		if roleID != "" {
 			updates["role_id"] = roleID
 			effectiveName = "reader"
 		}
@@ -109,7 +114,7 @@ func (r *UserRepo) UpsertLogin(ctx context.Context, externalID, provider, roleNa
 // List returns all users with their role names.
 func (r *UserRepo) List(ctx context.Context) ([]AppUser, error) {
 	type row struct {
-		ID         uint
+		ID         string
 		ExternalID string
 		Provider   string
 		RoleName   *string
@@ -152,19 +157,19 @@ func (r *UserRepo) GetCurrentRole(ctx context.Context, externalID string) (strin
 		}
 		return "", fmt.Errorf("user_repo: get role: %w", err)
 	}
-	if rec.RoleID == nil {
+	if rec.RoleID == "" {
 		return "", nil
 	}
 	var role RoleRecord
-	if err := r.db.WithContext(ctx).First(&role, *rec.RoleID).Error; err != nil {
+	if err := r.db.WithContext(ctx).First(&role, "id = ?", rec.RoleID).Error; err != nil {
 		return "", nil // role row missing, fall back to JWT
 	}
 	return role.Name, nil
 }
 
 // SetRole assigns a role to a user by name. Passing empty string clears the role.
-func (r *UserRepo) SetRole(ctx context.Context, id uint, roleName string) error {
-	var roleID *uint
+func (r *UserRepo) SetRole(ctx context.Context, id string, roleName string) error {
+	var roleID *string
 	if roleName != "" {
 		var rec RoleRecord
 		if err := r.db.WithContext(ctx).Where("name = ?", roleName).First(&rec).Error; err != nil {
@@ -177,29 +182,34 @@ func (r *UserRepo) SetRole(ctx context.Context, id uint, roleName string) error 
 
 // resolveRole returns the role ID and name for the given roleName.
 // Falls back to fallbackName if roleName is empty or not found.
-func (r *UserRepo) resolveRole(ctx context.Context, roleName, fallbackName string) (*uint, string, error) {
+func (r *UserRepo) resolveRole(ctx context.Context, roleName, fallbackName string) (string, string, error) {
 	name := roleName
 	if name == "" {
 		name = fallbackName
 	}
 	if name == "" {
-		return nil, "", nil
+		return "", "", nil
 	}
 	var rec RoleRecord
 	if err := r.db.WithContext(ctx).Where("name = ?", name).First(&rec).Error; err != nil {
 		// Role not in DB (e.g. admin role bypasses DB, or fresh install).
 		// Return nil ID but no error — callers that need the ID skip the update,
 		// and the role name is still used directly (e.g. for PermissionChecker bypass).
-		return nil, name, nil
+		return "", name, nil
 	}
-	return &rec.ID, rec.Name, nil
+	return rec.ID, rec.Name, nil
 }
 
 // roleNameByID returns the role name for a given role ID.
-func (r *UserRepo) roleNameByID(ctx context.Context, roleID uint) (string, error) {
+func (r *UserRepo) roleNameByID(ctx context.Context, roleID string) (string, error) {
 	var rec RoleRecord
-	if err := r.db.WithContext(ctx).First(&rec, roleID).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("id = ?", roleID).First(&rec).Error; err != nil {
 		return "", err
 	}
 	return rec.Name, nil
+}
+
+// Set UpdateJWT sets the update_jwt flag for a user, which signals that their JWT should be refreshed on next login.
+func (r *UserRepo) SetUpdateJWT(ctx context.Context, id string, update bool) error {
+	return r.db.WithContext(ctx).Model(&UserRecord{}).Where("id = ?", id).Update("update_jwt", update).Error
 }

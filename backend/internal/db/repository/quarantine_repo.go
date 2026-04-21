@@ -54,9 +54,9 @@ func (r *QuarantineRepository) List(page, perPage int) ([]models.QuarantineEntry
 }
 
 // FindByID returns the quarantine entry with the given primary key.
-func (r *QuarantineRepository) FindByID(id uint) (*models.QuarantineEntry, error) {
+func (r *QuarantineRepository) FindByID(id string) (*models.QuarantineEntry, error) {
 	var e models.QuarantineEntry
-	if err := r.db.First(&e, id).Error; err != nil {
+	if err := r.db.First(&e, "id = ?", id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrQuarantineNotFound
 		}
@@ -66,7 +66,7 @@ func (r *QuarantineRepository) FindByID(id uint) (*models.QuarantineEntry, error
 }
 
 // DeleteByID removes the quarantine entry and returns its file path.
-func (r *QuarantineRepository) DeleteByID(id uint) (string, error) {
+func (r *QuarantineRepository) DeleteByID(id string) (string, error) {
 	e, err := r.FindByID(id)
 	if err != nil {
 		return "", err
