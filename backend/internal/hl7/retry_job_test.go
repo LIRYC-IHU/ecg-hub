@@ -14,7 +14,7 @@ type stubRetryECGRepo struct {
 	ecgs           []models.ECG
 	findErr        error
 	lifecycleCalls []struct {
-		ecgID      uint
+		ecgID      string
 		status     string
 		retryCount int
 	}
@@ -25,9 +25,9 @@ func (s *stubRetryECGRepo) FindPendingHL7(_ int) ([]models.ECG, error) {
 	return s.ecgs, s.findErr
 }
 
-func (s *stubRetryECGRepo) UpdateHL7Lifecycle(ecgID uint, status string, retryCount int) error {
+func (s *stubRetryECGRepo) UpdateHL7Lifecycle(ecgID string, status string, retryCount int) error {
 	s.lifecycleCalls = append(s.lifecycleCalls, struct {
-		ecgID      uint
+		ecgID      string
 		status     string
 		retryCount int
 	}{ecgID, status, retryCount})
@@ -57,15 +57,15 @@ func (s *stubRetryAuditWriter) Insert(entry *models.AuditLog) error {
 type stubRetryWebhook struct {
 	calls []struct {
 		event string
-		ecgID uint
+		ecgID string
 	}
 	err error
 }
 
-func (s *stubRetryWebhook) Notify(event string, ecgID uint) error {
+func (s *stubRetryWebhook) Notify(event string, ecgID string) error {
 	s.calls = append(s.calls, struct {
 		event string
-		ecgID uint
+		ecgID string
 	}{event, ecgID})
 	return s.err
 }
@@ -87,7 +87,7 @@ func newTestRetryJob(
 
 func TestRetryJob_Success_UpdatesDemographicsAndStatus(t *testing.T) {
 	d := &PatientDemographics{LastName: "Dupont", FirstName: "Marie", Source: "his.local"}
-	ecgRepo := &stubRetryECGRepo{ecgs: []models.ECG{{ID: 10, PatientID: "P001", HL7RetryCount: 0}}}
+	ecgRepo := &stubRetryECGRepo{ecgs: []models.ECG{{ID: "10", PatientID: "P001", HL7RetryCount: 0}}}
 	patRepo := &stubRetryPatRepo{}
 	auditRepo := &stubRetryAuditWriter{}
 	webhook := &stubRetryWebhook{}
@@ -102,8 +102,8 @@ func TestRetryJob_Success_UpdatesDemographicsAndStatus(t *testing.T) {
 		t.Fatalf("ecgRepo.UpdateHL7Lifecycle calls = %d, want 1", len(ecgRepo.lifecycleCalls))
 	}
 	lc := ecgRepo.lifecycleCalls[0]
-	if lc.ecgID != 10 {
-		t.Errorf("ecgID = %d, want 10", lc.ecgID)
+	if lc.ecgID != "10" {
+		t.Errorf("ecgID = %s, want 10", lc.ecgID)
 	}
 	if lc.status != StatusSuccess {
 		t.Errorf("status = %q, want %q", lc.status, StatusSuccess)
@@ -121,7 +121,7 @@ func TestRetryJob_Success_UpdatesDemographicsAndStatus(t *testing.T) {
 
 func TestRetryJob_Failure_IncrementsRetryCount(t *testing.T) {
 	ecgRepo := &stubRetryECGRepo{
-		ecgs: []models.ECG{{ID: 7, PatientID: "P002", HL7RetryCount: 1}},
+		ecgs: []models.ECG{{ID: "7", PatientID: "P002", HL7RetryCount: 1}},
 	}
 	patRepo := &stubRetryPatRepo{}
 	auditRepo := &stubRetryAuditWriter{}
@@ -151,7 +151,7 @@ func TestRetryJob_Failure_IncrementsRetryCount(t *testing.T) {
 func TestRetryJob_Exhaustion_SetsStatusAndNotifies(t *testing.T) {
 	// retry_count=2, max=3 → newCount=3 >= 3 → exhaust
 	ecgRepo := &stubRetryECGRepo{
-		ecgs: []models.ECG{{ID: 42, PatientID: "P003", HL7RetryCount: 2}},
+		ecgs: []models.ECG{{ID: "42", PatientID: "P003", HL7RetryCount: 2}},
 	}
 	patRepo := &stubRetryPatRepo{}
 	auditRepo := &stubRetryAuditWriter{}
@@ -164,8 +164,8 @@ func TestRetryJob_Exhaustion_SetsStatusAndNotifies(t *testing.T) {
 		t.Fatalf("ecgRepo.UpdateHL7Lifecycle calls = %d, want 1", len(ecgRepo.lifecycleCalls))
 	}
 	lc := ecgRepo.lifecycleCalls[0]
-	if lc.ecgID != 42 {
-		t.Errorf("ecgID = %d, want 42", lc.ecgID)
+	if lc.ecgID != "42" {
+		t.Errorf("ecgID = %s, want 42", lc.ecgID)
 	}
 	if lc.status != StatusExhausted {
 		t.Errorf("status = %q, want %q", lc.status, StatusExhausted)
@@ -188,8 +188,8 @@ func TestRetryJob_Exhaustion_SetsStatusAndNotifies(t *testing.T) {
 	if webhook.calls[0].event != "hl7_exhausted" {
 		t.Errorf("webhook event = %q, want %q", webhook.calls[0].event, "hl7_exhausted")
 	}
-	if webhook.calls[0].ecgID != 42 {
-		t.Errorf("webhook ecgID = %d, want 42", webhook.calls[0].ecgID)
+	if webhook.calls[0].ecgID != "42" {
+		t.Errorf("webhook ecgID = %s, want 42", webhook.calls[0].ecgID)
 	}
 }
 

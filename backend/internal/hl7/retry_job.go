@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"strconv"
 	"sync"
 	"time"
 
@@ -16,7 +15,7 @@ import (
 // retryECGRepo is the ECG repository interface used by RetryJob.
 type retryECGRepo interface {
 	FindPendingHL7(limit int) ([]models.ECG, error)
-	UpdateHL7Lifecycle(ecgID uint, status string, retryCount int) error
+	UpdateHL7Lifecycle(ecgID string, status string, retryCount int) error
 }
 
 // retryPatRepo is the patient repository interface used by RetryJob.
@@ -33,7 +32,7 @@ type retryAuditWriter interface {
 // retryWebhookNotifier fires webhook events on exhaustion.
 // nil-safe: RetryJob checks for nil before calling.
 type retryWebhookNotifier interface {
-	Notify(event string, ecgID uint) error
+	Notify(event string, ecgID string) error
 }
 
 // RetryJob polls the DB at a configured interval and retries HL7 queries for pending ECGs.
@@ -167,7 +166,7 @@ func (j *RetryJob) exhaust(ecg models.ECG) {
 	_ = j.auditRepo.Insert(&models.AuditLog{
 		UserID:     "system",
 		Action:     "hl7_exhausted",
-		ResourceID: strconv.FormatUint(uint64(ecg.ID), 10),
+		ResourceID: ecg.ID,
 		Details:    datatypes.JSON(fmt.Sprintf(`{"max_retries":%d,"patient_id":%q}`, j.maxRetries, ecg.PatientID)),
 	})
 

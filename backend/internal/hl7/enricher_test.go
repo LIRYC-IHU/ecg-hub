@@ -31,15 +31,15 @@ func (s *stubPatientUpdater) UpdateDemographics(patientID string, d *PatientDemo
 
 type stubECGUpdater struct {
 	calls []struct {
-		ecgID  uint
+		ecgID  string
 		status string
 	}
 	err error
 }
 
-func (s *stubECGUpdater) UpdateHL7Status(ecgID uint, status string) error {
+func (s *stubECGUpdater) UpdateHL7Status(ecgID string, status string) error {
 	s.calls = append(s.calls, struct {
-		ecgID  uint
+		ecgID  string
 		status string
 	}{ecgID, status})
 	return s.err
@@ -59,7 +59,7 @@ func TestEnricher_Success(t *testing.T) {
 	ecgRepo := &stubECGUpdater{}
 
 	e := NewEnricher(qClient, patRepo, ecgRepo)
-	err := e.Enrich(context.TODO(), 42, "P001")
+	err := e.Enrich(context.TODO(), "42", "P001")
 	if err != nil {
 		t.Fatalf("Enrich returned non-nil: %v", err)
 	}
@@ -74,8 +74,8 @@ func TestEnricher_Success(t *testing.T) {
 	if len(ecgRepo.calls) != 1 {
 		t.Fatalf("ecgRepo.UpdateHL7Status calls = %d, want 1", len(ecgRepo.calls))
 	}
-	if ecgRepo.calls[0].ecgID != 42 {
-		t.Errorf("ecgID = %d, want 42", ecgRepo.calls[0].ecgID)
+	if ecgRepo.calls[0].ecgID != "42" {
+		t.Errorf("ecgID = %s, want 42", ecgRepo.calls[0].ecgID)
 	}
 	if ecgRepo.calls[0].status != "success" {
 		t.Errorf("status = %q, want %q", ecgRepo.calls[0].status, "success")
@@ -88,7 +88,7 @@ func TestEnricher_ClientError_ReturnsNilAndSkipsDB(t *testing.T) {
 	ecgRepo := &stubECGUpdater{}
 
 	e := NewEnricher(qClient, patRepo, ecgRepo)
-	err := e.Enrich(context.TODO(), 7, "P002")
+	err := e.Enrich(context.TODO(), "7", "P002")
 	if err != nil {
 		t.Errorf("Enrich should return nil on client error (NFR-I3), got: %v", err)
 	}
@@ -107,7 +107,7 @@ func TestEnricher_PatRepoError_StillUpdatesECGStatus(t *testing.T) {
 	ecgRepo := &stubECGUpdater{}
 
 	e := NewEnricher(qClient, patRepo, ecgRepo)
-	err := e.Enrich(context.TODO(), 99, "P003")
+	err := e.Enrich(context.TODO(), "99", "P003")
 	if err != nil {
 		t.Errorf("Enrich must return nil even on repo errors (NFR-I3), got: %v", err)
 	}
@@ -130,5 +130,5 @@ func TestEnricher_NeverPanics(t *testing.T) {
 	ecgRepo := &stubECGUpdater{}
 
 	e := NewEnricher(qClient, patRepo, ecgRepo)
-	_ = e.Enrich(context.TODO(), 0, "")
+	_ = e.Enrich(context.TODO(), "0", "")
 }
