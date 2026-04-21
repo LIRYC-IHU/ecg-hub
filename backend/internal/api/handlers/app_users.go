@@ -3,7 +3,6 @@ package handlers
 import (
 	"context"
 	"net/http"
-	"strconv"
 
 	"github.com/labstack/echo/v4"
 
@@ -13,7 +12,7 @@ import (
 
 type appUserRepo interface {
 	List(ctx context.Context) ([]repository.AppUser, error)
-	SetRole(ctx context.Context, id uint, roleName string) error
+	SetRole(ctx context.Context, id string, roleName string) error
 }
 
 // ListAppUsersHandler returns all authenticated users with their DB roles.
@@ -35,8 +34,8 @@ func ListAppUsersHandler(repo appUserRepo) echo.HandlerFunc {
 // PUT /api/v1/admin/app-users/:id/role
 func SetAppUserRoleHandler(repo appUserRepo) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-		if err != nil {
+		id := c.Param("id")
+		if id == "" {
 			return c.JSON(http.StatusBadRequest, mw.APIError("BAD_REQUEST", "invalid id"))
 		}
 		var body struct {
@@ -45,7 +44,7 @@ func SetAppUserRoleHandler(repo appUserRepo) echo.HandlerFunc {
 		if err := c.Bind(&body); err != nil {
 			return c.JSON(http.StatusBadRequest, mw.APIError("BAD_REQUEST", "invalid body"))
 		}
-		if err := repo.SetRole(c.Request().Context(), uint(id), body.Role); err != nil {
+		if err := repo.SetRole(c.Request().Context(), id, body.Role); err != nil {
 			return c.JSON(http.StatusInternalServerError, mw.APIError("INTERNAL", err.Error()))
 		}
 		return c.NoContent(http.StatusNoContent)

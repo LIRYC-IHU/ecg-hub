@@ -14,8 +14,8 @@ import (
 
 	mw "github.com/LIRYC-IHU/ecg-hub/internal/api/middleware"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
-	"github.com/LIRYC-IHU/ecg-hub/internal/export"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
+	"github.com/LIRYC-IHU/ecg-hub/internal/export"
 )
 
 // ─── stubs ────────────────────────────────────────────────────────────────────
@@ -25,7 +25,7 @@ type stubECGFinder struct {
 	err error
 }
 
-func (s *stubECGFinder) FindByID(_ uint) (*models.ECG, error) {
+func (s *stubECGFinder) FindByID(_ string) (*models.ECG, error) {
 	return s.ecg, s.err
 }
 
@@ -104,24 +104,14 @@ func noopBridge() *stubConverter      { return &stubConverter{} }
 
 // ─── Original format tests ────────────────────────────────────────────────────
 
-func TestDownloadECGHandler_InvalidID_NotANumber(t *testing.T) {
-	c, rec := newDownloadContext("abc")
-	handler := downloadECGHandler(&stubECGFinder{}, noopPatient(), noopBridge(), nil)
+func TestDownloadECGHandler_InvalidID_Empty(t *testing.T) {
+	c, rec := newDownloadContext("")
+	handler := downloadECGHandler(&stubECGFinder{err: repository.ErrECGNotFound}, noopPatient(), noopBridge(), nil)
 	if err := handler(c); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	assertCode(t, rec, http.StatusBadRequest)
-	assertErrorCode(t, rec, "INVALID_ID")
-}
-
-func TestDownloadECGHandler_InvalidID_Zero(t *testing.T) {
-	c, rec := newDownloadContext("0")
-	handler := downloadECGHandler(&stubECGFinder{}, noopPatient(), noopBridge(), nil)
-	if err := handler(c); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	assertCode(t, rec, http.StatusBadRequest)
-	assertErrorCode(t, rec, "INVALID_ID")
+	assertCode(t, rec, http.StatusNotFound)
+	assertErrorCode(t, rec, "ECG_NOT_FOUND")
 }
 
 func TestDownloadECGHandler_ECGNotFoundInDB(t *testing.T) {
@@ -137,7 +127,7 @@ func TestDownloadECGHandler_ECGNotFoundInDB(t *testing.T) {
 
 func TestDownloadECGHandler_FileNotOnDisk(t *testing.T) {
 	stub := &stubECGFinder{ecg: &models.ECG{
-		ID:               1,
+		ID:               "1",
 		FilePath:         "/nonexistent/path/ecg.xml",
 		OriginalFilename: "ecg.xml",
 	}}
@@ -159,7 +149,7 @@ func TestDownloadECGHandler_Success(t *testing.T) {
 	_ = f.Close()
 
 	stub := &stubECGFinder{ecg: &models.ECG{
-		ID:               7,
+		ID:               "7",
 		FilePath:         f.Name(),
 		OriginalFilename: "patient_ecg.xml",
 	}}
@@ -194,7 +184,7 @@ func TestDownloadECGHandler_XMLFDA_NotFoundInDB(t *testing.T) {
 
 func TestDownloadECGHandler_XMLFDA_FileNotOnDisk(t *testing.T) {
 	stub := &stubECGFinder{ecg: &models.ECG{
-		ID:               2,
+		ID:               "2",
 		FilePath:         "/nonexistent/path/ecg.xml",
 		OriginalFilename: "ecg.xml",
 		Vendor:           "philips",
@@ -216,7 +206,7 @@ func TestDownloadECGHandler_XMLFDA_UnsupportedVendor(t *testing.T) {
 	_ = f.Close()
 
 	ecgStub := &stubECGFinder{ecg: &models.ECG{
-		ID:               3,
+		ID:               "3",
 		FilePath:         f.Name(),
 		OriginalFilename: "ecg.dcm",
 		Vendor:           "dicom",
@@ -239,7 +229,7 @@ func TestDownloadECGHandler_XMLFDA_BridgeFailure(t *testing.T) {
 	_ = f.Close()
 
 	ecgStub := &stubECGFinder{ecg: &models.ECG{
-		ID:               4,
+		ID:               "4",
 		FilePath:         f.Name(),
 		OriginalFilename: "ecg.xml",
 		Vendor:           "philips",
@@ -263,7 +253,7 @@ func TestDownloadECGHandler_XMLFDA_Success(t *testing.T) {
 	_ = f.Close()
 
 	ecgStub := &stubECGFinder{ecg: &models.ECG{
-		ID:               5,
+		ID:               "5",
 		FilePath:         f.Name(),
 		OriginalFilename: "patient_001.xml",
 		Vendor:           "philips",

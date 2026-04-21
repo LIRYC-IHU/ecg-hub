@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -24,14 +23,14 @@ import (
 
 // ecgMetaRepo is the ECG repository interface required by the metadata handlers.
 type ecgMetaRepo interface {
-	FindByID(id uint) (*models.ECG, error)
-	UpdateMetadata(ecgID uint, extra map[string]any, recordedAt *time.Time) error
+	FindByID(id string) (*models.ECG, error)
+	UpdateMetadata(ecgID string, extra map[string]any, recordedAt *time.Time) error
 }
 
 // ecgByIDFinder is the minimal ECG repository interface needed by DownloadECGHandler.
 // Implemented by *repository.ECGRepository; can be stubbed in tests.
 type ecgByIDFinder interface {
-	FindByID(id uint) (*models.ECG, error)
+	FindByID(id string) (*models.ECG, error)
 }
 
 // patientByIDFinder is the minimal patient repository interface needed by DownloadECGHandler.
@@ -58,13 +57,8 @@ func DownloadECGHandler(db *gorm.DB, bridge export.Converter) echo.HandlerFunc {
 
 func downloadECGHandler(repo ecgByIDFinder, patRepo patientByIDFinder, bridge export.Converter, db *gorm.DB) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		rawID := c.Param("id")
-		id, err := strconv.ParseUint(rawID, 10, 64)
-		if err != nil || id == 0 {
-			return c.JSON(http.StatusBadRequest, mw.APIError("INVALID_ID", "id must be a positive integer"))
-		}
-
-		ecg, err := repo.FindByID(uint(id))
+		id := c.Param("id")
+		ecg, err := repo.FindByID(id)
 		if err != nil {
 			if errors.Is(err, repository.ErrECGNotFound) {
 				return c.JSON(http.StatusNotFound, mw.APIError("ECG_NOT_FOUND", "ECG not found"))
@@ -81,14 +75,14 @@ func downloadECGHandler(repo ecgByIDFinder, patRepo patientByIDFinder, bridge ex
 
 		format := c.QueryParam("format")
 		if format == "xmlfda" || format == "dicom" {
-			return handleConvertDownload(c, ecg, uint(id), userID, patRepo, bridge, format, db)
+			return handleConvertDownload(c, ecg, id, userID, patRepo, bridge, format, db)
 		}
 
 		// Original format path.
 		// Audit log is non-blocking — a failed write must not fail the download (NFR-R2).
 		if db != nil {
 			_ = mw.WriteAuditLog(c.Request().Context(), db, userID, "ecg_download",
-				strconv.FormatUint(id, 10), map[string]any{
+				id, map[string]any{
 					"format": "original",
 					"vendor": ecg.Vendor,
 					"file":   ecg.OriginalFilename,
@@ -106,13 +100,12 @@ func downloadECGHandler(repo ecgByIDFinder, patRepo patientByIDFinder, bridge ex
 func DeleteECGHandler(db *gorm.DB) echo.HandlerFunc {
 	ecgRepo := repository.NewECGRepository(db)
 	return func(c echo.Context) error {
-		rawID := c.Param("id")
-		id, err := strconv.ParseUint(rawID, 10, 64)
-		if err != nil || id == 0 {
-			return c.JSON(http.StatusBadRequest, mw.APIError("INVALID_ID", "id must be a positive integer"))
+		id := c.Param("id")
+		if id == "" {
+			return c.JSON(http.StatusBadRequest, mw.APIError("INVALID_ID", "id is required"))
 		}
 
-		filePath, err := ecgRepo.DeleteByID(uint(id))
+		filePath, err := ecgRepo.DeleteByID(id)
 		if err != nil {
 			if errors.Is(err, repository.ErrECGNotFound) {
 				return c.JSON(http.StatusNotFound, mw.APIError("ECG_NOT_FOUND", "ECG not found"))
@@ -127,7 +120,7 @@ func DeleteECGHandler(db *gorm.DB) echo.HandlerFunc {
 
 		userID, _ := c.Get(mw.CtxKeyUserID).(string)
 		_ = mw.WriteAuditLog(c.Request().Context(), db, userID, "delete",
-			rawID, map[string]any{
+			id, map[string]any{
 				"ecg_id": id,
 				"file":   filePath,
 			})
@@ -258,7 +251,7 @@ func PatchECGMetadataHandler(db *gorm.DB) echo.HandlerFunc {
 
 		userID, _ := c.Get(mw.CtxKeyUserID).(string)
 		_ = mw.WriteAuditLog(c.Request().Context(), db, userID, "ecg_metadata_update",
-			strconv.FormatUint(uint64(id), 10), map[string]any{
+			id, map[string]any{
 				"fields": changedFields,
 				"file":   ecg.FilePath,
 			})
@@ -268,12 +261,8 @@ func PatchECGMetadataHandler(db *gorm.DB) echo.HandlerFunc {
 }
 
 // parseECGID extracts and validates the :id path parameter.
-func parseECGID(c echo.Context) (uint, error) {
-	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
-	if err != nil || id == 0 {
-		return 0, errors.New("invalid id")
-	}
-	return uint(id), nil
+func parseECGID(c echo.Context) (string, error) {
+	return c.Param("id"), nil
 }
 
 // buildMetaValues constructs the metadata value map from an ECG record.
@@ -293,7 +282,7 @@ func buildMetaValues(ecg *models.ECG) map[string]any {
 func handleConvertDownload(
 	c echo.Context,
 	ecg *models.ECG,
-	id uint,
+	id string,
 	userID string,
 	patRepo patientByIDFinder,
 	bridge export.Converter,
@@ -319,7 +308,7 @@ func handleConvertDownload(
 	// Audit log is non-blocking (NFR-R2).
 	if db != nil {
 		_ = mw.WriteAuditLog(c.Request().Context(), db, userID, "ecg_download",
-			strconv.FormatUint(uint64(id), 10), map[string]any{
+			id, map[string]any{
 				"format": format,
 				"vendor": ecg.Vendor,
 				"file":   ecg.OriginalFilename,

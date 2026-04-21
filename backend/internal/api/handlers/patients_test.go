@@ -29,9 +29,9 @@ func newECGListContext(pathID string, query string) (echo.Context, *httptest.Res
 	return c, rec
 }
 
-func TestListPatientECGs_InvalidID_Returns400(t *testing.T) {
-	c, rec := newECGListContext("not-a-number", "")
-	handler := ListPatientECGsHandler(nil) // nil DB safe: ParseUint fails before DB access
+func TestListPatientECGs_EmptyID_Returns400(t *testing.T) {
+	c, rec := newECGListContext("", "")
+	handler := ListPatientECGsHandler(nil) // nil DB safe: empty ID check triggers before DB access
 	if err := handler(c); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

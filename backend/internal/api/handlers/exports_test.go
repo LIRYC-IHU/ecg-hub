@@ -39,7 +39,7 @@ func (s *stubExportJobRepo) FindByID(_ string) (*models.ExportJob, error) {
 
 func (s *stubExportJobRepo) Update(_ string, _ map[string]any) error { return nil }
 
-func (s *stubExportJobRepo) SaveECGList(_ string, _ []uint) error { return nil }
+func (s *stubExportJobRepo) SaveECGList(_ string, _ []string) error { return nil }
 
 // stubECGByIDsFinder stubs the ECG repository for FindByIDs.
 type stubECGByIDsFinder struct {
@@ -47,7 +47,7 @@ type stubECGByIDsFinder struct {
 	err  error
 }
 
-func (s *stubECGByIDsFinder) FindByIDs(_ []uint) ([]models.ECG, error) {
+func (s *stubECGByIDsFinder) FindByIDs(_ []string) ([]models.ECG, error) {
 	return s.ecgs, s.err
 }
 
@@ -84,7 +84,7 @@ func TestCreateExportHandler_ValidRequest_Returns201(t *testing.T) {
 	c.Set(mw.CtxKeyUserID, "user-abc")
 
 	exportRepo := &stubExportJobRepo{}
-	ecgRepo := &stubECGByIDsFinder{ecgs: []models.ECG{{ID: 1}, {ID: 2}}}
+	ecgRepo := &stubECGByIDsFinder{ecgs: []models.ECG{{ID: "1"}, {ID: "2"}}}
 	pool := &stubExportPool{}
 
 	handler := createExportHandler(nil, exportRepo, ecgRepo, pool)
@@ -134,7 +134,7 @@ func TestCreateExportHandler_UnknownECGIDs_Returns400(t *testing.T) {
 	c, rec := newExportContext(e, http.MethodPost, "/api/v1/exports", body)
 	c.Set(mw.CtxKeyUserID, "user-abc")
 
-	ecgRepo := &stubECGByIDsFinder{ecgs: []models.ECG{{ID: 1}}}
+	ecgRepo := &stubECGByIDsFinder{ecgs: []models.ECG{{ID: "1"}}}
 	handler := createExportHandler(nil, &stubExportJobRepo{}, ecgRepo, &stubExportPool{})
 	if err := handler(c); err != nil {
 		t.Fatalf("unexpected error: %v", err)

@@ -3,7 +3,6 @@ package handlers
 import (
 	"errors"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -119,16 +118,15 @@ type ECGListParams struct {
 // Response: {"data": [...EcgDTO], "total": N, "page": N, "per_page": N}
 func ListPatientECGsHandler(db *gorm.DB) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		rawID := c.Param("id")
-		id, err := strconv.ParseUint(rawID, 10, 64)
-		if err != nil {
-			return c.JSON(http.StatusBadRequest, mw.APIError("INVALID_ID", "patient id must be a positive integer"))
+		id := c.Param("id")
+		if id == "" {
+			return c.JSON(http.StatusBadRequest, mw.APIError("INVALID_ID", "patient id is required"))
 		}
 
 		// Load patient to resolve PatientID string.
 		// ecgs.patient_id is the device string (e.g. "P001"), NOT a FK to patients.id.
 		var patient models.Patient
-		if err := db.First(&patient, uint(id)).Error; err != nil {
+		if err := db.First(&patient, "id = ?", id).Error; err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
 				return c.JSON(http.StatusNotFound, mw.APIError("PATIENT_NOT_FOUND", "patient not found"))
 			}
@@ -186,7 +184,7 @@ func ListPatientECGsHandler(db *gorm.DB) echo.HandlerFunc {
 		// Audit log — non-blocking (NFR-R2).
 		userID, _ := c.Get(mw.CtxKeyUserID).(string)
 		_ = mw.WriteAuditLog(c.Request().Context(), db, userID, "patient_ecg_list",
-			strconv.FormatUint(id, 10), map[string]any{
+			id, map[string]any{
 				"vendor":     params.Vendor,
 				"hl7_status": params.HL7Status,
 				"from":       params.From,

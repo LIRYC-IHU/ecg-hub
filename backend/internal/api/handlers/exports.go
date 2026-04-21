@@ -19,7 +19,7 @@ import (
 // exportJobCreator is the minimal ExportJobRepository interface needed by CreateExportHandler.
 type exportJobCreator interface {
 	Create(job *models.ExportJob) error
-	SaveECGList(jobID string, ecgIDs []uint) error
+	SaveECGList(jobID string, ecgIDs []string) error
 	Update(id string, updates map[string]any) error
 }
 
@@ -30,7 +30,7 @@ type exportJobFinder interface {
 
 // ecgByIDsFinder is the minimal ECGRepository interface needed by CreateExportHandler.
 type ecgByIDsFinder interface {
-	FindByIDs(ids []uint) ([]models.ECG, error)
+	FindByIDs(ids []string) ([]models.ECG, error)
 }
 
 // exportJobEnqueuer is the minimal WorkerPool interface needed by CreateExportHandler.
@@ -41,8 +41,8 @@ type exportJobEnqueuer interface {
 
 // createExportRequest is the JSON body for POST /api/v1/exports.
 type createExportRequest struct {
-	ECGIDs []uint `json:"ecg_ids"`
-	Format string `json:"format"` // "original" (default) or "xmlfda"
+	ECGIDs []string `json:"ecg_ids"`
+	Format string   `json:"format"` // "original" (default) or "xmlfda"
 }
 
 // createExportResponse is the JSON body returned on successful export job creation.

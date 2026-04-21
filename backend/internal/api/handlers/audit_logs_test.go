@@ -42,7 +42,7 @@ func newAuditListContext(query string) (echo.Context, *httptest.ResponseRecorder
 	return c, rec
 }
 
-func makeAuditEntry(id uint, userID, action, resourceID string) models.AuditLog {
+func makeAuditEntry(id string, userID, action, resourceID string) models.AuditLog {
 	return models.AuditLog{
 		ID:         id,
 		CreatedAt:  time.Date(2026, 3, 1, 10, 0, 0, 0, time.UTC),
@@ -85,8 +85,8 @@ func TestListAuditLogs_DefaultPagination_Empty(t *testing.T) {
 
 func TestListAuditLogs_ReturnsEntries(t *testing.T) {
 	entries := []models.AuditLog{
-		makeAuditEntry(1, "user-1", "ecg_download", "42"),
-		makeAuditEntry(2, "user-2", "patient_search", ""),
+		makeAuditEntry("1", "user-1", "ecg_download", "42"),
+		makeAuditEntry("2", "user-2", "patient_search", ""),
 	}
 	stub := &stubAuditLister{entries: entries, total: 2}
 	c, rec := newAuditListContext("")
@@ -153,7 +153,7 @@ func TestListAuditLogs_DBError_Returns500(t *testing.T) {
 }
 
 func TestListAuditLogs_Pagination_Page2(t *testing.T) {
-	entries := []models.AuditLog{makeAuditEntry(3, "user-3", "ecg_download", "10")}
+	entries := []models.AuditLog{makeAuditEntry("3", "user-3", "ecg_download", "10")}
 	stub := &stubAuditLister{entries: entries, total: 5}
 	c, rec := newAuditListContext("?page=2&per_page=2")
 	handler := listAuditLogsHandler(stub)
@@ -178,7 +178,7 @@ func TestListAuditLogs_Pagination_Page2(t *testing.T) {
 }
 
 func TestListAuditLogs_DTOShape(t *testing.T) {
-	entries := []models.AuditLog{makeAuditEntry(7, "user-7", "patient_search", "")}
+	entries := []models.AuditLog{makeAuditEntry("7", "user-7", "patient_search", "")}
 	stub := &stubAuditLister{entries: entries, total: 1}
 	c, rec := newAuditListContext("")
 	handler := listAuditLogsHandler(stub)

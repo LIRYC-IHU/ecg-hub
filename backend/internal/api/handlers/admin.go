@@ -3,7 +3,6 @@ package handlers
 import (
 	"errors"
 	"net/http"
-	"strconv"
 
 	"github.com/labstack/echo/v4"
 	"gorm.io/gorm"
@@ -72,27 +71,23 @@ func AdminStatsHandler(db *gorm.DB) echo.HandlerFunc {
 // Requires: RequireRole("admin")
 func ForceHL7Handler(db *gorm.DB) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		rawID := c.Param("id")
-		id, err := strconv.ParseUint(rawID, 10, 64)
-		if err != nil {
-			return c.JSON(http.StatusBadRequest, mw.APIError("INVALID_ID", "ecg id must be a positive integer"))
-		}
+		id := c.Param("id")
 
 		ecgRepo := repository.NewECGRepository(db)
-		if _, err := ecgRepo.FindByID(uint(id)); err != nil {
+		if _, err := ecgRepo.FindByID(id); err != nil {
 			if errors.Is(err, repository.ErrECGNotFound) {
 				return c.JSON(http.StatusNotFound, mw.APIError("ECG_NOT_FOUND", "ecg not found"))
 			}
 			return c.JSON(http.StatusInternalServerError, mw.APIError("DB_ERROR", "query failed"))
 		}
 
-		if err := ecgRepo.UpdateHL7Lifecycle(uint(id), "pending", 0); err != nil {
+		if err := ecgRepo.UpdateHL7Lifecycle(id, "pending", 0); err != nil {
 			return c.JSON(http.StatusInternalServerError, mw.APIError("DB_ERROR", "update failed"))
 		}
 
 		userID, _ := c.Get(mw.CtxKeyUserID).(string)
 		_ = mw.WriteAuditLog(c.Request().Context(), db, userID, "hl7_force",
-			rawID, map[string]any{"ecg_id": id})
+			id, map[string]any{"ecg_id": id})
 
 		return c.JSON(http.StatusOK, map[string]any{"hl7_status": "pending"})
 	}
@@ -106,9 +101,9 @@ func ForceHL7Handler(db *gorm.DB) echo.HandlerFunc {
 func ModulesHandler(activeModules []module.Module) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		type moduleStatus struct {
-			Name       string               `json:"name"`
-			Extensions []string             `json:"extensions"`
-			Status     string               `json:"status"` // "ok" or error message
+			Name       string                `json:"name"`
+			Extensions []string              `json:"extensions"`
+			Status     string                `json:"status"` // "ok" or error message
 			Formats    []module.ExportFormat `json:"formats"`
 		}
 		result := make([]moduleStatus, 0, len(activeModules))
