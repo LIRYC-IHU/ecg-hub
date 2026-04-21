@@ -9,8 +9,8 @@ import "time"
 // fires after a successful persist. The RetryJob polls failed jobs and re-attempts
 // until max_attempts is reached, at which point the job is exhausted.
 type ConnectorJob struct {
-	ID            uint       `gorm:"primaryKey"`
-	ECGID         uint       `gorm:"not null;index"`
+	ID            string     `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
+	ECGID         string     `gorm:"type:varchar(36);not null;index"`
 	ConnectorName string     `gorm:"not null;size:64"`
 	Status        string     `gorm:"not null;default:'pending';index"`
 	Attempts      int        `gorm:"not null;default:0"`

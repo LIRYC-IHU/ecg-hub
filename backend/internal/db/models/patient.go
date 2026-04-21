@@ -11,23 +11,24 @@ import (
 //
 // NOTE: Patient data here reflects the current known state.
 // ECG records are immutable snapshots and are NOT updated when this table changes.
+
 type Patient struct {
-	ID        uint      `gorm:"primaryKey"`
+	ID        string `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
 	CreatedAt time.Time
 	UpdatedAt time.Time
 
-	// PatientID is the identifier sent by the ECG device. Always present.
-	PatientID string `gorm:"uniqueIndex;not null"`
+	PatientID string `gorm:"not null;unique"` // ← CRUCIAL
 
-	// Fields populated by HL7 enrichment — may be empty until HL7 succeeds.
 	FirstName   string
 	LastName    string `gorm:"index"`
 	DateOfBirth *time.Time
 	Gender      string
+	HL7Source   string
+	Extra       datatypes.JSON
 
-	// HL7Source tracks which HL7 system last enriched this patient.
-	HL7Source string
+	ECGS []ECG `gorm:"foreignKey:PatientID;references:PatientID;constraint:OnUpdate:CASCADE,OnDelete:RESTRICT;"`
+}
 
-	// Extra holds vendor-specific or HL7-specific fields not covered above.
-	Extra datatypes.JSON
+func (Patient) TableName() string {
+	return "patient"
 }

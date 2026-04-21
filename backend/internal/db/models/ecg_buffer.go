@@ -10,7 +10,7 @@ import (
 // is unavailable (FR11, NFR-R1). Once the volume is restored, records are drained
 // and deleted — INSERT + DELETE only, never UPDATE.
 type ECGBuffer struct {
-	ID         uint           `gorm:"primaryKey"`
+	ID         string `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
 	CreatedAt  time.Time
 	ReceivedAt time.Time      `gorm:"not null"`
 	RawData    datatypes.JSON `gorm:"type:jsonb;not null"`
