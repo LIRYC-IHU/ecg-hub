@@ -13,27 +13,27 @@ import (
 // retryJobRepo is the job repository interface used by RetryJob.
 type retryJobRepo interface {
 	FindPendingRetry(limit int) ([]models.ConnectorJob, error)
-	MarkSent(id uint) error
-	MarkFailed(id uint, errMsg string, nextRetryAt time.Time) error
-	Exhaust(id uint, errMsg string) error
+	MarkSent(id string) error
+	MarkFailed(id string, errMsg string, nextRetryAt time.Time) error
+	Exhaust(id string, errMsg string) error
 }
 
 // retryECGRepo is the ECG repository interface used by RetryJob.
 type retryECGRepo interface {
-	FindByID(id uint) (*models.ECG, error)
+	FindByID(id string) (*models.ECG, error)
 }
 
 // RetryJob polls the DB at a configured interval and retries failed connector jobs.
 // Lifecycle follows the same Start/Stop/Done pattern as hl7.RetryJob.
 type RetryJob struct {
-	connectors map[string]ConnectorSettings // keyed by connector name
-	jobRepo    retryJobRepo
-	ecgRepo    retryECGRepo
+	connectors   map[string]ConnectorSettings // keyed by connector name
+	jobRepo      retryJobRepo
+	ecgRepo      retryECGRepo
 	pollInterval time.Duration // how often to scan for pending retries
-	ctx        context.Context
-	cancel     context.CancelFunc
-	startOnce  sync.Once
-	done       chan struct{}
+	ctx          context.Context
+	cancel       context.CancelFunc
+	startOnce    sync.Once
+	done         chan struct{}
 }
 
 // NewRetryJob constructs a RetryJob. Call Start() to begin the retry ticker.
