@@ -35,13 +35,13 @@ func NewNotifier(cfg config.WebhookConfig, secret string) *Notifier {
 // payload is the JSON body sent for every webhook event.
 type payload struct {
 	Event     string `json:"event"`
-	ECGID     uint   `json:"ecg_id"`
+	ECGID     string `json:"ecg_id"`
 	Timestamp string `json:"timestamp"`
 }
 
 // Notify delivers a signed webhook for the given event. Returns nil when disabled.
 // Errors are logged but never propagate to the caller — webhooks are best-effort.
-func (n *Notifier) Notify(event string, ecgID uint) error {
+func (n *Notifier) Notify(event string, ecgID string) error {
 	if !n.cfg.Enabled {
 		return nil
 	}
@@ -101,7 +101,7 @@ func (n *Notifier) Test() (int, error) {
 
 	p := payload{
 		Event:     "test",
-		ECGID:     0,
+		ECGID:     "0",
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
 	}
 	body, _ := json.Marshal(p)
@@ -126,16 +126,16 @@ func (n *Notifier) Test() (int, error) {
 
 // Status returns the current webhook configuration status (never exposes the secret).
 type Status struct {
-	Enabled         bool   `json:"enabled"`
-	URL             string `json:"url"`
+	Enabled          bool   `json:"enabled"`
+	URL              string `json:"url"`
 	SecretConfigured bool   `json:"secret_configured"`
 }
 
 // GetStatus returns the webhook configuration state for the admin UI.
 func (n *Notifier) GetStatus() Status {
 	return Status{
-		Enabled:         n.cfg.Enabled,
-		URL:             n.cfg.URL,
+		Enabled:          n.cfg.Enabled,
+		URL:              n.cfg.URL,
 		SecretConfigured: n.secret != "",
 	}
 }
