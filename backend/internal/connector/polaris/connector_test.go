@@ -31,7 +31,7 @@ func makeConfig(extensions, vendors []string, ectpPort, ftpPort int) config.Conn
 }
 
 func makeECG(vendor, originalFilename string) *models.ECG {
-	return &models.ECG{ID: 1, Vendor: vendor, OriginalFilename: originalFilename}
+	return &models.ECG{ID: "1", Vendor: vendor, OriginalFilename: originalFilename}
 }
 
 // ─── Accepts tests ────────────────────────────────────────────────────────────
@@ -176,13 +176,13 @@ func handleMockECTP(c net.Conn) {
 	case strings.Contains(msg, "|FILE|SEND|"):
 		// FILE|SEND is 25 bytes total — drain the remaining 2 bytes before ACK.
 		tail := make([]byte, len(ectpFileSendMsg)-len(ectpFileEndsMsg))
-		io.ReadFull(c, tail) //nolint:errcheck
+		io.ReadFull(c, tail)                        //nolint:errcheck
 		fmt.Fprint(c, "|0100|0004|A|FILE|SEND|200") //nolint:errcheck
 
 	case strings.Contains(msg, "|FILE|ENDS|"):
 		// FILE|ENDS cmd frame was 23 bytes (already read); drain the 23-byte payload frame.
 		payload := make([]byte, ectpFileEndsPayloadLen)
-		io.ReadFull(c, payload) //nolint:errcheck
+		io.ReadFull(c, payload)                     //nolint:errcheck
 		fmt.Fprint(c, "|0100|0004|A|FILE|ENDS|200") //nolint:errcheck
 	}
 }
@@ -217,7 +217,7 @@ func TestForward_Success(t *testing.T) {
 	c := New(cfg)
 
 	ecg := &models.ECG{
-		ID:               42,
+		ID:               "42",
 		Vendor:           "nihon-kohden",
 		OriginalFilename: "0004263301553182.DAT",
 	}
@@ -235,7 +235,7 @@ func TestForward_Success(t *testing.T) {
 
 func TestForward_FileNotFound(t *testing.T) {
 	c := New(makeConfig(nil, nil, 0, 0))
-	ecg := &models.ECG{ID: 1, OriginalFilename: "missing.DAT"}
+	ecg := &models.ECG{ID: "1", OriginalFilename: "missing.DAT"}
 
 	err := c.Forward(context.Background(), ecg, "/nonexistent/path/missing.DAT")
 	if err == nil {
@@ -255,7 +255,7 @@ func TestForward_ECTPFileSendFails(t *testing.T) {
 	c := New(cfg)
 	c.timeout = 200 * time.Millisecond
 
-	ecg := &models.ECG{ID: 1, OriginalFilename: "test.DAT"}
+	ecg := &models.ECG{ID: "1", OriginalFilename: "test.DAT"}
 	err = c.Forward(context.Background(), ecg, tmp.Name())
 	if err == nil {
 		t.Fatal("Forward: expected error when ECTP FILE|SEND fails")
@@ -289,7 +289,7 @@ func TestForward_UsesOriginalFilename(t *testing.T) {
 
 	// OriginalFilename differs from the stored file name on disk.
 	ecg := &models.ECG{
-		ID:               99,
+		ID:               "99",
 		OriginalFilename: "0004263301553182.DAT",
 	}
 	c.Forward(context.Background(), ecg, tmp.Name()) //nolint:errcheck
@@ -326,7 +326,7 @@ func TestForward_FallbackToBaseFilename(t *testing.T) {
 	c := New(makeConfig(nil, nil, ectpPort, ftpPort))
 
 	// No OriginalFilename — should fall back to Base(filePath).
-	ecg := &models.ECG{ID: 1, OriginalFilename: ""}
+	ecg := &models.ECG{ID: "1", OriginalFilename: ""}
 	c.Forward(context.Background(), ecg, tmp.Name()) //nolint:errcheck
 
 	if srv.filename == "" {
