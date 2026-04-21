@@ -18,7 +18,7 @@ import (
 
 // QuarantineEntryDTO is the JSON representation of a quarantine entry.
 type QuarantineEntryDTO struct {
-	ID          uint   `json:"id"`
+	ID          string `json:"id"`
 	Filename    string `json:"filename"`
 	FilePath    string `json:"file_path"`
 	ReceivedAt  string `json:"received_at"` // RFC3339
@@ -75,13 +75,9 @@ func ListQuarantineHandler(db *gorm.DB) echo.HandlerFunc {
 func DeleteQuarantineHandler(db *gorm.DB) echo.HandlerFunc {
 	repo := repository.NewQuarantineRepository(db)
 	return func(c echo.Context) error {
-		rawID := c.Param("id")
-		id, err := strconv.ParseUint(rawID, 10, 64)
-		if err != nil || id == 0 {
-			return c.JSON(http.StatusBadRequest, mw.APIError("INVALID_ID", "id must be a positive integer"))
-		}
+		id := c.Param("id")
 
-		filePath, err := repo.DeleteByID(uint(id))
+		filePath, err := repo.DeleteByID(id)
 		if err != nil {
 			if errors.Is(err, repository.ErrQuarantineNotFound) {
 				return c.JSON(http.StatusNotFound, mw.APIError("NOT_FOUND", "quarantine entry not found"))
@@ -98,9 +94,9 @@ func DeleteQuarantineHandler(db *gorm.DB) echo.HandlerFunc {
 
 		userID, _ := c.Get(mw.CtxKeyUserID).(string)
 		_ = mw.WriteAuditLog(c.Request().Context(), db, userID, "quarantine_decision",
-			rawID, map[string]any{
+			id, map[string]any{
 				"action": "delete",
-				"id":     rawID,
+				"id":     id,
 				"file":   filePath,
 			})
 
