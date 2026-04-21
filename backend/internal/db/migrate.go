@@ -13,187 +13,103 @@ import (
 // It is idempotent: safe to call on every startup.
 // AutoMigrate only adds — it never drops columns or tables.
 func RunMigrations(db *gorm.DB) error {
-	if err := db.AutoMigrate(
+	// drop all tables and recreate them from scratch, to ensure the schema is exactly as defined in the models.
+
+	// Disable FK checks during drop+recreate (PostgreSQL syntax).
+	db.Exec("SET session_replication_role = 'replica'")
+	defer db.Exec("SET session_replication_role = 'origin'")
+	models := []any{
 		&models.Patient{},
 		&models.ECG{},
 		&models.AuditLog{},
 		&models.QuarantineEntry{},
-		&models.ExportJob{},
-		&models.NihonKohdenTransfer{},
-		&models.ConnectorJob{},
 		&repository.RoleRecord{},
 		&repository.RolePermRecord{},
 		&repository.UserRecord{},
-	); err != nil {
-		return fmt.Errorf("db: auto migrate: %w", err)
+		&models.ExportJob{},
+		&models.NihonKohdenTransfer{},
+		&models.ConnectorJob{},
+		&models.ECGBuffer{},
+	}
+	for _, m := range models {
+		err := db.Migrator().DropTable(m)
+		if err != nil {
+			return fmt.Errorf("db: drop table %s: %w", m, err)
+		}
+		fmt.Printf("Dropped table for %T\n", m)
+	}
+	for _, m := range models {
+		err := db.AutoMigrate(m)
+		if err != nil {
+			return fmt.Errorf("db: auto migrate %s: %w", m, err)
+		}
 	}
 
-	if err := applyConstraints(db); err != nil {
+	// init default role
+	if err := iniRole(db); err != nil {
 		return err
 	}
 
-	if err := seedRoles(db); err != nil {
-		return fmt.Errorf("db: seed roles: %w", err)
-	}
-
 	return nil
 }
 
-// applyConstraints adds FKs, CHECK constraints, join tables, and privilege
-// restrictions that GORM AutoMigrate cannot express via struct tags.
-// All statements are guarded by IF NOT EXISTS or are idempotent by nature.
-func applyConstraints(db *gorm.DB) error {
-	stmts := []struct {
-		name string
-		sql  string
-	}{
-		{
-			"export_job_ecgs join table",
-			`CREATE TABLE IF NOT EXISTS export_job_ecgs (
-				export_job_id VARCHAR(36) NOT NULL REFERENCES export_jobs(id) ON DELETE CASCADE,
-				ecg_id        BIGINT      NOT NULL,
-				PRIMARY KEY (export_job_id, ecg_id)
-			)`,
-		},
-		{
-			"fk ecgs.patient_id → patients.patient_id",
-			`DO $$ BEGIN
-				IF NOT EXISTS (
-					SELECT 1 FROM information_schema.table_constraints
-					WHERE constraint_name = 'fk_ecgs_patient_id' AND table_name = 'ecgs'
-				) THEN
-					ALTER TABLE ecgs ADD CONSTRAINT fk_ecgs_patient_id
-						FOREIGN KEY (patient_id) REFERENCES patients(patient_id);
-				END IF;
-			END $$`,
-		},
-		{
-			"check ecgs.hl7_status",
-			`DO $$ BEGIN
-				IF NOT EXISTS (
-					SELECT 1 FROM information_schema.table_constraints
-					WHERE constraint_name = 'chk_ecgs_hl7_status' AND table_name = 'ecgs'
-				) THEN
-					ALTER TABLE ecgs ADD CONSTRAINT chk_ecgs_hl7_status
-						CHECK (hl7_status IN ('pending', 'success', 'hl7_exhausted'));
-				END IF;
-			END $$`,
-		},
-		{
-			"fk role_permissions.role_id → roles.id CASCADE",
-			`DO $$ BEGIN
-				IF NOT EXISTS (
-					SELECT 1 FROM information_schema.table_constraints
-					WHERE constraint_name = 'fk_role_permissions_role_id' AND table_name = 'role_permissions'
-				) THEN
-					ALTER TABLE role_permissions ADD CONSTRAINT fk_role_permissions_role_id
-						FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE CASCADE;
-				END IF;
-			END $$`,
-		},
-		{
-			"fk ecg_hub_users.role_id → roles.id SET NULL",
-			`DO $$ BEGIN
-				IF NOT EXISTS (
-					SELECT 1 FROM information_schema.table_constraints
-					WHERE constraint_name = 'fk_ecg_hub_users_role_id' AND table_name = 'ecg_hub_users'
-				) THEN
-					ALTER TABLE ecg_hub_users ADD CONSTRAINT fk_ecg_hub_users_role_id
-						FOREIGN KEY (role_id) REFERENCES roles(id) ON DELETE SET NULL;
-				END IF;
-			END $$`,
-		},
-		{
-			"fk connector_jobs.ecg_id → ecgs.id",
-			`DO $$ BEGIN
-				IF NOT EXISTS (
-					SELECT 1 FROM information_schema.table_constraints
-					WHERE constraint_name = 'fk_connector_jobs_ecg_id' AND table_name = 'connector_jobs'
-				) THEN
-					ALTER TABLE connector_jobs ADD CONSTRAINT fk_connector_jobs_ecg_id
-						FOREIGN KEY (ecg_id) REFERENCES ecgs(id);
-				END IF;
-			END $$`,
-		},
-		{
-			"check connector_jobs.status",
-			`DO $$ BEGIN
-				IF NOT EXISTS (
-					SELECT 1 FROM information_schema.table_constraints
-					WHERE constraint_name = 'chk_connector_jobs_status' AND table_name = 'connector_jobs'
-				) THEN
-					ALTER TABLE connector_jobs ADD CONSTRAINT chk_connector_jobs_status
-						CHECK (status IN ('pending', 'sent', 'failed', 'exhausted'));
-				END IF;
-			END $$`,
-		},
-		{
-			// Enforce audit log immutability at the DB privilege level (NFR-S6, RGPD).
-			// REVOKE is idempotent: revoking a privilege not held produces no error.
-			"revoke audit_logs update/delete",
-			`REVOKE UPDATE, DELETE ON audit_logs FROM CURRENT_USER`,
-		},
-	}
-
-	for _, s := range stmts {
-		if err := db.Exec(s.sql).Error; err != nil {
-			return fmt.Errorf("db: constraint %q: %w", s.name, err)
-		}
-	}
-	return nil
-}
-
-// seedRoles inserts the built-in roles (admin, reader, writer) if they do not
-// already exist. Uses ON CONFLICT DO NOTHING so it is always idempotent.
-func seedRoles(db *gorm.DB) error {
+// Create Role admin | reader | writer
+// If no role exists, create it. If it already exists, do nothing. This is idempotent and safe to call on every startup.
+func iniRole(db *gorm.DB) error {
+	// create the default role for users
 	type roleSeed struct {
-		name        string
-		description string
-		permissions []string
+		name  string
+		desc  string
+		perms []string
 	}
-
 	seeds := []roleSeed{
 		{
-			name:        "admin",
-			description: "Accès complet — bypass toutes les permissions",
+			name: "admin",
+			desc: "Accès complet — bypass toutes les permissions",
+			perms: []string{
+				"patient.read", "ecg.read", "ecg.download",
+				"ecg.delete", "ecg.force_hl7", "ecg.write",
+				"quarantine.read", "quarantine.delete",
+				"admin.audit", "admin.system", "ecg.delete", "ecg.download", "ecg.write", "ecg.read",
+				"ecg.force_hl7", "patient.read", "quarantine.delete", "quarantine.read"},
 		},
 		{
-			name:        "reader",
-			description: "Lecture seule",
-			permissions: []string{"patient.read", "ecg.read", "ecg.download"},
+			name:  "reader",
+			desc:  "Lecture seule",
+			perms: []string{"patient.read", "ecg.read", "ecg.download"},
 		},
 		{
-			name:        "writer",
-			description: "Lecture + écriture",
-			permissions: []string{
+			name: "writer",
+			desc: "Lecture + écriture",
+			perms: []string{
 				"patient.read", "ecg.read", "ecg.download",
 				"ecg.delete", "ecg.force_hl7", "ecg.write",
 				"quarantine.read", "quarantine.delete",
 			},
 		},
 	}
+	roles := []repository.RoleRecord{}
+	result := db.Find(&roles)
+	if result.Error != nil {
+		return fmt.Errorf("query roles: %w", result.Error)
 
-	for _, s := range seeds {
-		// Insert role if absent.
-		if err := db.Exec(
-			`INSERT INTO roles (name, description) VALUES (?, ?) ON CONFLICT (name) DO NOTHING`,
-			s.name, s.description,
-		).Error; err != nil {
-			return fmt.Errorf("db: seed role %q: %w", s.name, err)
-		}
+	}
 
-		// Resolve the role ID we just ensured exists.
-		var roleID uint
-		if err := db.Raw(`SELECT id FROM roles WHERE name = ?`, s.name).Scan(&roleID).Error; err != nil {
-			return fmt.Errorf("db: resolve role id %q: %w", s.name, err)
-		}
+	if len(roles) == 0 {
+		for _, s := range seeds {
+			fmt.Printf("Creating role %s\n", s.name)
 
-		for _, perm := range s.permissions {
-			if err := db.Exec(
-				`INSERT INTO role_permissions (role_id, permission) VALUES (?, ?) ON CONFLICT DO NOTHING`,
-				roleID, perm,
-			).Error; err != nil {
-				return fmt.Errorf("db: seed permission %q for role %q: %w", perm, s.name, err)
+			record := repository.RoleRecord{Name: s.name, Description: s.desc}
+			if err := db.Create(&record).Error; err != nil {
+				fmt.Printf("Error creating role %s: %v\n", s.name, err)
+				continue
+			}
+
+			for _, perm := range s.perms {
+				p := repository.RolePermRecord{RoleID: record.ID, Permission: perm, Role: record}
+				if err := db.Create(&p).Error; err != nil {
+					fmt.Printf("Error creating permission %s for role %s: %v\n", s.perms, s.name, err)
+				}
 			}
 		}
 	}
