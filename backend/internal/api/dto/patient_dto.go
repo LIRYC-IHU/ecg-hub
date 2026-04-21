@@ -9,11 +9,11 @@ import (
 // PatientDTO is the JSON representation of a patient returned by the search API.
 // All fields use snake_case to match Go/PostgreSQL conventions (consumed by the frontend as-is).
 type PatientDTO struct {
-	ID           uint    `json:"id"`
+	ID           string  `json:"id"`
 	PatientID    string  `json:"patient_id"`
 	FirstName    string  `json:"first_name"`
 	LastName     string  `json:"last_name"`
-	DateOfBirth  *string `json:"date_of_birth"`  // ISO 8601 UTC string, or null
+	DateOfBirth  *string `json:"date_of_birth"` // ISO 8601 UTC string, or null
 	Gender       string  `json:"gender"`
 	ECGCount     int     `json:"ecg_count"`
 	LastActivity *string `json:"last_activity"` // ISO 8601 UTC; MAX(COALESCE(recorded_at, ingested_at))

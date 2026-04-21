@@ -10,14 +10,14 @@ import (
 // NOTE: FilePath is intentionally excluded — it's an internal storage path.
 // Downloads are handled via GET /ecgs/:id/download (Story 3.3).
 type EcgDTO struct {
-	ID               uint           `json:"id"`
+	ID               string         `json:"id"`
 	PatientID        string         `json:"patient_id"`
 	Vendor           string         `json:"vendor"`
 	OriginalFilename string         `json:"original_filename"`
-	RecordedAt       *string        `json:"recorded_at"`  // ISO 8601 UTC; nil for legacy records without acquisition timestamp
-	IngestedAt       string         `json:"ingested_at"`  // ISO 8601 UTC
-	HL7Status        string         `json:"hl7_status"`   // "pending"|"success"|"hl7_exhausted"
-	Extra            map[string]any `json:"extra"`        // editable vendor metadata
+	RecordedAt       *string        `json:"recorded_at"` // ISO 8601 UTC; nil for legacy records without acquisition timestamp
+	IngestedAt       string         `json:"ingested_at"` // ISO 8601 UTC
+	HL7Status        string         `json:"hl7_status"`  // "pending"|"success"|"hl7_exhausted"
+	Extra            map[string]any `json:"extra"`       // editable vendor metadata
 }
 
 // EcgToDTO converts a GORM ECG model to its API representation.
