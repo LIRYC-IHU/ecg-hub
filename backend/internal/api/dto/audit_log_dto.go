@@ -9,7 +9,7 @@ import (
 
 // AuditLogDTO is the JSON representation of an audit log entry returned by the API.
 type AuditLogDTO struct {
-	ID         uint            `json:"id"`
+	ID         string          `json:"id"`
 	CreatedAt  string          `json:"created_at"` // ISO 8601 UTC
 	UserID     string          `json:"user_id"`
 	Action     string          `json:"action"`
