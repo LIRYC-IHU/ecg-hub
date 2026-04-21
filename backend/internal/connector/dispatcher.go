@@ -13,9 +13,9 @@ import (
 // Extracted as a local interface so callers can inject mocks in tests.
 type dispatcherJobRepo interface {
 	Insert(job *models.ConnectorJob) error
-	MarkSent(id uint) error
-	MarkFailed(id uint, errMsg string, nextRetryAt time.Time) error
-	Exhaust(id uint, errMsg string) error
+	MarkSent(id string) error
+	MarkFailed(id string, errMsg string, nextRetryAt time.Time) error
+	Exhaust(id string, errMsg string) error
 }
 
 // ConnectorSettings bundles a Connector with its runtime parameters from config.

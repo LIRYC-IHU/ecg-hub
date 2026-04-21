@@ -18,11 +18,11 @@ type filterConnector struct {
 	name       string
 	acceptVend string // empty = accept all
 	forwardErr error
-	forwarded  []uint // ecg IDs forwarded
+	forwarded  []string // ecg IDs forwarded
 	mu         sync.Mutex
 }
 
-func (f *filterConnector) Name() string { return f.name }
+func (f *filterConnector) Name() string  { return f.name }
 func (f *filterConnector) Health() error { return nil }
 func (f *filterConnector) Accepts(ecg *models.ECG) bool {
 	if f.acceptVend == "" {
@@ -41,11 +41,11 @@ func (f *filterConnector) Forward(_ context.Context, ecg *models.ECG, _ string) 
 type mockDispatchRepo struct {
 	mu           sync.Mutex
 	inserted     []*models.ConnectorJob
-	markedSent   []uint
-	markedFailed []uint
-	exhausted    []uint
+	markedSent   []string
+	markedFailed []string
+	exhausted    []string
 	insertErr    error
-	insertIDSeq  uint
+	insertIDSeq  string
 }
 
 func (m *mockDispatchRepo) Insert(job *models.ConnectorJob) error {
@@ -54,27 +54,26 @@ func (m *mockDispatchRepo) Insert(job *models.ConnectorJob) error {
 	if m.insertErr != nil {
 		return m.insertErr
 	}
-	m.insertIDSeq++
 	job.ID = m.insertIDSeq
 	m.inserted = append(m.inserted, job)
 	return nil
 }
 
-func (m *mockDispatchRepo) MarkSent(id uint) error {
+func (m *mockDispatchRepo) MarkSent(id string) error {
 	m.mu.Lock()
 	m.markedSent = append(m.markedSent, id)
 	m.mu.Unlock()
 	return nil
 }
 
-func (m *mockDispatchRepo) MarkFailed(id uint, _ string, _ time.Time) error {
+func (m *mockDispatchRepo) MarkFailed(id string, _ string, _ time.Time) error {
 	m.mu.Lock()
 	m.markedFailed = append(m.markedFailed, id)
 	m.mu.Unlock()
 	return nil
 }
 
-func (m *mockDispatchRepo) Exhaust(id uint, _ string) error {
+func (m *mockDispatchRepo) Exhaust(id string, _ string) error {
 	m.mu.Lock()
 	m.exhausted = append(m.exhausted, id)
 	m.mu.Unlock()
@@ -105,7 +104,7 @@ func TestDispatcher_AcceptsFilter_Skip(t *testing.T) {
 		repo,
 	)
 
-	ecg := &models.ECG{ID: 1, Vendor: "nihon-kohden"}
+	ecg := &models.ECG{ID: "1", Vendor: "nihon-kohden"}
 	d.Dispatch(ecg, "/vol/test.dat")
 
 	// Give goroutines time to settle (none should fire).
@@ -127,7 +126,7 @@ func TestDispatcher_ForwardSuccess_MarksSent(t *testing.T) {
 		repo,
 	)
 
-	ecg := &models.ECG{ID: 10, Vendor: "nihon-kohden"}
+	ecg := &models.ECG{ID: "10", Vendor: "nihon-kohden"}
 	d.Dispatch(ecg, "/vol/file.dat")
 
 	waitFor(t, func() bool {
@@ -156,7 +155,7 @@ func TestDispatcher_ForwardFail_BelowMax_MarksFailedWithRetry(t *testing.T) {
 		repo,
 	)
 
-	ecg := &models.ECG{ID: 20, Vendor: "any"}
+	ecg := &models.ECG{ID: "20", Vendor: "any"}
 	d.Dispatch(ecg, "/vol/file.dat")
 
 	waitFor(t, func() bool {
@@ -185,7 +184,7 @@ func TestDispatcher_ForwardFail_AtMax_Exhausts(t *testing.T) {
 		repo,
 	)
 
-	ecg := &models.ECG{ID: 30, Vendor: "any"}
+	ecg := &models.ECG{ID: "30", Vendor: "any"}
 	d.Dispatch(ecg, "/vol/file.dat")
 
 	waitFor(t, func() bool {
@@ -217,7 +216,7 @@ func TestDispatcher_MultipleConnectors_OnlyMatchingFire(t *testing.T) {
 		repo,
 	)
 
-	ecg := &models.ECG{ID: 40, Vendor: "nihon-kohden"}
+	ecg := &models.ECG{ID: "40", Vendor: "nihon-kohden"}
 	d.Dispatch(ecg, "/vol/file.dat")
 
 	waitFor(t, func() bool {
@@ -246,7 +245,7 @@ func TestDispatcher_InsertError_SkipsForward(t *testing.T) {
 		repo,
 	)
 
-	ecg := &models.ECG{ID: 50, Vendor: "any"}
+	ecg := &models.ECG{ID: "50", Vendor: "any"}
 	d.Dispatch(ecg, "/vol/file.dat")
 
 	time.Sleep(30 * time.Millisecond)
