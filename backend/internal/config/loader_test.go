@@ -217,14 +217,14 @@ pacs:
 		t.Fatalf("expected no error, got: %v", err)
 	}
 
-	if !cfg.PACS.Enabled {
+	if !cfg.Proxy.Enabled {
 		t.Error("pacs.enabled: expected true")
 	}
-	if len(cfg.PACS.Connectors) != 1 {
-		t.Fatalf("pacs.connectors: expected 1, got %d", len(cfg.PACS.Connectors))
+	if len(cfg.Proxy.Connectors) != 1 {
+		t.Fatalf("pacs.connectors: expected 1, got %d", len(cfg.Proxy.Connectors))
 	}
 
-	c := cfg.PACS.Connectors[0]
+	c := cfg.Proxy.Connectors[0]
 	if c.Name != "polaris" {
 		t.Errorf("connector name: want %q, got %q", "polaris", c.Name)
 	}

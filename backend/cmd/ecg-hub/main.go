@@ -173,8 +173,8 @@ func main() {
 	// connCheckers is passed to RegisterRoutes now so /healthz can probe each connector's ECTP port.
 	var connCheckers []apihandlers.ConnectorHealthChecker
 	var connSettings []connector.ConnectorSettings
-	if cfg.PACS.Enabled {
-		for _, connCfg := range cfg.PACS.Connectors {
+	if cfg.Proxy.Enabled {
+		for _, connCfg := range cfg.Proxy.Connectors {
 			if !connCfg.Enabled {
 				continue
 			}

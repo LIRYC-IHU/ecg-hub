@@ -15,7 +15,7 @@ type Config struct {
 	Webhook  WebhookConfig  `mapstructure:"webhook"`
 	Metrics  MetricsConfig  `mapstructure:"metrics"`
 	DICOM    DICOMConfig    `mapstructure:"dicom"`
-	PACS     PACSConfig     `mapstructure:"pacs"`
+	Proxy    Proxy          `mapstructure:"proxy"`
 	Modules  ModulesConfig  `mapstructure:"modules"`
 
 	// Secrets — populated via os.Getenv after Viper unmarshal. Never from config.yaml.
@@ -212,8 +212,8 @@ type ModulesConfig struct {
 	Active []string `mapstructure:"active"`
 }
 
-// PACSConfig holds outbound PACS connector settings (Connector Pack).
-type PACSConfig struct {
+// Proxy holds outbound PACS connector settings (Connector Pack).
+type Proxy struct {
 	Enabled    bool              `mapstructure:"enabled"`
 	Connectors []ConnectorConfig `mapstructure:"connectors"`
 }

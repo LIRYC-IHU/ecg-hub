@@ -53,10 +53,10 @@ func Load(cfgPath string) (*Config, error) {
 
 	// Populate connector credentials from env vars (NFR-S2).
 	// Convention: <UPPER(name)>_FTP_USERNAME / <UPPER(name)>_FTP_PASSWORD
-	for i, c := range cfg.PACS.Connectors {
+	for i, c := range cfg.Proxy.Connectors {
 		nameUpper := strings.ToUpper(c.Name)
-		cfg.PACS.Connectors[i].FTPUsername = os.Getenv(nameUpper + "_FTP_USERNAME")
-		cfg.PACS.Connectors[i].FTPPassword = os.Getenv(nameUpper + "_FTP_PASSWORD")
+		cfg.Proxy.Connectors[i].FTPUsername = os.Getenv(nameUpper + "_FTP_USERNAME")
+		cfg.Proxy.Connectors[i].FTPPassword = os.Getenv(nameUpper + "_FTP_PASSWORD")
 	}
 
 	if err := validate(&cfg); err != nil {
