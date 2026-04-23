@@ -23,5 +23,5 @@ type ECG struct {
 }
 
 func (ECG) TableName() string {
-	return "ecg"
+	return "ecgs"
 }

@@ -30,5 +30,5 @@ type Patient struct {
 }
 
 func (Patient) TableName() string {
-	return "patient"
+	return "patients"
 }

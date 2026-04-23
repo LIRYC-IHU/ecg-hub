@@ -17,3 +17,13 @@ type ExportJob struct {
 	UpdatedAt      time.Time  `gorm:"autoUpdateTime"`
 	ExpiresAt      *time.Time // set on completion: CreatedAt + cfg.Export.TmpTTL
 }
+
+// ExportJobECG is the join table linking an ExportJob to the ECG IDs included
+// in the batch. Populated by ExportJobRepository.SaveECGList at job creation
+// and read back by GetECGIDs during ZIP assembly.
+type ExportJobECG struct {
+	ExportJobID string `gorm:"type:varchar(36);primaryKey"`
+	ECGID       string `gorm:"type:varchar(36);primaryKey"`
+}
+
+func (ExportJobECG) TableName() string { return "export_job_ecgs" }

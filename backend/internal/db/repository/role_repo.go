@@ -21,7 +21,7 @@ func (RoleRecord) TableName() string { return "roles" }
 
 // RolePermRecord is the DB model for role_permissions.
 type RolePermRecord struct {
-	RoleID     string     `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
+	RoleID     string     `gorm:"type:uuid;primaryKey"`
 	Permission string     `gorm:"primaryKey"`
 	Role       RoleRecord `gorm:"foreignKey:RoleID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
 }
