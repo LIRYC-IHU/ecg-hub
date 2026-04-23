@@ -74,17 +74,25 @@ dicom:
   # port: 11112
   # ae_title: ECG-HUB
 
-pacs:
-  enabled: false
-  tool:
-    polaris:
+proxy:
+  enabled: true
+  connectors:
+    - name: polaris
       enabled: true
-      host: polaris.example.com
+      protocol: ectp_ftp
+      filters:
+        extensions: [".DAT", ".dat"] # vide = accepte tout
+        vendors: [] # vide = accepte tout
+      retry:
+        max_attempts: 3
+        interval: 5m
+      ectp:
+        host: 10.33.35.69
+        port: 30003
       ftp:
-        host: polaris.example.com
-        # secret set via POLARIS_FTP_USERNAME & POLARIS_FTP_PASSWORD env var
-  # protocol: ftp | dicom
-  # host: pacs.example.com
+        host: 10.33.35.69
+        port: 21
+        # credentials via env vars: POLARIS_FTP_USERNAME / POLARIS_FTP_PASSWORD
 
 modules:
   # active: list of ECG format modules to load at startup.
