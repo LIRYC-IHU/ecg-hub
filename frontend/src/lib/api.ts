@@ -532,8 +532,9 @@ export async function setAppUserRole(
 
 export interface VolumeMetric {
   name: string;
-  total: number; // bytes
-  available: number; // bytes
+  total: number; // bytes (0 = unlimited / rotation disabled)
+  available: number; // bytes (may be negative when the soft cap is exceeded)
+  max_size?: string; // raw k8s resource quantity configured in storage.max_size (e.g. "50Gi")
 }
 
 export interface StorageMetricsResp {

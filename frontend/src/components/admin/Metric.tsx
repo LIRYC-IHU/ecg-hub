@@ -63,30 +63,39 @@ function MetricCard() {
         volumes &&
         volumes.map((v) => {
           const used = v.total - v.available;
-          const percent = Math.round((used / v.total) * 100);
+          const unlimited = v.total <= 0;
+          const percent = unlimited ? 0 : Math.round((used / v.total) * 100);
+          // The cap is a soft cap — usage can legitimately exceed it.
+          // Clamp the bar width but keep the real percentage in the label.
+          const barWidth = Math.min(100, Math.max(0, percent));
+          const capLabel = unlimited
+            ? "Unlimited"
+            : (v.max_size ?? formatBytes(v.total));
 
           return (
             <div key={v.name} className="space-y-2">
               <div className="flex justify-between text-sm">
                 <span className="font-medium">{v.name}</span>
                 <span>
-                  {formatBytes(used)} / {formatBytes(v.total)} ({percent}%)
+                  {formatBytes(used)} / {capLabel}
+                  {!unlimited && ` (${percent}%)`}
                 </span>
               </div>
 
-              {/* Barre */}
-              <div className="w-full h-3 bg-blue-500 rounded-full overflow-hidden border-border border-2 ">
-                <div
-                  className={`h-full transition-all duration-500 ${
-                    percent > 85
-                      ? "bg-red-500"
-                      : percent > 60
-                        ? "bg-yellow-500"
-                        : "bg-green-500"
-                  }`}
-                  style={{ width: `${percent}%` }}
-                />
-              </div>
+              {!unlimited && (
+                <div className="w-full h-3 bg-blue-500 rounded-full overflow-hidden border-border border-2 ">
+                  <div
+                    className={`h-full transition-all duration-500 ${
+                      percent > 85
+                        ? "bg-red-500"
+                        : percent > 60
+                          ? "bg-yellow-500"
+                          : "bg-green-500"
+                    }`}
+                    style={{ width: `${barWidth}%` }}
+                  />
+                </div>
+              )}
             </div>
           );
         })
