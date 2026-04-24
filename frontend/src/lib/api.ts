@@ -92,18 +92,6 @@ async function triggerBlobDownload(url: string): Promise<void> {
   URL.revokeObjectURL(objectUrl);
 }
 
-// downloadECG triggers a browser file download for the original ECG format.
-export async function downloadECG(id: number): Promise<void> {
-  await triggerBlobDownload(`${BASE_URL}/api/v1/ecgs/${id}/download`);
-}
-
-// downloadECGXMLFDA triggers a browser file download of the ECG converted to FDA HL7 v3 aECG XML.
-export async function downloadECGXMLFDA(id: number): Promise<void> {
-  await triggerBlobDownload(
-    `${BASE_URL}/api/v1/ecgs/${id}/download?format=xmlfda`,
-  );
-}
-
 // downloadECGFormat triggers a browser download for a specific export format.
 // format = "original" | "xmlfda" | "dicom" | ...
 export async function downloadECGFormat(
@@ -477,7 +465,7 @@ export async function patchECGMetadata(
 
 export interface ExportJobRequest {
   ecg_ids: number[];
-  format?: string;
+  formats: string[];
 }
 
 export interface ExportJobResponse {
@@ -485,7 +473,7 @@ export interface ExportJobResponse {
   status: "queued" | "processing" | "complete" | "failed";
   ecg_count: number;
   processed_count?: number;
-  format?: string;
+  formats: string[];
   created_at: string;
   download_url: string;
   error?: string;
