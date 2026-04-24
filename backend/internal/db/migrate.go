@@ -6,7 +6,7 @@ import (
 
 	"gorm.io/gorm"
 
-	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
+	appmodels "github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
 )
 
@@ -20,17 +20,17 @@ func RunMigrations(db *gorm.DB) error {
 	db.Exec("SET session_replication_role = 'replica'")
 	defer db.Exec("SET session_replication_role = 'origin'")
 	models := []any{
-		&models.Patient{},
-		&models.ECG{},
-		&models.AuditLog{},
-		&models.QuarantineEntry{},
+		&appmodels.Patient{},
+		&appmodels.ECG{},
+		&appmodels.AuditLog{},
+		&appmodels.QuarantineEntry{},
 		&repository.RoleRecord{},
 		&repository.RolePermRecord{},
 		&repository.UserRecord{},
-		&models.ExportJob{},
-		&models.NihonKohdenTransfer{},
-		&models.ConnectorJob{},
-		&models.ECGBuffer{},
+		&appmodels.ExportJob{},
+		&appmodels.NihonKohdenTransfer{},
+		&appmodels.ConnectorJob{},
+		&appmodels.ECGBuffer{},
 	}
 	// for _, m := range models {
 	// 	err := db.Migrator().DropTable(m)
@@ -39,6 +39,13 @@ func RunMigrations(db *gorm.DB) error {
 	// 	}
 	// 	fmt.Printf("Dropped table for %T\n", m)
 	// }
+	// Breaking change: export_jobs.format (string) → formats (jsonb string array).
+	// Drop the orphaned column when present; AutoMigrate will then create the new "formats" column.
+	if db.Migrator().HasColumn(&appmodels.ExportJob{}, "format") {
+		if err := db.Migrator().DropColumn(&appmodels.ExportJob{}, "format"); err != nil {
+			slog.Warn("db: drop export_jobs.format failed", "error", err)
+		}
+	}
 	for _, m := range models {
 		err := db.AutoMigrate(m)
 		if err != nil {
