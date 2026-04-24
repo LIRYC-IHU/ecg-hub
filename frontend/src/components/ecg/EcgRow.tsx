@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Download, FileText, RefreshCw, Trash2, ChevronDown, ChevronUp } from 'lucide-react'
+import { Download, RefreshCw, Trash2, ChevronDown, ChevronUp } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { downloadECG, downloadECGFormat, fetchECGMeta, fetchModules, forceHL7, deleteECG, patchECGMetadata } from '../../lib/api'
+import { downloadECGFormat, fetchECGMeta, forceHL7, deleteECG, patchECGMetadata } from '../../lib/api'
 import { Spinner } from '../ui/Spinner'
 import { useNotification } from '../../context/NotificationContext'
+import { DownloadFormatPopup } from './DownloadFormatPopup'
 import type { ECG, ECGFieldDef } from '../../types'
 
 const hl7StatusConfig: Record<string, { dot: string; label: string }> = {
@@ -30,20 +31,11 @@ export function EcgRow({ ecg, isSelected, onToggle, canForceHL7, canDelete, canR
   const { notify } = useNotification()
   const queryClient = useQueryClient()
   const [forced, setForced] = useState(false)
-
-  // Load module formats once (deduplicated by React Query across all rows).
-  const { data: modules } = useQuery({
-    queryKey: ['modules'],
-    queryFn: fetchModules,
-    staleTime: 5 * 60_000,
-  })
-  // Non-original formats available for this ECG's vendor.
-  const extraFormats = (modules ?? [])
-    .find((m) => m.name === ecg.vendor)
-    ?.formats.filter((f) => f.id !== 'original') ?? []
   const [deleted, setDeleted] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [expanded, setExpanded] = useState(false)
+  const [downloadOpen, setDownloadOpen] = useState(false)
+  const [downloading, setDownloading] = useState(false)
 
   const date = new Date(ecg.recorded_at ?? ecg.ingested_at).toLocaleString('fr-FR', {
     year: 'numeric', month: '2-digit', day: '2-digit',
@@ -122,34 +114,40 @@ export function EcgRow({ ecg, isSelected, onToggle, canForceHL7, canDelete, canR
 
         {/* Actions */}
         <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
-          {/* Download original */}
+          {/* Download — opens a format picker; fires one request per selected format. */}
           <button
-            onClick={() => {
-              downloadECG(ecg.id).catch((err: { message?: string }) => {
-                notify('error', err?.message ?? t('ecg.downloadError'))
-              })
-            }}
-            className="p-1.5 rounded hover:bg-muted transition-colors"
-            title={t('ecg.downloadOriginal')}
+            onClick={() => setDownloadOpen(true)}
+            disabled={downloading}
+            className="p-1.5 rounded hover:bg-muted transition-colors disabled:opacity-50"
+            title={t('ecg.download')}
           >
-            <Download className="w-3.5 h-3.5 text-muted-foreground" />
+            {downloading
+              ? <Spinner size={13} className="text-muted-foreground" />
+              : <Download className="w-3.5 h-3.5 text-muted-foreground" />
+            }
           </button>
 
-          {/* Download converted formats (from module capabilities) */}
-          {extraFormats.map((fmt) => (
-            <button
-              key={fmt.id}
-              onClick={() => {
-                downloadECGFormat(ecg.id, fmt.id).catch((err: { message?: string }) => {
-                  notify('error', err?.message ?? t('ecg.downloadError'))
-                })
-              }}
-              className="p-1.5 rounded hover:bg-muted transition-colors"
-              title={fmt.label}
-            >
-              <FileText className="w-3.5 h-3.5 text-muted-foreground" />
-            </button>
-          ))}
+          <DownloadFormatPopup
+            open={downloadOpen}
+            onClose={() => setDownloadOpen(false)}
+            vendor={ecg.vendor}
+            busy={downloading}
+            onConfirm={async (formats) => {
+              setDownloadOpen(false)
+              setDownloading(true)
+              try {
+                // Sequential so the browser doesn't silently swallow concurrent
+                // downloads of the same file — still fast enough in practice.
+                for (const fmt of formats) {
+                  await downloadECGFormat(ecg.id, fmt).catch((err: { message?: string }) => {
+                    notify('error', err?.message ?? t('ecg.downloadError'))
+                  })
+                }
+              } finally {
+                setDownloading(false)
+              }
+            }}
+          />
 
           {/* Force HL7 */}
           {canForceHL7 && ecg.hl7_status === 'hl7_exhausted' && !forced && (
