@@ -1,5 +1,12 @@
 package config
 
+import (
+	"fmt"
+	"strings"
+
+	"k8s.io/apimachinery/pkg/api/resource"
+)
+
 // Config holds all application configuration.
 // YAML fields are loaded from config.yaml via Viper.
 // Secret fields are populated from environment variables after YAML loading — they
@@ -157,10 +164,38 @@ type StorageConfig struct {
 	// QuarantinePath is the directory for quarantined files (FR6).
 	// Should be a separate volume from VolumePath so IT can manage it independently.
 	QuarantinePath string `mapstructure:"quarantine_path"`
-	// MaxSizeGB is the soft cap for VolumePath in gigabytes.
+	// MaxSize is the soft cap for VolumePath, expressed as a Kubernetes resource
+	// quantity (e.g. "500Mi", "50Gi", "1.5Ti"). Parsed via k8s.io/apimachinery/pkg/api/resource.
 	// When the volume exceeds this limit, the oldest files are rotated out.
-	// 0 means unlimited (not recommended for production).
-	MaxSizeGB int `mapstructure:"max_size_gb"`
+	// Empty or "0" means unlimited (not recommended for production).
+	MaxSize   string `mapstructure:"max_size"`
+	bytesSize int64  // parsed from MaxSize, used internally for size checks
+}
+
+// GetBytesSize returns the parsed MaxSize in bytes. 0 means rotation is disabled.
+func (s StorageConfig) GetBytesSize() int64 {
+	return s.bytesSize
+}
+
+// SetMaxSize assigns MaxSize and parses it into the internal byte count.
+// Empty (or whitespace-only) input is treated as 0 (rotation disabled).
+// The value must be a valid Kubernetes resource quantity (e.g. "500Mi", "50Gi").
+func (s *StorageConfig) SetMaxSize(raw string) error {
+	raw = strings.TrimSpace(raw)
+	s.MaxSize = raw
+	if raw == "" {
+		s.bytesSize = 0
+		return nil
+	}
+	q, err := resource.ParseQuantity(raw)
+	if err != nil {
+		return fmt.Errorf("parse max_size %q: %w", raw, err)
+	}
+	if q.Sign() < 0 {
+		return fmt.Errorf("max_size must be non-negative, got %q", raw)
+	}
+	s.bytesSize = q.Value()
+	return nil
 }
 
 // ExportConfig holds batch export worker settings (FR19, NFR-SC3).

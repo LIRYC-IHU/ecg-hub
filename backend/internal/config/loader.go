@@ -22,6 +22,8 @@ func Load(cfgPath string) (*Config, error) {
 	// Note: AutomaticEnv is intentionally omitted. Without SetEnvKeyReplacer("." → "_"),
 	// Viper cannot map env vars like SERVER_PORT to nested YAML keys like server.port.
 	// All secrets are read explicitly via os.Getenv after unmarshal (see below).
+	fmt.Printf("----------------------------------------------")
+	fmt.Printf("Loading config from %s\n", cfgPath)
 
 	if err := v.ReadInConfig(); err != nil {
 		return nil, fmt.Errorf("config: read %s: %w", cfgPath, err)
@@ -58,6 +60,15 @@ func Load(cfgPath string) (*Config, error) {
 		cfg.Proxy.Connectors[i].FTPUsername = os.Getenv(nameUpper + "_FTP_USERNAME")
 		cfg.Proxy.Connectors[i].FTPPassword = os.Getenv(nameUpper + "_FTP_PASSWORD")
 	}
+
+	// Parse storage.max_size as a Kubernetes resource quantity (e.g. "500Mi", "50Gi").
+	// Empty string is treated as 0 (rotation disabled).
+	if err := cfg.Storage.SetMaxSize(cfg.Storage.MaxSize); err != nil {
+		return nil, fmt.Errorf("config: storage.%w", err)
+	}
+	fmt.Printf("----------------------------------------------")
+	fmt.Printf("Parsed storage.max_size: %d bytes\n", cfg.Storage.bytesSize)
+	fmt.Printf("----------------------------------------------")
 
 	if err := validate(&cfg); err != nil {
 		return nil, err

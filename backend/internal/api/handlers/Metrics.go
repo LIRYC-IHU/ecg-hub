@@ -14,15 +14,15 @@ type VolumeMetrics struct {
 	Name      string `json:"name"`
 	Total     int64  `json:"total"`
 	Available int64  `json:"available"`
+	// MaxSize is the raw Kubernetes resource quantity configured in storage.max_size
+	// (e.g. "50Gi"). Empty when rotation is disabled. The frontend renders this verbatim
+	// so the displayed cap matches what the operator wrote in config.yaml.
+	MaxSize string `json:"max_size,omitempty"`
 }
 
 type StorageMetricsResp struct {
 	Volumes []VolumeMetrics `json:"volumes"`
 	Error   string          `json:"error"`
-}
-
-func gbToBytes(gb int) int64 {
-	return int64(gb) * 1024 * 1024 * 1024
 }
 
 // VolumeMetricsHandler  handles GET /api/v1/admin/storage-metrics
@@ -43,8 +43,9 @@ func VolumeMetricsHandler(cfg *config.Config, db *gorm.DB) echo.HandlerFunc {
 		// log info about the volume metrics
 		volumes = append(volumes, VolumeMetrics{
 			Name:      "ECG Storage",
-			Total:     gbToBytes(int(storage.MaxSizeGB)),
-			Available: (gbToBytes(storage.MaxSizeGB) - storage_size),
+			Total:     storage.GetBytesSize(),
+			Available: storage.GetBytesSize() - storage_size,
+			MaxSize:   storage.MaxSize,
 		})
 
 		quarantine_size, err := dirSize(storage.QuarantinePath)
@@ -55,8 +56,9 @@ func VolumeMetricsHandler(cfg *config.Config, db *gorm.DB) echo.HandlerFunc {
 		}
 		volumes = append(volumes, VolumeMetrics{
 			Name:      "Quarantine",
-			Total:     gbToBytes(int(storage.MaxSizeGB)),
-			Available: (gbToBytes(storage.MaxSizeGB) - quarantine_size),
+			Total:     storage.GetBytesSize(),
+			Available: storage.GetBytesSize() - quarantine_size,
+			MaxSize:   storage.MaxSize,
 		})
 		return c.JSON(http.StatusOK, StorageMetricsResp{
 			Volumes: volumes,
