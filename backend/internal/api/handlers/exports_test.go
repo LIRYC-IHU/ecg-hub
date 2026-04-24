@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
 	"testing"
 
 	"github.com/labstack/echo/v4"
@@ -79,7 +80,10 @@ func newExportContext(e *echo.Echo, method, path string, body []byte) (echo.Cont
 
 func TestCreateExportHandler_ValidRequest_Returns201(t *testing.T) {
 	e := echo.New()
-	body, _ := json.Marshal(map[string]any{"ecg_ids": []int{1, 2}})
+	body, _ := json.Marshal(map[string]any{
+		"ecg_ids": []string{"1", "2"},
+		"formats": []string{"original", "xmlfda"},
+	})
 	c, rec := newExportContext(e, http.MethodPost, "/api/v1/exports", body)
 	c.Set(mw.CtxKeyUserID, "user-abc")
 
@@ -107,14 +111,20 @@ func TestCreateExportHandler_ValidRequest_Returns201(t *testing.T) {
 	if resp.ID == "" {
 		t.Error("expected non-empty job ID")
 	}
+	if len(resp.Formats) != 2 || resp.Formats[0] != "original" || resp.Formats[1] != "xmlfda" {
+		t.Errorf("formats: want [original xmlfda], got %v", resp.Formats)
+	}
 	if pool.enqueued == nil {
-		t.Error("expected job to be enqueued in pool")
+		t.Fatal("expected job to be enqueued in pool")
+	}
+	if len(pool.enqueued.Formats) != 2 {
+		t.Errorf("enqueued formats: want 2, got %v", pool.enqueued.Formats)
 	}
 }
 
 func TestCreateExportHandler_EmptyECGIDs_Returns400(t *testing.T) {
 	e := echo.New()
-	body, _ := json.Marshal(map[string]any{"ecg_ids": []int{}})
+	body, _ := json.Marshal(map[string]any{"ecg_ids": []string{}, "formats": []string{"original"}})
 	c, rec := newExportContext(e, http.MethodPost, "/api/v1/exports", body)
 	c.Set(mw.CtxKeyUserID, "user-abc")
 
@@ -127,10 +137,28 @@ func TestCreateExportHandler_EmptyECGIDs_Returns400(t *testing.T) {
 	assertErrorCode(t, rec, "MISSING_ECG_IDS")
 }
 
+func TestCreateExportHandler_MissingFormats_Returns400(t *testing.T) {
+	e := echo.New()
+	body, _ := json.Marshal(map[string]any{"ecg_ids": []string{"1"}})
+	c, rec := newExportContext(e, http.MethodPost, "/api/v1/exports", body)
+	c.Set(mw.CtxKeyUserID, "user-abc")
+
+	handler := createExportHandler(nil, &stubExportJobRepo{}, &stubECGByIDsFinder{}, &stubExportPool{})
+	if err := handler(c); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	assertCode(t, rec, http.StatusBadRequest)
+	assertErrorCode(t, rec, "MISSING_FORMATS")
+}
+
 func TestCreateExportHandler_UnknownECGIDs_Returns400(t *testing.T) {
 	e := echo.New()
 	// Request 2 ECGs but repo only returns 1 (ECG 99 doesn't exist).
-	body, _ := json.Marshal(map[string]any{"ecg_ids": []int{1, 99}})
+	body, _ := json.Marshal(map[string]any{
+		"ecg_ids": []string{"1", "99"},
+		"formats": []string{"original"},
+	})
 	c, rec := newExportContext(e, http.MethodPost, "/api/v1/exports", body)
 	c.Set(mw.CtxKeyUserID, "user-abc")
 
@@ -146,11 +174,11 @@ func TestCreateExportHandler_UnknownECGIDs_Returns400(t *testing.T) {
 
 func TestCreateExportHandler_TooManyECGs_Returns400(t *testing.T) {
 	e := echo.New()
-	ids := make([]int, 501)
+	ids := make([]string, 501)
 	for i := range ids {
-		ids[i] = i + 1
+		ids[i] = strconv.Itoa(i + 1)
 	}
-	body, _ := json.Marshal(map[string]any{"ecg_ids": ids})
+	body, _ := json.Marshal(map[string]any{"ecg_ids": ids, "formats": []string{"original"}})
 	c, rec := newExportContext(e, http.MethodPost, "/api/v1/exports", body)
 	c.Set(mw.CtxKeyUserID, "user-abc")
 

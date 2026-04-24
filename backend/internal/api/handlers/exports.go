@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -40,30 +41,33 @@ type exportJobEnqueuer interface {
 }
 
 // createExportRequest is the JSON body for POST /api/v1/exports.
+// Formats lists every output format to include in the resulting ZIP
+// (e.g. ["original"], ["original", "xmlfda"]). At least one format is required.
 type createExportRequest struct {
-	ECGIDs []string `json:"ecg_ids"`
-	Format string   `json:"format"` // "original" (default) or "xmlfda"
+	ECGIDs  []string `json:"ecg_ids"`
+	Formats []string `json:"formats"`
 }
 
 // createExportResponse is the JSON body returned on successful export job creation.
 type createExportResponse struct {
-	ID          string `json:"id"`
-	Status      string `json:"status"`
-	ECGCount    int    `json:"ecg_count"`
-	CreatedAt   string `json:"created_at"`
-	DownloadURL string `json:"download_url"`
+	ID          string   `json:"id"`
+	Status      string   `json:"status"`
+	ECGCount    int      `json:"ecg_count"`
+	Formats     []string `json:"formats"`
+	CreatedAt   string   `json:"created_at"`
+	DownloadURL string   `json:"download_url"`
 }
 
 // exportJobResponse is the JSON body returned by GET /api/v1/exports/:id.
 type exportJobResponse struct {
-	ID             string  `json:"id"`
-	Status         string  `json:"status"`
-	ECGCount       int     `json:"ecg_count"`
-	ProcessedCount int     `json:"processed_count"`
-	Format         string  `json:"format"`
-	CreatedAt      string  `json:"created_at"`
-	DownloadURL    string  `json:"download_url"`
-	Error          *string `json:"error,omitempty"`
+	ID             string   `json:"id"`
+	Status         string   `json:"status"`
+	ECGCount       int      `json:"ecg_count"`
+	ProcessedCount int      `json:"processed_count"`
+	Formats        []string `json:"formats"`
+	CreatedAt      string   `json:"created_at"`
+	DownloadURL    string   `json:"download_url"`
+	Error          *string  `json:"error,omitempty"`
 }
 
 // CreateExportHandler handles POST /api/v1/exports.
@@ -92,9 +96,9 @@ func createExportHandler(db *gorm.DB, exportRepo exportJobCreator, ecgRepo ecgBy
 			return c.JSON(http.StatusBadRequest, mw.APIError("TOO_MANY_ECGS", "ecg_ids must not exceed 500"))
 		}
 
-		format := req.Format
-		if format == "" {
-			format = "original"
+		formats := dedupeFormats(req.Formats)
+		if len(formats) == 0 {
+			return c.JSON(http.StatusBadRequest, mw.APIError("MISSING_FORMATS", "formats must not be empty"))
 		}
 
 		// Validate that all requested ECG IDs exist.
@@ -113,7 +117,7 @@ func createExportHandler(db *gorm.DB, exportRepo exportJobCreator, ecgRepo ecgBy
 			UserID:   userID,
 			Status:   "queued",
 			ECGCount: len(req.ECGIDs),
-			Format:   format,
+			Formats:  formats,
 		}
 
 		if err := exportRepo.Create(job); err != nil {
@@ -125,10 +129,10 @@ func createExportHandler(db *gorm.DB, exportRepo exportJobCreator, ecgRepo ecgBy
 		}
 
 		if !pool.EnqueueJob(export.Job{
-			ID:     job.ID,
-			UserID: userID,
-			ECGIDs: req.ECGIDs,
-			Format: format,
+			ID:      job.ID,
+			UserID:  userID,
+			ECGIDs:  req.ECGIDs,
+			Formats: formats,
 		}) {
 			// Queue full or pool stopped — mark the job failed immediately so the
 			// DB record is consistent, then tell the caller to retry later.
@@ -139,17 +143,40 @@ func createExportHandler(db *gorm.DB, exportRepo exportJobCreator, ecgRepo ecgBy
 		// Audit log is non-blocking (NFR-R2).
 		if db != nil {
 			_ = mw.WriteAuditLog(c.Request().Context(), db, userID, "export_create",
-				job.ID, map[string]any{"ecg_count": len(req.ECGIDs), "format": format})
+				job.ID, map[string]any{"ecg_count": len(req.ECGIDs), "formats": formats})
 		}
 
 		return c.JSON(http.StatusCreated, createExportResponse{
 			ID:          job.ID,
 			Status:      job.Status,
 			ECGCount:    job.ECGCount,
+			Formats:     formats,
 			CreatedAt:   job.CreatedAt.Format(time.RFC3339),
 			DownloadURL: "/api/v1/exports/" + job.ID + "/download",
 		})
 	}
+}
+
+// dedupeFormats trims whitespace, drops empties, and removes duplicates while preserving order.
+// Returns nil when no valid format remains.
+func dedupeFormats(in []string) []string {
+	seen := make(map[string]struct{}, len(in))
+	out := make([]string, 0, len(in))
+	for _, f := range in {
+		f = strings.TrimSpace(f)
+		if f == "" {
+			continue
+		}
+		if _, ok := seen[f]; ok {
+			continue
+		}
+		seen[f] = struct{}{}
+		out = append(out, f)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // GetExportHandler handles GET /api/v1/exports/:id.
@@ -191,7 +218,7 @@ func getExportHandler(exportRepo exportJobFinder, adminRole string) echo.Handler
 			Status:         job.Status,
 			ECGCount:       job.ECGCount,
 			ProcessedCount: job.ProcessedCount,
-			Format:         job.Format,
+			Formats:        job.Formats,
 			CreatedAt:      job.CreatedAt.Format(time.RFC3339),
 			DownloadURL:    "/api/v1/exports/" + job.ID + "/download",
 			Error:          job.Error,
