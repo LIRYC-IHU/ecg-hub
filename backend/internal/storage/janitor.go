@@ -13,14 +13,14 @@ import (
 	"github.com/LIRYC-IHU/ecg-hub/internal/config"
 )
 
-// Janitor periodically enforces the storage soft cap defined by storage.max_size_gb.
+// Janitor periodically enforces the storage soft cap defined by storage.max_size.
 // When the volume exceeds the cap, it deletes the oldest files (by modification time)
 // until the volume is within the limit.
 //
 // ECG database records are never deleted — only the physical files on disk are removed.
 // A download request for a purged file will receive a 404.
 //
-// If max_size_gb is 0, the janitor is a no-op and does not start.
+// If max_size is empty or 0, the janitor is a no-op and does not start.
 type Janitor struct {
 	cfg       config.StorageConfig
 	cancel    context.CancelFunc
@@ -37,10 +37,10 @@ func NewJanitor(cfg config.StorageConfig) *Janitor {
 }
 
 // Start launches the background rotation goroutine on the given interval.
-// Safe to call multiple times (sync.Once). No-op if max_size_gb is 0.
+// Safe to call multiple times (sync.Once). No-op if max_size is empty or 0.
 func (j *Janitor) Start(interval time.Duration) {
-	if j.cfg.MaxSizeGB <= 0 {
-		slog.Info("janitor: max_size_gb is 0 — rotation disabled")
+	if j.cfg.GetBytesSize() <= 0 {
+		slog.Info("janitor: max_size is 0 — rotation disabled")
 		close(j.done)
 		return
 	}
@@ -48,7 +48,12 @@ func (j *Janitor) Start(interval time.Duration) {
 		ctx, cancel := context.WithCancel(context.Background())
 		j.cancel = cancel
 		go j.run(ctx, interval)
-		slog.Info("janitor: started", "interval", interval, "max_size_gb", j.cfg.MaxSizeGB)
+		slog.Info("janitor: started",
+			"interval", interval,
+			"path", j.cfg.VolumePath,
+			"max_size", j.cfg.MaxSize,
+			"max_size_bytes", j.cfg.GetBytesSize(),
+		)
 	})
 }
 
@@ -79,34 +84,39 @@ func (j *Janitor) run(ctx context.Context, interval time.Duration) {
 }
 
 func (j *Janitor) rotateOnce() {
-	if n, freed, err := j.Rotate(); err != nil {
-		slog.Error("janitor: rotation failed", "error", err)
-	} else if n > 0 {
-		slog.Info("janitor: rotation complete", "files_deleted", n, "freed_gb", freed)
+	var Paths = []string{j.cfg.VolumePath, j.cfg.QuarantinePath}
+	for _, path := range Paths {
+		if n, freed, err := j.Rotate(path); err != nil {
+			slog.Error("janitor: rotation failed", "error", err)
+		} else if n > 0 {
+			slog.Info("janitor: rotation complete", "files_deleted", n, "freed_bytes", freed)
+		}
 	}
 }
 
 // Rotate checks the current volume size and deletes the oldest files (by modification time)
-// until the volume is within the max_size_gb soft cap.
-// Returns the number of deleted files and the total GB freed.
-func (j *Janitor) Rotate() (deleted int, freedGB float64, err error) {
-	if j.cfg.MaxSizeGB <= 0 {
+// until the volume is within the max_size soft cap.
+// Returns the number of deleted files and the total bytes freed.
+func (j *Janitor) Rotate(path string) (deleted int, freedBytes int64, err error) {
+	limit := j.cfg.GetBytesSize()
+	if limit <= 0 {
 		return 0, 0, nil
 	}
 
-	totalGB, files, err := walkFiles(j.cfg.VolumePath)
+	total, files, err := walkFiles(path)
 	if err != nil {
 		return 0, 0, err
 	}
-	limitGB := float64(j.cfg.MaxSizeGB)
-	if totalGB <= limitGB {
+
+	if total <= limit {
 		return 0, 0, nil
 	}
 
 	slog.Warn("janitor: volume over soft cap, rotating oldest files",
 		"volume_path", j.cfg.VolumePath,
-		"current_gb", totalGB,
-		"limit_gb", limitGB,
+		"current_bytes", total,
+		"limit", j.cfg.MaxSize,
+		"limit_bytes", limit,
 	)
 
 	// Oldest files first.
@@ -115,20 +125,19 @@ func (j *Janitor) Rotate() (deleted int, freedGB float64, err error) {
 	})
 
 	for _, f := range files {
-		if totalGB <= limitGB {
+		if total <= limit {
 			break
 		}
-		fileGB := float64(f.size) / (1 << 30)
 		if err := os.Remove(f.path); err != nil {
 			slog.Warn("janitor: failed to delete file", "path", f.path, "error", err)
 			continue
 		}
-		totalGB -= fileGB
-		freedGB += fileGB
+		total -= f.size
+		freedBytes += f.size
 		deleted++
-		slog.Info("janitor: file purged", "path", f.path, "freed_gb", fileGB)
+		slog.Info("janitor: file purged", "path", f.path, "freed_bytes", f.size)
 	}
-	return deleted, freedGB, nil
+	return deleted, freedBytes, nil
 }
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -139,9 +148,8 @@ type fileEntry struct {
 	modTime time.Time
 }
 
-// walkFiles returns the total size in GB and a list of all regular files under root.
-func walkFiles(root string) (totalGB float64, files []fileEntry, err error) {
-	var total int64
+// walkFiles returns the total size in bytes and a list of all regular files under root.
+func walkFiles(root string) (totalBytes int64, files []fileEntry, err error) {
 	err = filepath.WalkDir(root, func(p string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			// Skip unreadable entries rather than aborting the whole walk.
@@ -155,7 +163,7 @@ func walkFiles(root string) (totalGB float64, files []fileEntry, err error) {
 		if infoErr != nil {
 			return nil
 		}
-		total += info.Size()
+		totalBytes += info.Size()
 		files = append(files, fileEntry{
 			path:    p,
 			size:    info.Size(),
@@ -163,6 +171,5 @@ func walkFiles(root string) (totalGB float64, files []fileEntry, err error) {
 		})
 		return nil
 	})
-	totalGB = float64(total) / (1 << 30)
-	return totalGB, files, err
+	return totalBytes, files, err
 }
