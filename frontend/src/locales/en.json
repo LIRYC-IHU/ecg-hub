@@ -29,6 +29,7 @@
     "downloadOriginal": "Original format",
     "downloadError": "Download failed",
     "downloadXmlfda": "XMLFDA format",
+    "downloadFormatsTitle": "Formats to download",
     "vendor": "Vendor",
     "date": "Date",
     "hl7Status": "HL7 Status",

@@ -29,6 +29,7 @@
     "downloadOriginal": "Format original",
     "downloadError": "Erreur lors du téléchargement",
     "downloadXmlfda": "Format XMLFDA",
+    "downloadFormatsTitle": "Formats à télécharger",
     "vendor": "Vendeur",
     "date": "Date",
     "hl7Status": "Statut HL7",
