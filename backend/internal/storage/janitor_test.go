@@ -4,9 +4,21 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/LIRYC-IHU/ecg-hub/internal/config"
 )
+
+// newStorage builds a StorageConfig whose MaxSize is parsed via the same path
+// the loader uses, so tests exercise the real parsing contract.
+func newStorage(t *testing.T, dir, maxSize string) config.StorageConfig {
+	t.Helper()
+	cfg := config.StorageConfig{VolumePath: dir}
+	if err := cfg.SetMaxSize(maxSize); err != nil {
+		t.Fatalf("SetMaxSize(%q): %v", maxSize, err)
+	}
+	return cfg
+}
 
 func writeTestFile(t *testing.T, dir, name string, sizeBytes int) {
 	t.Helper()
@@ -20,10 +32,10 @@ func TestJanitor_Rotate_DisabledWhenZero(t *testing.T) {
 	dir := t.TempDir()
 	writeTestFile(t, dir, "a.xml", 1024)
 
-	j := NewJanitor(config.StorageConfig{VolumePath: dir, MaxSizeGB: 0})
-	deleted, freed, err := j.Rotate()
+	j := NewJanitor(newStorage(t, dir, "0"))
+	deleted, freed, err := j.Rotate(dir)
 	if err != nil || deleted != 0 || freed != 0 {
-		t.Errorf("expected no-op when max_size_gb=0, got deleted=%d freed=%f err=%v", deleted, freed, err)
+		t.Errorf("expected no-op when max_size=0, got deleted=%d freed=%d err=%v", deleted, freed, err)
 	}
 }
 
@@ -31,8 +43,8 @@ func TestJanitor_Rotate_NoOpWhenUnderLimit(t *testing.T) {
 	dir := t.TempDir()
 	writeTestFile(t, dir, "a.xml", 512)
 
-	j := NewJanitor(config.StorageConfig{VolumePath: dir, MaxSizeGB: 100})
-	deleted, _, err := j.Rotate()
+	j := NewJanitor(newStorage(t, dir, "100Gi"))
+	deleted, _, err := j.Rotate(dir)
 	if err != nil || deleted != 0 {
 		t.Errorf("expected no-op when under limit, got deleted=%d err=%v", deleted, err)
 	}
@@ -41,48 +53,57 @@ func TestJanitor_Rotate_NoOpWhenUnderLimit(t *testing.T) {
 func TestJanitor_Rotate_DeletesOldestFirst(t *testing.T) {
 	dir := t.TempDir()
 
-	// Write 3 files, each ~400 MB equivalent (use small sizes, scale limit down).
-	// Simulate: 3 files of 400 bytes, limit = 0 (we'll use a tiny limit in bytes via a trick).
-	// Actually max_size_gb is in GB which is too coarse for unit tests.
-	// Instead we test the ordering logic: write files, then directly call walkFiles + sort.
-	writeTestFile(t, dir, "old.xml", 100)
-	writeTestFile(t, dir, "new.xml", 100)
-
-	_, files, err := walkFiles(dir)
-	if err != nil {
-		t.Fatalf("walkFiles: %v", err)
+	// Two 600-byte files, limit = 1Ki (1024 B) → exactly one file must be purged,
+	// and it must be the oldest.
+	writeTestFile(t, dir, "old.xml", 600)
+	oldPath := filepath.Join(dir, "old.xml")
+	if err := os.Chtimes(oldPath, time.Now().Add(-2*time.Hour), time.Now().Add(-2*time.Hour)); err != nil {
+		t.Fatalf("chtimes: %v", err)
 	}
-	if len(files) != 2 {
-		t.Fatalf("expected 2 files, got %d", len(files))
+	writeTestFile(t, dir, "new.xml", 600)
+
+	j := NewJanitor(newStorage(t, dir, "1Ki"))
+	deleted, freed, err := j.Rotate(dir)
+	if err != nil {
+		t.Fatalf("Rotate: %v", err)
+	}
+	if deleted != 1 {
+		t.Fatalf("expected 1 deletion, got %d", deleted)
+	}
+	if freed != 600 {
+		t.Errorf("expected 600 bytes freed, got %d", freed)
+	}
+	if _, err := os.Stat(oldPath); !os.IsNotExist(err) {
+		t.Error("old.xml should have been purged")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "new.xml")); err != nil {
+		t.Errorf("new.xml should still exist: %v", err)
 	}
 }
 
 func TestJanitor_Rotate_PurgesFilesOverLimit(t *testing.T) {
 	dir := t.TempDir()
 
-	// Write 3 files of 1 byte each. Set max_size_gb to a negative trick won't work.
-	// Use a subtest with a tiny custom helper that tests Rotate() internals.
-	// Since maxSizeGB is in whole GB, we can't easily trigger rotation with tiny files.
-	// Instead, verify that Rotate() returns 0 when clearly under any real limit.
-	writeTestFile(t, dir, "ecg1.xml", 1)
-	writeTestFile(t, dir, "ecg2.xml", 1)
+	// 3 × 1KiB files, limit = 2Ki → one file must be purged to fit under the cap.
+	for _, name := range []string{"a", "b", "c"} {
+		writeTestFile(t, dir, name+".xml", 1024)
+	}
 
-	j := NewJanitor(config.StorageConfig{VolumePath: dir, MaxSizeGB: 50})
-	deleted, _, err := j.Rotate()
+	j := NewJanitor(newStorage(t, dir, "2Ki"))
+	deleted, freed, err := j.Rotate(dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if deleted != 0 {
-		t.Errorf("expected 0 deletions, got %d", deleted)
+	if deleted != 1 {
+		t.Errorf("expected 1 deletion, got %d", deleted)
 	}
-	// Both files still exist
-	if _, err := os.Stat(filepath.Join(dir, "ecg1.xml")); err != nil {
-		t.Error("ecg1.xml should still exist")
+	if freed != 1024 {
+		t.Errorf("expected 1024 bytes freed, got %d", freed)
 	}
 }
 
 func TestJanitor_Start_DisabledWhenZero(t *testing.T) {
-	j := NewJanitor(config.StorageConfig{VolumePath: t.TempDir(), MaxSizeGB: 0})
+	j := NewJanitor(newStorage(t, t.TempDir(), "0"))
 	j.Start(0) // should not panic, done channel should be closed
 	j.Stop()   // should not block
 }

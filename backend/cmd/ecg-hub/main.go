@@ -320,9 +320,9 @@ func main() {
 	persister.Start()
 	defer persister.Stop()
 
-	// Step 9: Start storage janitor — enforces max_size_gb soft cap by rotating oldest files.
+	// Step 9: Start storage janitor — enforces storage.max_size soft cap by rotating oldest files.
 	janitor := storage.NewJanitor(cfg.Storage)
-	janitor.Start(time.Hour)
+	janitor.Start(time.Minute)
 	defer janitor.Stop()
 
 	port := ":4444"

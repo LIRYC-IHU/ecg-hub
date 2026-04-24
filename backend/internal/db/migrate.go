@@ -2,6 +2,7 @@ package db
 
 import (
 	"fmt"
+	"log/slog"
 
 	"gorm.io/gorm"
 
@@ -31,17 +32,17 @@ func RunMigrations(db *gorm.DB) error {
 		&models.ConnectorJob{},
 		&models.ECGBuffer{},
 	}
-	for _, m := range models {
-		err := db.Migrator().DropTable(m)
-		if err != nil {
-			return fmt.Errorf("db: drop table %s: %w", m, err)
-		}
-		fmt.Printf("Dropped table for %T\n", m)
-	}
+	// for _, m := range models {
+	// 	err := db.Migrator().DropTable(m)
+	// 	if err != nil {
+	// 		return fmt.Errorf("db: drop table %s: %w", m, err)
+	// 	}
+	// 	fmt.Printf("Dropped table for %T\n", m)
+	// }
 	for _, m := range models {
 		err := db.AutoMigrate(m)
 		if err != nil {
-			return fmt.Errorf("db: auto migrate %s: %w", m, err)
+			slog.Warn("db: auto migrate %s: %w", m, err)
 		}
 	}
 
