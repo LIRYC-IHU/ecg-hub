@@ -10,7 +10,9 @@ type ExportJob struct {
 	Status         string     `gorm:"not null;default:'queued';index"`
 	ECGCount       int        `gorm:"not null"`
 	ProcessedCount int        `gorm:"default:0"`
-	Format         string     `gorm:"not null;default:'original'"` // "original" or "xmlfda"
+	// Formats is the list of output formats requested for this job (e.g. ["original", "xmlfda"]).
+	// Stored as JSONB to preserve order and allow repeated downloads in a single ZIP.
+	Formats        []string   `gorm:"type:jsonb;serializer:json;not null"`
 	FilePath       *string    // nil until job completes; path to ZIP on disk
 	Error          *string    // non-nil only when status == "failed"
 	CreatedAt      time.Time  `gorm:"autoCreateTime;index"`

@@ -28,11 +28,14 @@ type patientFetcher interface {
 }
 
 // Job represents a batch export request to be processed by the worker pool.
+// Formats lists every output format to include in the produced ZIP.
+// When more than one format is present, entries are grouped under per-format
+// subfolders inside the archive (e.g. "original/foo.xml", "xmlfda/foo.xml").
 type Job struct {
-	ID     string
-	UserID string
-	ECGIDs []string
-	Format string // "original" or "xmlfda" or "dicom"
+	ID      string
+	UserID  string
+	ECGIDs  []string
+	Formats []string
 }
 
 // WorkerPool processes batch export jobs concurrently (FR19, NFR-SC3).
@@ -143,7 +146,7 @@ func (p *WorkerPool) processJob(job Job) {
 	}
 
 	zipPath := filepath.Join(tmpExportDir(), job.ID+".zip")
-	if err := buildZIP(job, ecgs, zipPath, p.exportRepo, p.bridge, p.patFetcher, job.Format); err != nil {
+	if err := buildZIP(job, ecgs, zipPath, p.exportRepo, p.bridge, p.patFetcher); err != nil {
 		// Remove any partial ZIP left on disk before marking the job failed.
 		os.Remove(zipPath)
 		p.failJob(job.ID, err.Error())
@@ -164,8 +167,15 @@ func (p *WorkerPool) processJob(job Job) {
 }
 
 // buildZIP assembles a ZIP archive at zipPath from the given ECGs.
-// It updates processed_count in the DB after each file.
-func buildZIP(job Job, ecgs []models.ECG, zipPath string, exportRepo *repository.ExportJobRepository, bridge batchConverter, pf patientFetcher, format string) error {
+// It writes one entry per (ecg, format) pair. When job.Formats has more than
+// one entry, each format's files are grouped under a subfolder named after the
+// format. Progress is reported once per ECG (all formats done).
+func buildZIP(job Job, ecgs []models.ECG, zipPath string, exportRepo *repository.ExportJobRepository, bridge batchConverter, pf patientFetcher) error {
+	formats := job.Formats
+	if len(formats) == 0 {
+		return fmt.Errorf("export job %s has no formats", job.ID)
+	}
+
 	f, err := os.Create(zipPath)
 	if err != nil {
 		return fmt.Errorf("create zip file: %w", err)
@@ -175,63 +185,83 @@ func buildZIP(job Job, ecgs []models.ECG, zipPath string, exportRepo *repository
 	zw := zip.NewWriter(f)
 	defer zw.Close()
 
-	nameCount := make(map[string]int, len(ecgs))
+	multiFormat := len(formats) > 1
+	// Per-format name counters so ECGs sharing the same original filename
+	// within the same format folder get disambiguated by ID.
+	nameCounts := make(map[string]map[string]int, len(formats))
+	for _, fmtID := range formats {
+		nameCounts[fmtID] = make(map[string]int, len(ecgs))
+	}
 
 	for i, ecg := range ecgs {
-		name := safeZIPName(ecg.OriginalFilename, ecg.ID, nameCount)
+		for _, fmtID := range formats {
+			entryName := zipEntryName(ecg, fmtID, multiFormat, nameCounts[fmtID])
 
-		// Determine whether to convert or copy original.
-		useConvert := format != "original" && bridge != nil && bridge.SupportsFormat(ecg.Vendor, format)
+			if fmtID == "original" || bridge == nil || !bridge.SupportsFormat(ecg.Vendor, fmtID) {
+				if err := copyOriginalToZip(zw, ecg, entryName); err != nil {
+					return err
+				}
+				continue
+			}
 
-		if useConvert {
-			// Fetch patient demographics for metadata enrichment (nil is OK).
 			var patient *models.Patient
 			if pf != nil {
 				patient, _ = pf.FindByPatientID(ecg.PatientID)
 			}
 
-			converted, convErr := bridge.Convert(context.Background(), ecg.FilePath, ecg.Vendor, format, patient)
+			converted, convErr := bridge.Convert(context.Background(), ecg.FilePath, ecg.Vendor, fmtID, patient)
 			if convErr != nil {
-				return fmt.Errorf("convert ecg %s (%s) to %s: %w", ecg.ID, ecg.FilePath, format, convErr)
+				return fmt.Errorf("convert ecg %s (%s) to %s: %w", ecg.ID, ecg.FilePath, fmtID, convErr)
 			}
-
-			// Replace the extension in the zip entry name.
-			if newExt := outputExtension(format); newExt != "" {
-				origExt := filepath.Ext(name)
-				base := name[:len(name)-len(origExt)]
-				name = base + newExt
-			}
-
-			w, createErr := zw.Create(name)
+			w, createErr := zw.Create(entryName)
 			if createErr != nil {
-				return fmt.Errorf("create zip entry %s: %w", name, createErr)
+				return fmt.Errorf("create zip entry %s: %w", entryName, createErr)
 			}
 			if _, writeErr := w.Write(converted); writeErr != nil {
 				return fmt.Errorf("write converted ecg %s to zip: %w", ecg.ID, writeErr)
 			}
-		} else {
-			src, openErr := os.Open(ecg.FilePath)
-			if openErr != nil {
-				return fmt.Errorf("open ecg %s (%s): %w", ecg.ID, ecg.FilePath, openErr)
-			}
-
-			w, createErr := zw.Create(name)
-			if createErr != nil {
-				src.Close()
-				return fmt.Errorf("create zip entry %s: %w", name, createErr)
-			}
-
-			if _, copyErr := io.Copy(w, src); copyErr != nil {
-				src.Close()
-				return fmt.Errorf("copy ecg %s to zip: %w", ecg.ID, copyErr)
-			}
-			src.Close()
 		}
 
-		// Update progress after each file — best-effort, do not abort on DB error.
+		// Update progress once per processed ECG — best-effort, do not abort on DB error.
 		_ = exportRepo.Update(job.ID, map[string]any{"processed_count": i + 1})
 	}
 
+	return nil
+}
+
+// zipEntryName builds the archive entry path for a given ECG and format.
+// When multiFormat is true, entries live under "<format>/..." subfolders.
+// For non-original formats the file extension is replaced according to outputExtension.
+func zipEntryName(ecg models.ECG, format string, multiFormat bool, counter map[string]int) string {
+	name := safeZIPName(ecg.OriginalFilename, ecg.ID, counter)
+	if format != "original" {
+		if newExt := outputExtension(format); newExt != "" {
+			origExt := filepath.Ext(name)
+			base := name[:len(name)-len(origExt)]
+			name = base + newExt
+		}
+	}
+	if multiFormat {
+		return filepath.ToSlash(filepath.Join(format, name))
+	}
+	return name
+}
+
+// copyOriginalToZip streams the on-disk ECG file into the ZIP writer under entryName.
+func copyOriginalToZip(zw *zip.Writer, ecg models.ECG, entryName string) error {
+	src, openErr := os.Open(ecg.FilePath)
+	if openErr != nil {
+		return fmt.Errorf("open ecg %s (%s): %w", ecg.ID, ecg.FilePath, openErr)
+	}
+	defer src.Close()
+
+	w, createErr := zw.Create(entryName)
+	if createErr != nil {
+		return fmt.Errorf("create zip entry %s: %w", entryName, createErr)
+	}
+	if _, copyErr := io.Copy(w, src); copyErr != nil {
+		return fmt.Errorf("copy ecg %s to zip: %w", ecg.ID, copyErr)
+	}
 	return nil
 }
 
