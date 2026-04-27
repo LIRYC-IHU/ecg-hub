@@ -67,6 +67,7 @@ func (m *Module) Validate(data []byte) error {
 		"doc_version", doc.DocInfo.DocVersion,
 	)
 	if doc.Patient.General.PatientID == "" {
+		recordMissingPatientID()
 		return fmt.Errorf("philips: validate: missing patientid (namespace mismatch or missing field)")
 	}
 	return nil
@@ -122,6 +123,8 @@ func (m *Module) Parse(_ context.Context, data []byte) (*module.ECGMetadata, err
 	if doc.Patient.General.Sex != "" {
 		extra["sex"] = doc.Patient.General.Sex
 	}
+
+	recordDocType(doc.DocInfo.DocType, doc.DocInfo.DocVersion)
 
 	return &module.ECGMetadata{
 		PatientID:       patientID,
