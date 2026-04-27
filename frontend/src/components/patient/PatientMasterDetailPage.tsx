@@ -16,39 +16,6 @@ import { ExportFooter } from "../export/ExportFooter";
 import { downloadECGFormat } from "../../lib/api";
 import type { Patient, ECG } from "../../types";
 
-// ─── Mini ECG sparkline (decorative) ────────────────────────────────────────
-
-function EcgSpark() {
-  const w = 100;
-  const h = 24;
-  const pts: string[] = [];
-  for (let x = 0; x <= w; x += 2) {
-    const phase = (x % 26) / 26;
-    let y = h / 2;
-    if (phase > 0.3 && phase < 0.4) y -= 2;
-    if (phase > 0.4 && phase < 0.5)
-      y += 10 * Math.sin(((phase - 0.4) / 0.1) * Math.PI);
-    if (phase > 0.55 && phase < 0.7) y += 2;
-    pts.push(`${x},${y.toFixed(1)}`);
-  }
-  return (
-    <svg
-      width="100%"
-      height="100%"
-      viewBox={`0 0 ${w} ${h}`}
-      preserveAspectRatio="none"
-    >
-      <polyline
-        points={pts.join(" ")}
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={1.2}
-        className="text-green-400"
-      />
-    </svg>
-  );
-}
-
 // ─── Small helpers ───────────────────────────────────────────────────────────
 
 function PatientAvatar({
@@ -181,7 +148,10 @@ function PatientRow({
         <div className="text-[11px] text-muted-foreground flex gap-1.5 mt-0.5">
           <span className="font-mono">{patient.patient_id}</span>
           <span>·</span>
-          <span>{patient.ecg_count ?? 0} ECG{(patient.ecg_count ?? 0) > 1 ? "s" : ""}</span>
+          <span>
+            {patient.ecg_count ?? 0} ECG
+            {(patient.ecg_count ?? 0) > 1 ? "s" : ""}
+          </span>
         </div>
       </div>
       <button
@@ -227,10 +197,9 @@ function PatientDetail({
   canForceHL7: boolean;
 }) {
   const [selectedECGs, setSelectedECGs] = useState<Set<string>>(new Set());
-  const { ecgs, total, isLoading } = useECGs(
-    patient.id as unknown as number,
-    { per_page: 50 },
-  );
+  const { ecgs, total, isLoading } = useECGs(patient.id as unknown as number, {
+    per_page: 50,
+  });
 
   const pendingCount = ecgs.filter((e) => e.hl7_status === "pending").length;
   const sentCount = ecgs.filter((e) => e.hl7_status === "success").length;
@@ -409,11 +378,6 @@ function PatientDetail({
                   />
                 </div>
 
-                {/* Mini sparkline */}
-                <div className="w-28 h-9 bg-background rounded border border-border p-1.5 shrink-0">
-                  <EcgSpark />
-                </div>
-
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="font-mono text-xs text-foreground">
@@ -572,8 +536,7 @@ export function PatientMasterDetailPage({
                 </div>
               )}
               {sortedPatients.map((patient, i) => {
-                const showDivider =
-                  hasPinnedSection && i === firstNonPinned;
+                const showDivider = hasPinnedSection && i === firstNonPinned;
                 return (
                   <div key={patient.id as unknown as string}>
                     {showDivider && (
@@ -581,14 +544,10 @@ export function PatientMasterDetailPage({
                     )}
                     <PatientRow
                       patient={patient}
-                      isSelected={
-                        selectedPatient?.id === patient.id
-                      }
+                      isSelected={selectedPatient?.id === patient.id}
                       isPinned={pinned.has(patient.patient_id)}
                       onSelect={() => setSelectedPatient(patient)}
-                      onTogglePin={(e) =>
-                        togglePin(patient.patient_id, e)
-                      }
+                      onTogglePin={(e) => togglePin(patient.patient_id, e)}
                     />
                   </div>
                 );
