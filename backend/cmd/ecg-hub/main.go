@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -369,6 +370,23 @@ func main() {
 	janitor := storage.NewJanitor(cfg.Storage)
 	janitor.Start(time.Minute)
 	defer janitor.Stop()
+
+	// Dedicated metrics server — started only when metrics.enabled and metrics.port > 0.
+	// Runs on its own goroutine so it never blocks the main API server.
+	// Useful for Prometheus scraping without exposing /metrics on the public API port.
+	if cfg.Metrics.Enabled && cfg.Metrics.Port > 0 {
+		metricsAddr := fmt.Sprintf(":%d", cfg.Metrics.Port)
+		mux := http.NewServeMux()
+		mux.Handle("/metrics", appmetrics.Handler())
+		srv := &http.Server{Addr: metricsAddr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
+		go func() {
+			slog.Info("metrics: dedicated server started", "addr", metricsAddr)
+			if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+				slog.Error("metrics: server error", "error", err)
+			}
+		}()
+		defer srv.Close()
+	}
 
 	port := ":4444"
 	slog.Info("starting ECG Hub", "port", port)

@@ -81,11 +81,17 @@ func (r *RouterConfig) RegisterRoutes() {
 
 	roleRepo := repository.NewRoleRepo(r.gormDB)
 
-	// === Metrics — only registered when metrics.enabled: true in config ===
+	// === Metrics middleware — active when enabled, regardless of port mode ===
 	if r.cfg.Metrics.Enabled {
-		r.e.GET("/metrics", echo.WrapHandler(appmetrics.Handler()))
 		r.e.Use(appmetrics.Middleware())
-		slog.Info("metrics: endpoint enabled", "path", "/metrics")
+		// Dedicated port: metrics are served by a separate server started in main.go.
+		// No port set: expose /metrics on the main API server.
+		if r.cfg.Metrics.Port == 0 {
+			r.e.GET("/metrics", echo.WrapHandler(appmetrics.Handler()))
+			slog.Info("metrics: endpoint on main server", "path", "/metrics")
+		} else {
+			slog.Info("metrics: endpoint on dedicated server", "port", r.cfg.Metrics.Port)
+		}
 	}
 
 	// === Public routes ===
