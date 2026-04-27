@@ -19,6 +19,7 @@ import (
 	"github.com/LIRYC-IHU/ecg-hub/internal/export"
 	"github.com/LIRYC-IHU/ecg-hub/internal/hl7"
 	"github.com/LIRYC-IHU/ecg-hub/internal/ingestion"
+	appmetrics "github.com/LIRYC-IHU/ecg-hub/internal/metrics"
 	"github.com/LIRYC-IHU/ecg-hub/internal/module"
 	_ "github.com/LIRYC-IHU/ecg-hub/internal/module/dicom"
 	_ "github.com/LIRYC-IHU/ecg-hub/internal/module/nihon-kohden"
@@ -56,6 +57,15 @@ func main() {
 	if err != nil {
 		slog.Error("FATAL: " + err.Error())
 		os.Exit(1)
+	}
+
+	// Step 2a-bis: Start DB metrics if enabled.
+	if cfg.Metrics.Enabled {
+		if sqlDB, err := gormDB.DB(); err == nil {
+			appmetrics.RegisterGORMCallbacks(gormDB)
+			appmetrics.StartPoolExporter(context.Background(), sqlDB, 10*time.Second)
+			slog.Info("metrics: DB instrumentation enabled")
+		}
 	}
 
 	// Step 2b: Run database migrations — idempotent, safe on restart (AC#1, AC#2).
@@ -142,6 +152,39 @@ func main() {
 			if err := s.Start(cfg); err != nil {
 				slog.Error("FATAL: module start failed", "module", m.Name(), "error", err)
 				os.Exit(1)
+			}
+		}
+	}
+
+	// Step 5c: Wire module-level metrics when enabled.
+	if cfg.Metrics.Enabled {
+		for _, m := range activeModules {
+			vendor := m.Name()
+			appmetrics.ModuleActive.WithLabelValues(vendor).Set(1)
+			// Register vendor-specific collectors (EPIC 3 layer B opt-in).
+			if mp, ok := m.(module.MetricsProvider); ok {
+				appmetrics.Registry.MustRegister(mp.Collectors()...)
+			}
+			// Poll Health() every 30s and update ModuleHealth gauge.
+			go func(mod module.Module, name string) {
+				t := time.NewTicker(30 * time.Second)
+				defer t.Stop()
+				for {
+					select {
+					case <-t.C:
+						if mod.Health() == nil {
+							appmetrics.ModuleHealth.WithLabelValues(name).Set(1)
+						} else {
+							appmetrics.ModuleHealth.WithLabelValues(name).Set(0)
+						}
+					}
+				}
+			}(m, vendor)
+			// Set initial health value immediately.
+			if m.Health() == nil {
+				appmetrics.ModuleHealth.WithLabelValues(vendor).Set(1)
+			} else {
+				appmetrics.ModuleHealth.WithLabelValues(vendor).Set(0)
 			}
 		}
 	}
