@@ -2,6 +2,7 @@ package ingestion
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"path/filepath"
@@ -9,9 +10,16 @@ import (
 	"sync"
 	"time"
 
+	"gorm.io/datatypes"
+
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 	"github.com/LIRYC-IHU/ecg-hub/internal/module"
 )
+
+func marshalJSON(v any) (datatypes.JSON, error) {
+	b, err := json.Marshal(v)
+	return datatypes.JSON(b), err
+}
 
 // fileWriter is the storage interface used by Persister (implemented by *storage.Volume).
 type fileWriter interface {
@@ -36,6 +44,11 @@ type ecgInserter interface {
 	Insert(ecg *models.ECG) error
 }
 
+// auditWriter is the minimal interface for writing audit log entries (implemented by *repository.AuditRepository).
+type auditWriter interface {
+	Insert(entry *models.AuditLog) error
+}
+
 // patientUpserter is the repository interface for patient upsert (implemented by *repository.PatientRepository).
 type patientUpserter interface {
 	UpsertWithDemographics(patientID, firstName, lastName, gender string) error
@@ -48,6 +61,8 @@ type Persister struct {
 	volume       fileWriter
 	ecgRepo      ecgInserter
 	patRepo      patientUpserter
+	audit        auditWriter            // nil when audit logging is disabled; guarded by auditMu
+	auditMu      sync.RWMutex
 	enricher     ecgEnricher            // nil when HL7 is disabled; guarded by enricherMu
 	enricherMu   sync.RWMutex           // guards concurrent read (persist) / write (WithEnricher)
 	dispatcher   ecgConnectorDispatcher // nil when connector forwarding is disabled; guarded by dispatcherMu
@@ -84,6 +99,15 @@ func (p *Persister) WithEnricher(e ecgEnricher) *Persister {
 	p.enricherMu.Lock()
 	p.enricher = e
 	p.enricherMu.Unlock()
+	return p
+}
+
+// WithAuditWriter attaches an optional audit writer to the Persister.
+// When set, a "ecg_ingested" entry is written after each successful ECG insert.
+func (p *Persister) WithAuditWriter(a auditWriter) *Persister {
+	p.auditMu.Lock()
+	p.audit = a
+	p.auditMu.Unlock()
 	return p
 }
 
@@ -197,6 +221,28 @@ func (p *Persister) persist(ri RoutedItem) error {
 	}
 	if err := p.ecgRepo.Insert(ecg); err != nil {
 		return fmt.Errorf("persister: insert ecg: %w", err)
+	}
+
+	// Audit log — system action, user_id = "system".
+	p.auditMu.RLock()
+	a := p.audit
+	p.auditMu.RUnlock()
+	if a != nil {
+		details, _ := marshalJSON(map[string]any{
+			"filename":   ri.IngestItem.Filename,
+			"patient_id": ecg.PatientID,
+			"vendor":     ecg.Vendor,
+			"path":       fullPath,
+		})
+		entry := &models.AuditLog{
+			UserID:     "system",
+			Action:     "ecg_ingested",
+			ResourceID: ecg.ID,
+			Details:    details,
+		}
+		if err := a.Insert(entry); err != nil {
+			slog.Warn("ingestion: audit log failed", "ecg_id", ecg.ID, "error", err)
+		}
 	}
 
 	// Fire-and-forget HL7 enrichment. Uses context.Background() so the

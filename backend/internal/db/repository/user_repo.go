@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 	"gorm.io/gorm"
 )
 
@@ -19,8 +18,6 @@ type UserRecord struct {
 	LastLogin  time.Time `gorm:"not null"`
 	UpdateJWT  bool      `gorm:"not null;default:false"`
 
-	AuditLog  []models.AuditLog  `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE"`
-	ExportJob []models.ExportJob `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE"`
 }
 
 func (UserRecord) TableName() string { return "ecg_hub_users" }
