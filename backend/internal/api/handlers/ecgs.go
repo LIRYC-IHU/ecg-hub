@@ -14,6 +14,7 @@ import (
 	"gorm.io/gorm"
 
 	mw "github.com/LIRYC-IHU/ecg-hub/internal/api/middleware"
+	"github.com/LIRYC-IHU/ecg-hub/internal/api/dto"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
 	"github.com/LIRYC-IHU/ecg-hub/internal/ecgmeta"
@@ -91,6 +92,105 @@ func downloadECGHandler(repo ecgByIDFinder, patRepo patientByIDFinder, bridge ex
 
 		// c.Attachment sets Content-Disposition: attachment; filename="..." and streams the file.
 		return c.Attachment(ecg.FilePath, ecg.OriginalFilename)
+	}
+}
+
+// AllECGsParams holds query parameters for GET /api/v1/ecgs.
+type AllECGsParams struct {
+	Q         string `query:"q"`          // search by patient name, patient_id, filename
+	HL7Status string `query:"hl7_status"` // "pending"|"success"|"hl7_exhausted"
+	Vendor    string `query:"vendor"`     // exact vendor match
+	From      string `query:"from"`       // YYYY-MM-DD, inclusive
+	To        string `query:"to"`         // YYYY-MM-DD, inclusive
+	Page      int    `query:"page"`
+	PerPage   int    `query:"per_page"`
+}
+
+// ListAllECGsHandler handles GET /api/v1/ecgs.
+// Returns a paginated, cross-patient ECG timeline sorted by acquisition date desc.
+// Each row embeds patient demographics via a LEFT JOIN on patients.patient_id.
+//
+// Requires: AuthMiddleware, RequirePermission(patient.read)
+func ListAllECGsHandler(db *gorm.DB) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		var params AllECGsParams
+		if err := c.Bind(&params); err != nil {
+			return c.JSON(http.StatusBadRequest, mw.APIError("INVALID_PARAMS", err.Error()))
+		}
+		if params.Page <= 0 {
+			params.Page = 1
+		}
+		if params.PerPage <= 0 {
+			params.PerPage = 50
+		}
+		if params.PerPage > 200 {
+			params.PerPage = 200
+		}
+
+		buildQ := func() *gorm.DB {
+			q := db.Model(&models.ECG{}).
+				Joins("LEFT JOIN patients ON patients.patient_id = ecgs.patient_id")
+			if params.Q != "" {
+				like := "%" + params.Q + "%"
+				q = q.Where("(patients.last_name ILIKE ? OR patients.first_name ILIKE ? OR ecgs.patient_id ILIKE ? OR ecgs.original_filename ILIKE ?)", like, like, like, like)
+			}
+			if params.HL7Status != "" {
+				q = q.Where("ecgs.hl7_status = ?", params.HL7Status)
+			}
+			if params.Vendor != "" {
+				q = q.Where("ecgs.vendor = ?", params.Vendor)
+			}
+			if params.From != "" {
+				if t, err := time.Parse("2006-01-02", params.From); err == nil {
+					q = q.Where("COALESCE(ecgs.recorded_at, ecgs.ingested_at) >= ?", t)
+				}
+			}
+			if params.To != "" {
+				if t, err := time.Parse("2006-01-02", params.To); err == nil {
+					q = q.Where("COALESCE(ecgs.recorded_at, ecgs.ingested_at) < ?", t.AddDate(0, 0, 1))
+				}
+			}
+			return q
+		}
+
+		var total int64
+		if err := buildQ().Count(&total).Error; err != nil {
+			return c.JSON(http.StatusInternalServerError, mw.APIError("DB_ERROR", "count failed"))
+		}
+
+		var rows []dto.EcgWithPatientRow
+		offset := (params.Page - 1) * params.PerPage
+		if err := buildQ().
+			Select("ecgs.*, patients.first_name AS patient_first_name, patients.last_name AS patient_last_name, patients.gender AS patient_gender, patients.date_of_birth AS patient_dob").
+			Order("COALESCE(ecgs.recorded_at, ecgs.ingested_at) DESC").
+			Offset(offset).Limit(params.PerPage).
+			Scan(&rows).Error; err != nil {
+			return c.JSON(http.StatusInternalServerError, mw.APIError("DB_ERROR", "query failed"))
+		}
+
+		result := make([]dto.EcgWithPatientDTO, len(rows))
+		for i := range rows {
+			result[i] = dto.EcgWithPatientToDTO(&rows[i])
+		}
+
+		userID, _ := c.Get(mw.CtxKeyUserID).(string)
+		_ = mw.WriteAuditLog(c.Request().Context(), db, userID, "ecg_search", "", map[string]any{
+			"q":          params.Q,
+			"hl7_status": params.HL7Status,
+			"vendor":     params.Vendor,
+			"from":       params.From,
+			"to":         params.To,
+			"page":       params.Page,
+			"per_page":   params.PerPage,
+			"total":      total,
+		})
+
+		return c.JSON(http.StatusOK, map[string]any{
+			"data":     result,
+			"total":    total,
+			"page":     params.Page,
+			"per_page": params.PerPage,
+		})
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
@@ -32,6 +33,7 @@ func WriteAuditLog(ctx context.Context, db *gorm.DB, userID, action, resourceID 
 		Details:    datatypes.JSON(raw),
 	}
 	if err := db.WithContext(ctx).Create(&entry).Error; err != nil {
+		slog.Error("audit: write log failed", "action", action, "user_id", userID, "resource_id", resourceID, "error", err)
 		return fmt.Errorf("audit: write log: %w", err)
 	}
 	return nil

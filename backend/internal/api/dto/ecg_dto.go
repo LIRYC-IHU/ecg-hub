@@ -6,6 +6,40 @@ import (
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 )
 
+// EcgWithPatientRow is used for scanning joined ECG+patient rows (GET /api/v1/ecgs).
+type EcgWithPatientRow struct {
+	models.ECG
+	PatientFirstName string     `gorm:"column:patient_first_name"`
+	PatientLastName  string     `gorm:"column:patient_last_name"`
+	PatientGender    string     `gorm:"column:patient_gender"`
+	PatientDOB       *time.Time `gorm:"column:patient_dob"`
+}
+
+// EcgWithPatientDTO extends EcgDTO with patient demographics for the timeline view.
+type EcgWithPatientDTO struct {
+	EcgDTO
+	PatientFirstName string  `json:"patient_first_name"`
+	PatientLastName  string  `json:"patient_last_name"`
+	PatientGender    string  `json:"patient_gender"`
+	PatientDOB       *string `json:"patient_dob"` // ISO 8601 UTC or null
+}
+
+// EcgWithPatientToDTO converts a joined ECG+patient scan row to its API representation.
+func EcgWithPatientToDTO(r *EcgWithPatientRow) EcgWithPatientDTO {
+	base := EcgToDTO(&r.ECG)
+	dto := EcgWithPatientDTO{
+		EcgDTO:           base,
+		PatientFirstName: r.PatientFirstName,
+		PatientLastName:  r.PatientLastName,
+		PatientGender:    r.PatientGender,
+	}
+	if r.PatientDOB != nil {
+		s := r.PatientDOB.UTC().Format(time.RFC3339)
+		dto.PatientDOB = &s
+	}
+	return dto
+}
+
 // EcgDTO is the JSON representation of an ECG record returned by the API.
 // NOTE: FilePath is intentionally excluded — it's an internal storage path.
 // Downloads are handled via GET /ecgs/:id/download (Story 3.3).
