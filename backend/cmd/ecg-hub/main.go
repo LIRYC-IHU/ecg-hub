@@ -262,7 +262,9 @@ func main() {
 	vol := storage.NewVolume(cfg.Storage.VolumePath)
 	ecgRepo := repository.NewECGRepository(gormDB)
 	patRepo := repository.NewPatientRepository(gormDB)
-	persister := ingestion.NewPersister(routedQueue, vol, ecgRepo, patRepo)
+	auditRepo := repository.NewAuditRepository(gormDB)
+	persister := ingestion.NewPersister(routedQueue, vol, ecgRepo, patRepo).
+		WithAuditWriter(auditRepo)
 
 	// Wire quarantine recorder — stores failed files to disk + DB.
 	quarantineRepo := repository.NewQuarantineRepository(gormDB)
