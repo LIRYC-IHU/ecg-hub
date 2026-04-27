@@ -46,6 +46,28 @@ func RunMigrations(db *gorm.DB) error {
 			slog.Warn("db: drop export_jobs.format failed", "error", err)
 		}
 	}
+
+	// Widen user_id columns from varchar(36) to text so any external ID length is accepted.
+	// AutoMigrate doesn't alter existing column types, so we do it explicitly.
+	for _, stmt := range []string{
+		`ALTER TABLE audit_logs ALTER COLUMN user_id TYPE text`,
+		`ALTER TABLE export_jobs ALTER COLUMN user_id TYPE text`,
+	} {
+		if err := db.Exec(stmt).Error; err != nil {
+			slog.Warn("db: migrate user_id column type", "stmt", stmt, "error", err)
+		}
+	}
+
+	// Drop the stale FK constraint on audit_logs if it still exists from a previous migration attempt.
+	for _, stmt := range []string{
+		`ALTER TABLE audit_logs DROP CONSTRAINT IF EXISTS fk_ecg_hub_users_audit_log`,
+		`ALTER TABLE export_jobs DROP CONSTRAINT IF EXISTS fk_ecg_hub_users_export_job`,
+	} {
+		if err := db.Exec(stmt).Error; err != nil {
+			slog.Warn("db: drop stale fk constraint", "stmt", stmt, "error", err)
+		}
+	}
+
 	for _, m := range models {
 		err := db.AutoMigrate(m)
 		if err != nil {
