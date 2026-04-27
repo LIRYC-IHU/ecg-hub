@@ -74,6 +74,14 @@ export interface SystemState {
   hl7_exhausted_count: number
 }
 
+// ECGWithPatient extends ECG with patient demographics for the timeline view (GET /api/v1/ecgs).
+export interface ECGWithPatient extends ECG {
+  patient_first_name: string
+  patient_last_name: string
+  patient_gender: string
+  patient_dob: string | null
+}
+
 // API response wrappers
 export interface ListResponse<T> {
   data: T[]
