@@ -92,6 +92,9 @@ func (m *Module) Parse(_ context.Context, data []byte) (*module.ECGMetadata, err
 		extra["modality"] = modality
 	}
 
+	modality, _ := extra["modality"].(string)
+	recordModality(modality)
+
 	return &module.ECGMetadata{
 		PatientID:    strings.TrimSpace(patientID),
 		RecordedAt:   recordedAt,
