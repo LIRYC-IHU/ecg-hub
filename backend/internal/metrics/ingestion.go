@@ -1,0 +1,41 @@
+package metrics
+
+import "github.com/prometheus/client_golang/prometheus"
+
+var (
+	IngestFilesReceived = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "ingest_files_received_total",
+		Help: "Total files received by the ingestion pipeline.",
+	}, []string{"source", "vendor"})
+
+	IngestPipelineDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
+		Name:    "ingest_pipeline_duration_seconds",
+		Help:    "Duration of ingestion pipeline stages.",
+		Buckets: prometheus.DefBuckets,
+	}, []string{"stage"})
+
+	IngestQueueDepth = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "ingest_queue_depth",
+		Help: "Current number of items waiting in the ingest queue.",
+	})
+
+	IngestWorkersBusy = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "ingest_workers_busy",
+		Help: "Number of ingestion workers currently processing an item.",
+	})
+
+	IngestQuarantine = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "ingest_quarantine_total",
+		Help: "Total files sent to quarantine, by reason category.",
+	}, []string{"reason"})
+)
+
+func init() {
+	Registry.MustRegister(
+		IngestFilesReceived,
+		IngestPipelineDuration,
+		IngestQueueDepth,
+		IngestWorkersBusy,
+		IngestQuarantine,
+	)
+}
