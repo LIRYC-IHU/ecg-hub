@@ -13,7 +13,7 @@ type AuditLog struct {
 	ID        string    `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
 	CreatedAt time.Time `gorm:"index"`
 	// No UpdatedAt — audit logs are append-only. UpdatedAt is intentionally absent.
-	UserID     string         `gorm:"type:varchar(36);not null;index"`
+	UserID     string         `gorm:"not null;index"`
 	Action     string         `gorm:"not null"`
 	ResourceID string         `gorm:"not null;index"`
 	Details    datatypes.JSON `gorm:"type:jsonb;not null;default:'{}'"`

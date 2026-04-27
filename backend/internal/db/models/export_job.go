@@ -6,7 +6,7 @@ import "time"
 // Status lifecycle: queued → processing → complete | failed
 type ExportJob struct {
 	ID             string     `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
-	UserID         string     `gorm:"type:varchar(36);not null;index"`
+	UserID         string     `gorm:"not null;index"`
 	Status         string     `gorm:"not null;default:'queued';index"`
 	ECGCount       int        `gorm:"not null"`
 	ProcessedCount int        `gorm:"default:0"`
