@@ -41,6 +41,35 @@ export async function fetchMe(): Promise<MeResponse> {
   return res.json();
 }
 
+export interface AllECGFilters {
+  q?: string;
+  hl7_status?: "pending" | "success" | "hl7_exhausted";
+  vendor?: string;
+  from?: string;
+  to?: string;
+  page?: number;
+  per_page?: number;
+}
+
+export async function fetchAllECGs(
+  filters: AllECGFilters = {},
+): Promise<ListResponse<import("../types").ECGWithPatient>> {
+  const params = new URLSearchParams();
+  if (filters.q) params.set("q", filters.q);
+  if (filters.hl7_status) params.set("hl7_status", filters.hl7_status);
+  if (filters.vendor) params.set("vendor", filters.vendor);
+  if (filters.from) params.set("from", filters.from);
+  if (filters.to) params.set("to", filters.to);
+  params.set("page", String(filters.page ?? 1));
+  params.set("per_page", String(filters.per_page ?? 50));
+  const res = await fetch(`${BASE_URL}/api/v1/ecgs?${params}`);
+  if (!res.ok) {
+    const err: ErrorResponse = await res.json();
+    throw err;
+  }
+  return res.json();
+}
+
 export interface ECGFilters {
   from?: string;
   to?: string;
