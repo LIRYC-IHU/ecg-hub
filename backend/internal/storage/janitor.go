@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	appmetrics "github.com/LIRYC-IHU/ecg-hub/internal/metrics"
 	"github.com/LIRYC-IHU/ecg-hub/internal/config"
 )
 
@@ -86,10 +87,18 @@ func (j *Janitor) run(ctx context.Context, interval time.Duration) {
 func (j *Janitor) rotateOnce() {
 	var Paths = []string{j.cfg.VolumePath, j.cfg.QuarantinePath}
 	for _, path := range Paths {
-		if n, freed, err := j.Rotate(path); err != nil {
+		n, freed, err := j.Rotate(path)
+		if err != nil {
 			slog.Error("janitor: rotation failed", "error", err)
-		} else if n > 0 {
+			continue
+		}
+		if n > 0 {
 			slog.Info("janitor: rotation complete", "files_deleted", n, "freed_bytes", freed)
+		}
+		// Update storage gauges after each rotation pass.
+		if total, files, walkErr := walkFiles(path); walkErr == nil {
+			appmetrics.StorageBytesUsed.WithLabelValues(path).Set(float64(total))
+			appmetrics.StorageFilesTotal.WithLabelValues(path).Set(float64(len(files)))
 		}
 	}
 }
