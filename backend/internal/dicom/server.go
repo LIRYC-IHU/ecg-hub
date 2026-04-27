@@ -123,6 +123,7 @@ func (s *Server) onCStore(
 	item := ingestion.IngestItem{
 		Filename: filename,
 		Data:     raw,
+		Source:   "dicom",
 	}
 
 	// Non-blocking send: if the queue is full, log and return a transient error

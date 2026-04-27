@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/LIRYC-IHU/ecg-hub/internal/metrics"
 	"github.com/LIRYC-IHU/ecg-hub/internal/module"
 )
 
@@ -46,6 +47,13 @@ func (r *Router) Route(ctx context.Context, item IngestItem) (RoutedItem, string
 		return RoutedItem{}, reason, false
 	}
 
+	source := item.Source
+	if source == "" {
+		source = "unknown"
+	}
+	metrics.IngestFilesReceived.WithLabelValues(source, matched.Name()).Inc()
+	metrics.ModuleFilesAccepted.WithLabelValues(matched.Name(), ext).Inc()
+
 	return RoutedItem{
 		IngestItem: item,
 		Meta:       meta,
@@ -84,6 +92,7 @@ func (r *Router) probeModule(ext string, data []byte) (module.Module, bool) {
 		if err == nil {
 			return m, true
 		}
+		metrics.ModuleParseErrors.WithLabelValues(m.Name(), "validate").Inc()
 	}
 	// All candidates rejected the content — fall back to first, let Parse quarantine it.
 	slog.Warn("ingestion: no candidate validated content, falling back to first",

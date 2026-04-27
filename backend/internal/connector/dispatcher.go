@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
+	appmetrics "github.com/LIRYC-IHU/ecg-hub/internal/metrics"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 )
 
@@ -85,17 +86,22 @@ func (d *Dispatcher) forward(s ConnectorSettings, ecg *models.ECG, job *models.C
 		"file", filepath.Base(filePath),
 	)
 
+	connName := s.Connector.Name()
+	fwdStart := time.Now()
 	err := s.Connector.Forward(context.Background(), ecg, filePath)
+	appmetrics.ConnectorRequestDuration.WithLabelValues(connName, "forward").Observe(time.Since(fwdStart).Seconds())
+
 	if err == nil {
+		appmetrics.ConnectorRequestsTotal.WithLabelValues(connName, "sent").Inc()
 		if markErr := d.jobRepo.MarkSent(job.ID); markErr != nil {
 			slog.Warn("connector: mark_sent failed",
-				"connector", s.Connector.Name(),
+				"connector", connName,
 				"job_id", job.ID,
 				"error", markErr,
 			)
 		}
 		slog.Info("connector: sent",
-			"connector", s.Connector.Name(),
+			"connector", connName,
 			"ecg_id", ecg.ID,
 		)
 		return
@@ -104,7 +110,7 @@ func (d *Dispatcher) forward(s ConnectorSettings, ecg *models.ECG, job *models.C
 	// Forward failed.
 	nextAttempts := job.Attempts + 1
 	slog.Warn("connector: forward failed",
-		"connector", s.Connector.Name(),
+		"connector", connName,
 		"ecg_id", ecg.ID,
 		"attempt", nextAttempts,
 		"max_attempts", s.MaxAttempts,
@@ -112,20 +118,22 @@ func (d *Dispatcher) forward(s ConnectorSettings, ecg *models.ECG, job *models.C
 	)
 
 	if nextAttempts >= s.MaxAttempts {
+		appmetrics.ConnectorRequestsTotal.WithLabelValues(connName, "exhausted").Inc()
 		if exhaustErr := d.jobRepo.Exhaust(job.ID, err.Error()); exhaustErr != nil {
 			slog.Warn("connector: exhaust update failed",
-				"connector", s.Connector.Name(),
+				"connector", connName,
 				"job_id", job.ID,
 				"error", exhaustErr,
 			)
 		}
 		slog.Error("connector: exhausted",
-			"connector", s.Connector.Name(),
+			"connector", connName,
 			"ecg_id", ecg.ID,
 			"max_attempts", s.MaxAttempts,
 		)
 		return
 	}
+	appmetrics.ConnectorRequestsTotal.WithLabelValues(connName, "failed").Inc()
 
 	nextRetryAt := time.Now().Add(s.Interval)
 	if failErr := d.jobRepo.MarkFailed(job.ID, err.Error(), nextRetryAt); failErr != nil {

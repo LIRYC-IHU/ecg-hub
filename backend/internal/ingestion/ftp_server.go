@@ -213,6 +213,7 @@ func (f *ingestFile) Close() error {
 	item := IngestItem{
 		Filename: filepath.Base(f.name),
 		Data:     data,
+		Source:   "ftp",
 	}
 	select {
 	case f.queue <- item:

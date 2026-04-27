@@ -8,9 +8,11 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"time"
 
+	appmetrics "github.com/LIRYC-IHU/ecg-hub/internal/metrics"
 	"github.com/LIRYC-IHU/ecg-hub/internal/config"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
@@ -107,6 +109,7 @@ func (p *WorkerPool) Stop() {
 func (p *WorkerPool) EnqueueJob(job Job) bool {
 	select {
 	case p.jobs <- job:
+		appmetrics.ExportJobsTotal.WithLabelValues("queued").Inc()
 		return true
 	case <-p.ctx.Done():
 		slog.Warn("export: cannot enqueue job, pool is stopped", "job_id", job.ID)
@@ -134,23 +137,38 @@ func (p *WorkerPool) worker() {
 
 func (p *WorkerPool) processJob(job Job) {
 	slog.Info("export: processing job", "job_id", job.ID, "ecg_count", len(job.ECGIDs))
+	start := time.Now()
+	formatsCount := strconv.Itoa(len(job.Formats))
 
+	appmetrics.ExportJobsTotal.WithLabelValues("processing").Inc()
 	if err := p.exportRepo.Update(job.ID, map[string]any{"status": "processing"}); err != nil {
 		slog.Error("export: failed to mark job processing", "job_id", job.ID, "error", err)
 	}
 
 	ecgs, err := p.ecgRepo.FindByIDs(job.ECGIDs)
 	if err != nil {
+		appmetrics.ExportJobsTotal.WithLabelValues("failed").Inc()
 		p.failJob(job.ID, fmt.Sprintf("failed to fetch ECG records: %v", err))
 		return
 	}
 
 	zipPath := filepath.Join(tmpExportDir(), job.ID+".zip")
 	if err := buildZIP(job, ecgs, zipPath, p.exportRepo, p.bridge, p.patFetcher); err != nil {
+		appmetrics.ExportJobsTotal.WithLabelValues("failed").Inc()
+		appmetrics.ExportJobDuration.WithLabelValues(formatsCount).Observe(time.Since(start).Seconds())
 		// Remove any partial ZIP left on disk before marking the job failed.
 		os.Remove(zipPath)
 		p.failJob(job.ID, err.Error())
 		return
+	}
+
+	appmetrics.ExportJobDuration.WithLabelValues(formatsCount).Observe(time.Since(start).Seconds())
+	appmetrics.ExportJobsTotal.WithLabelValues("complete").Inc()
+	if info, statErr := os.Stat(zipPath); statErr == nil {
+		appmetrics.ExportZipSizeBytes.Observe(float64(info.Size()))
+	}
+	for _, fmtID := range job.Formats {
+		appmetrics.ExportECGsProcessed.WithLabelValues(fmtID).Add(float64(len(ecgs)))
 	}
 
 	expiresAt := time.Now().Add(p.ttl)

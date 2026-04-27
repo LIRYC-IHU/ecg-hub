@@ -9,6 +9,7 @@ import (
 
 	"gorm.io/datatypes"
 
+	appmetrics "github.com/LIRYC-IHU/ecg-hub/internal/metrics"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 )
 
@@ -113,6 +114,7 @@ func (j *RetryJob) processPending() {
 		slog.Warn("hl7: retry job find pending failed", "error", err)
 		return
 	}
+	appmetrics.HL7PendingGauge.Set(float64(len(ecgs)))
 	for _, ecg := range ecgs {
 		j.processOne(ecg)
 	}
@@ -134,6 +136,7 @@ func (j *RetryJob) processOne(ecg models.ECG) {
 		if newCount >= j.maxRetries {
 			j.exhaust(ecg)
 		} else {
+			appmetrics.HL7RetryAttempts.WithLabelValues("failed").Inc()
 			if updErr := j.ecgRepo.UpdateHL7Lifecycle(ecg.ID, StatusPending, newCount); updErr != nil {
 				slog.Warn("hl7: retry count update failed", "ecg_id", ecg.ID, "error", updErr)
 			}
@@ -150,6 +153,7 @@ func (j *RetryJob) processOne(ecg models.ECG) {
 		slog.Warn("hl7: retry lifecycle success update failed", "ecg_id", ecg.ID, "error", updErr)
 	}
 
+	appmetrics.HL7RetryAttempts.WithLabelValues("success").Inc()
 	slog.Info("hl7: retry succeeded",
 		"ecg_id", ecg.ID,
 		"patient_id", ecg.PatientID,
@@ -159,6 +163,7 @@ func (j *RetryJob) processOne(ecg models.ECG) {
 
 // exhaust sets the ECG to hl7_exhausted, writes an audit log, and fires a webhook notification.
 func (j *RetryJob) exhaust(ecg models.ECG) {
+	appmetrics.HL7RetryAttempts.WithLabelValues("exhausted").Inc()
 	if updErr := j.ecgRepo.UpdateHL7Lifecycle(ecg.ID, StatusExhausted, j.maxRetries); updErr != nil {
 		slog.Warn("hl7: exhaustion status update failed", "ecg_id", ecg.ID, "error", updErr)
 	}

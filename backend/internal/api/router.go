@@ -16,6 +16,7 @@ import (
 	"github.com/LIRYC-IHU/ecg-hub/internal/config"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
 	"github.com/LIRYC-IHU/ecg-hub/internal/export"
+	appmetrics "github.com/LIRYC-IHU/ecg-hub/internal/metrics"
 	"github.com/LIRYC-IHU/ecg-hub/internal/module"
 	"github.com/LIRYC-IHU/ecg-hub/internal/webhook"
 )
@@ -79,6 +80,13 @@ func (r *RouterConfig) RegisterRoutes() {
 	}
 
 	roleRepo := repository.NewRoleRepo(r.gormDB)
+
+	// === Metrics — only registered when metrics.enabled: true in config ===
+	if r.cfg.Metrics.Enabled {
+		r.e.GET("/metrics", echo.WrapHandler(appmetrics.Handler()))
+		r.e.Use(appmetrics.Middleware())
+		slog.Info("metrics: endpoint enabled", "path", "/metrics")
+	}
 
 	// === Public routes ===
 	api := r.e.Group("", mw.HealthzMiddleware(r.authProvider, r.userRepo))

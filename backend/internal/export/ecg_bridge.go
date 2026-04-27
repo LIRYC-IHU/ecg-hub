@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"time"
 
+	appmetrics "github.com/LIRYC-IHU/ecg-hub/internal/metrics"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 )
 
@@ -61,6 +62,7 @@ func (b *ECGBridge) Convert(ctx context.Context, sourcePath, vendor, format stri
 		return nil, fmt.Errorf("%w: %s", ErrFormatNotSupported, key)
 	}
 
+	start := time.Now()
 	ctx, cancel := context.WithTimeout(ctx, b.timeout)
 	defer cancel()
 
@@ -69,7 +71,10 @@ func (b *ECGBridge) Convert(ctx context.Context, sourcePath, vendor, format stri
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
-	if err := cmd.Run(); err != nil {
+	err := cmd.Run()
+	appmetrics.ModuleConversionDuration.WithLabelValues(vendor, format).Observe(time.Since(start).Seconds())
+	if err != nil {
+		appmetrics.ModuleConversionErrors.WithLabelValues(vendor, format).Inc()
 		slog.Error("ecg-bridge: conversion error",
 			"vendor", vendor, "format", format, "binary", binary,
 			"source", sourcePath, "stderr", stderr.String(), "error", err,

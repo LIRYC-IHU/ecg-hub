@@ -12,6 +12,7 @@ import (
 
 	"gorm.io/datatypes"
 
+	appmetrics "github.com/LIRYC-IHU/ecg-hub/internal/metrics"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 	"github.com/LIRYC-IHU/ecg-hub/internal/module"
 )
@@ -142,7 +143,12 @@ func (p *Persister) run() {
 			}
 			return
 		case ri := <-p.routed:
-			if err := p.persist(ri); err != nil {
+			appmetrics.IngestWorkersBusy.Add(1)
+			start := time.Now()
+			err := p.persist(ri)
+			appmetrics.IngestPipelineDuration.WithLabelValues("persist").Observe(time.Since(start).Seconds())
+			appmetrics.IngestWorkersBusy.Add(-1)
+			if err != nil {
 				slog.Error("ingestion: persist failed",
 					"filename", ri.IngestItem.Filename,
 					"patient_id", ri.Meta.PatientID,

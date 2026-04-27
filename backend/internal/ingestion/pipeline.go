@@ -6,8 +6,10 @@ package ingestion
 import (
 	"context"
 	"log/slog"
+	"strings"
 	"sync"
 
+	appmetrics "github.com/LIRYC-IHU/ecg-hub/internal/metrics"
 	"github.com/LIRYC-IHU/ecg-hub/internal/module"
 )
 
@@ -19,6 +21,8 @@ type IngestItem struct {
 	Filename string
 	// Data is the complete raw file content.
 	Data []byte
+	// Source identifies the ingestion channel (e.g. "ftp", "dicom"). Used for metrics.
+	Source string
 }
 
 // IngestQueue carries IngestItems from the FTP receiver to the ingestion pipeline.
@@ -120,8 +124,17 @@ func (d *Dispatcher) run() {
 			}
 			return
 		case item := <-d.ingest:
+			appmetrics.IngestQueueDepth.Set(float64(len(d.ingest)))
 			ri, reason, ok := d.router.Route(d.ctx, item)
 			if !ok {
+				// Extract a bounded reason category for the label (no filename, no cardinality explosion).
+				category := "unknown"
+				if strings.HasPrefix(reason, "no_module") {
+					category = "no_module"
+				} else if strings.HasPrefix(reason, "parse_error") {
+					category = "parse_error"
+				}
+				appmetrics.IngestQuarantine.WithLabelValues(category).Inc()
 				if d.quarantine != nil {
 					if err := d.quarantine.Record(d.ctx, item.Filename, item.Data, reason); err != nil {
 						slog.Error("ingestion: quarantine record failed",
