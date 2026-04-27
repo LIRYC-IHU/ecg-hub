@@ -18,7 +18,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+
 	"github.com/LIRYC-IHU/ecg-hub/internal/config"
+	appmetrics "github.com/LIRYC-IHU/ecg-hub/internal/metrics"
 )
 
 // MetadataPatch carries the editable fields that can be written back to a source file.
@@ -144,17 +147,32 @@ type ECTPProvider interface {
 	ECTPListenPort() int
 }
 
-// SafeParse calls m.Parse with panic recovery.
-// If Parse panics, the panic is logged via slog and an error is returned —
-// the caller receives a non-nil error instead of a crashed goroutine.
+// MetricsProvider is an optional interface for modules that expose domain-specific
+// Prometheus collectors (layer B opt-in metrics). main.go registers these collectors
+// via metrics.Registry.MustRegister after resolving active modules.
+// Only modules listed in modules.active are registered — disabled modules never emit series.
+type MetricsProvider interface {
+	Collectors() []prometheus.Collector
+}
+
+// SafeParse calls m.Parse with panic recovery and Prometheus instrumentation.
+// Parse duration is always observed; errors are counted by kind (parse|panic).
 func SafeParse(ctx context.Context, m Module, data []byte) (meta *ECGMetadata, err error) {
+	start := time.Now()
+	vendor := m.Name()
 	defer func() {
+		appmetrics.ModuleParseDuration.WithLabelValues(vendor).Observe(time.Since(start).Seconds())
 		if r := recover(); r != nil {
-			slog.Error("module: parse panic recovered", "module", m.Name(), "panic", r)
-			err = fmt.Errorf("module %s: parse panicked: %v", m.Name(), r)
+			slog.Error("module: parse panic recovered", "module", vendor, "panic", r)
+			appmetrics.ModuleParseErrors.WithLabelValues(vendor, "panic").Inc()
+			err = fmt.Errorf("module %s: parse panicked: %v", vendor, r)
 		}
 	}()
-	return m.Parse(ctx, data)
+	meta, err = m.Parse(ctx, data)
+	if err != nil {
+		appmetrics.ModuleParseErrors.WithLabelValues(vendor, "parse").Inc()
+	}
+	return meta, err
 }
 
 var (
