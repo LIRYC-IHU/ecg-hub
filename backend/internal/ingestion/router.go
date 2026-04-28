@@ -47,6 +47,13 @@ func (r *Router) Route(ctx context.Context, item IngestItem) (RoutedItem, string
 		return RoutedItem{}, reason, false
 	}
 
+	if strings.TrimSpace(meta.PatientID) == "" {
+		reason := "missing_patient_id: file parsed successfully by module " + matched.Name() + " but no patient ID found (filename: " + item.Filename + ")"
+		slog.Warn("ingestion: missing patient ID, file queued for quarantine",
+			"filename", item.Filename, "module", matched.Name())
+		return RoutedItem{}, reason, false
+	}
+
 	source := item.Source
 	if source == "" {
 		source = "unknown"
