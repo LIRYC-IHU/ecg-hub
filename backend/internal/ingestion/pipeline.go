@@ -133,6 +133,8 @@ func (d *Dispatcher) run() {
 					category = "no_module"
 				} else if strings.HasPrefix(reason, "parse_error") {
 					category = "parse_error"
+				} else if strings.HasPrefix(reason, "missing_patient_id") {
+					category = "missing_patient_id"
 				}
 				appmetrics.IngestQuarantine.WithLabelValues(category).Inc()
 				if d.quarantine != nil {
