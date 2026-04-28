@@ -108,10 +108,10 @@ func main() {
 	// Build ECGBridge — maps vendor names to conversion binaries.
 	// Add new vendors here when ecg-bridge publishes new tools.
 	binaries := map[string]string{
-		"philips:xmlfda":      envOr("BRIDGE_PHILIPS_TO_FDA", "philips-to-fda"),
-		"philips:dicom":       envOr("BRIDGE_PHILIPS_TO_DICOM", "philips-to-dicom"),
-		"dicom:xmlfda":        envOr("BRIDGE_DICOM_TO_FDA", "dicom-to-fda"),
-		"nihon-kohden:xmlfda": envOr("BRIDGE_NK_TO_FDA", "nk-to-fda"),
+		"philips:xmlfda":      bridgeBin("BRIDGE_PHILIPS_TO_FDA", "philips-to-fda"),
+		"philips:dicom":       bridgeBin("BRIDGE_PHILIPS_TO_DICOM", "philips-to-dicom"),
+		"dicom:xmlfda":        bridgeBin("BRIDGE_DICOM_TO_FDA", "dicom-to-fda"),
+		"nihon-kohden:xmlfda": bridgeBin("BRIDGE_NK_TO_FDA", "nk-to-fda"),
 	}
 
 	bridge := export.NewECGBridge(binaries, 5*time.Second)
@@ -405,4 +405,17 @@ func envOr(key, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// bridgeBin resolves a converter binary path.
+// Per-binary env var (e.g. BRIDGE_PHILIPS_TO_FDA) takes precedence.
+// Otherwise: BRIDGE_BIN_DIR/name if BRIDGE_BIN_DIR is set, else bare name (relies on $PATH).
+func bridgeBin(envKey, name string) string {
+	if v := os.Getenv(envKey); v != "" {
+		return v
+	}
+	if dir := os.Getenv("BRIDGE_BIN_DIR"); dir != "" {
+		return dir + "/" + name
+	}
+	return name
 }
