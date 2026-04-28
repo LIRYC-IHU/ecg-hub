@@ -108,9 +108,10 @@ func main() {
 	// Build ECGBridge — maps vendor names to conversion binaries.
 	// Add new vendors here when ecg-bridge publishes new tools.
 	binaries := map[string]string{
-		"philips:xmlfda": envOr("BRIDGE_PHILIPS_TO_FDA", "philips-to-fda"),
-		"philips:dicom":  envOr("BRIDGE_PHILIPS_TO_DICOM", "philips-to-dicom"),
-		"dicom:xmlfda":   envOr("BRIDGE_DICOM_TO_FDA", "dicom-to-fda"),
+		"philips:xmlfda":      envOr("BRIDGE_PHILIPS_TO_FDA", "philips-to-fda"),
+		"philips:dicom":       envOr("BRIDGE_PHILIPS_TO_DICOM", "philips-to-dicom"),
+		"dicom:xmlfda":        envOr("BRIDGE_DICOM_TO_FDA", "dicom-to-fda"),
+		"nihon-kohden:xmlfda": envOr("BRIDGE_NK_TO_FDA", "nk-to-fda"),
 	}
 
 	bridge := export.NewECGBridge(binaries, 5*time.Second)
