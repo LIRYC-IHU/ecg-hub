@@ -11,9 +11,13 @@ import {
 import { useAllECGs } from "../../hooks/useAllECGs";
 import { Spinner } from "../ui/Spinner";
 import { ExportFooter } from "../export/ExportFooter";
+import { DownloadFormatPopup } from "../ecg/DownloadFormatPopup";
 import { downloadECGFormat } from "../../lib/api";
+import { useNotification } from "../../context/NotificationContext";
 import type { AllECGFilters } from "../../lib/api";
 import type { ECGWithPatient } from "../../types";
+
+type ExternalFilters = Pick<AllECGFilters, "vendor" | "device_model" | "hl7_status" | "from" | "to">;
 
 type QuickFilter = "all" | "today" | "pending";
 
@@ -113,14 +117,22 @@ interface Props {
   canRead: boolean;
   canWrite: boolean;
   canForceHL7: boolean;
+  search: string;
+  onSearchChange: (value: string) => void;
+  filters: ExternalFilters;
 }
 
 export function EcgTimelinePage({
   canDelete,
   canRead,
+  search,
+  onSearchChange,
+  filters,
 }: Props) {
-  const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const { notify } = useNotification();
+  const [downloadOpenId, setDownloadOpenId] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState<number>(() => {
@@ -134,9 +146,11 @@ export function EcgTimelinePage({
     return () => clearTimeout(id);
   }, [search]);
 
+  const clearSearch = () => onSearchChange("");
+
   useEffect(() => {
     setPage(1);
-  }, [debouncedSearch, quickFilter, perPage]);
+  }, [debouncedSearch, quickFilter, perPage, filters]);
 
   const handlePerPageChange = (value: number) => {
     setPerPage(value);
@@ -144,15 +158,16 @@ export function EcgTimelinePage({
   };
 
   const today = new Date().toISOString().slice(0, 10);
-  const filters: AllECGFilters = {
+  const apiFilters: AllECGFilters = {
     ...(debouncedSearch ? { q: debouncedSearch } : {}),
     ...(quickFilter === "today" ? { from: today, to: today } : {}),
     ...(quickFilter === "pending" ? { hl7_status: "pending" } : {}),
+    ...filters,
     page,
     per_page: perPage,
   };
 
-  const { ecgs, total, isLoading } = useAllECGs(filters);
+  const { ecgs, total, isLoading } = useAllECGs(apiFilters);
 
   const allChecked =
     ecgs.length > 0 && ecgs.every((e) => selectedECGs.has(e.id as unknown as string));
@@ -204,12 +219,20 @@ export function EcgTimelinePage({
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <input
               autoFocus
-              type="search"
+              type="text"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => onSearchChange(e.target.value)}
               placeholder="Rechercher par patient, identifiant, nom de fichier…"
-              className="w-full pl-10 pr-4 py-2 text-sm bg-muted/50 border-0 rounded-full focus:outline-none focus:ring-2 focus:ring-ring/20 placeholder:text-muted-foreground/60"
+              className={`w-full pl-10 ${search ? "pr-9" : "pr-4"} py-2 text-sm bg-muted/50 border-0 rounded-full focus:outline-none focus:ring-2 focus:ring-ring/20 placeholder:text-muted-foreground/60`}
             />
+            {search && (
+              <button
+                onClick={clearSearch}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
           </div>
           {isLoading ? (
             <Spinner size={15} className="text-muted-foreground shrink-0" />
@@ -375,18 +398,38 @@ export function EcgTimelinePage({
                       onClick={(e) => e.stopPropagation()}
                     >
                       {canRead && (
-                        <button
-                          title="Télécharger"
-                          onClick={() =>
-                            void downloadECGFormat(
-                              ecg.id as unknown as number,
-                              "original",
-                            )
-                          }
-                          className="w-7 h-7 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                        >
-                          <Download className="w-3.5 h-3.5" />
-                        </button>
+                        <>
+                          <button
+                            title="Télécharger"
+                            onClick={() => setDownloadOpenId(id)}
+                            disabled={downloading && downloadOpenId === id}
+                            className="w-7 h-7 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+                          >
+                            {downloading && downloadOpenId === id
+                              ? <Spinner size={13} className="text-muted-foreground" />
+                              : <Download className="w-3.5 h-3.5" />
+                            }
+                          </button>
+                          <DownloadFormatPopup
+                            open={downloadOpenId === id}
+                            onClose={() => setDownloadOpenId(null)}
+                            vendor={ecg.vendor}
+                            busy={downloading}
+                            onConfirm={async (formats) => {
+                              setDownloadOpenId(null);
+                              setDownloading(true);
+                              try {
+                                for (const fmt of formats) {
+                                  await downloadECGFormat(ecg.id as unknown as number, fmt).catch(() => {
+                                    notify("error", "Erreur de téléchargement");
+                                  });
+                                }
+                              } finally {
+                                setDownloading(false);
+                              }
+                            }}
+                          />
+                        </>
                       )}
                     </div>
                   </div>
