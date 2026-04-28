@@ -12,6 +12,7 @@ const PERMISSION_GROUPS = [
   { key: 'ecg',         labelKey: 'admin.roles.group.ecg',         permissions: ['ecg.read', 'ecg.write', 'ecg.download', 'ecg.delete', 'ecg.force_hl7'] },
   { key: 'quarantine',  labelKey: 'admin.roles.group.quarantine',  permissions: ['quarantine.read', 'quarantine.delete'] },
   { key: 'admin',       labelKey: 'admin.roles.group.admin',       permissions: ['admin.users', 'admin.audit', 'admin.system'] },
+  { key: 'swagger',     labelKey: 'admin.roles.group.swagger',     permissions: ['swagger.read'] },
 ]
 
 export function AdminRolesPage() {

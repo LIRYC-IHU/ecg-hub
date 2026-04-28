@@ -161,7 +161,8 @@
         "patient": "Patient",
         "ecg": "ECG",
         "quarantine": "Quarantine",
-        "admin": "Administration"
+        "admin": "Administration",
+        "swagger": "API"
       },
       "perm": {
         "patient_read": "View patients",
@@ -174,7 +175,8 @@
         "quarantine_delete": "Delete quarantine files",
         "admin_users": "Manage roles",
         "admin_audit": "View audit logs",
-        "admin_system": "View system status"
+        "admin_system": "View system status",
+        "swagger_read": "Access API documentation"
       }
     }
   },
