@@ -45,10 +45,22 @@ export interface AllECGFilters {
   q?: string;
   hl7_status?: "pending" | "success" | "hl7_exhausted";
   vendor?: string;
+  device_model?: string;
   from?: string;
   to?: string;
   page?: number;
   per_page?: number;
+}
+
+export interface ECGFilterFacets {
+  vendors: string[];
+  device_models: string[];
+}
+
+export async function fetchECGFilterFacets(): Promise<ECGFilterFacets> {
+  const res = await fetch(`${BASE_URL}/api/v1/ecgs/filters`);
+  if (!res.ok) return { vendors: [], device_models: [] };
+  return res.json();
 }
 
 export async function fetchAllECGs(
@@ -58,6 +70,7 @@ export async function fetchAllECGs(
   if (filters.q) params.set("q", filters.q);
   if (filters.hl7_status) params.set("hl7_status", filters.hl7_status);
   if (filters.vendor) params.set("vendor", filters.vendor);
+  if (filters.device_model) params.set("device_model", filters.device_model);
   if (filters.from) params.set("from", filters.from);
   if (filters.to) params.set("to", filters.to);
   params.set("page", String(filters.page ?? 1));
