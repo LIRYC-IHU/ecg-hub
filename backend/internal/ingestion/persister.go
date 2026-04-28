@@ -2,6 +2,8 @@ package ingestion
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -43,6 +45,7 @@ type ecgConnectorDispatcher interface {
 // ecgInserter is the repository interface for ECG persistence (implemented by *repository.ECGRepository).
 type ecgInserter interface {
 	Insert(ecg *models.ECG) error
+	ExistsByContentHash(hash string) (bool, error)
 }
 
 // auditWriter is the minimal interface for writing audit log entries (implemented by *repository.AuditRepository).
@@ -188,10 +191,22 @@ func buildExtra(meta *module.ECGMetadata) map[string]any {
 //  3. Upsert the patient row
 //  4. Insert the ECG row
 func (p *Persister) persist(ri RoutedItem) error {
+	hash := sha256.Sum256(ri.IngestItem.Data)
+	contentHash := hex.EncodeToString(hash[:])
+
+	exists, err := p.ecgRepo.ExistsByContentHash(contentHash)
+	if err != nil {
+		slog.Warn("ingestion: dedup check failed, proceeding with insert",
+			"filename", ri.IngestItem.Filename, "error", err)
+	} else if exists {
+		slog.Info("ingestion: duplicate file skipped",
+			"filename", ri.IngestItem.Filename, "content_hash", contentHash)
+		return nil
+	}
+
 	ext := strings.ToLower(filepath.Ext(ri.IngestItem.Filename))
 	patientID := ri.Meta.PatientID
 	if patientID == "" {
-		// Module didn't extract a patient ID — fall back to the original filename stem.
 		stem := ri.IngestItem.Filename
 		if e := filepath.Ext(stem); e != "" {
 			stem = stem[:len(stem)-len(e)]
@@ -218,6 +233,7 @@ func (p *Persister) persist(ri RoutedItem) error {
 		Vendor:           ri.Meta.VendorName,
 		FilePath:         fullPath,
 		OriginalFilename: ri.IngestItem.Filename,
+		ContentHash:      contentHash,
 		IngestedAt:       time.Now(),
 		HL7Status:        "pending",
 		Extra:            buildExtra(ri.Meta),

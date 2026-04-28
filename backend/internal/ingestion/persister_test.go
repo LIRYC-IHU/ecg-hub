@@ -36,11 +36,25 @@ func (m *mockVolume) Exists(filename string) bool {
 type mockECGRepo struct {
 	inserted []*models.ECG
 	err      error
+	hashes   map[string]bool
 }
 
 func (m *mockECGRepo) Insert(ecg *models.ECG) error {
 	m.inserted = append(m.inserted, ecg)
+	if m.hashes == nil {
+		m.hashes = make(map[string]bool)
+	}
+	if ecg.ContentHash != "" {
+		m.hashes[ecg.ContentHash] = true
+	}
 	return m.err
+}
+
+func (m *mockECGRepo) ExistsByContentHash(hash string) (bool, error) {
+	if m.hashes == nil {
+		return false, nil
+	}
+	return m.hashes[hash], nil
 }
 
 type upsertCall struct {
