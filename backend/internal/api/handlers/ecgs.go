@@ -90,7 +90,7 @@ func downloadECGHandler(repo ecgByIDFinder, patRepo patientByIDFinder, bridge ex
 				})
 		}
 
-		// c.Attachment sets Content-Disposition: attachment; filename="..." and streams the file.
+		c.Response().Header().Set("Cache-Control", "no-store")
 		return c.Attachment(ecg.FilePath, ecg.OriginalFilename)
 	}
 }
@@ -453,5 +453,6 @@ func handleConvertDownload(
 	// Use mime.FormatMediaType so special characters in the filename are properly encoded.
 	disp := mime.FormatMediaType("attachment", map[string]string{"filename": outName})
 	c.Response().Header().Set("Content-Disposition", disp)
+	c.Response().Header().Set("Cache-Control", "no-store")
 	return c.Blob(http.StatusOK, contentType, outData)
 }

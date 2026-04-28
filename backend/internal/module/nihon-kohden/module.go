@@ -23,7 +23,7 @@ import (
 
 var ECTPPort = 30003
 
-var nkToFDABinary = envOr("BRIDGE_NK_TO_FDA", "converter-fda/bin/nk-to-fda")
+var nkToFDABinary = bridgeBin("BRIDGE_NK_TO_FDA", "nk-to-fda")
 
 var _ module.Module = (*Module)(nil)
 
@@ -50,11 +50,14 @@ type nkMetadataJSON struct {
 	TotalSamples int     `json:"totalSamples"`
 }
 
-func envOr(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
+func bridgeBin(envKey, name string) string {
+	if v := os.Getenv(envKey); v != "" {
 		return v
 	}
-	return fallback
+	if dir := os.Getenv("BRIDGE_BIN_DIR"); dir != "" {
+		return dir + "/" + name
+	}
+	return name
 }
 
 func init() {
