@@ -8,12 +8,16 @@ import {
   Calendar,
   X,
   ChevronRight,
+  Trash2,
 } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { usePatients } from "../../hooks/usePatients";
 import { useECGs } from "../../hooks/useECGs";
 import { Spinner } from "../ui/Spinner";
 import { ExportFooter } from "../export/ExportFooter";
-import { downloadECGFormat } from "../../lib/api";
+import { downloadECGFormat, deleteECG } from "../../lib/api";
+import { useNotification } from "../../context/NotificationContext";
+import { DownloadFormatPopup } from "../ecg/DownloadFormatPopup";
 import type { Patient, ECG } from "../../types";
 
 // ─── Small helpers ───────────────────────────────────────────────────────────
@@ -196,6 +200,23 @@ function PatientDetail({
   canDelete: boolean;
   canForceHL7: boolean;
 }) {
+  const { notify } = useNotification();
+  const queryClient = useQueryClient();
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [downloadOpenId, setDownloadOpenId] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState(false);
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => deleteECG(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["ecgs", patient.id] });
+      notify("success", "ECG supprimé");
+      setConfirmDeleteId(null);
+    },
+    onError: () => {
+      notify("error", "Erreur lors de la suppression");
+      setConfirmDeleteId(null);
+    },
+  });
   const [selectedECGs, setSelectedECGs] = useState<Set<string>>(new Set());
   const { ecgs, total, isLoading } = useECGs(patient.id as unknown as number, {
     per_page: 50,
@@ -403,18 +424,66 @@ function PatientDetail({
                     Ouvrir
                   </button>
                   {canRead && (
-                    <button
-                      title="Télécharger"
-                      onClick={() =>
-                        void downloadECGFormat(
-                          ecg.id as unknown as number,
-                          "original",
-                        )
-                      }
-                      className="w-7 h-7 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                    </button>
+                    <>
+                      <button
+                        title="Télécharger"
+                        onClick={() => setDownloadOpenId(id)}
+                        disabled={downloading && downloadOpenId === id}
+                        className="w-7 h-7 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+                      >
+                        {downloading && downloadOpenId === id
+                          ? <Spinner size={13} className="text-muted-foreground" />
+                          : <Download className="w-3.5 h-3.5" />
+                        }
+                      </button>
+                      <DownloadFormatPopup
+                        open={downloadOpenId === id}
+                        onClose={() => setDownloadOpenId(null)}
+                        vendor={ecg.vendor}
+                        busy={downloading}
+                        onConfirm={async (formats) => {
+                          setDownloadOpenId(null);
+                          setDownloading(true);
+                          try {
+                            for (const fmt of formats) {
+                              await downloadECGFormat(ecg.id as unknown as number, fmt).catch(() => {
+                                notify("error", "Erreur de téléchargement");
+                              });
+                            }
+                          } finally {
+                            setDownloading(false);
+                          }
+                        }}
+                      />
+                    </>
+                  )}
+                  {canDelete && (
+                    confirmDeleteId === id ? (
+                      <>
+                        <button
+                          onClick={() => deleteMutation.mutate(ecg.id as unknown as number)}
+                          disabled={deleteMutation.isPending}
+                          className="text-[10px] font-medium text-destructive hover:underline disabled:opacity-50 flex items-center gap-0.5 px-1"
+                        >
+                          {deleteMutation.isPending && <Spinner size={10} className="text-destructive" />}
+                          Confirmer
+                        </button>
+                        <button
+                          onClick={() => setConfirmDeleteId(null)}
+                          className="text-[10px] text-muted-foreground hover:underline px-1"
+                        >
+                          Annuler
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        onClick={() => setConfirmDeleteId(id)}
+                        className="w-7 h-7 rounded flex items-center justify-center text-destructive/60 hover:text-destructive hover:bg-destructive/10 transition-colors"
+                        title="Supprimer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )
                   )}
                 </div>
               </div>
@@ -442,15 +511,19 @@ interface Props {
   canRead: boolean;
   canWrite: boolean;
   canForceHL7: boolean;
+  search: string;
+  onSearchChange: (value: string) => void;
+  filters: Record<string, string | undefined>;
 }
 
 export function PatientMasterDetailPage({
   canDelete,
   canRead,
   canForceHL7,
+  search,
+  onSearchChange,
 }: Props) {
-  const [search, setSearch] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [pinned, setPinned] = useState<Set<string>>(() => {
     try {
@@ -508,12 +581,20 @@ export function PatientMasterDetailPage({
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <input
               autoFocus
-              type="search"
+              type="text"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => onSearchChange(e.target.value)}
               placeholder="Rechercher un patient…"
-              className="w-full pl-9 pr-3 py-2 text-sm bg-muted/50 border-0 rounded-full focus:outline-none focus:ring-2 focus:ring-ring/20 placeholder:text-muted-foreground/60"
+              className={`w-full pl-9 ${search ? "pr-9" : "pr-3"} py-2 text-sm bg-muted/50 border-0 rounded-full focus:outline-none focus:ring-2 focus:ring-ring/20 placeholder:text-muted-foreground/60`}
             />
+            {search && (
+              <button
+                onClick={() => onSearchChange("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
           </div>
         </div>
 
