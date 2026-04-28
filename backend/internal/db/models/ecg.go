@@ -13,6 +13,7 @@ type ECG struct {
 	Vendor           string         `gorm:"not null"`
 	FilePath         string         `gorm:"not null"`
 	OriginalFilename string         `gorm:"not null"`
+	ContentHash      string         `gorm:"type:varchar(64);uniqueIndex"` // SHA-256 hex digest for deduplication
 	IngestedAt       time.Time      `gorm:"not null;autoCreateTime;index"`
 	RecordedAt       *time.Time     `gorm:"index"`                            // acquisition timestamp from device file; nil for legacy records
 	HL7Status        string         `gorm:"not null;default:'pending';index"` // "pending"|"success"|"hl7_exhausted" — CHECK constraint in DB
