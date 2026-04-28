@@ -97,13 +97,14 @@ func downloadECGHandler(repo ecgByIDFinder, patRepo patientByIDFinder, bridge ex
 
 // AllECGsParams holds query parameters for GET /api/v1/ecgs.
 type AllECGsParams struct {
-	Q         string `query:"q"`          // search by patient name, patient_id, filename
-	HL7Status string `query:"hl7_status"` // "pending"|"success"|"hl7_exhausted"
-	Vendor    string `query:"vendor"`     // exact vendor match
-	From      string `query:"from"`       // YYYY-MM-DD, inclusive
-	To        string `query:"to"`         // YYYY-MM-DD, inclusive
-	Page      int    `query:"page"`
-	PerPage   int    `query:"per_page"`
+	Q           string `query:"q"`            // search by patient name, patient_id, filename
+	HL7Status   string `query:"hl7_status"`   // "pending"|"success"|"hl7_exhausted"
+	Vendor      string `query:"vendor"`       // exact vendor match
+	DeviceModel string `query:"device_model"` // exact device model match (from extra JSONB)
+	From        string `query:"from"`         // YYYY-MM-DD, inclusive
+	To          string `query:"to"`           // YYYY-MM-DD, inclusive
+	Page        int    `query:"page"`
+	PerPage     int    `query:"per_page"`
 }
 
 // ListAllECGsHandler handles GET /api/v1/ecgs.
@@ -139,6 +140,9 @@ func ListAllECGsHandler(db *gorm.DB) echo.HandlerFunc {
 			}
 			if params.Vendor != "" {
 				q = q.Where("ecgs.vendor = ?", params.Vendor)
+			}
+			if params.DeviceModel != "" {
+				q = q.Where("ecgs.extra->>'device_model' = ?", params.DeviceModel)
 			}
 			if params.From != "" {
 				if t, err := time.Parse("2006-01-02", params.From); err == nil {
@@ -190,6 +194,27 @@ func ListAllECGsHandler(db *gorm.DB) echo.HandlerFunc {
 			"total":    total,
 			"page":     params.Page,
 			"per_page": params.PerPage,
+		})
+	}
+}
+
+// ECGFiltersHandler returns distinct filter facets for the ECG search UI.
+// GET /api/v1/ecgs/filters → { vendors: [...], device_models: [...] }
+func ECGFiltersHandler(db *gorm.DB) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		var vendors []string
+		db.Model(&models.ECG{}).Distinct("vendor").Where("vendor != ''").Order("vendor").Pluck("vendor", &vendors)
+
+		var deviceModels []string
+		db.Model(&models.ECG{}).
+			Where("extra->>'device_model' IS NOT NULL AND extra->>'device_model' != ''").
+			Distinct("extra->>'device_model'").
+			Order("extra->>'device_model'").
+			Pluck("extra->>'device_model'", &deviceModels)
+
+		return c.JSON(http.StatusOK, map[string]any{
+			"vendors":       vendors,
+			"device_models": deviceModels,
 		})
 	}
 }

@@ -125,6 +125,9 @@ func (r *RouterConfig) RegisterRoutes() {
 	// Cross-patient ECG timeline (Direction A) — requires patient.read
 	apiV1.GET("/ecgs", handlers.ListAllECGsHandler(r.gormDB), mw.RequirePermission(r.checker, auth.PermPatientRead))
 
+	// ECG filter facets (vendors, device models) — requires patient.read
+	apiV1.GET("/ecgs/filters", handlers.ECGFiltersHandler(r.gormDB), mw.RequirePermission(r.checker, auth.PermPatientRead))
+
 	// ECG download — requires ecg.download
 	apiV1.GET("/ecgs/:id/download", handlers.DownloadECGHandler(r.gormDB, r.bridge), mw.RequirePermission(r.checker, auth.PermECGDownload))
 
