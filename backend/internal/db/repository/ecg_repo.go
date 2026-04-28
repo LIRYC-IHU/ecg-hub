@@ -37,6 +37,15 @@ func (r *ECGRepository) FindByID(id string) (*models.ECG, error) {
 	return &ecg, nil
 }
 
+// ExistsByContentHash returns true if an ECG with the given SHA-256 hash already exists.
+func (r *ECGRepository) ExistsByContentHash(hash string) (bool, error) {
+	var count int64
+	if err := r.db.Model(&models.ECG{}).Where("content_hash = ?", hash).Count(&count).Error; err != nil {
+		return false, fmt.Errorf("ecg_repo: exists by content_hash: %w", err)
+	}
+	return count > 0, nil
+}
+
 // Insert persists a new ECG record. It is the only write operation exposed.
 func (r *ECGRepository) Insert(ecg *models.ECG) error {
 	if err := r.db.Create(ecg).Error; err != nil {
