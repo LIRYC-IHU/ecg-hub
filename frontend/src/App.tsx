@@ -11,6 +11,8 @@ import {
   List,
   PanelLeftOpen,
   Layers,
+  Filter,
+  X,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Spinner } from "./components/ui/Spinner";
@@ -28,7 +30,8 @@ import { AdminSystemPage } from "./components/admin/AdminSystemPage";
 import { AdminRolesPage } from "./components/admin/AdminRolesPage";
 import { AdminAppUsersPage } from "./components/admin/AdminAppUsersPage";
 import { AdminQuarantinePage } from "./components/admin/AdminQuarantinePage";
-import { fetchAdminStats } from "./lib/api";
+import { fetchAdminStats, fetchECGFilterFacets } from "./lib/api";
+import type { AllECGFilters } from "./lib/api";
 import i18n from "./lib/i18n";
 
 type PatientView = "timeline" | "master-detail" | "grouped";
@@ -72,6 +75,21 @@ function App() {
   const [patientView, setPatientView] = useState<PatientView>(() => {
     return (localStorage.getItem("ecghub.patientView") as PatientView) ?? "timeline";
   });
+
+  const [globalSearch, setGlobalSearch] = useState("");
+  const [filters, setFilters] = useState<Pick<AllECGFilters, "vendor" | "device_model" | "hl7_status" | "from" | "to">>({});
+  const [filtersOpen, setFiltersOpen] = useState(false);
+
+  const { data: facets } = useQuery({
+    queryKey: ["ecg-filter-facets"],
+    queryFn: fetchECGFilterFacets,
+    staleTime: 5 * 60_000,
+    enabled: status === "authenticated",
+  });
+
+  const activeFilterCount = Object.values(filters).filter(Boolean).length;
+
+  const clearFilters = () => setFilters({});
 
   const handleViewChange = (v: PatientView) => {
     setPatientView(v);
@@ -152,11 +170,88 @@ function App() {
               element={
                 <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
                   {/* View toggle bar */}
-                  <div className="shrink-0 flex items-center gap-3 px-6 py-2 border-b border-border bg-card/50">
-                    <PatientsViewToggle
-                      view={patientView}
-                      onChange={handleViewChange}
-                    />
+                  <div className="shrink-0 border-b border-border bg-card/50">
+                    <div className="flex items-center gap-3 px-6 py-2">
+                      <PatientsViewToggle
+                        view={patientView}
+                        onChange={handleViewChange}
+                      />
+                      <div className="flex-1" />
+                      <button
+                        onClick={() => setFiltersOpen((v) => !v)}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border transition-colors ${
+                          filtersOpen || activeFilterCount > 0
+                            ? "bg-primary/10 text-primary border-primary/30"
+                            : "text-muted-foreground border-border hover:text-foreground hover:bg-muted/50"
+                        }`}
+                      >
+                        <Filter className="w-3.5 h-3.5" />
+                        Filtres
+                        {activeFilterCount > 0 && (
+                          <span className="ml-1 w-4 h-4 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center">
+                            {activeFilterCount}
+                          </span>
+                        )}
+                      </button>
+                      {activeFilterCount > 0 && (
+                        <button
+                          onClick={clearFilters}
+                          className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          Effacer
+                        </button>
+                      )}
+                    </div>
+                    {filtersOpen && (
+                      <div className="flex items-center gap-3 px-6 py-2 border-t border-border/50 bg-muted/20 flex-wrap">
+                        <select
+                          value={filters.vendor ?? ""}
+                          onChange={(e) => setFilters((f) => ({ ...f, vendor: e.target.value || undefined }))}
+                          className="text-xs border border-border rounded-md px-2.5 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring/20"
+                        >
+                          <option value="">Tous les appareils</option>
+                          {facets?.vendors.map((v) => (
+                            <option key={v} value={v}>{v}</option>
+                          ))}
+                        </select>
+                        <select
+                          value={filters.device_model ?? ""}
+                          onChange={(e) => setFilters((f) => ({ ...f, device_model: e.target.value || undefined }))}
+                          className="text-xs border border-border rounded-md px-2.5 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring/20"
+                        >
+                          <option value="">Tous les modèles</option>
+                          {facets?.device_models.map((m) => (
+                            <option key={m} value={m}>{m}</option>
+                          ))}
+                        </select>
+                        <select
+                          value={filters.hl7_status ?? ""}
+                          onChange={(e) => setFilters((f) => ({ ...f, hl7_status: (e.target.value || undefined) as AllECGFilters["hl7_status"] }))}
+                          className="text-xs border border-border rounded-md px-2.5 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring/20"
+                        >
+                          <option value="">Tous les statuts HL7</option>
+                          <option value="pending">En attente</option>
+                          <option value="success">Envoyé</option>
+                          <option value="hl7_exhausted">Épuisé</option>
+                        </select>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[10px] text-muted-foreground">Du</span>
+                          <input
+                            type="date"
+                            value={filters.from ?? ""}
+                            onChange={(e) => setFilters((f) => ({ ...f, from: e.target.value || undefined }))}
+                            className="text-xs border border-border rounded-md px-2 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring/20"
+                          />
+                          <span className="text-[10px] text-muted-foreground">au</span>
+                          <input
+                            type="date"
+                            value={filters.to ?? ""}
+                            onChange={(e) => setFilters((f) => ({ ...f, to: e.target.value || undefined }))}
+                            className="text-xs border border-border rounded-md px-2 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring/20"
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
                   <div className="flex-1 min-h-0 overflow-hidden">
                     {patientView === "timeline" ? (
@@ -165,6 +260,9 @@ function App() {
                         canForceHL7={canForceHL7}
                         canRead={canRead}
                         canWrite={canWrite}
+                        search={globalSearch}
+                        onSearchChange={setGlobalSearch}
+                        filters={filters}
                       />
                     ) : patientView === "master-detail" ? (
                       <PatientMasterDetailPage
@@ -172,6 +270,9 @@ function App() {
                         canForceHL7={canForceHL7}
                         canRead={canRead}
                         canWrite={canWrite}
+                        search={globalSearch}
+                        onSearchChange={setGlobalSearch}
+                        filters={filters}
                       />
                     ) : (
                       <PatientGroupedPage
@@ -179,6 +280,9 @@ function App() {
                         canForceHL7={canForceHL7}
                         canRead={canRead}
                         canWrite={canWrite}
+                        search={globalSearch}
+                        onSearchChange={setGlobalSearch}
+                        filters={filters}
                       />
                     )}
                   </div>
