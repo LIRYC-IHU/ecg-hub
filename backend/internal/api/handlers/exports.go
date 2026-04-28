@@ -78,6 +78,16 @@ type exportJobResponse struct {
 //	Body: { "ecg_ids": [1, 2, 3], "format": "original" }
 //	201 Created: { "id": "...", "status": "queued", ... }
 //	400 Bad Request: MISSING_ECG_IDS | TOO_MANY_ECGS | ECG_NOT_FOUND
+//
+// @Summary Create batch export job
+// @Tags Exports
+// @Accept json
+// @Produce json
+// @Param body body map[string]interface{} true "Export request: ecg_ids (string[]), formats (string[])"
+// @Success 201 {object} map[string]interface{}
+// @Failure 400 {object} map[string]string
+// @Security BearerAuth
+// @Router /api/v1/exports [post]
 func CreateExportHandler(db *gorm.DB, exportRepo *repository.ExportJobRepository, ecgRepo *repository.ECGRepository, pool *export.WorkerPool) echo.HandlerFunc {
 	return createExportHandler(db, exportRepo, ecgRepo, pool)
 }
@@ -187,6 +197,15 @@ func dedupeFormats(in []string) []string {
 //	GET /api/v1/exports/:id
 //	200 OK: { "id": "...", "status": "...", "processed_count": N, ... }
 //	404 Not Found: job does not exist or belongs to a different user
+//
+// @Summary Get export job status
+// @Tags Exports
+// @Param id path string true "Export job UUID"
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Failure 404 {object} map[string]string
+// @Security BearerAuth
+// @Router /api/v1/exports/{id} [get]
 func GetExportHandler(exportRepo *repository.ExportJobRepository, adminRole string) echo.HandlerFunc {
 	return getExportHandler(exportRepo, adminRole)
 }
@@ -229,6 +248,16 @@ func getExportHandler(exportRepo exportJobFinder, adminRole string) echo.Handler
 // DownloadExportHandler handles GET /api/v1/exports/:id/download.
 // Streams the completed ZIP file to the client with Content-Disposition: attachment.
 // Returns 409 NOT_READY if the job is not yet complete.
+//
+// @Summary Download export ZIP
+// @Tags Exports
+// @Param id path string true "Export job UUID"
+// @Produce octet-stream
+// @Success 200 {file} binary
+// @Failure 404 {object} map[string]string
+// @Failure 409 {object} map[string]string
+// @Security BearerAuth
+// @Router /api/v1/exports/{id}/download [get]
 func DownloadExportHandler(exportRepo *repository.ExportJobRepository, adminRole string) echo.HandlerFunc {
 	return downloadExportHandler(exportRepo, adminRole)
 }

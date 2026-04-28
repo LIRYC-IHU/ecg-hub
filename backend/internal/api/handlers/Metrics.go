@@ -27,6 +27,13 @@ type StorageMetricsResp struct {
 
 // VolumeMetricsHandler  handles GET /api/v1/admin/storage-metrics
 // Returns storage usage metrics for all configured volumes (quarantine, ECG storage, etc).
+//
+// @Summary Storage volume metrics
+// @Tags Admin
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Security BearerAuth
+// @Router /api/v1/admin/storage-metrics [get]
 func VolumeMetricsHandler(cfg *config.Config, db *gorm.DB) echo.HandlerFunc {
 	return func(c echo.Context) error {
 

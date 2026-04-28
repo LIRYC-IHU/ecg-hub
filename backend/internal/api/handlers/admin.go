@@ -18,6 +18,13 @@ import (
 // Returns ECG counts grouped by HL7 status and total patient count.
 //
 // Requires: RequireRole("admin")
+//
+// @Summary System statistics
+// @Tags Admin
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Security BearerAuth
+// @Router /api/v1/admin/stats [get]
 func AdminStatsHandler(db *gorm.DB) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		type row struct {
@@ -69,6 +76,15 @@ func AdminStatsHandler(db *gorm.DB) echo.HandlerFunc {
 // Resets hl7_status to "pending" and hl7_retry_count to 0 so the retry job picks it up.
 //
 // Requires: RequireRole("admin")
+//
+// @Summary Force HL7 retry for an ECG
+// @Tags ECG
+// @Param id path string true "ECG UUID"
+// @Produce json
+// @Success 200 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Security BearerAuth
+// @Router /api/v1/ecgs/{id}/hl7/force [post]
 func ForceHL7Handler(db *gorm.DB) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		id := c.Param("id")
@@ -98,6 +114,13 @@ func ForceHL7Handler(db *gorm.DB) echo.HandlerFunc {
 // Called by the System admin page to display which vendor modules are loaded.
 //
 // Requires: RequirePermission(admin.system)
+//
+// @Summary List active vendor modules
+// @Tags Admin
+// @Produce json
+// @Success 200 {array} map[string]interface{}
+// @Security BearerAuth
+// @Router /api/v1/modules [get]
 func ModulesHandler(activeModules []module.Module) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		type moduleStatus struct {
@@ -128,6 +151,13 @@ func ModulesHandler(activeModules []module.Module) echo.HandlerFunc {
 // Health() dials the connector's ECTP port — may be slow if unreachable.
 //
 // Requires: RequirePermission(admin.system)
+//
+// @Summary List connector status
+// @Tags Admin
+// @Produce json
+// @Success 200 {array} map[string]string
+// @Security BearerAuth
+// @Router /api/v1/admin/connectors [get]
 func ConnectorsHandler(checkers []ConnectorHealthChecker) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		result := make([]ConnectorHealthEntry, 0, len(checkers))
@@ -147,6 +177,13 @@ func ConnectorsHandler(checkers []ConnectorHealthChecker) echo.HandlerFunc {
 // Never exposes the actual secret.
 //
 // Requires: RequireRole("admin")
+//
+// @Summary Webhook configuration status
+// @Tags Admin
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Security BearerAuth
+// @Router /api/v1/admin/webhook [get]
 func WebhookStatusHandler(n *webhook.Notifier) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		return c.JSON(http.StatusOK, n.GetStatus())
@@ -157,6 +194,13 @@ func WebhookStatusHandler(n *webhook.Notifier) echo.HandlerFunc {
 // Fires a test webhook event and returns the HTTP status from the receiver.
 //
 // Requires: RequireRole("admin")
+//
+// @Summary Test webhook
+// @Tags Admin
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Security BearerAuth
+// @Router /api/v1/admin/webhook/test [post]
 func WebhookTestHandler(n *webhook.Notifier) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		statusCode, err := n.Test()

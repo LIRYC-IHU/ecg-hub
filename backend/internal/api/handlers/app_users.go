@@ -16,7 +16,14 @@ type appUserRepo interface {
 }
 
 // ListAppUsersHandler returns all authenticated users with their DB roles.
-// GET /api/v1/admin/app-users
+//
+//	@Summary		List application users
+//	@Description	Returns all authenticated users with their database roles.
+//	@Tags			Users
+//	@Produce		json
+//	@Success		200	{object}	map[string]interface{}
+//	@Security		BearerAuth
+//	@Router			/api/v1/admin/app-users [get]
 func ListAppUsersHandler(repo appUserRepo) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		users, err := repo.List(c.Request().Context())
@@ -31,7 +38,18 @@ func ListAppUsersHandler(repo appUserRepo) echo.HandlerFunc {
 }
 
 // SetAppUserRoleHandler changes the role of a user in ecg_hub_users.
-// PUT /api/v1/admin/app-users/:id/role
+//
+//	@Summary		Set app user role
+//	@Description	Changes the role of a user in the ecg_hub_users table.
+//	@Tags			Users
+//	@Accept			json
+//	@Produce		json
+//	@Param			id		path	string					true	"App user UUID"
+//	@Param			body	body	map[string]interface{}	true	"Role {role: string}"
+//	@Success		204
+//	@Failure		400	{object}	map[string]string
+//	@Security		BearerAuth
+//	@Router			/api/v1/admin/app-users/{id}/role [put]
 func SetAppUserRoleHandler(repo appUserRepo) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		id := c.Param("id")

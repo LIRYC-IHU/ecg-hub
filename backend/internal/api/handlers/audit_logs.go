@@ -37,6 +37,19 @@ type AuditLogListParams struct {
 // Requires: AuthMiddleware (CtxKeyUserID), RequireRole("admin")
 //
 // Response: {"data": [...AuditLogDTO], "total": N, "page": N, "per_page": N}
+//
+// @Summary List audit logs
+// @Tags Audit
+// @Param user_id query string false "Filter by user"
+// @Param action query string false "Filter by action"
+// @Param from query string false "Start date (YYYY-MM-DD)"
+// @Param to query string false "End date (YYYY-MM-DD)"
+// @Param page query int false "Page number" default(1)
+// @Param per_page query int false "Items per page" default(50)
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Security BearerAuth
+// @Router /api/v1/audit-logs [get]
 func ListAuditLogsHandler(db *gorm.DB) echo.HandlerFunc {
 	return listAuditLogsHandler(repository.NewAuditRepository(db))
 }

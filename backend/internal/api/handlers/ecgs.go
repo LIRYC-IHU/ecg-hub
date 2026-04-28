@@ -52,6 +52,18 @@ type patientByIDFinder interface {
 //	404 — ECG record not found in DB, or file missing on disk
 //	422 — vendor not supported for XMLFDA conversion
 //	502 — bridge binary failed
+//
+// @Summary Download ECG file
+// @Tags ECG
+// @Param id path string true "ECG UUID"
+// @Param format query string false "Export format" Enums(original, xmlfda, dicom)
+// @Produce octet-stream
+// @Success 200 {file} binary
+// @Failure 404 {object} map[string]string
+// @Failure 422 {object} map[string]string
+// @Failure 502 {object} map[string]string
+// @Security BearerAuth
+// @Router /api/v1/ecgs/{id}/download [get]
 func DownloadECGHandler(db *gorm.DB, bridge export.Converter) echo.HandlerFunc {
 	return downloadECGHandler(repository.NewECGRepository(db), repository.NewPatientRepository(db), bridge, db)
 }
@@ -112,6 +124,21 @@ type AllECGsParams struct {
 // Each row embeds patient demographics via a LEFT JOIN on patients.patient_id.
 //
 // Requires: AuthMiddleware, RequirePermission(patient.read)
+//
+// @Summary List all ECGs (cross-patient timeline)
+// @Tags ECG
+// @Param q query string false "Search patient name, ID, filename"
+// @Param hl7_status query string false "HL7 status filter" Enums(pending, success, hl7_exhausted)
+// @Param vendor query string false "Vendor filter"
+// @Param device_model query string false "Device model filter"
+// @Param from query string false "Start date (YYYY-MM-DD)"
+// @Param to query string false "End date (YYYY-MM-DD)"
+// @Param page query int false "Page number" default(1)
+// @Param per_page query int false "Items per page" default(50)
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Security BearerAuth
+// @Router /api/v1/ecgs [get]
 func ListAllECGsHandler(db *gorm.DB) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		var params AllECGsParams
@@ -200,6 +227,13 @@ func ListAllECGsHandler(db *gorm.DB) echo.HandlerFunc {
 
 // ECGFiltersHandler returns distinct filter facets for the ECG search UI.
 // GET /api/v1/ecgs/filters → { vendors: [...], device_models: [...] }
+//
+// @Summary Get filter facets (vendors, device models)
+// @Tags ECG
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Security BearerAuth
+// @Router /api/v1/ecgs/filters [get]
 func ECGFiltersHandler(db *gorm.DB) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		var vendors []string
@@ -222,6 +256,14 @@ func ECGFiltersHandler(db *gorm.DB) echo.HandlerFunc {
 // DeleteECGHandler handles DELETE /api/v1/ecgs/:id.
 // Deletes the ECG record from the DB and removes the file from storage.
 // Requires: RequireRole("writer")
+//
+// @Summary Delete ECG
+// @Tags ECG
+// @Param id path string true "ECG UUID"
+// @Success 204
+// @Failure 404 {object} map[string]string
+// @Security BearerAuth
+// @Router /api/v1/ecgs/{id} [delete]
 func DeleteECGHandler(db *gorm.DB) echo.HandlerFunc {
 	ecgRepo := repository.NewECGRepository(db)
 	return func(c echo.Context) error {
@@ -259,6 +301,15 @@ func DeleteECGHandler(db *gorm.DB) echo.HandlerFunc {
 //	GET /api/v1/ecgs/:id/metadata   (requires ecg.read)
 //
 // Response: { "fields": [...], "values": { "last_name": "Doe", ... } }
+//
+// @Summary Get ECG metadata
+// @Tags ECG
+// @Param id path string true "ECG UUID"
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Failure 404 {object} map[string]string
+// @Security BearerAuth
+// @Router /api/v1/ecgs/{id}/metadata [get]
 func ECGMetadataHandler(db *gorm.DB) echo.HandlerFunc {
 	repo := repository.NewECGRepository(db)
 	return func(c echo.Context) error {
@@ -288,6 +339,17 @@ func ECGMetadataHandler(db *gorm.DB) echo.HandlerFunc {
 //
 // Body: { "last_name": "Doe", "recorded_at": "2024-01-15T10:30:00Z", ... }
 // Only keys listed in ecgmeta.EditableFields are accepted. Unknown keys are ignored.
+//
+// @Summary Update ECG metadata
+// @Tags ECG
+// @Param id path string true "ECG UUID"
+// @Accept json
+// @Produce json
+// @Param body body map[string]interface{} true "Metadata fields to update"
+// @Success 200 {object} map[string]interface{}
+// @Failure 404 {object} map[string]string
+// @Security BearerAuth
+// @Router /api/v1/ecgs/{id}/metadata [patch]
 func PatchECGMetadataHandler(db *gorm.DB) echo.HandlerFunc {
 	repo := repository.NewECGRepository(db)
 	return func(c echo.Context) error {

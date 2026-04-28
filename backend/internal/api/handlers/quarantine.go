@@ -37,7 +37,16 @@ func quarantineToDTO(e models.QuarantineEntry) QuarantineEntryDTO {
 
 // ListQuarantineHandler handles GET /api/v1/admin/quarantine.
 // Returns paginated list of quarantine entries, ordered newest-first.
-// Requires: quarantine.read
+//
+//	@Summary		List quarantined files
+//	@Description	Returns a paginated list of quarantine entries, ordered newest-first.
+//	@Tags			Quarantine
+//	@Produce		json
+//	@Param			page		query	int	false	"Page number"
+//	@Param			per_page	query	int	false	"Items per page"
+//	@Success		200	{object}	map[string]interface{}
+//	@Security		BearerAuth
+//	@Router			/api/v1/admin/quarantine [get]
 func ListQuarantineHandler(db *gorm.DB) echo.HandlerFunc {
 	repo := repository.NewQuarantineRepository(db)
 	return func(c echo.Context) error {
@@ -71,7 +80,15 @@ func ListQuarantineHandler(db *gorm.DB) echo.HandlerFunc {
 
 // DeleteQuarantineHandler handles DELETE /api/v1/admin/quarantine/:id.
 // Deletes the DB record and removes the physical file from the quarantine directory.
-// Requires: quarantine.delete
+//
+//	@Summary		Delete quarantine entry
+//	@Description	Deletes the quarantine DB record and removes the physical file from the quarantine directory.
+//	@Tags			Quarantine
+//	@Param			id	path	string	true	"Quarantine entry UUID"
+//	@Success		204
+//	@Failure		404	{object}	map[string]string
+//	@Security		BearerAuth
+//	@Router			/api/v1/admin/quarantine/{id} [delete]
 func DeleteQuarantineHandler(db *gorm.DB) echo.HandlerFunc {
 	repo := repository.NewQuarantineRepository(db)
 	return func(c echo.Context) error {

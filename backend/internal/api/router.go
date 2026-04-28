@@ -97,7 +97,16 @@ func (r *RouterConfig) RegisterRoutes() {
 	// === Public routes ===
 	api := r.e.Group("", mw.HealthzMiddleware(r.authProvider, r.userRepo))
 	api.GET("/healthz", handlers.HealthHandler(pinger, r.dicomStatus, r.ftpStatus, r.ectpStatus, r.connCheckers))
-	api.GET("/swagger/*", echoSwagger.WrapHandler)
+
+	// Swagger UI — requires authentication + ecg.read permission.
+	// Only Patients, ECG and Exports tags are shown (clinical workflows).
+	allowedTags := map[string]bool{"Patients": true, "ECG": true, "Exports": true}
+	r.e.GET("/swagger/doc.json", handlers.SwaggerFilterHandler(allowedTags), mw.AuthMiddleware(r.authProvider, r.userRepo), mw.RequirePermission(r.checker, auth.PermSwaggerRead))
+	swaggerHandler := echoSwagger.EchoWrapHandler(
+		echoSwagger.URL("/swagger/doc.json"),
+		echoSwagger.DocExpansion("list"),
+	)
+	r.e.GET("/swagger/*", swaggerHandler, mw.AuthMiddleware(r.authProvider, r.userRepo), mw.RequirePermission(r.checker, auth.PermSwaggerRead))
 
 	// === Authentication (public — these endpoints issue JWTs) ===
 	r.e.GET("/api/v1/auth/provider", handlers.AuthProviderHandler(r.authProvider))

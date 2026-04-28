@@ -13,7 +13,14 @@ import (
 // Returns all Keycloak users with their current ECG Hub role.
 // Returns 503 if Keycloak Admin API is not configured.
 //
-// Requires: RequireRole("admin")
+//	@Summary		List Keycloak users
+//	@Description	Returns all Keycloak users with their current ECG Hub role. Returns 503 if the Keycloak Admin API is not configured.
+//	@Tags			Users
+//	@Produce		json
+//	@Success		200	{object}	map[string]interface{}
+//	@Failure		503	{object}	map[string]string
+//	@Security		BearerAuth
+//	@Router			/api/v1/admin/users [get]
 func ListUsersHandler(admin *auth.KeycloakAdminClient) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		if admin == nil {
@@ -33,7 +40,17 @@ func ListUsersHandler(admin *auth.KeycloakAdminClient) echo.HandlerFunc {
 // Body: {"role": "reader"|"writer"|"admin"}
 // Assigns the role in Keycloak, replacing any previous ECG Hub role.
 //
-// Requires: RequireRole("admin")
+//	@Summary		Set user role
+//	@Description	Assigns a role in Keycloak, replacing any previous ECG Hub role.
+//	@Tags			Users
+//	@Accept			json
+//	@Produce		json
+//	@Param			id		path	string					true	"Keycloak user UUID"
+//	@Param			body	body	map[string]interface{}	true	"Role assignment {role: string}"
+//	@Success		200		{object}	map[string]interface{}
+//	@Failure		400		{object}	map[string]string
+//	@Security		BearerAuth
+//	@Router			/api/v1/admin/users/{id}/role [put]
 func SetUserRoleHandler(admin *auth.KeycloakAdminClient) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		if admin == nil {

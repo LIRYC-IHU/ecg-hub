@@ -110,7 +110,14 @@ type permissionResolver interface {
 // MeHandler returns the authenticated user's identity, role, and resolved permissions.
 // Protected — requires a valid JWT cookie or Bearer token (enforced by AuthMiddleware).
 //
-// GET /api/v1/auth/me
+//	@Summary		Current user info
+//	@Description	Returns the authenticated user's ID, role, and resolved permissions.
+//	@Tags			auth
+//	@Produce		json
+//	@Success		200	{object}	map[string]interface{}
+//	@Failure		401	{object}	map[string]string	"UNAUTHENTICATED"
+//	@Security		BearerAuth
+//	@Router			/api/v1/auth/me [get]
 func MeHandler(checker permissionResolver) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		userID, _ := c.Get(mw.CtxKeyUserID).(string)
@@ -132,7 +139,11 @@ func MeHandler(checker permissionResolver) echo.HandlerFunc {
 // session is also terminated. For LDAP-only it redirects to the frontend root.
 // Public — no valid JWT required (the user may have an expired or missing token).
 //
-// GET /api/v1/auth/logout
+//	@Summary		Logout
+//	@Description	Clears the JWT cookie and redirects to the identity provider's logout URL (OIDC) or the frontend root (LDAP).
+//	@Tags			auth
+//	@Success		302	"Redirect to logout URL"
+//	@Router			/api/v1/auth/logout [get]
 func LogoutHandler(provider auth.Provider) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		clearJWTCookie(c)

@@ -26,7 +26,14 @@ type roleRequest struct {
 }
 
 // ListRolesHandler returns all roles with their permissions.
-// GET /api/v1/admin/roles
+//
+//	@Summary		List roles
+//	@Description	Returns all roles with their permissions.
+//	@Tags			Roles
+//	@Produce		json
+//	@Success		200	{object}	map[string]interface{}
+//	@Security		BearerAuth
+//	@Router			/api/v1/admin/roles [get]
 func ListRolesHandler(repo roleRepoIface) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		roles, err := repo.List(c.Request().Context())
@@ -41,7 +48,18 @@ func ListRolesHandler(repo roleRepoIface) echo.HandlerFunc {
 }
 
 // CreateRoleHandler creates a new role with permissions.
-// POST /api/v1/admin/roles
+//
+//	@Summary		Create role
+//	@Description	Creates a new role with the given name, description, and permissions.
+//	@Tags			Roles
+//	@Accept			json
+//	@Produce		json
+//	@Param			body	body		map[string]interface{}	true	"Role: name, description, permissions[]"
+//	@Success		201		{object}	map[string]interface{}
+//	@Failure		400		{object}	map[string]string
+//	@Failure		409		{object}	map[string]string
+//	@Security		BearerAuth
+//	@Router			/api/v1/admin/roles [post]
 func CreateRoleHandler(repo roleRepoIface, checker *auth.PermissionChecker) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		var req roleRequest
@@ -61,8 +79,19 @@ func CreateRoleHandler(repo roleRepoIface, checker *auth.PermissionChecker) echo
 }
 
 // UpdateRoleHandler replaces the description and permissions of an existing role.
-// PUT /api/v1/admin/roles/:id
 // Returns 400 if permissions list is empty — every role must have at least one permission.
+//
+//	@Summary		Update role
+//	@Description	Replaces the description and permissions of an existing role.
+//	@Tags			Roles
+//	@Accept			json
+//	@Produce		json
+//	@Param			id		path	string					true	"Role UUID"
+//	@Param			body	body	map[string]interface{}	true	"Updated role fields"
+//	@Success		204
+//	@Failure		400		{object}	map[string]string
+//	@Security		BearerAuth
+//	@Router			/api/v1/admin/roles/{id} [put]
 func UpdateRoleHandler(repo roleRepoIface, checker *auth.PermissionChecker) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		id := c.Param("id")
@@ -99,7 +128,14 @@ func UpdateRoleHandler(repo roleRepoIface, checker *auth.PermissionChecker) echo
 }
 
 // DeleteRoleHandler deletes a role by ID.
-// DELETE /api/v1/admin/roles/:id
+//
+//	@Summary		Delete role
+//	@Description	Deletes a role by its UUID.
+//	@Tags			Roles
+//	@Param			id	path	string	true	"Role UUID"
+//	@Success		204
+//	@Security		BearerAuth
+//	@Router			/api/v1/admin/roles/{id} [delete]
 func DeleteRoleHandler(repo roleRepoIface, checker *auth.PermissionChecker) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		id := c.Param("id")

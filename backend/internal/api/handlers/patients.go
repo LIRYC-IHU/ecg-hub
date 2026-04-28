@@ -34,6 +34,18 @@ var allowedPatientSortBy = map[string]string{
 // Requires: AuthMiddleware (provides CtxKeyUserID), RequireRole("reader")
 //
 // Response: {"data": [...PatientDTO], "total": N, "page": N, "per_page": N}
+//
+// @Summary Search patients
+// @Tags Patients
+// @Param q query string false "Search query"
+// @Param sort_by query string false "Sort field" Enums(patient_id, last_name, created_at)
+// @Param sort_order query string false "Sort order" Enums(asc, desc)
+// @Param page query int false "Page number" default(1)
+// @Param per_page query int false "Items per page" default(50)
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Security BearerAuth
+// @Router /api/v1/patients [get]
 func SearchPatientsHandler(db *gorm.DB) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		var params PatientSearchParams
@@ -116,6 +128,20 @@ type ECGListParams struct {
 // Requires: AuthMiddleware (CtxKeyUserID), RequireRole("reader")
 //
 // Response: {"data": [...EcgDTO], "total": N, "page": N, "per_page": N}
+//
+// @Summary List ECGs for a patient
+// @Tags Patients
+// @Param id path string true "Patient UUID"
+// @Param from query string false "Start date (YYYY-MM-DD)"
+// @Param to query string false "End date (YYYY-MM-DD)"
+// @Param vendor query string false "Vendor filter"
+// @Param hl7_status query string false "HL7 status" Enums(pending, success, hl7_exhausted)
+// @Param page query int false "Page number"
+// @Param per_page query int false "Items per page"
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Security BearerAuth
+// @Router /api/v1/patients/{id}/ecgs [get]
 func ListPatientECGsHandler(db *gorm.DB) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		id := c.Param("id")
