@@ -22,6 +22,7 @@ const (
 	PermAdminUsers       = "admin.users"
 	PermAdminAudit       = "admin.audit"
 	PermAdminSystem      = "admin.system"
+	PermSwaggerRead      = "swagger.read"
 )
 
 // AllPermissions is the ordered list of every permission string in the application.
@@ -37,6 +38,7 @@ var AllPermissions = []string{
 	PermAdminUsers,
 	PermAdminAudit,
 	PermAdminSystem,
+	PermSwaggerRead,
 }
 
 // PermissionChecker resolves a role name → set of permissions.

@@ -102,7 +102,8 @@ func iniRole(db *gorm.DB) error {
 				"quarantine.read", "quarantine.delete",
 				"admin.audit", "admin.system", "admin.users",
 				"ecg.delete", "ecg.download", "ecg.write", "ecg.read",
-				"ecg.force_hl7", "patient.read", "quarantine.delete", "quarantine.read"},
+				"ecg.force_hl7", "patient.read", "quarantine.delete", "quarantine.read",
+				"swagger.read"},
 		},
 		{
 			name:  "reader",
