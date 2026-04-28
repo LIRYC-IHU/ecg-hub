@@ -117,7 +117,7 @@ export async function fetchECGs(
 // triggerBlobDownload fetches a URL and triggers a browser download from a blob.
 // Unlike window.location.href, this allows catching JSON error responses.
 async function triggerBlobDownload(url: string): Promise<void> {
-  const res = await fetch(url);
+  const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) {
     const err: ErrorResponse = await res.json();
     throw err;
@@ -130,8 +130,13 @@ async function triggerBlobDownload(url: string): Promise<void> {
   const a = document.createElement("a");
   a.href = objectUrl;
   a.download = filename;
+  a.style.display = "none";
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(objectUrl);
+  setTimeout(() => {
+    document.body.removeChild(a);
+    URL.revokeObjectURL(objectUrl);
+  }, 100);
 }
 
 // downloadECGFormat triggers a browser download for a specific export format.
