@@ -174,7 +174,11 @@ export async function fetchAdminStats(): Promise<AdminStats> {
 
 export interface ConnectorHealthEntry {
   name: string;
+  protocol?: string;
   status: string; // "ok" or error message
+  host?: string;
+  port?: number;
+  ae_title?: string;
 }
 
 export async function fetchConnectors(): Promise<ConnectorHealthEntry[]> {
