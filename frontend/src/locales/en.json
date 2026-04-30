@@ -91,8 +91,48 @@
     },
     "system": {
       "title": "System state",
+      "subtitle": "Service monitoring and statistics",
       "operational": "All systems operational",
-      "degraded": "System degraded"
+      "degraded": "System degraded",
+      "infrastructure": "Infrastructure",
+      "servicesMonitored": "{{count}} services monitored",
+      "formatsTitle": "Supported ECG formats",
+      "formatsSubtitle": "Auto-detection",
+      "disabled": "Disabled",
+      "service": {
+        "database": "Database",
+        "api": "REST API",
+        "ftp": "FTP Server",
+        "dicom": "DICOM Server",
+        "ectp": "ECTP Server"
+      },
+      "kpi": {
+        "totalEcgs": "Total ECGs",
+        "hl7Sent": "HL7 Sent",
+        "hl7Pending": "Pending",
+        "hl7Exhausted": "Exhausted",
+        "quarantine": "Quarantined"
+      },
+      "connectors": {
+        "title": "Proxy Connectors",
+        "protocolDicom": "DICOM C-STORE",
+        "protocolEctp": "ECTP / FTP"
+      },
+      "webhook": {
+        "title": "Webhook HL7",
+        "enabled": "Enabled",
+        "disabled": "Disabled",
+        "test": "Test",
+        "testing": "Testing…",
+        "secret": "Secret",
+        "secretConfigured": "Configured",
+        "secretMissing": "Missing",
+        "lastTest": "Last test:",
+        "urlCopied": "URL copied",
+        "testOk": "Webhook OK — HTTP {{code}}",
+        "testWarn": "Webhook — HTTP response {{code}}",
+        "testError": "Webhook — unable to reach remote server"
+      }
     },
     "hl7": {
       "forceRetry": "Force HL7 retry"

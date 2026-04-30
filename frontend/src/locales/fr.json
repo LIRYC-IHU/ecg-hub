@@ -91,8 +91,48 @@
     },
     "system": {
       "title": "État du système",
+      "subtitle": "Surveillance des services et statistiques",
       "operational": "Tous les systèmes opérationnels",
-      "degraded": "Système dégradé"
+      "degraded": "Système dégradé",
+      "infrastructure": "Infrastructure",
+      "servicesMonitored": "{{count}} services monitorés",
+      "formatsTitle": "Formats ECG supportés",
+      "formatsSubtitle": "Détection automatique",
+      "disabled": "Désactivé",
+      "service": {
+        "database": "Base de données",
+        "api": "API REST",
+        "ftp": "Serveur FTP",
+        "dicom": "Serveur DICOM",
+        "ectp": "Serveur ECTP"
+      },
+      "kpi": {
+        "totalEcgs": "Total ECGs",
+        "hl7Sent": "Envoyés HL7",
+        "hl7Pending": "En attente",
+        "hl7Exhausted": "Épuisés",
+        "quarantine": "En quarantaine"
+      },
+      "connectors": {
+        "title": "Connecteurs Proxy",
+        "protocolDicom": "DICOM C-STORE",
+        "protocolEctp": "ECTP / FTP"
+      },
+      "webhook": {
+        "title": "Webhook HL7",
+        "enabled": "Activé",
+        "disabled": "Désactivé",
+        "test": "Tester",
+        "testing": "Test…",
+        "secret": "Secret",
+        "secretConfigured": "Configuré",
+        "secretMissing": "Manquant",
+        "lastTest": "Dernier test :",
+        "urlCopied": "URL copiée",
+        "testOk": "Webhook OK — HTTP {{code}}",
+        "testWarn": "Webhook — réponse HTTP {{code}}",
+        "testError": "Webhook — impossible de joindre le serveur distant"
+      }
     },
     "hl7": {
       "forceRetry": "Forcer la tentative HL7"
