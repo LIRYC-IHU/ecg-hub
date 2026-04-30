@@ -163,6 +163,9 @@ func ConnectorsHandler(checkers []ConnectorHealthChecker) echo.HandlerFunc {
 		result := make([]ConnectorHealthEntry, 0, len(checkers))
 		for _, ch := range checkers {
 			entry := ConnectorHealthEntry{Name: ch.Name(), Status: "ok"}
+			if p, ok := ch.(ConnectorProtocoler); ok {
+				entry.Protocol = p.Protocol()
+			}
 			if err := ch.Health(); err != nil {
 				entry.Status = err.Error()
 			}
