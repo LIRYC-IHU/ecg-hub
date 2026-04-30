@@ -94,6 +94,23 @@ proxy:
         port: 21
         # credentials via env vars: POLARIS_FTP_USERNAME / POLARIS_FTP_PASSWORD
 
+    - name: orthanc
+      enabled: false
+      protocol: dicom_cstore
+      filters:
+        extensions: [".dcm"]
+        vendors: ["dicom"]
+      retry:
+        max_attempts: 3
+        interval: 5m
+      dicom:
+        host: pacs.example.com
+        port: 4242
+        calling_ae: ECGHUB
+        called_ae: ORTHANC
+        timeout: 30s
+        # strict_sop: false  # true = reject unknown SOP classes
+
 modules:
   # active: list of ECG format modules to load at startup.
   # Accepted values: philips, dicom
