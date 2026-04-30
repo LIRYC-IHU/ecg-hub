@@ -60,6 +60,7 @@ func NewRouterConfig(e *echo.Echo, gormDB *gorm.DB, authProvider auth.Provider, 
 		ectpStatus:    ectpStatus,
 		exportRepo:    exportRepo,
 		exportPool:    exportPool,
+		connCheckers:  connCheckers,
 		cfg:           cfg,
 	}
 }

@@ -55,11 +55,26 @@ type ConnectorProtocoler interface {
 	Protocol() string
 }
 
+// ConnectorEndpointer is an optional interface a connector can implement
+// to expose its remote host and port in admin/health responses.
+type ConnectorEndpointer interface {
+	Endpoint() (host string, port int)
+}
+
+// ConnectorAETitler is an optional interface a DICOM connector can implement
+// to expose its Called AE Title in admin/health responses.
+type ConnectorAETitler interface {
+	AETitle() string
+}
+
 // ConnectorHealthEntry carries a single connector's health state in the response.
 type ConnectorHealthEntry struct {
 	Name     string `json:"name"`
 	Protocol string `json:"protocol,omitempty"`
-	Status   string `json:"status"` // "ok" or error message
+	Status   string `json:"status"`              // "ok" or error message
+	Host     string `json:"host,omitempty"`
+	Port     int    `json:"port,omitempty"`
+	AETitle  string `json:"ae_title,omitempty"`
 }
 
 // HealthResponse is the JSON body returned by GET /healthz.
@@ -94,17 +109,7 @@ func HealthHandler(pinger DBPinger, dicom DICOMStatus, ftp FTPStatus, ectp ECTPS
 		ctx, cancel := context.WithTimeout(c.Request().Context(), 3*time.Second)
 		defer cancel()
 
-		connEntries := make([]ConnectorHealthEntry, 0, len(connCheckers))
-		for _, ch := range connCheckers {
-			entry := ConnectorHealthEntry{Name: ch.Name(), Status: "ok"}
-			if p, ok := ch.(ConnectorProtocoler); ok {
-				entry.Protocol = p.Protocol()
-			}
-			if err := ch.Health(); err != nil {
-				entry.Status = err.Error()
-			}
-			connEntries = append(connEntries, entry)
-		}
+		connEntries := buildConnectorEntries(connCheckers)
 
 		role, _ := c.Get(mw.CtxKeyRole).(string)
 		if role == "admin" {
@@ -146,4 +151,25 @@ func HealthHandler(pinger DBPinger, dicom DICOMStatus, ftp FTPStatus, ectp ECTPS
 			Status: "ok",
 		})
 	}
+}
+
+func buildConnectorEntries(checkers []ConnectorHealthChecker) []ConnectorHealthEntry {
+	entries := make([]ConnectorHealthEntry, 0, len(checkers))
+	for _, ch := range checkers {
+		entry := ConnectorHealthEntry{Name: ch.Name(), Status: "ok"}
+		if p, ok := ch.(ConnectorProtocoler); ok {
+			entry.Protocol = p.Protocol()
+		}
+		if ep, ok := ch.(ConnectorEndpointer); ok {
+			entry.Host, entry.Port = ep.Endpoint()
+		}
+		if ae, ok := ch.(ConnectorAETitler); ok {
+			entry.AETitle = ae.AETitle()
+		}
+		if err := ch.Health(); err != nil {
+			entry.Status = err.Error()
+		}
+		entries = append(entries, entry)
+	}
+	return entries
 }

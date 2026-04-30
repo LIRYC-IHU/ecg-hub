@@ -160,18 +160,7 @@ func ModulesHandler(activeModules []module.Module) echo.HandlerFunc {
 // @Router /api/v1/admin/connectors [get]
 func ConnectorsHandler(checkers []ConnectorHealthChecker) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		result := make([]ConnectorHealthEntry, 0, len(checkers))
-		for _, ch := range checkers {
-			entry := ConnectorHealthEntry{Name: ch.Name(), Status: "ok"}
-			if p, ok := ch.(ConnectorProtocoler); ok {
-				entry.Protocol = p.Protocol()
-			}
-			if err := ch.Health(); err != nil {
-				entry.Status = err.Error()
-			}
-			result = append(result, entry)
-		}
-		return c.JSON(http.StatusOK, result)
+		return c.JSON(http.StatusOK, buildConnectorEntries(checkers))
 	}
 }
 
