@@ -57,6 +57,7 @@ func (m *mockECGRepo) ExistsByContentHash(hash string) (bool, error) {
 	return m.hashes[hash], nil
 }
 
+
 type upsertCall struct {
 	patientID, firstName, lastName, gender string
 }

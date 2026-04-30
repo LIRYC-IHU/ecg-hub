@@ -298,3 +298,4 @@ func (p *Persister) persist(ri RoutedItem) error {
 	)
 	return nil
 }
+
