@@ -1,3 +1,16 @@
+// @title ECG Hub API
+// @version 1.0
+// @description API for ECG file ingestion, storage, conversion, and clinical workflow management.
+//
+// @contact.name LIRYC-IHU
+// @contact.url https://www.ihu-liryc.fr
+//
+// @host localhost
+// @BasePath /api/v1
+//
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
 package main
 
 import (
@@ -8,6 +21,7 @@ import (
 	"os"
 	"time"
 
+	_ "github.com/LIRYC-IHU/ecg-hub/docs"
 	"github.com/LIRYC-IHU/ecg-hub/internal/api"
 	apihandlers "github.com/LIRYC-IHU/ecg-hub/internal/api/handlers"
 	"github.com/LIRYC-IHU/ecg-hub/internal/auth"
