@@ -27,6 +27,7 @@ import (
 	"github.com/LIRYC-IHU/ecg-hub/internal/auth"
 	config "github.com/LIRYC-IHU/ecg-hub/internal/config"
 	"github.com/LIRYC-IHU/ecg-hub/internal/connector"
+	dicomconn "github.com/LIRYC-IHU/ecg-hub/internal/connector/dicom"
 	"github.com/LIRYC-IHU/ecg-hub/internal/connector/polaris"
 	dbpkg "github.com/LIRYC-IHU/ecg-hub/internal/db"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
@@ -241,6 +242,13 @@ func main() {
 			switch connCfg.Protocol {
 			case "ectp_ftp":
 				c = polaris.New(connCfg)
+			case "dicom_cstore":
+				dc, err := dicomconn.New(connCfg)
+				if err != nil {
+					slog.Error("FATAL: "+err.Error())
+					os.Exit(1)
+				}
+				c = dc
 			default:
 				slog.Warn("connector: unknown protocol, skipping",
 					"name", connCfg.Name, "protocol", connCfg.Protocol)
