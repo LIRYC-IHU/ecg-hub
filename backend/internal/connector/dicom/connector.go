@@ -35,8 +35,10 @@ func New(cfg config.ConnectorConfig) (*DICOMConnector, error) {
 	return &DICOMConnector{cfg: cfg, client: client}, nil
 }
 
-func (c *DICOMConnector) Name() string     { return c.cfg.Name }
-func (c *DICOMConnector) Protocol() string { return c.cfg.Protocol }
+func (c *DICOMConnector) Name() string              { return c.cfg.Name }
+func (c *DICOMConnector) Protocol() string           { return c.cfg.Protocol }
+func (c *DICOMConnector) Endpoint() (string, int)    { return c.cfg.DICOM.Host, c.cfg.DICOM.Port }
+func (c *DICOMConnector) AETitle() string            { return c.cfg.DICOM.CalledAE }
 
 // Accepts reports whether this connector should forward the given ECG.
 // Empty filter slices mean "accept all" for that dimension.
