@@ -257,11 +257,12 @@ type Proxy struct {
 type ConnectorConfig struct {
 	Name     string               `mapstructure:"name"`
 	Enabled  bool                 `mapstructure:"enabled"`
-	Protocol string               `mapstructure:"protocol"` // "ectp_ftp" | "dicom"
+	Protocol string               `mapstructure:"protocol"` // "ectp_ftp" | "dicom_cstore"
 	Filters  ConnectorFilters     `mapstructure:"filters"`
 	Retry    ConnectorRetryConfig `mapstructure:"retry"`
-	ECTP     ECTPClientConfig     `mapstructure:"ectp"`
-	FTP      FTPConnectorConfig   `mapstructure:"ftp"`
+	ECTP  ECTPClientConfig      `mapstructure:"ectp"`
+	FTP   FTPConnectorConfig   `mapstructure:"ftp"`
+	DICOM DICOMConnectorConfig `mapstructure:"dicom"`
 
 	// Secrets — populated from env vars after YAML loading (NFR-S2).
 	// Convention: <UPPER(name)>_FTP_USERNAME / <UPPER(name)>_FTP_PASSWORD
@@ -299,4 +300,15 @@ type ECTPClientConfig struct {
 type FTPConnectorConfig struct {
 	Host string `mapstructure:"host"`
 	Port int    `mapstructure:"port"`
+}
+
+// DICOMConnectorConfig holds settings for the outbound DICOM C-STORE SCU connection.
+type DICOMConnectorConfig struct {
+	Host      string `mapstructure:"host"`
+	Port      int    `mapstructure:"port"`
+	CallingAE string `mapstructure:"calling_ae"`
+	CalledAE  string `mapstructure:"called_ae"`
+	TLS       bool   `mapstructure:"tls"`
+	Timeout   string `mapstructure:"timeout"`
+	StrictSOP bool   `mapstructure:"strict_sop"`
 }
