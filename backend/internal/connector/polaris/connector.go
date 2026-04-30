@@ -43,7 +43,8 @@ func New(cfg config.ConnectorConfig) *PolarisConnector {
 }
 
 // Name returns the connector identifier — matches pacs.connectors[].name in config.yaml.
-func (c *PolarisConnector) Name() string { return c.cfg.Name }
+func (c *PolarisConnector) Name() string     { return c.cfg.Name }
+func (c *PolarisConnector) Protocol() string { return c.cfg.Protocol }
 
 // Accepts reports whether this connector should forward the given ECG.
 // Filters are applied on extension (from OriginalFilename) and vendor name.
