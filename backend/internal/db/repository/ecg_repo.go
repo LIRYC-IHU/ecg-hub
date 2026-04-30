@@ -46,6 +46,19 @@ func (r *ECGRepository) ExistsByContentHash(hash string) (bool, error) {
 	return count > 0, nil
 }
 
+// FindByContentHash returns the first ECG matching the given SHA-256 hash.
+// Returns ErrECGNotFound if no record matches.
+func (r *ECGRepository) FindByContentHash(hash string) (*models.ECG, error) {
+	var ecg models.ECG
+	if err := r.db.Where("content_hash = ?", hash).First(&ecg).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrECGNotFound
+		}
+		return nil, fmt.Errorf("ecg_repo: find by content_hash: %w", err)
+	}
+	return &ecg, nil
+}
+
 // Insert persists a new ECG record. It is the only write operation exposed.
 func (r *ECGRepository) Insert(ecg *models.ECG) error {
 	if err := r.db.Create(ecg).Error; err != nil {
