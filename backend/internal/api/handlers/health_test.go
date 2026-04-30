@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	mw "github.com/LIRYC-IHU/ecg-hub/internal/api/middleware"
 	"github.com/labstack/echo/v4"
 )
 
@@ -21,6 +22,7 @@ func TestHealthHandler_Healthy(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	c.Set(mw.CtxKeyRole, "admin")
 
 	handler := HealthHandler(&mockPinger{err: nil}, DICOMStatus{}, FTPStatus{}, ECTPStatus{}, nil)
 	if err := handler(c); err != nil {
@@ -43,6 +45,7 @@ func TestHealthHandler_Degraded(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	c.Set(mw.CtxKeyRole, "admin")
 
 	handler := HealthHandler(&mockPinger{err: fmt.Errorf("connection refused")}, DICOMStatus{}, FTPStatus{}, ECTPStatus{}, nil)
 	if err := handler(c); err != nil {
@@ -65,6 +68,7 @@ func TestHealthHandler_DICOMFields(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	c.Set(mw.CtxKeyRole, "admin")
 
 	handler := HealthHandler(&mockPinger{err: nil}, DICOMStatus{Enabled: true, Port: 11112}, FTPStatus{}, ECTPStatus{}, nil)
 	if err := handler(c); err != nil {
@@ -84,6 +88,7 @@ func TestHealthHandler_DICOMDisabled(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	c.Set(mw.CtxKeyRole, "admin")
 
 	handler := HealthHandler(&mockPinger{err: nil}, DICOMStatus{Enabled: false, Port: 0}, FTPStatus{}, ECTPStatus{}, nil)
 	if err := handler(c); err != nil {
@@ -100,6 +105,7 @@ func TestHealthHandler_FTPFields(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	c.Set(mw.CtxKeyRole, "admin")
 
 	handler := HealthHandler(&mockPinger{err: nil}, DICOMStatus{}, FTPStatus{Enabled: true, Port: 2121}, ECTPStatus{}, nil)
 	if err := handler(c); err != nil {
@@ -119,6 +125,7 @@ func TestHealthHandler_FTPDisabled(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	rec := httptest.NewRecorder()
 	c := e.NewContext(req, rec)
+	c.Set(mw.CtxKeyRole, "admin")
 
 	handler := HealthHandler(&mockPinger{err: nil}, DICOMStatus{}, FTPStatus{Enabled: false, Port: 0}, ECTPStatus{}, nil)
 	if err := handler(c); err != nil {

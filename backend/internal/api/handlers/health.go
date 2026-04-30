@@ -49,10 +49,17 @@ type ConnectorHealthChecker interface {
 	Health() error
 }
 
+// ConnectorProtocoler is an optional interface a connector can implement
+// to expose its protocol type in admin/health responses.
+type ConnectorProtocoler interface {
+	Protocol() string
+}
+
 // ConnectorHealthEntry carries a single connector's health state in the response.
 type ConnectorHealthEntry struct {
-	Name   string `json:"name"`
-	Status string `json:"status"` // "ok" or error message
+	Name     string `json:"name"`
+	Protocol string `json:"protocol,omitempty"`
+	Status   string `json:"status"` // "ok" or error message
 }
 
 // HealthResponse is the JSON body returned by GET /healthz.
@@ -90,6 +97,9 @@ func HealthHandler(pinger DBPinger, dicom DICOMStatus, ftp FTPStatus, ectp ECTPS
 		connEntries := make([]ConnectorHealthEntry, 0, len(connCheckers))
 		for _, ch := range connCheckers {
 			entry := ConnectorHealthEntry{Name: ch.Name(), Status: "ok"}
+			if p, ok := ch.(ConnectorProtocoler); ok {
+				entry.Protocol = p.Protocol()
+			}
 			if err := ch.Health(); err != nil {
 				entry.Status = err.Error()
 			}
