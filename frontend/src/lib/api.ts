@@ -46,6 +46,7 @@ export interface AllECGFilters {
   hl7_status?: "pending" | "success" | "hl7_exhausted";
   vendor?: string;
   device_model?: string;
+  file_format?: string;
   from?: string;
   to?: string;
   page?: number;
@@ -55,6 +56,7 @@ export interface AllECGFilters {
 export interface ECGFilterFacets {
   vendors: string[];
   device_models: string[];
+  file_formats: string[];
 }
 
 export async function fetchECGFilterFacets(): Promise<ECGFilterFacets> {
@@ -71,6 +73,7 @@ export async function fetchAllECGs(
   if (filters.hl7_status) params.set("hl7_status", filters.hl7_status);
   if (filters.vendor) params.set("vendor", filters.vendor);
   if (filters.device_model) params.set("device_model", filters.device_model);
+  if (filters.file_format) params.set("file_format", filters.file_format);
   if (filters.from) params.set("from", filters.from);
   if (filters.to) params.set("to", filters.to);
   params.set("page", String(filters.page ?? 1));
