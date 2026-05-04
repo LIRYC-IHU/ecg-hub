@@ -235,6 +235,16 @@
     "file": "Fichier",
     "files": "Fichiers"
   },
+  "filters": {
+    "label": "Filtres",
+    "clear": "Effacer",
+    "allVendors": "Tous les appareils",
+    "allModels": "Tous les modèles",
+    "allFormats": "Tous les formats",
+    "allHL7": "Tous les statuts HL7",
+    "from": "Du",
+    "to": "au"
+  },
   "nav": {
     "patients": "Patients",
     "users": "Droits",

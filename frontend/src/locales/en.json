@@ -235,6 +235,16 @@
     "files": "File",
     "files": "Files"
   },
+  "filters": {
+    "label": "Filters",
+    "clear": "Clear",
+    "allVendors": "All vendors",
+    "allModels": "All models",
+    "allFormats": "All formats",
+    "allHL7": "All HL7 statuses",
+    "from": "From",
+    "to": "to"
+  },
   "nav": {
     "patients": "Patients",
     "users": "Rights",
