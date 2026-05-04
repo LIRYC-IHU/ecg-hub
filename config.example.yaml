@@ -72,6 +72,7 @@ metrics:
 dicom:
   enabled: false
   # port: 11112
+  # echo_enabled: true
   # ae_title: ECG-HUB
 
 proxy:
