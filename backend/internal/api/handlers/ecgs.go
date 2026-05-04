@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -113,6 +114,7 @@ type AllECGsParams struct {
 	HL7Status   string `query:"hl7_status"`   // "pending"|"success"|"hl7_exhausted"
 	Vendor      string `query:"vendor"`       // exact vendor match
 	DeviceModel string `query:"device_model"` // exact device model match (from extra JSONB)
+	FileFormat  string `query:"file_format"`  // file extension filter (e.g. ".xml", ".dat", ".dcm")
 	From        string `query:"from"`         // YYYY-MM-DD, inclusive
 	To          string `query:"to"`           // YYYY-MM-DD, inclusive
 	Page        int    `query:"page"`
@@ -131,6 +133,7 @@ type AllECGsParams struct {
 // @Param hl7_status query string false "HL7 status filter" Enums(pending, success, hl7_exhausted)
 // @Param vendor query string false "Vendor filter"
 // @Param device_model query string false "Device model filter"
+// @Param file_format query string false "File extension filter (e.g. .xml, .dat, .dcm)"
 // @Param from query string false "Start date (YYYY-MM-DD)"
 // @Param to query string false "End date (YYYY-MM-DD)"
 // @Param page query int false "Page number" default(1)
@@ -170,6 +173,9 @@ func ListAllECGsHandler(db *gorm.DB) echo.HandlerFunc {
 			}
 			if params.DeviceModel != "" {
 				q = q.Where("ecgs.extra->>'device_model' = ?", params.DeviceModel)
+			}
+			if params.FileFormat != "" {
+				q = q.Where("LOWER(substring(ecgs.original_filename from '\\.([^.]+)$')) = LOWER(?)", strings.TrimPrefix(params.FileFormat, "."))
 			}
 			if params.From != "" {
 				if t, err := time.Parse("2006-01-02", params.From); err == nil {
@@ -226,9 +232,9 @@ func ListAllECGsHandler(db *gorm.DB) echo.HandlerFunc {
 }
 
 // ECGFiltersHandler returns distinct filter facets for the ECG search UI.
-// GET /api/v1/ecgs/filters → { vendors: [...], device_models: [...] }
+// GET /api/v1/ecgs/filters → { vendors: [...], device_models: [...], file_formats: [...] }
 //
-// @Summary Get filter facets (vendors, device models)
+// @Summary Get filter facets (vendors, device models, file formats)
 // @Tags ECG
 // @Produce json
 // @Success 200 {object} map[string]interface{}
@@ -246,9 +252,17 @@ func ECGFiltersHandler(db *gorm.DB) echo.HandlerFunc {
 			Order("extra->>'device_model'").
 			Pluck("extra->>'device_model'", &deviceModels)
 
+		var fileFormats []string
+		db.Model(&models.ECG{}).
+			Where("original_filename LIKE '%.%'").
+			Distinct("LOWER(substring(original_filename from '\\.([^.]+)$'))").
+			Order("LOWER(substring(original_filename from '\\.([^.]+)$'))").
+			Pluck("LOWER(substring(original_filename from '\\.([^.]+)$'))", &fileFormats)
+
 		return c.JSON(http.StatusOK, map[string]any{
 			"vendors":       vendors,
 			"device_models": deviceModels,
+			"file_formats":  fileFormats,
 		})
 	}
 }
