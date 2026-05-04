@@ -221,9 +221,10 @@ type MetricsConfig struct {
 
 // DICOMConfig holds DICOM C-STORE server settings (FR2, Phase 2).
 type DICOMConfig struct {
-	Enabled bool   `mapstructure:"enabled"`
-	Port    int    `mapstructure:"port"`
-	AETitle string `mapstructure:"ae_title"`
+	Enabled     bool   `mapstructure:"enabled"`
+	Port        int    `mapstructure:"port"`
+	AETitle     string `mapstructure:"ae_title"`
+	EchoEnabled bool   `mapstructure:"echo_enabled"`
 	// TLS enables TLS on the DICOM connection. Required in production (NFR-S1). tls: false is dev-only.
 	TLS bool `mapstructure:"tls"`
 	// CertFile is the path to the TLS certificate PEM file. Required when tls: true.
