@@ -13,6 +13,8 @@ import (
 	"crypto/tls"
 	"fmt"
 	"log/slog"
+	"strings"
+	"time"
 
 	dicomio "github.com/apaladiychuk/go-dicom/dicomio"
 	legacydicom "github.com/apaladiychuk/go-dicom"
@@ -114,11 +116,7 @@ func (s *Server) onCStore(
 		return dimse.Status{Status: dimse.StatusNotAuthorized, ErrorComment: err.Error()}
 	}
 
-	// Use the SOPInstanceUID as the filename so downstream tracing is easy.
-	filename := sopInstanceUID + ".dcm"
-	if sopInstanceUID == "" {
-		filename = "unknown.dcm"
-	}
+	filename := buildDICOMFilename(data, sopInstanceUID)
 
 	item := ingestion.IngestItem{
 		Filename: filename,
@@ -170,4 +168,52 @@ func reconstructDICOM(
 	}
 
 	return buf.Bytes(), nil
+}
+
+// buildDICOMFilename extracts PatientID and StudyDate/StudyTime from the raw
+// DICOM data elements to produce a human-readable filename like
+// "BS1174_20260430T092816_dicom.dcm". Falls back to sopInstanceUID.dcm on
+// parse errors or missing tags.
+func buildDICOMFilename(data []byte, sopInstanceUID string) string {
+	fallback := sopInstanceUID + ".dcm"
+	if sopInstanceUID == "" {
+		fallback = "unknown.dcm"
+	}
+
+	ds, err := legacydicom.ReadDataSetInBytes(data, legacydicom.ReadOptions{})
+	if err != nil {
+		return fallback
+	}
+
+	patientID := extractTagString(ds, legacytag.PatientID)
+	if patientID == "" {
+		return fallback
+	}
+
+	studyDate := extractTagString(ds, legacytag.StudyDate)
+	studyTime := extractTagString(ds, legacytag.StudyTime)
+
+	var ts string
+	if studyDate != "" {
+		ts = strings.TrimSpace(studyDate)
+		if len(studyTime) >= 6 {
+			ts += "T" + strings.TrimSpace(studyTime[:6])
+		}
+	} else {
+		ts = time.Now().Format("20060102T150405")
+	}
+
+	return fmt.Sprintf("%s_%s_dicom.dcm", strings.TrimSpace(patientID), ts)
+}
+
+func extractTagString(ds *legacydicom.DataSet, t legacytag.Tag) string {
+	elem, err := ds.FindElementByTag(t)
+	if err != nil {
+		return ""
+	}
+	s, err := elem.GetString()
+	if err != nil {
+		return ""
+	}
+	return s
 }
