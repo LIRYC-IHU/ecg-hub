@@ -17,7 +17,7 @@ import { useNotification } from "../../context/NotificationContext";
 import type { AllECGFilters } from "../../lib/api";
 import type { ECGWithPatient } from "../../types";
 
-type ExternalFilters = Pick<AllECGFilters, "vendor" | "device_model" | "hl7_status" | "from" | "to">;
+type ExternalFilters = Pick<AllECGFilters, "vendor" | "device_model" | "file_format" | "hl7_status" | "from" | "to">;
 
 type QuickFilter = "all" | "today" | "pending";
 
