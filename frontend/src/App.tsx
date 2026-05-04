@@ -71,13 +71,13 @@ function PatientsViewToggle({
 
 function App() {
   const { status, user, logout, hasPermission } = useAuth();
-  const { i18n: i18next } = useTranslation();
+  const { t, i18n: i18next } = useTranslation();
   const [patientView, setPatientView] = useState<PatientView>(() => {
     return (localStorage.getItem("ecghub.patientView") as PatientView) ?? "timeline";
   });
 
   const [globalSearch, setGlobalSearch] = useState("");
-  const [filters, setFilters] = useState<Pick<AllECGFilters, "vendor" | "device_model" | "hl7_status" | "from" | "to">>({});
+  const [filters, setFilters] = useState<Pick<AllECGFilters, "vendor" | "device_model" | "file_format" | "hl7_status" | "from" | "to">>({});
   const [filtersOpen, setFiltersOpen] = useState(false);
 
   const { data: facets } = useQuery({
@@ -186,7 +186,7 @@ function App() {
                         }`}
                       >
                         <Filter className="w-3.5 h-3.5" />
-                        Filtres
+                        {t("filters.label")}
                         {activeFilterCount > 0 && (
                           <span className="ml-1 w-4 h-4 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center">
                             {activeFilterCount}
@@ -198,7 +198,7 @@ function App() {
                           onClick={clearFilters}
                           className="text-xs text-muted-foreground hover:text-foreground transition-colors"
                         >
-                          Effacer
+                          {t("filters.clear")}
                         </button>
                       )}
                     </div>
@@ -209,7 +209,7 @@ function App() {
                           onChange={(e) => setFilters((f) => ({ ...f, vendor: e.target.value || undefined }))}
                           className="text-xs border border-border rounded-md px-2.5 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring/20"
                         >
-                          <option value="">Tous les appareils</option>
+                          <option value="">{t("filters.allVendors")}</option>
                           {facets?.vendors.map((v) => (
                             <option key={v} value={v}>{v}</option>
                           ))}
@@ -219,9 +219,19 @@ function App() {
                           onChange={(e) => setFilters((f) => ({ ...f, device_model: e.target.value || undefined }))}
                           className="text-xs border border-border rounded-md px-2.5 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring/20"
                         >
-                          <option value="">Tous les modèles</option>
+                          <option value="">{t("filters.allModels")}</option>
                           {facets?.device_models.map((m) => (
                             <option key={m} value={m}>{m}</option>
+                          ))}
+                        </select>
+                        <select
+                          value={filters.file_format ?? ""}
+                          onChange={(e) => setFilters((f) => ({ ...f, file_format: e.target.value || undefined }))}
+                          className="text-xs border border-border rounded-md px-2.5 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring/20"
+                        >
+                          <option value="">{t("filters.allFormats")}</option>
+                          {facets?.file_formats?.map((fmt) => (
+                            <option key={fmt} value={fmt}>.{fmt}</option>
                           ))}
                         </select>
                         <select
@@ -229,20 +239,20 @@ function App() {
                           onChange={(e) => setFilters((f) => ({ ...f, hl7_status: (e.target.value || undefined) as AllECGFilters["hl7_status"] }))}
                           className="text-xs border border-border rounded-md px-2.5 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring/20"
                         >
-                          <option value="">Tous les statuts HL7</option>
-                          <option value="pending">En attente</option>
-                          <option value="success">Envoyé</option>
-                          <option value="hl7_exhausted">Épuisé</option>
+                          <option value="">{t("filters.allHL7")}</option>
+                          <option value="pending">{t("ecg.status.pending")}</option>
+                          <option value="success">{t("ecg.status.success")}</option>
+                          <option value="hl7_exhausted">{t("ecg.status.hl7_exhausted")}</option>
                         </select>
                         <div className="flex items-center gap-1.5">
-                          <span className="text-[10px] text-muted-foreground">Du</span>
+                          <span className="text-[10px] text-muted-foreground">{t("filters.from")}</span>
                           <input
                             type="date"
                             value={filters.from ?? ""}
                             onChange={(e) => setFilters((f) => ({ ...f, from: e.target.value || undefined }))}
                             className="text-xs border border-border rounded-md px-2 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring/20"
                           />
-                          <span className="text-[10px] text-muted-foreground">au</span>
+                          <span className="text-[10px] text-muted-foreground">{t("filters.to")}</span>
                           <input
                             type="date"
                             value={filters.to ?? ""}
