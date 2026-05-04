@@ -63,6 +63,12 @@ func (s *Server) Start() error {
 		TLSConfig: tlsCfg,
 		CStore:    s.onCStore,
 	}
+	if s.cfg.DICOM.EchoEnabled {
+		params.CEcho = func(_ netdicom.ConnectionState) dimse.Status {
+			slog.Debug("dicom: C-ECHO received")
+			return dimse.Success
+		}
+	}
 
 	addr := fmt.Sprintf(":%d", s.cfg.DICOM.Port)
 	sp, err := netdicom.NewServiceProvider(params, addr)
@@ -76,6 +82,7 @@ func (s *Server) Start() error {
 			"port", s.cfg.DICOM.Port,
 			"ae_title", s.cfg.DICOM.AETitle,
 			"tls", s.cfg.DICOM.TLS,
+			"echo", s.cfg.DICOM.EchoEnabled,
 		)
 		sp.Run() // blocks; logs internally on accept errors
 	}()
