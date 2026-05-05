@@ -7,6 +7,7 @@ import (
 	"time"
 
 	mw "github.com/LIRYC-IHU/ecg-hub/internal/api/middleware"
+	appmetrics "github.com/LIRYC-IHU/ecg-hub/internal/metrics"
 	"github.com/labstack/echo/v4"
 )
 
@@ -168,6 +169,9 @@ func buildConnectorEntries(checkers []ConnectorHealthChecker) []ConnectorHealthE
 		}
 		if err := ch.Health(); err != nil {
 			entry.Status = err.Error()
+			appmetrics.ConnectorHealthStatus.WithLabelValues(entry.Name, entry.Protocol).Set(0)
+		} else {
+			appmetrics.ConnectorHealthStatus.WithLabelValues(entry.Name, entry.Protocol).Set(1)
 		}
 		entries = append(entries, entry)
 	}
