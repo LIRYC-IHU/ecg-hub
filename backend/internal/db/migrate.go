@@ -28,6 +28,7 @@ func RunMigrations(db *gorm.DB) error {
 		&repository.RolePermRecord{},
 		&repository.UserRecord{},
 		&appmodels.ExportJob{},
+		&appmodels.ExportJobECG{},
 		&appmodels.NihonKohdenTransfer{},
 		&appmodels.ConnectorJob{},
 		&appmodels.ECGBuffer{},
