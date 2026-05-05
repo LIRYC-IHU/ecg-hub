@@ -24,6 +24,7 @@ import (
 
 	"github.com/LIRYC-IHU/ecg-hub/internal/config"
 	"github.com/LIRYC-IHU/ecg-hub/internal/ingestion"
+	appmetrics "github.com/LIRYC-IHU/ecg-hub/internal/metrics"
 )
 
 // Server wraps a DICOM C-STORE SCP and pushes received files onto an IngestQueue.
@@ -65,6 +66,7 @@ func (s *Server) Start() error {
 	}
 	if s.cfg.DICOM.EchoEnabled {
 		params.CEcho = func(_ netdicom.ConnectionState) dimse.Status {
+			appmetrics.DICOMSCPCEchoReceived.Inc()
 			slog.Debug("dicom: C-ECHO received")
 			return dimse.Success
 		}
@@ -116,6 +118,7 @@ func (s *Server) onCStore(
 ) dimse.Status {
 	raw, err := reconstructDICOM(transferSyntaxUID, sopClassUID, sopInstanceUID, data)
 	if err != nil {
+		appmetrics.DICOMSCPErrors.WithLabelValues("reconstruct").Inc()
 		slog.Error("dicom: failed to reconstruct DICOM file",
 			"sop_instance_uid", sopInstanceUID,
 			"error", err,
@@ -135,12 +138,15 @@ func (s *Server) onCStore(
 	// so the DICOM device can retry rather than silently drop the file.
 	select {
 	case s.queue <- item:
+		appmetrics.DICOMSCPFilesReceived.Inc()
+		appmetrics.DICOMSCPBytesReceived.Add(float64(len(raw)))
 		slog.Info("dicom: file queued for ingestion",
 			"filename", filename,
 			"size_bytes", len(raw),
 		)
 		return dimse.Success
 	default:
+		appmetrics.DICOMSCPErrors.WithLabelValues("queue_full").Inc()
 		slog.Error("dicom: IngestQueue full — C-STORE rejected, device should retry",
 			"filename", filename,
 		)
