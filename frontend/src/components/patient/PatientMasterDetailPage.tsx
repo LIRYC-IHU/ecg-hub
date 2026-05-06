@@ -7,8 +7,9 @@ import {
   Eye,
   Calendar,
   X,
-  ChevronRight,
   Trash2,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { usePatients } from "../../hooks/usePatients";
@@ -120,6 +121,88 @@ function ageFromDOB(dob: string | null): number | null {
   return age;
 }
 
+// ─── Full-page patient grid (no patient selected) ───────────────────────────
+
+function PatientGrid({
+  patients,
+  pinned,
+  onSelect,
+  onTogglePin,
+  isLoading,
+}: {
+  patients: Patient[];
+  pinned: Set<string>;
+  onSelect: (p: Patient) => void;
+  onTogglePin: (patientId: string, e: React.MouseEvent) => void;
+  isLoading: boolean;
+}) {
+  if (isLoading) {
+    return (
+      <div className="flex justify-center py-16">
+        <Spinner size={24} className="text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (patients.length === 0) {
+    return (
+      <p className="text-sm text-muted-foreground text-center py-16">
+        Aucun patient trouvé
+      </p>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-1 p-4">
+      {patients.map((patient) => {
+        const isPinned = pinned.has(patient.patient_id);
+        const age = ageFromDOB(patient.date_of_birth);
+        return (
+          <div
+            key={patient.id}
+            onClick={() => onSelect(patient)}
+            className="group flex items-center gap-4 px-4 py-3 rounded-lg border border-border bg-card hover:bg-muted/40 hover:border-primary/30 cursor-pointer transition-all duration-150"
+          >
+            <PatientAvatar patient={patient} size={36} />
+            <div className="min-w-0 w-48">
+              <div className="text-sm font-medium text-foreground truncate">
+                {patient.last_name}, {patient.first_name}
+              </div>
+              <div className="text-[11px] text-muted-foreground font-mono mt-0.5">
+                {patient.patient_id}
+              </div>
+            </div>
+            <div className="flex items-center gap-4 flex-1 text-[11px] text-muted-foreground">
+              <span>
+                {patient.ecg_count ?? 0} ECG{(patient.ecg_count ?? 0) > 1 ? "s" : ""}
+              </span>
+              {age !== null && (
+                <span>{age} ans</span>
+              )}
+              {patient.last_activity && (
+                <span>{formatDate(patient.last_activity)}</span>
+              )}
+            </div>
+            <button
+              onClick={(e) => onTogglePin(patient.patient_id, e)}
+              className={`p-1.5 rounded transition-colors ${
+                isPinned
+                  ? "text-amber-400"
+                  : "text-muted-foreground/20 group-hover:text-muted-foreground/50"
+              }`}
+            >
+              <Star
+                className="w-3.5 h-3.5"
+                fill={isPinned ? "currentColor" : "none"}
+              />
+            </button>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── Patient row in the left panel ──────────────────────────────────────────
 
 function PatientRow({
@@ -172,17 +255,6 @@ function PatientRow({
           fill={isPinned ? "currentColor" : "none"}
         />
       </button>
-    </div>
-  );
-}
-
-// ─── Right panel: empty state ────────────────────────────────────────────────
-
-function NoPatientSelected() {
-  return (
-    <div className="flex flex-col items-center justify-center h-full gap-3 text-muted-foreground">
-      <ChevronRight className="w-10 h-10 opacity-20" />
-      <p className="text-sm">Sélectionner un patient dans la liste</p>
     </div>
   );
 }
@@ -248,7 +320,6 @@ function PatientDetail({
     [],
   );
 
-  // reset selection when patient changes
   useEffect(() => {
     setSelectedECGs(new Set());
   }, [patient.id]);
@@ -525,6 +596,11 @@ export function PatientMasterDetailPage({
 }: Props) {
   const [debouncedSearch, setDebouncedSearch] = useState(search);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState<number>(() => {
+    const saved = localStorage.getItem("ecghub.patientsPerPage");
+    return saved ? Number(saved) : 25;
+  });
   const [pinned, setPinned] = useState<Set<string>>(() => {
     try {
       const saved = localStorage.getItem("ecghub.pinnedPatients");
@@ -535,18 +611,23 @@ export function PatientMasterDetailPage({
   });
 
   useEffect(() => {
-    const id = setTimeout(() => setDebouncedSearch(search), 300);
+    const id = setTimeout(() => {
+      setDebouncedSearch(search);
+      setPage(1);
+    }, 300);
     return () => clearTimeout(id);
   }, [search]);
 
-  const { patients, isLoading } = usePatients({
+  const { patients, total, isLoading } = usePatients({
     ...(debouncedSearch ? { q: debouncedSearch } : {}),
     sort_by: "last_name",
     sort_order: "asc",
-    per_page: 200,
+    page,
+    per_page: perPage,
   });
 
-  // Pinned first, then alphabetical
+  const totalPages = Math.max(1, Math.ceil(total / perPage));
+
   const sortedPatients = [...patients].sort((a, b) => {
     const aP = pinned.has(a.patient_id) ? 0 : 1;
     const bP = pinned.has(b.patient_id) ? 0 : 1;
@@ -571,8 +652,100 @@ export function PatientMasterDetailPage({
     });
   }, []);
 
+  const handleSelectPatient = (patient: Patient) => {
+    if (selectedPatient?.id === patient.id) {
+      setSelectedPatient(null);
+    } else {
+      setSelectedPatient(patient);
+    }
+  };
+
+  // ─── Full-page mode (no patient selected) ─────────────────────────────────
+  if (!selectedPatient) {
+    return (
+      <div className="flex flex-col h-full min-h-0 overflow-hidden animate-in fade-in duration-200">
+        {/* Search bar + per page selector */}
+        <div className="p-4 border-b border-border shrink-0 flex items-center gap-4">
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <input
+              autoFocus
+              type="text"
+              value={search}
+              onChange={(e) => onSearchChange(e.target.value)}
+              placeholder="Rechercher un patient…"
+              className={`w-full pl-9 ${search ? "pr-9" : "pr-3"} py-2 text-sm bg-muted/50 border-0 rounded-full focus:outline-none focus:ring-2 focus:ring-ring/20 placeholder:text-muted-foreground/60`}
+            />
+            {search && (
+              <button
+                onClick={() => onSearchChange("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground shrink-0">
+            <span>{total} patient{total > 1 ? "s" : ""}</span>
+            <select
+              value={perPage}
+              onChange={(e) => {
+                const v = Number(e.target.value);
+                setPerPage(v);
+                setPage(1);
+                localStorage.setItem("ecghub.patientsPerPage", String(v));
+              }}
+              className="text-xs border border-border rounded-md px-2 py-1 bg-background focus:outline-none focus:ring-1 focus:ring-ring/20"
+            >
+              {[10, 25, 50, 100].map((n) => (
+                <option key={n} value={n}>{n} / page</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Patient list */}
+        <div className="flex-1 min-h-0 overflow-y-auto">
+          <PatientGrid
+            patients={sortedPatients}
+            pinned={pinned}
+            onSelect={handleSelectPatient}
+            onTogglePin={togglePin}
+            isLoading={isLoading}
+          />
+        </div>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="shrink-0 border-t border-border px-4 py-2 flex items-center justify-between">
+            <span className="text-xs text-muted-foreground">
+              Page {page} / {totalPages}
+            </span>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page <= 1}
+                className="inline-flex items-center justify-center w-7 h-7 rounded border border-border text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={page >= totalPages}
+                className="inline-flex items-center justify-center w-7 h-7 rounded border border-border text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              >
+                <ChevronRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ─── Master-detail mode (patient selected) ────────────────────────────────
   return (
-    <div className="flex h-full min-h-0 overflow-hidden">
+    <div className="flex h-full min-h-0 overflow-hidden animate-in slide-in-from-left-2 duration-200">
       {/* ── Left panel: patient list ── */}
       <div className="w-80 shrink-0 border-r border-border flex flex-col min-h-0 bg-card/40">
         {/* Search */}
@@ -580,7 +753,6 @@ export function PatientMasterDetailPage({
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <input
-              autoFocus
               type="text"
               value={search}
               onChange={(e) => onSearchChange(e.target.value)}
@@ -627,7 +799,7 @@ export function PatientMasterDetailPage({
                       patient={patient}
                       isSelected={selectedPatient?.id === patient.id}
                       isPinned={pinned.has(patient.patient_id)}
-                      onSelect={() => setSelectedPatient(patient)}
+                      onSelect={() => handleSelectPatient(patient)}
                       onTogglePin={(e) => togglePin(patient.patient_id, e)}
                     />
                   </div>
@@ -639,18 +811,14 @@ export function PatientMasterDetailPage({
       </div>
 
       {/* ── Right panel: detail ── */}
-      <div className="flex-1 min-h-0 overflow-hidden">
-        {selectedPatient ? (
-          <PatientDetail
-            key={selectedPatient.id as unknown as string}
-            patient={selectedPatient}
-            canRead={canRead}
-            canDelete={canDelete}
-            canForceHL7={canForceHL7}
-          />
-        ) : (
-          <NoPatientSelected />
-        )}
+      <div className="flex-1 min-h-0 overflow-hidden animate-in fade-in duration-150">
+        <PatientDetail
+          key={selectedPatient.id as unknown as string}
+          patient={selectedPatient}
+          canRead={canRead}
+          canDelete={canDelete}
+          canForceHL7={canForceHL7}
+        />
       </div>
     </div>
   );

@@ -8,18 +8,12 @@ import {
   Server,
   AlertTriangle,
   Heart,
-  List,
-  PanelLeftOpen,
-  Layers,
   Filter,
-  X,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Spinner } from "./components/ui/Spinner";
 import { useAuth } from "./hooks/useAuth";
-import { EcgTimelinePage } from "./components/patient/EcgTimelinePage";
 import { PatientMasterDetailPage } from "./components/patient/PatientMasterDetailPage";
-import { PatientGroupedPage } from "./components/patient/PatientGroupedPage";
 import { LoginPage } from "./components/LoginPage";
 import { Header } from "./components/layout/Header";
 import { Sidebar } from "./components/layout/Sidebar";
@@ -34,48 +28,9 @@ import { fetchAdminStats, fetchECGFilterFacets } from "./lib/api";
 import type { AllECGFilters } from "./lib/api";
 import i18n from "./lib/i18n";
 
-type PatientView = "timeline" | "master-detail" | "grouped";
-
-function PatientsViewToggle({
-  view,
-  onChange,
-}: {
-  view: PatientView;
-  onChange: (v: PatientView) => void;
-}) {
-  return (
-    <div className="flex items-center gap-0.5 p-0.5 bg-muted rounded-lg border border-border">
-      {(
-        [
-          { key: "timeline", Icon: List, label: "A · Timeline" },
-          { key: "master-detail", Icon: PanelLeftOpen, label: "B · Dossier" },
-          { key: "grouped", Icon: Layers, label: "C · Groupé" },
-        ] as const
-      ).map(({ key, Icon, label }) => (
-        <button
-          key={key}
-          onClick={() => onChange(key)}
-          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
-            view === key
-              ? "bg-card text-foreground shadow-sm"
-              : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          <Icon className="w-3.5 h-3.5" />
-          {label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 function App() {
   const { status, user, logout, hasPermission } = useAuth();
   const { t, i18n: i18next } = useTranslation();
-  const [patientView, setPatientView] = useState<PatientView>(() => {
-    return (localStorage.getItem("ecghub.patientView") as PatientView) ?? "timeline";
-  });
-
   const [globalSearch, setGlobalSearch] = useState("");
   const [filters, setFilters] = useState<Pick<AllECGFilters, "vendor" | "device_model" | "file_format" | "hl7_status" | "from" | "to">>({});
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -90,11 +45,6 @@ function App() {
   const activeFilterCount = Object.values(filters).filter(Boolean).length;
 
   const clearFilters = () => setFilters({});
-
-  const handleViewChange = (v: PatientView) => {
-    setPatientView(v);
-    localStorage.setItem("ecghub.patientView", v);
-  };
 
   const canDelete = status === "authenticated" && hasPermission("ecg.delete");
   const canForceHL7 =
@@ -169,13 +119,9 @@ function App() {
               path="/"
               element={
                 <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
-                  {/* View toggle bar */}
+                  {/* Filter bar */}
                   <div className="shrink-0 border-b border-border bg-card/50">
                     <div className="flex items-center gap-3 px-6 py-2">
-                      <PatientsViewToggle
-                        view={patientView}
-                        onChange={handleViewChange}
-                      />
                       <div className="flex-1" />
                       <button
                         onClick={() => setFiltersOpen((v) => !v)}
@@ -264,37 +210,15 @@ function App() {
                     )}
                   </div>
                   <div className="flex-1 min-h-0 overflow-hidden">
-                    {patientView === "timeline" ? (
-                      <EcgTimelinePage
-                        canDelete={canDelete}
-                        canForceHL7={canForceHL7}
-                        canRead={canRead}
-                        canWrite={canWrite}
-                        search={globalSearch}
-                        onSearchChange={setGlobalSearch}
-                        filters={filters}
-                      />
-                    ) : patientView === "master-detail" ? (
-                      <PatientMasterDetailPage
-                        canDelete={canDelete}
-                        canForceHL7={canForceHL7}
-                        canRead={canRead}
-                        canWrite={canWrite}
-                        search={globalSearch}
-                        onSearchChange={setGlobalSearch}
-                        filters={filters}
-                      />
-                    ) : (
-                      <PatientGroupedPage
-                        canDelete={canDelete}
-                        canForceHL7={canForceHL7}
-                        canRead={canRead}
-                        canWrite={canWrite}
-                        search={globalSearch}
-                        onSearchChange={setGlobalSearch}
-                        filters={filters}
-                      />
-                    )}
+                    <PatientMasterDetailPage
+                      canDelete={canDelete}
+                      canForceHL7={canForceHL7}
+                      canRead={canRead}
+                      canWrite={canWrite}
+                      search={globalSearch}
+                      onSearchChange={setGlobalSearch}
+                      filters={filters}
+                    />
                   </div>
                 </div>
               }

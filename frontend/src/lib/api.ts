@@ -592,3 +592,22 @@ export async function fetchStorageMetrics(): Promise<StorageMetricsResp> {
   }
   return res.json();
 }
+
+export interface RecentError {
+  timestamp: string;
+  method: string;
+  route: string;
+  status: number;
+  error?: string;
+  request_uri: string;
+  user_id?: string;
+  duration_ms: number;
+}
+
+export async function fetchRecentErrors(
+  limit = 20,
+): Promise<RecentError[]> {
+  const res = await fetch(`${BASE_URL}/api/v1/admin/errors?limit=${limit}`);
+  if (!res.ok) return [];
+  return res.json();
+}
