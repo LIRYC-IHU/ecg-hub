@@ -20,12 +20,36 @@
     "colName": "Nom",
     "colId": "Identifiant",
     "colEcgs": "ECGs",
-    "colLastActivity": "Dernière activité"
+    "colLastActivity": "Dernière activité",
+    "pin": "Épingler",
+    "unpin": "Désépingler",
+    "pinned": "Épinglés",
+    "favorites": "Favoris",
+    "history": "Historique",
+    "downloadAll": "Tout télécharger",
+    "totalEcgs": "Total ECGs",
+    "lastExam": "Dernier examen",
+    "hl7Sent": "Envoyés HL7",
+    "hl7Pending": "En attente",
+    "ecgExams": "Examens ECG",
+    "noEcg": "Aucun ECG pour ce patient",
+    "genderF": "Femme",
+    "genderM": "Homme",
+    "bornOn": "né le",
+    "name": "Nom",
+    "sortRecent": "Récent",
+    "sortOldest": "Ancien",
+    "selectAll": "Tout sélectionner"
   },
   "ecg": {
     "download": "Télécharger",
     "delete": "Supprimer",
     "deleteConfirm": "Supprimer définitivement cet ECG ?",
+    "deleteConfirmBulk": "Supprimer {{count}} ECG(s) ?",
+    "deleted": "ECG supprimé",
+    "deletedBulk": "{{count}} ECG(s) supprimé(s)",
+    "deleteError": "Erreur lors de la suppression",
+    "open": "Ouvrir",
     "downloadOriginal": "Format original",
     "downloadError": "Erreur lors du téléchargement",
     "downloadXmlfda": "Format XMLFDA",
@@ -33,9 +57,10 @@
     "vendor": "Vendeur",
     "date": "Date",
     "hl7Status": "Statut HL7",
+    "hl7Retry": "Renvoyer HL7",
     "status": {
       "pending": "En attente",
-      "success": "Enrichi",
+      "success": "Envoyé",
       "hl7_exhausted": "HL7 épuisé"
     },
     "meta": {
@@ -270,6 +295,11 @@
     "confirm": "Confirmer",
     "cancel": "Annuler",
     "close": "Fermer",
-    "delete": "Supprimer"
+    "delete": "Supprimer",
+    "deselect": "Désélectionner",
+    "selected": "{{count}} sélectionné",
+    "selected_other": "{{count}} sélectionnés",
+    "exportStarted": "Export lancé ({{count}} ECGs)",
+    "exportError": "Erreur lors de l'export"
   }
 }
