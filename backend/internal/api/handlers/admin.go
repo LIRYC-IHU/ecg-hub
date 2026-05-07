@@ -3,6 +3,7 @@ package handlers
 import (
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/labstack/echo/v4"
 	"gorm.io/gorm"
@@ -10,6 +11,7 @@ import (
 	mw "github.com/LIRYC-IHU/ecg-hub/internal/api/middleware"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
+	appmetrics "github.com/LIRYC-IHU/ecg-hub/internal/metrics"
 	"github.com/LIRYC-IHU/ecg-hub/internal/module"
 	"github.com/LIRYC-IHU/ecg-hub/internal/webhook"
 )
@@ -206,5 +208,31 @@ func WebhookTestHandler(n *webhook.Notifier) echo.HandlerFunc {
 			"success":     statusCode >= 200 && statusCode < 300,
 			"status_code": statusCode,
 		})
+	}
+}
+
+// RecentErrorsHandler handles GET /api/v1/admin/errors.
+// Returns the last N server errors (5xx) from the in-memory ring buffer.
+// Query param: ?limit=20 (default 20, max 50).
+//
+// @Summary Recent server errors
+// @Tags Admin
+// @Produce json
+// @Param limit query int false "Number of errors to return" default(20)
+// @Success 200 {array} metrics.ErrorEntry
+// @Security BearerAuth
+// @Router /api/v1/admin/errors [get]
+func RecentErrorsHandler() echo.HandlerFunc {
+	return func(c echo.Context) error {
+		limit := 20
+		if l := c.QueryParam("limit"); l != "" {
+			if n, err := strconv.Atoi(l); err == nil && n > 0 {
+				limit = n
+			}
+		}
+		if limit > 50 {
+			limit = 50
+		}
+		return c.JSON(http.StatusOK, appmetrics.RecentErrors(limit))
 	}
 }
