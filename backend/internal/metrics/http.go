@@ -35,6 +35,7 @@ func init() {
 // Middleware returns an Echo middleware that instruments every request.
 // The route label uses the Echo path pattern (e.g. /api/v1/ecgs/:id) to avoid
 // unbounded cardinality from path parameter values.
+// 5xx errors are captured into a ring buffer for the /admin/errors endpoint.
 func Middleware() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
@@ -44,22 +45,43 @@ func Middleware() echo.MiddlewareFunc {
 			err := next(c)
 
 			httpInFlight.Dec()
+			duration := time.Since(start)
 
 			route := c.Path()
 			if route == "" {
 				route = c.Request().URL.Path
 			}
-			status := strconv.Itoa(c.Response().Status)
+
+			statusCode := c.Response().Status
 			if err != nil {
 				if he, ok := err.(*echo.HTTPError); ok {
-					status = strconv.Itoa(he.Code)
+					statusCode = he.Code
 				} else {
-					status = strconv.Itoa(http.StatusInternalServerError)
+					statusCode = http.StatusInternalServerError
 				}
 			}
 
+			status := strconv.Itoa(statusCode)
 			httpRequestsTotal.WithLabelValues(c.Request().Method, route, status).Inc()
-			httpRequestDuration.WithLabelValues(c.Request().Method, route).Observe(time.Since(start).Seconds())
+			httpRequestDuration.WithLabelValues(c.Request().Method, route).Observe(duration.Seconds())
+
+			if statusCode >= 500 {
+				errMsg := ""
+				if err != nil {
+					errMsg = err.Error()
+				}
+				userID, _ := c.Get("user_id").(string)
+				RecordError(ErrorEntry{
+					Timestamp:  time.Now(),
+					Method:     c.Request().Method,
+					Route:      route,
+					Status:     statusCode,
+					Error:      errMsg,
+					RequestURI: c.Request().RequestURI,
+					UserID:     userID,
+					Duration:   float64(duration.Milliseconds()),
+				})
+			}
 
 			return err
 		}
