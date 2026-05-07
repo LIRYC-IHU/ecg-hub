@@ -190,6 +190,9 @@ func (r *RouterConfig) RegisterRoutes() {
 	// Outbound PACS connectors — requires admin.system
 	apiV1.GET("/admin/connectors", handlers.ConnectorsHandler(r.connCheckers), mw.RequirePermission(r.checker, auth.PermAdminSystem))
 
+	// Recent 5xx errors — requires admin.system
+	apiV1.GET("/admin/errors", handlers.RecentErrorsHandler(), mw.RequirePermission(r.checker, auth.PermAdminSystem))
+
 	// Batch export (FR19, Story 5.1) — requires ecg.download
 	ecgRepo := repository.NewECGRepository(r.gormDB)
 	apiV1.POST("/exports", handlers.CreateExportHandler(r.gormDB, r.exportRepo, ecgRepo, r.exportPool), mw.RequirePermission(r.checker, auth.PermECGDownload))
@@ -198,4 +201,20 @@ func (r *RouterConfig) RegisterRoutes() {
 	// Batch export — WebSocket progress + download (FR20, Story 5.2)
 	apiV1.GET("/exports/:id/ws", handlers.ExportWSHandler(r.exportRepo, r.checker.AdminRole()), mw.RequirePermission(r.checker, auth.PermECGDownload))
 	apiV1.GET("/exports/:id/download", handlers.DownloadExportHandler(r.exportRepo, r.checker.AdminRole()), mw.RequirePermission(r.checker, auth.PermECGDownload))
+
+	// User pins (favourites) — requires patient.read
+	pinRepo := repository.NewPinRepository(r.gormDB)
+	apiV1.GET("/pins", handlers.ListPinsHandler(pinRepo), mw.RequirePermission(r.checker, auth.PermPatientRead))
+	apiV1.POST("/pins", handlers.PinPatientHandler(pinRepo), mw.RequirePermission(r.checker, auth.PermPatientRead))
+	apiV1.DELETE("/pins/:patient_id", handlers.UnpinPatientHandler(pinRepo), mw.RequirePermission(r.checker, auth.PermPatientRead))
+
+	// Tags — requires patient.read
+	tagRepo := repository.NewTagRepository(r.gormDB)
+	apiV1.GET("/tags", handlers.ListTagsHandler(tagRepo), mw.RequirePermission(r.checker, auth.PermPatientRead))
+	apiV1.POST("/tags", handlers.CreateTagHandler(tagRepo), mw.RequirePermission(r.checker, auth.PermPatientRead))
+	apiV1.PUT("/tags/:id", handlers.UpdateTagHandler(tagRepo), mw.RequirePermission(r.checker, auth.PermPatientRead))
+	apiV1.DELETE("/tags/:id", handlers.DeleteTagHandler(tagRepo), mw.RequirePermission(r.checker, auth.PermPatientRead))
+	apiV1.POST("/patients/:id/tags", handlers.TagPatientHandler(tagRepo), mw.RequirePermission(r.checker, auth.PermPatientRead))
+	apiV1.DELETE("/patients/:id/tags/:tag_id", handlers.UntagPatientHandler(tagRepo), mw.RequirePermission(r.checker, auth.PermPatientRead))
+	apiV1.GET("/patients/:id/tags", handlers.ListPatientTagsHandler(tagRepo), mw.RequirePermission(r.checker, auth.PermPatientRead))
 }
