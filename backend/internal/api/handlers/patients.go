@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"errors"
 	"net/http"
 	"time"
 
@@ -24,9 +23,10 @@ type PatientSearchParams struct {
 
 // allowedPatientSortBy maps accepted sort_by values to their SQL column name.
 var allowedPatientSortBy = map[string]string{
-	"patient_id": "patient_id",
-	"last_name":  "last_name",
-	"created_at": "created_at",
+	"patient_id":    "patient_id",
+	"last_name":     "last_name",
+	"created_at":    "created_at",
+	"last_activity": "last_activity",
 }
 
 // SearchPatientsHandler handles GET /api/v1/patients?q=&page=&per_page=
@@ -149,14 +149,21 @@ func ListPatientECGsHandler(db *gorm.DB) echo.HandlerFunc {
 			return c.JSON(http.StatusBadRequest, mw.APIError("INVALID_ID", "patient id is required"))
 		}
 
-		// Load patient to resolve PatientID string.
-		// ecgs.patient_id is the device string (e.g. "P001"), NOT a FK to patients.id.
+		// Resolve patient_id: the path param can be either the UUID (patients.id)
+		// or the device string (patients.patient_id, e.g. "BS1339").
+		var patientID string
 		var patient models.Patient
-		if err := db.First(&patient, "id = ?", id).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return c.JSON(http.StatusNotFound, mw.APIError("PATIENT_NOT_FOUND", "patient not found"))
-			}
-			return c.JSON(http.StatusInternalServerError, mw.APIError("DB_ERROR", "query failed"))
+		if err := db.First(&patient, "patient_id = ?", id).Error; err == nil {
+			patientID = patient.PatientID
+		} else if err := db.First(&patient, "id = ?", id).Error; err == nil {
+			patientID = patient.PatientID
+		} else {
+			return c.JSON(http.StatusOK, map[string]any{
+				"data":     []any{},
+				"total":    0,
+				"page":     1,
+				"per_page": 20,
+			})
 		}
 
 		var params ECGListParams
@@ -170,7 +177,7 @@ func ListPatientECGsHandler(db *gorm.DB) echo.HandlerFunc {
 			params.PerPage = 20
 		}
 
-		q := db.Model(&models.ECG{}).Where("patient_id = ?", patient.PatientID)
+		q := db.Model(&models.ECG{}).Where("patient_id = ?", patientID)
 
 		// Apply optional AND filters.
 		if params.From != "" {
