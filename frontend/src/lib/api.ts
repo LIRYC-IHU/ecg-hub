@@ -339,7 +339,7 @@ export async function fetchAuditLogs(
 
 export interface PatientFilters {
   q?: string;
-  sort_by?: "patient_id" | "last_name" | "created_at";
+  sort_by?: "patient_id" | "last_name" | "created_at" | "last_activity";
   sort_order?: "asc" | "desc";
   page?: number;
   per_page?: number;
@@ -570,6 +570,70 @@ export async function setAppUserRole(
     const err: ErrorResponse = await res.json();
     throw err;
   }
+}
+
+// ─── Pins (favourites) ──────────────────────────────────────────────────────
+
+export async function fetchPins(): Promise<string[]> {
+  const res = await fetch(`${BASE_URL}/api/v1/pins`);
+  if (!res.ok) return [];
+  const json = await res.json();
+  return json.data ?? [];
+}
+
+export async function pinPatient(patientId: string): Promise<void> {
+  await fetch(`${BASE_URL}/api/v1/pins`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ patient_id: patientId }),
+  });
+}
+
+export async function unpinPatient(patientId: string): Promise<void> {
+  await fetch(`${BASE_URL}/api/v1/pins/${patientId}`, {
+    method: "DELETE",
+  });
+}
+
+// ─── Tags ───────────────────────────────────────────────────────────────────
+
+export interface TagDTO {
+  id: string;
+  name: string;
+  color: string;
+  created_by: string;
+  created_at: string;
+}
+
+export async function fetchTags(): Promise<TagDTO[]> {
+  const res = await fetch(`${BASE_URL}/api/v1/tags`);
+  if (!res.ok) return [];
+  const json = await res.json();
+  return json.data ?? [];
+}
+
+export async function createTag(name: string, color?: string): Promise<TagDTO> {
+  const res = await fetch(`${BASE_URL}/api/v1/tags`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, color }),
+  });
+  const json = await res.json();
+  return json.data;
+}
+
+export async function updateTag(id: string, name: string, color: string): Promise<TagDTO> {
+  const res = await fetch(`${BASE_URL}/api/v1/tags/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, color }),
+  });
+  const json = await res.json();
+  return json.data;
+}
+
+export async function deleteTag(id: string): Promise<void> {
+  await fetch(`${BASE_URL}/api/v1/tags/${id}`, { method: "DELETE" });
 }
 
 export interface VolumeMetric {
