@@ -20,12 +20,36 @@
     "colName": "Name",
     "colId": "Identifier",
     "colEcgs": "ECGs",
-    "colLastActivity": "Last activity"
+    "colLastActivity": "Last activity",
+    "pin": "Pin",
+    "unpin": "Unpin",
+    "pinned": "Pinned",
+    "favorites": "Favorites",
+    "history": "History",
+    "downloadAll": "Download all",
+    "totalEcgs": "Total ECGs",
+    "lastExam": "Last exam",
+    "hl7Sent": "HL7 Sent",
+    "hl7Pending": "Pending",
+    "ecgExams": "ECG Exams",
+    "noEcg": "No ECG for this patient",
+    "genderF": "Female",
+    "genderM": "Male",
+    "bornOn": "born on",
+    "name": "Name",
+    "sortRecent": "Recent",
+    "sortOldest": "Oldest",
+    "selectAll": "Select all"
   },
   "ecg": {
     "download": "Download",
     "delete": "Delete",
     "deleteConfirm": "Permanently delete this ECG?",
+    "deleteConfirmBulk": "Delete {{count}} ECG(s)?",
+    "deleted": "ECG deleted",
+    "deletedBulk": "{{count}} ECG(s) deleted",
+    "deleteError": "Error while deleting",
+    "open": "Open",
     "downloadOriginal": "Original format",
     "downloadError": "Download failed",
     "downloadXmlfda": "XMLFDA format",
@@ -33,9 +57,10 @@
     "vendor": "Vendor",
     "date": "Date",
     "hl7Status": "HL7 Status",
+    "hl7Retry": "Resend HL7",
     "status": {
       "pending": "Pending",
-      "success": "Enriched",
+      "success": "Sent",
       "hl7_exhausted": "HL7 exhausted"
     },
     "meta": {
@@ -270,6 +295,11 @@
     "confirm": "Confirm",
     "cancel": "Cancel",
     "close": "Close",
-    "delete": "Delete"
+    "delete": "Delete",
+    "deselect": "Deselect",
+    "selected": "{{count}} selected",
+    "selected_other": "{{count}} selected",
+    "exportStarted": "Export started ({{count}} ECGs)",
+    "exportError": "Export error"
   }
 }
