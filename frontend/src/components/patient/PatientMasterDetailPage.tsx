@@ -1,22 +1,30 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import {
   Search,
   Star,
   Download,
-  Send,
   Eye,
   Calendar,
   X,
   Trash2,
   ChevronLeft,
   ChevronRight,
+  ArrowDownAZ,
+  ArrowUpAZ,
+  Clock,
 } from "lucide-react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePatients } from "../../hooks/usePatients";
 import { useECGs } from "../../hooks/useECGs";
 import { Spinner } from "../ui/Spinner";
-import { ExportFooter } from "../export/ExportFooter";
-import { downloadECGFormat, deleteECG } from "../../lib/api";
+import {
+  downloadECGFormat,
+  deleteECG,
+  fetchPins,
+  pinPatient,
+  unpinPatient,
+} from "../../lib/api";
+import { useTranslation } from "react-i18next";
 import { useNotification } from "../../context/NotificationContext";
 import { DownloadFormatPopup } from "../ecg/DownloadFormatPopup";
 import type { Patient, ECG } from "../../types";
@@ -51,12 +59,14 @@ function PatientAvatar({
 }
 
 function HL7Badge({ status }: { status: string }) {
-  const cfg: Record<string, { dot: string; label: string }> = {
-    success: { dot: "bg-green-400", label: "Envoyé" },
-    pending: { dot: "bg-amber-400", label: "En attente" },
-    hl7_exhausted: { dot: "bg-red-400", label: "HL7 épuisé" },
+  const { t } = useTranslation();
+  const dotCls: Record<string, string> = {
+    success: "bg-green-400",
+    pending: "bg-amber-400",
+    hl7_exhausted: "bg-red-400",
   };
-  const s = cfg[status] ?? cfg.pending;
+  const label = t(`ecg.status.${status}`) || status;
+  const s = { dot: dotCls[status] ?? dotCls.pending, label };
   const textCls =
     status === "success"
       ? "text-green-400"
@@ -126,16 +136,23 @@ function ageFromDOB(dob: string | null): number | null {
 function PatientGrid({
   patients,
   pinned,
+  checked,
+  selectedEcgCounts,
   onSelect,
   onTogglePin,
+  onToggleCheck,
   isLoading,
 }: {
   patients: Patient[];
   pinned: Set<string>;
+  checked: Set<number>;
+  selectedEcgCounts: Map<number, number>;
   onSelect: (p: Patient) => void;
   onTogglePin: (patientId: string, e: React.MouseEvent) => void;
+  onToggleCheck: (patientId: number) => void;
   isLoading: boolean;
 }) {
+  const { t } = useTranslation();
   if (isLoading) {
     return (
       <div className="flex justify-center py-16">
@@ -147,7 +164,7 @@ function PatientGrid({
   if (patients.length === 0) {
     return (
       <p className="text-sm text-muted-foreground text-center py-16">
-        Aucun patient trouvé
+        {t("search.noResults")}
       </p>
     );
   }
@@ -156,13 +173,31 @@ function PatientGrid({
     <div className="flex flex-col gap-1 p-4">
       {patients.map((patient) => {
         const isPinned = pinned.has(patient.patient_id);
+        const isChecked = checked.has(patient.id);
         const age = ageFromDOB(patient.date_of_birth);
         return (
           <div
             key={patient.id}
             onClick={() => onSelect(patient)}
-            className="group flex items-center gap-4 px-4 py-3 rounded-lg border border-border bg-card hover:bg-muted/40 hover:border-primary/30 cursor-pointer transition-all duration-150"
+            className={`group flex items-center gap-4 px-4 py-3 rounded-lg border cursor-pointer transition-all duration-150 ${
+              isChecked
+                ? "border-primary/40 bg-primary/5"
+                : "border-border bg-card hover:bg-muted/40 hover:border-primary/30"
+            }`}
           >
+            <div
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleCheck(patient.id);
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={isChecked}
+                readOnly
+                className="w-4 h-4 rounded border-border accent-primary cursor-pointer pointer-events-none"
+              />
+            </div>
             <PatientAvatar patient={patient} size={36} />
             <div className="min-w-0 w-48">
               <div className="text-sm font-medium text-foreground truncate">
@@ -174,18 +209,22 @@ function PatientGrid({
             </div>
             <div className="flex items-center gap-4 flex-1 text-[11px] text-muted-foreground">
               <span>
-                {patient.ecg_count ?? 0} ECG{(patient.ecg_count ?? 0) > 1 ? "s" : ""}
+                {patient.ecg_count ?? 0} ECG
+                {(patient.ecg_count ?? 0) > 1 ? "s" : ""}
               </span>
-              {age !== null && (
-                <span>{age} ans</span>
-              )}
+              {age !== null && <span>{age} {t("common.years", "ans")}</span>}
               {patient.last_activity && (
                 <span>{formatDate(patient.last_activity)}</span>
               )}
             </div>
+            {(selectedEcgCounts.get(patient.id) ?? 0) > 0 && (
+              <span className="text-[10px] font-medium text-primary tabular-nums">
+                {selectedEcgCounts.get(patient.id)}/{patient.ecg_count ?? 0}
+              </span>
+            )}
             <button
               onClick={(e) => onTogglePin(patient.patient_id, e)}
-              className={`p-1.5 rounded transition-colors ${
+              className={`p-1.5 rounded transition-colors hover:cursor-pointer ${
                 isPinned
                   ? "text-amber-400"
                   : "text-muted-foreground/20 group-hover:text-muted-foreground/50"
@@ -218,6 +257,7 @@ function PatientRow({
   onSelect: () => void;
   onTogglePin: (e: React.MouseEvent) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div
       onClick={onSelect}
@@ -248,7 +288,7 @@ function PatientRow({
             ? "text-amber-400"
             : "text-muted-foreground/30 group-hover:text-muted-foreground/60"
         }`}
-        title={isPinned ? "Désépingler" : "Épingler"}
+        title={isPinned ? t("patient.unpin") : t("patient.pin")}
       >
         <Star
           className="w-3.5 h-3.5"
@@ -266,12 +306,27 @@ function PatientDetail({
   canRead,
   canDelete,
   canForceHL7,
+  selectedECGs,
+  onToggleECG,
+  onSetAllECGs,
+  onClearECGs,
+  onPatientCheckedChange,
 }: {
   patient: Patient;
   canRead: boolean;
   canDelete: boolean;
   canForceHL7: boolean;
+  selectedECGs: Set<number>;
+  onToggleECG: (ecgId: number) => void;
+  onSetAllECGs: (ecgIds: number[]) => void;
+  onClearECGs: () => void;
+  onPatientCheckedChange: (
+    patientId: number,
+    allSelected: boolean,
+    selectedCount: number,
+  ) => void;
 }) {
+  const { t } = useTranslation();
   const { notify } = useNotification();
   const queryClient = useQueryClient();
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -281,15 +336,15 @@ function PatientDetail({
     mutationFn: (id: number) => deleteECG(id),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["ecgs", patient.id] });
-      notify("success", "ECG supprimé");
+      void queryClient.invalidateQueries({ queryKey: ["patients"] });
+      notify("success", t("ecg.deleted"));
       setConfirmDeleteId(null);
     },
     onError: () => {
-      notify("error", "Erreur lors de la suppression");
+      notify("error", t("ecg.deleteError"));
       setConfirmDeleteId(null);
     },
   });
-  const [selectedECGs, setSelectedECGs] = useState<Set<string>>(new Set());
   const { ecgs, total, isLoading } = useECGs(patient.id as unknown as number, {
     per_page: 50,
   });
@@ -298,31 +353,20 @@ function PatientDetail({
   const sentCount = ecgs.filter((e) => e.hl7_status === "success").length;
   const age = ageFromDOB(patient.date_of_birth);
 
-  const toggle = (id: string) => {
-    setSelectedECGs((prev) => {
-      const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
-      return next;
-    });
-  };
-
+  const ecgIdsOnPage = ecgs.map((e) => e.id);
+  const selectedOnPage = ecgIdsOnPage.filter((id) => selectedECGs.has(id));
+  const allChecked = ecgs.length > 0 && selectedOnPage.length === ecgs.length;
+  const someChecked = selectedOnPage.length > 0 && !allChecked;
   const checkAllRef = useRef<HTMLInputElement>(null);
-  const allChecked =
-    ecgs.length > 0 &&
-    ecgs.every((e) => selectedECGs.has(e.id as unknown as string));
-  const someChecked = selectedECGs.size > 0 && !allChecked;
   useEffect(() => {
     if (checkAllRef.current) checkAllRef.current.indeterminate = someChecked;
   }, [someChecked]);
 
-  const handleClearSelection = useCallback(
-    () => setSelectedECGs(new Set()),
-    [],
-  );
-
   useEffect(() => {
-    setSelectedECGs(new Set());
-  }, [patient.id]);
+    if (ecgs.length > 0) {
+      onPatientCheckedChange(patient.id, allChecked, selectedOnPage.length);
+    }
+  }, [allChecked, selectedOnPage.length, ecgs.length, patient.id]);
 
   return (
     <div className="flex flex-col h-full min-h-0 overflow-hidden relative">
@@ -340,17 +384,17 @@ function PatientDetail({
             <span className="text-border">·</span>
             <span>
               {patient.gender === "F"
-                ? "Femme"
+                ? t("patient.genderF")
                 : patient.gender === "M"
-                  ? "Homme"
+                  ? t("patient.genderM")
                   : patient.gender || "—"}
-              {age !== null ? `, ${age} ans` : ""}
+              {age !== null ? `, ${age} ${t("common.years", "ans")}` : ""}
             </span>
             {patient.date_of_birth && (
               <>
                 <span className="text-border">·</span>
                 <span>
-                  né le{" "}
+                  {t("patient.bornOn")}{" "}
                   {new Date(patient.date_of_birth).toLocaleDateString("fr-FR")}
                 </span>
               </>
@@ -360,12 +404,12 @@ function PatientDetail({
         <div className="flex gap-2 shrink-0">
           <button className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm border border-border text-foreground hover:bg-muted transition-colors">
             <Calendar className="w-3.5 h-3.5" />
-            Historique
+            {t("patient.history")}
           </button>
           {canRead && (
             <button className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm bg-primary text-primary-foreground hover:opacity-90 transition-opacity">
               <Download className="w-3.5 h-3.5" />
-              Tout télécharger
+              {t("patient.downloadAll")}
             </button>
           )}
         </div>
@@ -374,14 +418,14 @@ function PatientDetail({
       {/* Stats strip */}
       <div className="grid grid-cols-4 gap-3 px-8 py-4 border-b border-border shrink-0">
         {[
-          { label: "Total ECGs", value: total, cls: "text-primary" },
+          { label: t("patient.totalEcgs"), value: total, cls: "text-primary" },
           {
-            label: "Dernier examen",
+            label: t("patient.lastExam"),
             value: formatDate(patient.last_activity),
             cls: "text-foreground font-mono text-sm",
           },
-          { label: "Envoyés HL7", value: sentCount, cls: "text-green-400" },
-          { label: "En attente", value: pendingCount, cls: "text-amber-400" },
+          { label: t("patient.hl7Sent"), value: sentCount, cls: "text-green-400" },
+          { label: t("patient.hl7Pending"), value: pendingCount, cls: "text-amber-400" },
         ].map((s) => (
           <div
             key={s.label}
@@ -405,36 +449,20 @@ function PatientDetail({
             type="checkbox"
             checked={allChecked}
             onChange={() => {
-              if (allChecked || someChecked) setSelectedECGs(new Set());
-              else
-                setSelectedECGs(
-                  new Set(ecgs.map((e) => e.id as unknown as string)),
-                );
+              if (allChecked || someChecked) onClearECGs();
+              else onSetAllECGs(ecgIdsOnPage);
             }}
             className="w-4 h-4 rounded border-border accent-primary cursor-pointer"
           />
           <span className="text-sm font-semibold text-foreground">
-            Examens ECG
+            {t("patient.ecgExams")}
           </span>
-        </div>
-        {selectedECGs.size > 0 && (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span>
-              {selectedECGs.size} sélectionné
-              {selectedECGs.size > 1 ? "s" : ""}
+          {selectedOnPage.length > 0 && (
+            <span className="text-[11px] text-muted-foreground">
+              ({t("common.selected", { count: selectedOnPage.length })})
             </span>
-            <button className="inline-flex items-center gap-1 px-2 py-1 rounded border border-border bg-card hover:bg-muted transition-colors">
-              <Send className="w-3 h-3" />
-              Renvoyer HL7
-            </button>
-            <button
-              onClick={handleClearSelection}
-              className="text-muted-foreground hover:text-foreground"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* ECG list body */}
@@ -445,16 +473,15 @@ function PatientDetail({
           </div>
         ) : ecgs.length === 0 ? (
           <p className="text-sm text-muted-foreground text-center py-10">
-            Aucun ECG pour ce patient
+            {t("patient.noEcg")}
           </p>
         ) : (
           ecgs.map((ecg) => {
-            const id = ecg.id as unknown as string;
-            const isSelected = selectedECGs.has(id);
+            const isSelected = selectedECGs.has(ecg.id);
             return (
               <div
                 key={ecg.id}
-                onClick={() => toggle(id)}
+                onClick={() => onToggleECG(ecg.id)}
                 className={`flex items-center gap-3 p-3.5 rounded-lg border cursor-pointer transition-colors ${
                   isSelected
                     ? "border-primary/40 bg-primary/5"
@@ -465,7 +492,7 @@ function PatientDetail({
                   <input
                     type="checkbox"
                     checked={isSelected}
-                    onChange={() => toggle(id)}
+                    onChange={() => onToggleECG(ecg.id)}
                     className="w-4 h-4 rounded border-border accent-primary cursor-pointer"
                   />
                 </div>
@@ -492,23 +519,29 @@ function PatientDetail({
                 >
                   <button className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-colors">
                     <Eye className="w-3 h-3" />
-                    Ouvrir
+                    {t("ecg.open")}
                   </button>
                   {canRead && (
                     <>
                       <button
-                        title="Télécharger"
-                        onClick={() => setDownloadOpenId(id)}
-                        disabled={downloading && downloadOpenId === id}
+                        title={t("ecg.download")}
+                        onClick={() => setDownloadOpenId(String(ecg.id))}
+                        disabled={
+                          downloading && downloadOpenId === String(ecg.id)
+                        }
                         className="w-7 h-7 rounded flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
                       >
-                        {downloading && downloadOpenId === id
-                          ? <Spinner size={13} className="text-muted-foreground" />
-                          : <Download className="w-3.5 h-3.5" />
-                        }
+                        {downloading && downloadOpenId === String(ecg.id) ? (
+                          <Spinner
+                            size={13}
+                            className="text-muted-foreground"
+                          />
+                        ) : (
+                          <Download className="w-3.5 h-3.5" />
+                        )}
                       </button>
                       <DownloadFormatPopup
-                        open={downloadOpenId === id}
+                        open={downloadOpenId === String(ecg.id)}
                         onClose={() => setDownloadOpenId(null)}
                         vendor={ecg.vendor}
                         busy={downloading}
@@ -517,8 +550,8 @@ function PatientDetail({
                           setDownloading(true);
                           try {
                             for (const fmt of formats) {
-                              await downloadECGFormat(ecg.id as unknown as number, fmt).catch(() => {
-                                notify("error", "Erreur de téléchargement");
+                              await downloadECGFormat(ecg.id, fmt).catch(() => {
+                                notify("error", t("ecg.downloadError"));
                               });
                             }
                           } finally {
@@ -528,49 +561,139 @@ function PatientDetail({
                       />
                     </>
                   )}
-                  {canDelete && (
-                    confirmDeleteId === id ? (
+                  {canDelete &&
+                    (confirmDeleteId === String(ecg.id) ? (
                       <>
                         <button
-                          onClick={() => deleteMutation.mutate(ecg.id as unknown as number)}
+                          onClick={() => deleteMutation.mutate(ecg.id)}
                           disabled={deleteMutation.isPending}
                           className="text-[10px] font-medium text-destructive hover:underline disabled:opacity-50 flex items-center gap-0.5 px-1"
                         >
-                          {deleteMutation.isPending && <Spinner size={10} className="text-destructive" />}
-                          Confirmer
+                          {deleteMutation.isPending && (
+                            <Spinner size={10} className="text-destructive" />
+                          )}
+                          {t("common.confirm")}
                         </button>
                         <button
                           onClick={() => setConfirmDeleteId(null)}
                           className="text-[10px] text-muted-foreground hover:underline px-1"
                         >
-                          Annuler
+                          {t("common.cancel")}
                         </button>
                       </>
                     ) : (
                       <button
-                        onClick={() => setConfirmDeleteId(id)}
+                        onClick={() => setConfirmDeleteId(String(ecg.id))}
                         className="w-7 h-7 rounded flex items-center justify-center text-destructive/60 hover:text-destructive hover:bg-destructive/10 transition-colors"
-                        title="Supprimer"
+                        title={t("common.delete")}
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
-                    )
-                  )}
+                    ))}
                 </div>
               </div>
             );
           })
         )}
       </div>
+    </div>
+  );
+}
 
-      {/* Export footer */}
-      {selectedECGs.size > 0 && (
-        <ExportFooter
-          count={selectedECGs.size}
-          ecgIds={Array.from(selectedECGs) as unknown as number[]}
-          onClear={handleClearSelection}
-        />
-      )}
+// ─── Shared bulk ECG action footer ──────────────────────────────────────────
+
+function BulkECGFooter({
+  count,
+  ecgIds,
+  canRead,
+  canDelete,
+  onClear,
+}: {
+  count: number;
+  ecgIds: Set<number>;
+  canRead: boolean;
+  canDelete: boolean;
+  onClear: () => void;
+}) {
+  const { t } = useTranslation();
+  const { notify } = useNotification();
+  const queryClient = useQueryClient();
+  const [busy, setBusy] = useState(false);
+
+  return (
+    <div className="absolute bottom-0 left-0 right-0 z-20 border-t border-border bg-card/95 backdrop-blur-sm px-6 py-3 flex items-center justify-between">
+      <div className="flex items-center gap-2 text-sm text-foreground">
+        <span className="font-medium">
+          {count} ECG{count > 1 ? "s" : ""} {t("common.selected", { count })}
+        </span>
+      </div>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={onClear}
+          className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+        >
+          {t("common.deselect")}
+        </button>
+        {canRead && (
+          <button
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              try {
+                const { createExportJob } = await import("../../lib/api");
+                await createExportJob({
+                  ecg_ids: Array.from(ecgIds),
+                  formats: ["original"],
+                });
+                notify("success", t("common.exportStarted", { count }));
+                onClear();
+              } catch {
+                notify("error", t("common.exportError"));
+              } finally {
+                setBusy(false);
+              }
+            }}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity disabled:opacity-50"
+          >
+            <Download className="w-3.5 h-3.5" />
+            {busy ? t("export.exporting") : t("ecg.download")}
+          </button>
+        )}
+        {canDelete && (
+          <button
+            disabled={busy}
+            onClick={async () => {
+              if (
+                !window.confirm(
+                  t("ecg.deleteConfirmBulk", { count }),
+                )
+              )
+                return;
+              setBusy(true);
+              try {
+                for (const id of ecgIds) {
+                  await deleteECG(id);
+                }
+                notify(
+                  "success",
+                  t("ecg.deletedBulk", { count }),
+                );
+                onClear();
+                void queryClient.invalidateQueries({ queryKey: ["patients"] });
+                void queryClient.invalidateQueries({ queryKey: ["ecgs"] });
+              } catch {
+                notify("error", t("ecg.deleteError"));
+              } finally {
+                setBusy(false);
+              }
+            }}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-destructive/10 text-destructive border border-destructive/20 hover:bg-destructive/20 transition-colors disabled:opacity-50"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            {t("common.delete")}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -594,6 +717,9 @@ export function PatientMasterDetailPage({
   search,
   onSearchChange,
 }: Props) {
+  const { t } = useTranslation();
+  const { notify } = useNotification();
+  const queryClient = useQueryClient();
   const [debouncedSearch, setDebouncedSearch] = useState(search);
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [page, setPage] = useState(1);
@@ -601,14 +727,22 @@ export function PatientMasterDetailPage({
     const saved = localStorage.getItem("ecghub.patientsPerPage");
     return saved ? Number(saved) : 25;
   });
-  const [pinned, setPinned] = useState<Set<string>>(() => {
-    try {
-      const saved = localStorage.getItem("ecghub.pinnedPatients");
-      return new Set(JSON.parse(saved ?? "[]") as string[]);
-    } catch {
-      return new Set<string>();
-    }
+  const [checkedPatients, setCheckedPatients] = useState<Set<number>>(
+    new Set(),
+  );
+  const [selectedECGs, setSelectedECGs] = useState<Set<number>>(new Set());
+  const [pinnedOnly, setPinnedOnly] = useState(false);
+  const [sortBy, setSortBy] = useState<"last_name" | "last_activity">("last_name");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+  const [ecgCountByPatient, setEcgCountByPatient] = useState<
+    Map<number, number>
+  >(new Map());
+  const { data: pinnedData } = useQuery({
+    queryKey: ["pins"],
+    queryFn: fetchPins,
+    staleTime: 60_000,
   });
+  const pinned = new Set(pinnedData ?? []);
 
   useEffect(() => {
     const id = setTimeout(() => {
@@ -620,52 +754,229 @@ export function PatientMasterDetailPage({
 
   const { patients, total, isLoading } = usePatients({
     ...(debouncedSearch ? { q: debouncedSearch } : {}),
-    sort_by: "last_name",
-    sort_order: "asc",
+    sort_by: sortBy,
+    sort_order: sortOrder,
     page,
     per_page: perPage,
   });
 
   const totalPages = Math.max(1, Math.ceil(total / perPage));
 
-  const sortedPatients = [...patients].sort((a, b) => {
-    const aP = pinned.has(a.patient_id) ? 0 : 1;
-    const bP = pinned.has(b.patient_id) ? 0 : 1;
-    return aP - bP;
-  });
+  const pinnedSnapshot = useRef<Set<string>>(pinned);
+  useEffect(() => {
+    pinnedSnapshot.current = pinned;
+  }, [patients]);
 
-  const firstNonPinned = sortedPatients.findIndex(
+  const sortedPatients = useMemo(() => {
+    const snap = pinnedSnapshot.current;
+    return [...patients].sort((a, b) => {
+      const aP = snap.has(a.patient_id) ? 0 : 1;
+      const bP = snap.has(b.patient_id) ? 0 : 1;
+      return aP - bP;
+    });
+  }, [patients]);
+
+  const displayedPatients = pinnedOnly
+    ? sortedPatients.filter((p) => pinned.has(p.patient_id))
+    : sortedPatients;
+
+  const firstNonPinned = displayedPatients.findIndex(
     (p) => !pinned.has(p.patient_id),
   );
-  const hasPinnedSection = pinned.size > 0 && firstNonPinned > 0;
+  const hasPinnedSection = !pinnedOnly && pinned.size > 0 && firstNonPinned > 0;
 
-  const togglePin = useCallback((patientId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
-    setPinned((prev) => {
-      const next = new Set(prev);
-      next.has(patientId) ? next.delete(patientId) : next.add(patientId);
-      localStorage.setItem(
-        "ecghub.pinnedPatients",
-        JSON.stringify(Array.from(next)),
-      );
-      return next;
-    });
-  }, []);
+  const togglePin = useCallback(
+    (patientId: string, e: React.MouseEvent) => {
+      e.stopPropagation();
+      const wasPinned = (
+        queryClient.getQueryData<string[]>(["pins"]) ?? []
+      ).includes(patientId);
+      queryClient.setQueryData<string[]>(["pins"], (old) => {
+        if (!old) return wasPinned ? [] : [patientId];
+        return wasPinned
+          ? old.filter((id) => id !== patientId)
+          : [...old, patientId];
+      });
+      if (wasPinned) {
+        void unpinPatient(patientId);
+      } else {
+        void pinPatient(patientId);
+      }
+    },
+    [queryClient],
+  );
 
-  const handleSelectPatient = (patient: Patient) => {
+  const handleSelectPatient = async (patient: Patient) => {
     if (selectedPatient?.id === patient.id) {
       setSelectedPatient(null);
     } else {
       setSelectedPatient(patient);
+      if (checkedPatients.has(patient.id)) {
+        try {
+          const res = await fetch(
+            `${import.meta.env.VITE_API_URL || ""}/api/v1/patients/${patient.id}/ecgs?per_page=500`,
+          );
+          if (res.ok) {
+            const json = await res.json();
+            const ids = (json.data ?? []).map((e: { id: number }) => e.id);
+            setSelectedECGs((prev) => {
+              const next = new Set(prev);
+              for (const id of ids) next.add(id);
+              return next;
+            });
+          }
+        } catch {
+          /* ignore */
+        }
+      }
     }
   };
 
+  const fetchAndAddECGs = async (patientId: number) => {
+    try {
+      const res = await fetch(
+        `${import.meta.env.VITE_API_URL || ""}/api/v1/patients/${patientId}/ecgs?per_page=500`,
+      );
+      if (res.ok) {
+        const json = await res.json();
+        const ids: number[] = (json.data ?? []).map(
+          (e: { id: number }) => e.id,
+        );
+        setSelectedECGs((prev) => {
+          const next = new Set(prev);
+          for (const id of ids) next.add(id);
+          return next;
+        });
+        setEcgCountByPatient((prev) =>
+          new Map(prev).set(patientId, ids.length),
+        );
+      }
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const fetchAndRemoveECGs = async (patientId: number) => {
+    try {
+      const res = await fetch(
+        `${import.meta.env.VITE_API_URL || ""}/api/v1/patients/${patientId}/ecgs?per_page=500`,
+      );
+      if (res.ok) {
+        const json = await res.json();
+        const ids = new Set((json.data ?? []).map((e: { id: number }) => e.id));
+        setSelectedECGs((prev) => {
+          const next = new Set(prev);
+          for (const id of ids) next.delete(id);
+          return next;
+        });
+        setEcgCountByPatient((prev) => {
+          const next = new Map(prev);
+          next.delete(patientId);
+          return next;
+        });
+      }
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const handleToggleCheck = (patientId: number) => {
+    const wasChecked = checkedPatients.has(patientId);
+    setCheckedPatients((prev) => {
+      const next = new Set(prev);
+      wasChecked ? next.delete(patientId) : next.add(patientId);
+      return next;
+    });
+    if (wasChecked) {
+      void fetchAndRemoveECGs(patientId);
+    } else {
+      void fetchAndAddECGs(patientId);
+    }
+  };
+
+  const handleCheckAll = () => {
+    if (checkedPatients.size === patients.length) {
+      setCheckedPatients(new Set());
+      setSelectedECGs(new Set());
+    } else {
+      setCheckedPatients(new Set(patients.map((p) => p.id)));
+      for (const p of patients) {
+        if (!checkedPatients.has(p.id)) {
+          void fetchAndAddECGs(p.id);
+        }
+      }
+    }
+  };
+
+  const handleToggleECG = useCallback((ecgId: number) => {
+    setSelectedECGs((prev) => {
+      const next = new Set(prev);
+      next.has(ecgId) ? next.delete(ecgId) : next.add(ecgId);
+      return next;
+    });
+  }, []);
+
+  const handleSetAllECGs = useCallback((ecgIds: number[]) => {
+    setSelectedECGs((prev) => {
+      const next = new Set(prev);
+      for (const id of ecgIds) next.add(id);
+      return next;
+    });
+  }, []);
+
+  const handleClearECGsForPatient = useCallback(() => {
+    if (!selectedPatient) return;
+    setSelectedECGs(new Set());
+  }, [selectedPatient]);
+
+  const handleClearAllECGs = useCallback(() => {
+    setSelectedECGs(new Set());
+  }, []);
+
+  const handlePatientCheckedChange = useCallback(
+    (patientId: number, allSelected: boolean, selectedCount: number) => {
+      setCheckedPatients((prev) => {
+        const next = new Set(prev);
+        if (allSelected) {
+          next.add(patientId);
+        } else {
+          next.delete(patientId);
+        }
+        return next;
+      });
+      setEcgCountByPatient((prev) => {
+        const next = new Map(prev);
+        if (selectedCount > 0) {
+          next.set(patientId, selectedCount);
+        } else {
+          next.delete(patientId);
+        }
+        return next;
+      });
+    },
+    [],
+  );
+
   // ─── Full-page mode (no patient selected) ─────────────────────────────────
   if (!selectedPatient) {
+    const allCheckedOnPage =
+      patients.length > 0 && patients.every((p) => checkedPatients.has(p.id));
+    const someCheckedOnPage = checkedPatients.size > 0 && !allCheckedOnPage;
+
     return (
       <div className="flex flex-col h-full min-h-0 overflow-hidden animate-in fade-in duration-200">
         {/* Search bar + per page selector */}
         <div className="p-4 border-b border-border shrink-0 flex items-center gap-4">
+          <input
+            type="checkbox"
+            checked={allCheckedOnPage}
+            ref={(el) => {
+              if (el) el.indeterminate = someCheckedOnPage;
+            }}
+            onChange={handleCheckAll}
+            className="w-4 h-4 rounded border-border accent-primary cursor-pointer shrink-0"
+            title={t("patient.selectAll")}
+          />
           <div className="relative flex-1 max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <input
@@ -673,7 +984,7 @@ export function PatientMasterDetailPage({
               type="text"
               value={search}
               onChange={(e) => onSearchChange(e.target.value)}
-              placeholder="Rechercher un patient…"
+              placeholder={t("search.placeholder")}
               className={`w-full pl-9 ${search ? "pr-9" : "pr-3"} py-2 text-sm bg-muted/50 border-0 rounded-full focus:outline-none focus:ring-2 focus:ring-ring/20 placeholder:text-muted-foreground/60`}
             />
             {search && (
@@ -685,8 +996,63 @@ export function PatientMasterDetailPage({
               </button>
             )}
           </div>
+          <button
+            onClick={() => setPinnedOnly((v) => !v)}
+            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium border transition-colors shrink-0 ${
+              pinnedOnly
+                ? "bg-amber-400/10 text-amber-500 border-amber-400/30"
+                : "text-muted-foreground border-border hover:text-foreground hover:bg-muted/50"
+            }`}
+          >
+            <Star className="w-3 h-3" fill={pinnedOnly ? "currentColor" : "none"} />
+            {t("patient.favorites")}
+          </button>
+          <button
+            onClick={() => {
+              if (sortBy === "last_name") {
+                setSortOrder((o) => (o === "asc" ? "desc" : "asc"));
+              } else {
+                setSortBy("last_name");
+                setSortOrder("asc");
+              }
+              setPage(1);
+            }}
+            className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium border transition-colors shrink-0 ${
+              sortBy === "last_name"
+                ? "bg-primary/10 text-primary border-primary/30"
+                : "text-muted-foreground border-border hover:text-foreground hover:bg-muted/50"
+            }`}
+          >
+            {sortBy === "last_name" && sortOrder === "desc" ? (
+              <ArrowUpAZ className="w-3.5 h-3.5" />
+            ) : (
+              <ArrowDownAZ className="w-3.5 h-3.5" />
+            )}
+            {t("patient.name")}
+          </button>
+          <button
+            onClick={() => {
+              if (sortBy === "last_activity") {
+                setSortOrder((o) => (o === "desc" ? "asc" : "desc"));
+              } else {
+                setSortBy("last_activity");
+                setSortOrder("desc");
+              }
+              setPage(1);
+            }}
+            className={`inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium border transition-colors shrink-0 ${
+              sortBy === "last_activity"
+                ? "bg-primary/10 text-primary border-primary/30"
+                : "text-muted-foreground border-border hover:text-foreground hover:bg-muted/50"
+            }`}
+          >
+            <Clock className="w-3 h-3" />
+            {sortBy === "last_activity" && sortOrder === "asc" ? t("patient.sortOldest") : t("patient.sortRecent")}
+          </button>
           <div className="flex items-center gap-2 text-xs text-muted-foreground shrink-0">
-            <span>{total} patient{total > 1 ? "s" : ""}</span>
+            <span>
+              {total} patient{total > 1 ? "s" : ""}
+            </span>
             <select
               value={perPage}
               onChange={(e) => {
@@ -698,7 +1064,9 @@ export function PatientMasterDetailPage({
               className="text-xs border border-border rounded-md px-2 py-1 bg-background focus:outline-none focus:ring-1 focus:ring-ring/20"
             >
               {[10, 25, 50, 100].map((n) => (
-                <option key={n} value={n}>{n} / page</option>
+                <option key={n} value={n}>
+                  {n} / page
+                </option>
               ))}
             </select>
           </div>
@@ -707,10 +1075,13 @@ export function PatientMasterDetailPage({
         {/* Patient list */}
         <div className="flex-1 min-h-0 overflow-y-auto">
           <PatientGrid
-            patients={sortedPatients}
+            patients={displayedPatients}
             pinned={pinned}
+            checked={checkedPatients}
+            selectedEcgCounts={ecgCountByPatient}
             onSelect={handleSelectPatient}
             onTogglePin={togglePin}
+            onToggleCheck={handleToggleCheck}
             isLoading={isLoading}
           />
         </div>
@@ -739,6 +1110,17 @@ export function PatientMasterDetailPage({
             </div>
           </div>
         )}
+
+        {/* Bulk ECG footer (shared) */}
+        {selectedECGs.size > 0 && (
+          <BulkECGFooter
+            count={selectedECGs.size}
+            ecgIds={selectedECGs}
+            canRead={canRead}
+            canDelete={canDelete}
+            onClear={handleClearAllECGs}
+          />
+        )}
       </div>
     );
   }
@@ -756,7 +1138,7 @@ export function PatientMasterDetailPage({
               type="text"
               value={search}
               onChange={(e) => onSearchChange(e.target.value)}
-              placeholder="Rechercher un patient…"
+              placeholder={t("search.placeholder")}
               className={`w-full pl-9 ${search ? "pr-9" : "pr-3"} py-2 text-sm bg-muted/50 border-0 rounded-full focus:outline-none focus:ring-2 focus:ring-ring/20 placeholder:text-muted-foreground/60`}
             />
             {search && (
@@ -778,17 +1160,17 @@ export function PatientMasterDetailPage({
             </div>
           ) : patients.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-8">
-              Aucun patient trouvé
+              {t("search.noResults")}
             </p>
           ) : (
             <>
               {hasPinnedSection && (
                 <div className="px-4 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
                   <Star className="w-2.5 h-2.5" />
-                  Épinglés
+                  {t("patient.pinned")}
                 </div>
               )}
-              {sortedPatients.map((patient, i) => {
+              {displayedPatients.map((patient, i) => {
                 const showDivider = hasPinnedSection && i === firstNonPinned;
                 return (
                   <div key={patient.id as unknown as string}>
@@ -813,13 +1195,28 @@ export function PatientMasterDetailPage({
       {/* ── Right panel: detail ── */}
       <div className="flex-1 min-h-0 overflow-hidden animate-in fade-in duration-150">
         <PatientDetail
-          key={selectedPatient.id as unknown as string}
           patient={selectedPatient}
           canRead={canRead}
           canDelete={canDelete}
           canForceHL7={canForceHL7}
+          selectedECGs={selectedECGs}
+          onToggleECG={handleToggleECG}
+          onSetAllECGs={handleSetAllECGs}
+          onClearECGs={handleClearAllECGs}
+          onPatientCheckedChange={handlePatientCheckedChange}
         />
       </div>
+
+      {/* ── Common footer ── */}
+      {selectedECGs.size > 0 && (
+        <BulkECGFooter
+          count={selectedECGs.size}
+          ecgIds={selectedECGs}
+          canRead={canRead}
+          canDelete={canDelete}
+          onClear={handleClearAllECGs}
+        />
+      )}
     </div>
   );
 }
