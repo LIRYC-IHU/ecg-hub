@@ -32,6 +32,9 @@ func RunMigrations(db *gorm.DB) error {
 		&appmodels.NihonKohdenTransfer{},
 		&appmodels.ConnectorJob{},
 		&appmodels.ECGBuffer{},
+		&appmodels.UserPin{},
+		&appmodels.Tag{},
+		&appmodels.PatientTag{},
 	}
 	// for _, m := range models {
 	// 	err := db.Migrator().DropTable(m)
