@@ -339,6 +339,7 @@ export async function fetchAuditLogs(
 
 export interface PatientFilters {
   q?: string;
+  tags?: string[];
   sort_by?: "patient_id" | "last_name" | "created_at" | "last_activity";
   sort_order?: "asc" | "desc";
   page?: number;
@@ -350,6 +351,7 @@ export async function fetchPatients(
 ): Promise<ListResponse<Patient>> {
   const params = new URLSearchParams();
   if (filters.q) params.set("q", filters.q);
+  if (filters.tags && filters.tags.length > 0) params.set("tags", filters.tags.join(","));
   if (filters.sort_by) params.set("sort_by", filters.sort_by);
   if (filters.sort_order) params.set("sort_order", filters.sort_order);
   params.set("page", String(filters.page ?? 1));
