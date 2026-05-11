@@ -17,6 +17,7 @@ const (
 	PermECGDownload      = "ecg.download"
 	PermECGDelete        = "ecg.delete"
 	PermECGForceHL7      = "ecg.force_hl7"
+	PermHL7Config        = "hl7.config"
 	PermTagCreate        = "tag.create"
 	PermTagDelete        = "tag.delete"
 	PermTagApply         = "tag.apply"
@@ -36,6 +37,7 @@ var AllPermissions = []string{
 	PermECGDownload,
 	PermECGDelete,
 	PermECGForceHL7,
+	PermHL7Config,
 	PermTagCreate,
 	PermTagDelete,
 	PermTagApply,
@@ -80,18 +82,11 @@ func (p *PermissionChecker) AdminRole() string { return p.adminRole }
 
 // HasPermission reports whether role has the given permission.
 func (p *PermissionChecker) HasPermission(ctx context.Context, role, permission string) bool {
-	if role == p.adminRole {
-		return true
-	}
 	return p.load(ctx, role)[permission]
 }
 
 // GetPermissions returns all permissions held by role.
-// Admin role returns AllPermissions.
 func (p *PermissionChecker) GetPermissions(ctx context.Context, role string) []string {
-	if role == p.adminRole {
-		return AllPermissions
-	}
 	m := p.load(ctx, role)
 	out := make([]string, 0, len(m))
 	for perm := range m {
