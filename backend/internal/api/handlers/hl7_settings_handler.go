@@ -1,0 +1,159 @@
+package handlers
+
+import (
+	"net/http"
+	"time"
+
+	"github.com/labstack/echo/v4"
+
+	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
+	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
+)
+
+// HL7SchedulerStatus exposes scheduler state to handlers.
+type HL7SchedulerStatus interface {
+	LastRun() time.Time
+	NextRun() time.Time
+	Reload() error
+	RunNow()
+}
+
+// HL7SettingsResponse is the JSON response for GET /admin/hl7/settings.
+type HL7SettingsResponse struct {
+	models.HL7Settings
+	LastRun *time.Time `json:"last_run,omitempty"`
+	NextRun *time.Time `json:"next_run,omitempty"`
+}
+
+// UpdateHL7SettingsRequest is the body for PUT /admin/hl7/settings.
+type UpdateHL7SettingsRequest struct {
+	TriggerMode    *string `json:"trigger_mode"`
+	CronExpression *string `json:"cron_expression"`
+	MaxRetries     *int    `json:"max_retries"`
+	Enabled        *bool   `json:"enabled"`
+}
+
+// GetHL7SettingsHandler returns GET /admin/hl7/settings.
+// Returns the current scheduler settings plus last_run and next_run timestamps.
+func GetHL7SettingsHandler(repo *repository.HL7SettingsRepository, scheduler HL7SchedulerStatus) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		settings, err := repo.Get()
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{
+				"code":    "DB_ERROR",
+				"message": "failed to read hl7 settings",
+			})
+		}
+
+		resp := HL7SettingsResponse{
+			HL7Settings: *settings,
+		}
+
+		if scheduler != nil {
+			lr := scheduler.LastRun()
+			if !lr.IsZero() {
+				resp.LastRun = &lr
+			}
+			nr := scheduler.NextRun()
+			if !nr.IsZero() {
+				resp.NextRun = &nr
+			}
+		}
+
+		return c.JSON(http.StatusOK, map[string]any{"data": resp})
+	}
+}
+
+// UpdateHL7SettingsHandler handles PUT /admin/hl7/settings.
+// Updates the settings and reloads the scheduler.
+func UpdateHL7SettingsHandler(repo *repository.HL7SettingsRepository, scheduler HL7SchedulerStatus) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		var req UpdateHL7SettingsRequest
+		if err := c.Bind(&req); err != nil {
+			return c.JSON(http.StatusBadRequest, map[string]string{
+				"code":    "INVALID_PARAMS",
+				"message": err.Error(),
+			})
+		}
+
+		// Load existing settings.
+		settings, err := repo.Get()
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{
+				"code":    "DB_ERROR",
+				"message": "failed to read hl7 settings",
+			})
+		}
+
+		// Apply partial updates.
+		if req.TriggerMode != nil {
+			mode := *req.TriggerMode
+			if mode != "immediate" && mode != "scheduled" {
+				return c.JSON(http.StatusBadRequest, map[string]string{
+					"code":    "INVALID_PARAMS",
+					"message": "trigger_mode must be 'immediate' or 'scheduled'",
+				})
+			}
+			settings.TriggerMode = mode
+		}
+		if req.CronExpression != nil {
+			if *req.CronExpression == "" {
+				return c.JSON(http.StatusBadRequest, map[string]string{
+					"code":    "INVALID_PARAMS",
+					"message": "cron_expression must not be empty",
+				})
+			}
+			settings.CronExpression = *req.CronExpression
+		}
+		if req.MaxRetries != nil {
+			if *req.MaxRetries < 1 {
+				return c.JSON(http.StatusBadRequest, map[string]string{
+					"code":    "INVALID_PARAMS",
+					"message": "max_retries must be at least 1",
+				})
+			}
+			settings.MaxRetries = *req.MaxRetries
+		}
+		if req.Enabled != nil {
+			settings.Enabled = *req.Enabled
+		}
+
+		if err := repo.Update(settings); err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{
+				"code":    "DB_ERROR",
+				"message": "failed to update hl7 settings",
+			})
+		}
+
+		// Reload scheduler with new settings.
+		if scheduler != nil {
+			if err := scheduler.Reload(); err != nil {
+				return c.JSON(http.StatusInternalServerError, map[string]string{
+					"code":    "SCHEDULER_ERROR",
+					"message": "settings saved but scheduler reload failed: " + err.Error(),
+				})
+			}
+		}
+
+		return c.JSON(http.StatusOK, map[string]any{"data": settings})
+	}
+}
+
+// ForceHL7RunHandler handles POST /admin/hl7/run.
+// Triggers an immediate run of the scheduler regardless of cron schedule.
+func ForceHL7RunHandler(scheduler HL7SchedulerStatus) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		if scheduler == nil {
+			return c.JSON(http.StatusServiceUnavailable, map[string]string{
+				"code":    "HL7_DISABLED",
+				"message": "HL7 scheduler is not configured",
+			})
+		}
+
+		scheduler.RunNow()
+
+		return c.JSON(http.StatusAccepted, map[string]string{
+			"message": "HL7 processing triggered",
+		})
+	}
+}
