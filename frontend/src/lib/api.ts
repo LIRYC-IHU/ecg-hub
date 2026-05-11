@@ -636,6 +636,35 @@ export async function deleteTag(id: string): Promise<void> {
   await fetch(`${BASE_URL}/api/v1/tags/${id}`, { method: "DELETE" });
 }
 
+export async function fetchPatientTags(patientId: string): Promise<TagDTO[]> {
+  const res = await fetch(`${BASE_URL}/api/v1/patients/${patientId}/tags`);
+  if (!res.ok) return [];
+  const json = await res.json();
+  return json.data ?? [];
+}
+
+export async function tagPatient(patientId: string, tagId: string): Promise<void> {
+  const res = await fetch(`${BASE_URL}/api/v1/patients/${patientId}/tags`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ tag_id: tagId }),
+  });
+  if (!res.ok) {
+    const err: ErrorResponse = await res.json();
+    throw err;
+  }
+}
+
+export async function untagPatient(patientId: string, tagId: string): Promise<void> {
+  const res = await fetch(`${BASE_URL}/api/v1/patients/${patientId}/tags/${tagId}`, {
+    method: "DELETE",
+  });
+  if (!res.ok && res.status !== 404) {
+    const err: ErrorResponse = await res.json();
+    throw err;
+  }
+}
+
 export interface VolumeMetric {
   name: string;
   total: number; // bytes (0 = unlimited / rotation disabled)
