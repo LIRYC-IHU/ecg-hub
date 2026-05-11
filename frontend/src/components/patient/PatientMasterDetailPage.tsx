@@ -4,7 +4,6 @@ import {
   Star,
   Download,
   Eye,
-  Calendar,
   X,
   Trash2,
   ChevronLeft,
@@ -13,6 +12,8 @@ import {
   ArrowUpAZ,
   Clock,
   Tag,
+  Copy,
+  RefreshCw,
 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePatients } from "../../hooks/usePatients";
@@ -27,6 +28,8 @@ import {
   fetchPatientTags,
   fetchTags,
   untagPatient,
+  forceHL7,
+  fetchActiveHL7Mappings,
   type TagDTO,
 } from "../../lib/api";
 import { useTranslation } from "react-i18next";
@@ -161,6 +164,7 @@ function PatientGrid({
   isLoading: boolean;
 }) {
   const { t } = useTranslation();
+  const { notify } = useNotification();
   if (isLoading) {
     return (
       <div className="flex justify-center py-16">
@@ -211,8 +215,18 @@ function PatientGrid({
               <div className="text-sm font-medium text-foreground truncate">
                 {patient.last_name}, {patient.first_name}
               </div>
-              <div className="text-[11px] text-muted-foreground font-mono mt-0.5">
+              <div className="text-[11px] text-muted-foreground font-mono mt-0.5 inline-flex items-center gap-1">
                 {patient.patient_id}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void navigator.clipboard.writeText(patient.patient_id);
+                    notify("success", t("patient.idCopied"));
+                  }}
+                  className="p-0.5 rounded text-muted-foreground/40 hover:text-foreground transition-colors"
+                >
+                  <Copy className="w-2.5 h-2.5" />
+                </button>
               </div>
             </div>
             <div className="flex items-center gap-4 flex-1 text-[11px] text-muted-foreground">
@@ -458,8 +472,18 @@ function PatientDetail({
             {patient.last_name}, {patient.first_name}
           </h2>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-sm text-muted-foreground">
-            <span className="font-mono text-foreground text-xs">
+            <span className="inline-flex items-center gap-1 font-mono text-foreground text-xs">
               {patient.patient_id}
+              <button
+                onClick={() => {
+                  void navigator.clipboard.writeText(patient.patient_id);
+                  notify("success", t("patient.idCopied"));
+                }}
+                className="p-0.5 rounded text-muted-foreground hover:text-foreground transition-colors"
+                title={t("patient.copyId")}
+              >
+                <Copy className="w-3 h-3" />
+              </button>
             </span>
             <span className="text-border">·</span>
             <span>
@@ -483,10 +507,30 @@ function PatientDetail({
           <PatientTagsRow patientId={patient.patient_id} />
         </div>
         <div className="flex gap-2 shrink-0">
-          <button className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm border border-border text-foreground hover:bg-muted transition-colors">
-            <Calendar className="w-3.5 h-3.5" />
-            {t("patient.history")}
-          </button>
+          {canForceHL7 && (
+            <button
+              onClick={async () => {
+                if (ecgs.length === 0) {
+                  notify("info", t("patient.hl7NoPending"));
+                  return;
+                }
+                try {
+                  for (const ecg of ecgs) {
+                    await forceHL7(ecg.id);
+                  }
+                  notify("success", t("patient.hl7Forced"));
+                  void queryClient.invalidateQueries({ queryKey: ["ecgs", patient.id] });
+                  void queryClient.invalidateQueries({ queryKey: ["patients"] });
+                } catch {
+                  notify("error", t("patient.hl7ForceError"));
+                }
+              }}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm border border-border text-foreground hover:bg-muted transition-colors"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              {t("patient.forceHL7")}
+            </button>
+          )}
           {canRead && (
             <button className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm bg-primary text-primary-foreground hover:opacity-90 transition-opacity">
               <Download className="w-3.5 h-3.5" />
@@ -833,6 +877,18 @@ export function PatientMasterDetailPage({
     staleTime: 60_000,
   });
 
+  // Check HL7 mapping on mount — notify once if not configured
+  const hl7Notified = useRef(false);
+  useEffect(() => {
+    if (hl7Notified.current) return;
+    hl7Notified.current = true;
+    fetchActiveHL7Mappings().then(({ active }) => {
+      if (!active) {
+        notify("warn", t("patient.hl7NotConfigured"));
+      }
+    }).catch(() => {});
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const tagDropdownRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!tagDropdownOpen) return;
@@ -863,6 +919,16 @@ export function PatientMasterDetailPage({
   });
 
   const totalPages = Math.max(1, Math.ceil(total / perPage));
+
+  // Sync selectedPatient with refetched data
+  useEffect(() => {
+    if (selectedPatient) {
+      const updated = patients.find((p) => p.id === selectedPatient.id);
+      if (updated && (updated.last_name !== selectedPatient.last_name || updated.first_name !== selectedPatient.first_name || updated.date_of_birth !== selectedPatient.date_of_birth || updated.gender !== selectedPatient.gender)) {
+        setSelectedPatient(updated);
+      }
+    }
+  }, [patients]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pinnedSnapshot = useRef<Set<string>>(pinned);
   useEffect(() => {
