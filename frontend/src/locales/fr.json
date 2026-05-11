@@ -225,6 +225,7 @@
       "group": {
         "patient": "Patient",
         "ecg": "ECG",
+        "tag": "Tags",
         "quarantine": "Quarantaine",
         "admin": "Administration",
         "swagger": "API"
@@ -236,6 +237,9 @@
         "ecg_download": "Télécharger les ECG",
         "ecg_delete": "Supprimer les ECG",
         "ecg_force_hl7": "Forcer la tentative HL7",
+        "tag_create": "Créer et modifier des tags",
+        "tag_delete": "Supprimer des tags",
+        "tag_apply": "Appliquer des tags aux patients",
         "quarantine_read": "Voir la quarantaine",
         "quarantine_delete": "Supprimer des fichiers en quarantaine",
         "admin_users": "Gérer les rôles",
