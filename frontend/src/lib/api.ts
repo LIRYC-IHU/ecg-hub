@@ -597,6 +597,115 @@ export async function unpinPatient(patientId: string): Promise<void> {
   });
 }
 
+// ─── HL7 Test ────────────────────────────────────────────────────────────────
+
+export interface HL7CompNode {
+  path: string;
+  value: string;
+}
+
+export interface HL7FieldNode {
+  path: string;
+  value: string;
+  components?: HL7CompNode[];
+}
+
+export interface HL7SegmentNode {
+  name: string;
+  fields: HL7FieldNode[];
+}
+
+export interface HL7TestResult {
+  success: boolean;
+  patient_id: string;
+  duration: string;
+  error?: string;
+  raw?: string;
+  tree?: HL7SegmentNode[];
+  demographics?: {
+    last_name: string;
+    first_name: string;
+    date_of_birth: string;
+    gender: string;
+    source: string;
+  };
+}
+
+export interface HL7Mapping {
+  id: string;
+  preset_id: string;
+  source_path: string;
+  target_field: string;
+}
+
+export interface HL7Preset {
+  id: string;
+  name: string;
+  active: boolean;
+  mappings: HL7Mapping[];
+  created_at: string;
+}
+
+export async function testHL7Query(patientId: string): Promise<HL7TestResult> {
+  const res = await fetch(`${BASE_URL}/api/v1/admin/hl7/test`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ patient_id: patientId }),
+  });
+  if (!res.ok) {
+    const err: ErrorResponse = await res.json();
+    throw err;
+  }
+  return res.json();
+}
+
+export async function fetchHL7Presets(): Promise<HL7Preset[]> {
+  const res = await fetch(`${BASE_URL}/api/v1/admin/hl7/presets`);
+  if (!res.ok) return [];
+  const json = await res.json();
+  return json.data ?? [];
+}
+
+export async function createHL7Preset(name: string, mappings: { source_path: string; target_field: string }[]): Promise<HL7Preset> {
+  const res = await fetch(`${BASE_URL}/api/v1/admin/hl7/presets`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, mappings }),
+  });
+  if (!res.ok) {
+    const err: ErrorResponse = await res.json();
+    throw err;
+  }
+  const json = await res.json();
+  return json.data;
+}
+
+export async function activateHL7Preset(id: string): Promise<void> {
+  await fetch(`${BASE_URL}/api/v1/admin/hl7/presets/${id}/activate`, { method: "POST" });
+}
+
+export async function deleteHL7Preset(id: string): Promise<void> {
+  await fetch(`${BASE_URL}/api/v1/admin/hl7/presets/${id}`, { method: "DELETE" });
+}
+
+export async function saveHL7PresetMappings(presetId: string, mappings: { source_path: string; target_field: string }[]): Promise<void> {
+  const res = await fetch(`${BASE_URL}/api/v1/admin/hl7/presets/${presetId}/mappings`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ mappings }),
+  });
+  if (!res.ok) {
+    const err: ErrorResponse = await res.json();
+    throw err;
+  }
+}
+
+export async function fetchActiveHL7Mappings(): Promise<{ data: HL7Mapping[]; active: boolean }> {
+  const res = await fetch(`${BASE_URL}/api/v1/admin/hl7/active-mappings`);
+  if (!res.ok) return { data: [], active: false };
+  return res.json();
+}
+
 // ─── Tags ───────────────────────────────────────────────────────────────────
 
 export interface TagDTO {
