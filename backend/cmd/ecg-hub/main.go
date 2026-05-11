@@ -309,11 +309,42 @@ func main() {
 		hl7Enricher = hl7EnricherForPersister
 	}
 
+	// HL7 Scheduler: database-driven cron replacement for the config-only RetryJob.
+	var hl7Scheduler *hl7.Scheduler
+	var hl7SettingsRepo *repository.HL7SettingsRepository
+	if hl7Client != nil {
+		hl7SettingsRepo = repository.NewHL7SettingsRepository(gormDB)
+		auditRepoForScheduler := repository.NewAuditRepository(gormDB)
+		hl7Scheduler = hl7.NewScheduler(
+			hl7SettingsRepo,
+			ecgRepo,
+			patRepo,
+			auditRepoForScheduler,
+			webhookNotifier,
+			hl7Client,
+			hl7EnricherForPersister,
+			cfg.HL7.MaxRetries,
+		)
+		if err := hl7Scheduler.Start(); err != nil {
+			slog.Warn("hl7 scheduler: failed to start, falling back to retry job", "error", err)
+			hl7Scheduler = nil
+		} else {
+			slog.Info("hl7 scheduler: started successfully")
+		}
+	}
+
+	// Wrap scheduler as the handler interface (nil-safe).
+	var hl7SchedulerStatus apihandlers.HL7SchedulerStatus
+	if hl7Scheduler != nil {
+		hl7SchedulerStatus = hl7Scheduler
+	}
+
 	router := api.NewRouterConfig(e, gormDB, authProvider, bridge, webhookNotifier, keycloakAdmin, permChecker, userRepo, activeModules,
 		apihandlers.DICOMStatus{Enabled: cfg.DICOM.Enabled, Port: cfg.DICOM.Port},
 		apihandlers.FTPStatus{Enabled: cfg.FTP.Enabled, Port: cfg.FTP.Port},
 		ectpStatus,
-		exportRepo, exportPool, connCheckers, hl7Client, hl7Enricher, cfg)
+		exportRepo, exportPool, connCheckers, hl7Client, hl7Enricher,
+		hl7SchedulerStatus, hl7SettingsRepo, cfg)
 
 	router.RegisterRoutes()
 
@@ -366,31 +397,55 @@ func main() {
 	quarantineStore := ingestion.NewQuarantineStore(cfg.Storage.QuarantinePath, quarantineRepo)
 	dispatcher.WithQuarantineRecorder(quarantineStore)
 
-	// Story 4.1 + 4.2: Wire HL7 enricher and retry job if HL7 client is available.
+	// Story 4.1 + 4.2: Wire HL7 enricher if HL7 client is available.
+	// The new Scheduler (started above) replaces the RetryJob for retry processing.
+	// If the scheduler failed to start, fall back to the old RetryJob.
 	if hl7EnricherForPersister != nil {
-		persister.WithEnricher(hl7EnricherForPersister)
-		slog.Info("hl7: enricher enabled", "host", cfg.HL7.Host, "port", cfg.HL7.Port)
-
-		// Story 4.2: Retry job — parse interval, fail-fast if invalid (NFR-R3).
-		retryInterval, err := time.ParseDuration(cfg.HL7.RetryInterval)
-		if err != nil {
-			slog.Error("FATAL: hl7: invalid retry_interval in config",
-				"value", cfg.HL7.RetryInterval, "error", err)
-			os.Exit(1)
+		// Read settings to decide enricher wiring mode.
+		// If trigger_mode == "immediate", wire enricher to persister (current behavior).
+		// If trigger_mode == "scheduled", skip wiring — ECGs stay pending until cron fires.
+		wireEnricher := true
+		if hl7SettingsRepo != nil {
+			if settings, err := hl7SettingsRepo.Get(); err == nil && settings.TriggerMode == "scheduled" {
+				wireEnricher = false
+				slog.Info("hl7: trigger_mode=scheduled, enricher NOT wired to persister")
+			}
 		}
-		auditRepo := repository.NewAuditRepository(gormDB)
-		retryJob := hl7.NewRetryJob(
-			hl7Client, ecgRepo, patRepo, auditRepo, webhookNotifier,
-			cfg.HL7.MaxRetries, retryInterval,
-		)
-		retryJob.Start()
-		slog.Info("hl7: retry job started",
-			"interval", retryInterval,
-			"max_retries", cfg.HL7.MaxRetries,
-		)
+		if wireEnricher {
+			persister.WithEnricher(hl7EnricherForPersister)
+			slog.Info("hl7: enricher enabled (immediate mode)", "host", cfg.HL7.Host, "port", cfg.HL7.Port)
+		}
+
+		// Only start the legacy RetryJob if the new Scheduler is not running.
+		if hl7Scheduler == nil {
+			retryInterval, err := time.ParseDuration(cfg.HL7.RetryInterval)
+			if err != nil {
+				slog.Error("FATAL: hl7: invalid retry_interval in config",
+					"value", cfg.HL7.RetryInterval, "error", err)
+				os.Exit(1)
+			}
+			auditRepo := repository.NewAuditRepository(gormDB)
+			retryJob := hl7.NewRetryJob(
+				hl7Client, ecgRepo, patRepo, auditRepo, webhookNotifier,
+				cfg.HL7.MaxRetries, retryInterval,
+			)
+			retryJob.Start()
+			slog.Info("hl7: legacy retry job started (scheduler unavailable)",
+				"interval", retryInterval,
+				"max_retries", cfg.HL7.MaxRetries,
+			)
+			defer func() {
+				retryJob.Stop()
+				<-retryJob.Done()
+			}()
+		}
+	}
+
+	// Defer scheduler stop after persister setup.
+	if hl7Scheduler != nil {
 		defer func() {
-			retryJob.Stop()
-			<-retryJob.Done()
+			hl7Scheduler.Stop()
+			<-hl7Scheduler.Done()
 		}()
 	}
 
