@@ -12,6 +12,7 @@ import {
   ArrowDownAZ,
   ArrowUpAZ,
   Clock,
+  Tag,
 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePatients } from "../../hooks/usePatients";
@@ -24,6 +25,7 @@ import {
   pinPatient,
   unpinPatient,
   fetchPatientTags,
+  fetchTags,
   untagPatient,
   type TagDTO,
 } from "../../lib/api";
@@ -811,6 +813,8 @@ export function PatientMasterDetailPage({
   );
   const [selectedECGs, setSelectedECGs] = useState<Set<number>>(new Set());
   const [pinnedOnly, setPinnedOnly] = useState(false);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [tagDropdownOpen, setTagDropdownOpen] = useState(false);
   const [sortBy, setSortBy] = useState<"last_name" | "last_activity">("last_name");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [ecgCountByPatient, setEcgCountByPatient] = useState<
@@ -823,6 +827,24 @@ export function PatientMasterDetailPage({
   });
   const pinned = new Set(pinnedData ?? []);
 
+  const { data: allTags = [] } = useQuery({
+    queryKey: ["tags"],
+    queryFn: fetchTags,
+    staleTime: 60_000,
+  });
+
+  const tagDropdownRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!tagDropdownOpen) return;
+    function handleClick(e: MouseEvent) {
+      if (tagDropdownRef.current && !tagDropdownRef.current.contains(e.target as Node)) {
+        setTagDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [tagDropdownOpen]);
+
   useEffect(() => {
     const id = setTimeout(() => {
       setDebouncedSearch(search);
@@ -833,6 +855,7 @@ export function PatientMasterDetailPage({
 
   const { patients, total, isLoading } = usePatients({
     ...(debouncedSearch ? { q: debouncedSearch } : {}),
+    ...(selectedTags.length > 0 ? { tags: selectedTags } : {}),
     sort_by: sortBy,
     sort_order: sortOrder,
     page,
@@ -1086,6 +1109,73 @@ export function PatientMasterDetailPage({
             <Star className="w-3 h-3" fill={pinnedOnly ? "currentColor" : "none"} />
             {t("patient.favorites")}
           </button>
+          {/* Tag multi-select filter */}
+          <div ref={tagDropdownRef} className="relative shrink-0">
+            <button
+              onClick={() => setTagDropdownOpen((v) => !v)}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium border transition-colors ${
+                selectedTags.length > 0
+                  ? "bg-primary/10 text-primary border-primary/30"
+                  : "text-muted-foreground border-border hover:text-foreground hover:bg-muted/50"
+              }`}
+            >
+              <Tag className="w-3 h-3" />
+              {t("patient.filterTags")}
+              {selectedTags.length > 0 && (
+                <span className="ml-1 px-1.5 py-0.5 rounded-full bg-primary text-primary-foreground text-[10px] leading-none">
+                  {selectedTags.length}
+                </span>
+              )}
+            </button>
+            {tagDropdownOpen && (
+              <div className="absolute top-full left-0 mt-1 z-50 w-56 bg-card border border-border rounded-lg shadow-lg overflow-hidden">
+                <div className="max-h-60 overflow-y-auto p-1">
+                  {allTags.length === 0 ? (
+                    <p className="text-xs text-muted-foreground text-center py-3">
+                      {t("patient.noTags")}
+                    </p>
+                  ) : (
+                    allTags.map((tag) => {
+                      const isActive = selectedTags.includes(tag.id);
+                      return (
+                        <label
+                          key={tag.id}
+                          className="flex items-center gap-2.5 px-3 py-2 rounded-md hover:bg-muted/50 cursor-pointer transition-colors"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isActive}
+                            onChange={() => {
+                              setSelectedTags((prev) =>
+                                isActive ? prev.filter((id) => id !== tag.id) : [...prev, tag.id],
+                              );
+                              setPage(1);
+                            }}
+                            className="w-3.5 h-3.5 rounded border-border accent-primary cursor-pointer"
+                          />
+                          <span
+                            className="w-2.5 h-2.5 rounded-full shrink-0"
+                            style={{ backgroundColor: tag.color }}
+                          />
+                          <span className="text-xs text-foreground truncate">{tag.name}</span>
+                        </label>
+                      );
+                    })
+                  )}
+                </div>
+                {selectedTags.length > 0 && (
+                  <div className="border-t border-border p-2">
+                    <button
+                      onClick={() => { setSelectedTags([]); setPage(1); }}
+                      className="w-full text-xs text-muted-foreground hover:text-foreground text-center py-1 transition-colors"
+                    >
+                      {t("common.clearAll")}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
           <button
             onClick={() => {
               if (sortBy === "last_name") {
