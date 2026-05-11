@@ -134,7 +134,7 @@ func (j *RetryJob) processOne(ecg models.ECG) {
 		)
 		newCount := ecg.HL7RetryCount + 1
 		if newCount >= j.maxRetries {
-			j.exhaust(ecg)
+			j.exhaust(ecg, err)
 		} else {
 			appmetrics.HL7RetryAttempts.WithLabelValues("failed").Inc()
 			if updErr := j.ecgRepo.UpdateHL7Lifecycle(ecg.ID, StatusPending, newCount); updErr != nil {
@@ -162,17 +162,21 @@ func (j *RetryJob) processOne(ecg models.ECG) {
 }
 
 // exhaust sets the ECG to hl7_exhausted, writes an audit log, and fires a webhook notification.
-func (j *RetryJob) exhaust(ecg models.ECG) {
+func (j *RetryJob) exhaust(ecg models.ECG, lastErr error) {
 	appmetrics.HL7RetryAttempts.WithLabelValues("exhausted").Inc()
 	if updErr := j.ecgRepo.UpdateHL7Lifecycle(ecg.ID, StatusExhausted, j.maxRetries); updErr != nil {
 		slog.Warn("hl7: exhaustion status update failed", "ecg_id", ecg.ID, "error", updErr)
 	}
 
+	errMsg := ""
+	if lastErr != nil {
+		errMsg = lastErr.Error()
+	}
 	_ = j.auditRepo.Insert(&models.AuditLog{
 		UserID:     "system",
 		Action:     "hl7_exhausted",
 		ResourceID: ecg.ID,
-		Details:    datatypes.JSON(fmt.Sprintf(`{"max_retries":%d,"patient_id":%q}`, j.maxRetries, ecg.PatientID)),
+		Details:    datatypes.JSON(fmt.Sprintf(`{"max_retries":%d,"patient_id":%q,"last_error":%q}`, j.maxRetries, ecg.PatientID, errMsg)),
 	})
 
 	if j.webhook != nil {
