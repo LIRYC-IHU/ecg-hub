@@ -35,14 +35,186 @@ import {
   activateHL7Preset,
   deleteHL7Preset,
   saveHL7PresetMappings,
+  fetchHL7Settings,
+  updateHL7Settings,
+  triggerHL7Run,
   type HL7TestResult,
   type HL7SegmentNode,
   type HL7Preset,
+  type HL7Settings,
 } from "../../lib/api";
 import { Spinner } from "../ui/Spinner";
 import { useNotification } from "../../context/NotificationContext";
 import { useAuth } from "../../hooks/useAuth";
 import MetricCard from "./Metric";
+
+// ─── HL7 Scheduler Form (local state + save button) ─────────────────────────
+
+function HL7SchedulerForm({ settings, onSave, saving }: {
+  settings: HL7Settings;
+  onSave: (data: Partial<Pick<HL7Settings, "trigger_mode" | "cron_expression" | "max_retries" | "enabled">>) => void;
+  saving: boolean;
+}) {
+  const { t } = useTranslation();
+  const [triggerMode, setTriggerMode] = useState(settings.trigger_mode);
+  const [cronExpr, setCronExpr] = useState(settings.cron_expression);
+  const [maxRetries, setMaxRetries] = useState(settings.max_retries);
+  const [enabled, setEnabled] = useState(settings.enabled);
+
+  const isDirty = triggerMode !== settings.trigger_mode || cronExpr !== settings.cron_expression || maxRetries !== settings.max_retries || enabled !== settings.enabled;
+
+  return (
+    <div className="space-y-4 mb-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Trigger mode */}
+        <div>
+          <label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            {t("admin.system.hl7.triggerMode")}
+          </label>
+          <select
+            value={triggerMode}
+            onChange={(e) => setTriggerMode(e.target.value as "immediate" | "scheduled")}
+            className="mt-1 w-full text-xs border border-border rounded-md px-2 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring/20"
+          >
+            <option value="immediate">{t("admin.system.hl7.modeImmediate")}</option>
+            <option value="scheduled">{t("admin.system.hl7.modeScheduled")}</option>
+          </select>
+        </div>
+
+        {/* Cron expression */}
+        <div>
+          <label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            {t("admin.system.hl7.cronExpr")}
+          </label>
+          <input
+            type="text"
+            value={cronExpr}
+            onChange={(e) => setCronExpr(e.target.value)}
+            className="mt-1 w-full text-xs font-mono border border-border rounded-md px-2 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring/20"
+          />
+        </div>
+
+        {/* Max retries */}
+        <div>
+          <label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            {t("admin.system.hl7.maxRetries")}
+          </label>
+          <input
+            type="number"
+            min={1}
+            value={maxRetries}
+            onChange={(e) => setMaxRetries(parseInt(e.target.value) || 1)}
+            className="mt-1 w-full text-xs border border-border rounded-md px-2 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring/20"
+          />
+        </div>
+
+        {/* Enabled toggle */}
+        <div>
+          <label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            {t("admin.system.hl7.enabledLabel")}
+          </label>
+          <div className="mt-2">
+            <button
+              onClick={() => setEnabled((v) => !v)}
+              className={`relative w-10 h-5 rounded-full transition-colors ${enabled ? "bg-primary" : "bg-muted-foreground/30"}`}
+            >
+              <span className={`absolute left-0.5 top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${enabled ? "translate-x-5" : "translate-x-0"}`} />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {isDirty && (
+        <button
+          onClick={() => onSave({ trigger_mode: triggerMode, cron_expression: cronExpr, max_retries: maxRetries, enabled })}
+          disabled={saving}
+          className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-medium bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50 transition-opacity"
+        >
+          {saving && <Spinner size={11} className="text-primary-foreground" />}
+          <Save className="w-3 h-3" />
+          {t("admin.system.hl7.saveSettings")}
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ─── HL7 Scheduler Settings ─────────────────────────────────────────────────
+
+function HL7SchedulerSection() {
+  const { t } = useTranslation();
+  const { notify } = useNotification();
+  const queryClient = useQueryClient();
+
+  const { data: settings, isLoading } = useQuery({
+    queryKey: ["admin", "hl7-settings"],
+    queryFn: fetchHL7Settings,
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: (data: Parameters<typeof updateHL7Settings>[0]) => updateHL7Settings(data),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["admin", "hl7-settings"] });
+      notify("success", t("admin.system.hl7.settingsSaved"));
+    },
+    onError: () => notify("error", t("admin.system.hl7.settingsError")),
+  });
+
+  const runMutation = useMutation({
+    mutationFn: triggerHL7Run,
+    onSuccess: () => {
+      notify("success", t("admin.system.hl7.runTriggered"));
+      void queryClient.invalidateQueries({ queryKey: ["admin", "hl7-settings"] });
+    },
+    onError: () => notify("error", t("admin.system.hl7.runError")),
+  });
+
+  if (isLoading || !settings) return null;
+
+  return (
+    <div className="bg-card rounded-lg border border-border p-5">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <Clock className="w-5 h-5 text-muted-foreground" />
+          <h2 className="text-sm font-semibold text-foreground">
+            {t("admin.system.hl7.schedulerTitle")}
+          </h2>
+          <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${
+            settings.enabled ? "bg-success/10 text-success" : "bg-muted text-muted-foreground"
+          }`}>
+            {settings.enabled ? t("admin.system.hl7.schedulerEnabled") : t("admin.system.hl7.schedulerDisabled")}
+          </span>
+        </div>
+        <button
+          onClick={() => runMutation.mutate()}
+          disabled={runMutation.isPending || !settings.enabled}
+          className="inline-flex items-center gap-1.5 text-xs border border-border px-3 py-1.5 rounded-lg hover:bg-muted transition-colors disabled:opacity-50"
+        >
+          {runMutation.isPending && <Spinner size={11} />}
+          {t("admin.system.hl7.runNow")}
+        </button>
+      </div>
+
+      <HL7SchedulerForm settings={settings} onSave={(data) => updateMutation.mutate(data)} saving={updateMutation.isPending} />
+
+      {/* Status row */}
+      <div className="flex items-center gap-6 text-[11px] text-muted-foreground border-t border-border pt-3">
+        {settings.last_run && (
+          <span>
+            {t("admin.system.hl7.lastRunLabel")}: <span className="font-mono text-foreground">{new Date(settings.last_run).toLocaleString("fr-FR")}</span>
+          </span>
+        )}
+        {settings.next_run && (
+          <span>
+            {t("admin.system.hl7.nextRunLabel")}: <span className="font-mono text-foreground">{new Date(settings.next_run).toLocaleString("fr-FR")}</span>
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
 
 // ─── HL7 Tree Node (collapsible) ────────────────────────────────────────────
 
@@ -894,7 +1066,8 @@ export function AdminSystemPage() {
         </div>
       )}
 
-      {/* HL7 Test Query — requires hl7.config */}
+      {/* HL7 Scheduler + Test — requires hl7.config */}
+      {hasPermission("hl7.config") && <HL7SchedulerSection />}
       {hasPermission("hl7.config") && <HL7TestSection />}
 
       {/* Storage */}
