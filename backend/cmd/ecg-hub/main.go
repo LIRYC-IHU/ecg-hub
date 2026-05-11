@@ -279,11 +279,41 @@ func main() {
 		}
 	}
 
+	// Create HL7 client early so it can be injected into the router for the test endpoint.
+	var hl7Client *hl7.Client
+	if cfg.HL7.Enabled && cfg.HL7.Host != "" && cfg.HL7.Port != 0 {
+		hl7Timeout := 10 * time.Second
+		if cfg.HL7.Timeout != "" {
+			if d, err := time.ParseDuration(cfg.HL7.Timeout); err == nil {
+				hl7Timeout = d
+			}
+		}
+		hl7Client = hl7.NewClient(cfg.HL7.Host, cfg.HL7.Port, hl7Timeout, hl7.MSHConfig{
+			SendingApplication:   cfg.HL7.SendingApplication,
+			SendingFacility:      cfg.HL7.SendingFacility,
+			ReceivingApplication: cfg.HL7.ReceivingApplication,
+			ReceivingFacility:    cfg.HL7.ReceivingFacility,
+			Version:              cfg.HL7.Version,
+			ProcessingID:         cfg.HL7.ProcessingID,
+		})
+	}
+
+	// Create repos + HL7 enricher early so ForceHL7Handler can execute queries immediately.
+	ecgRepo := repository.NewECGRepository(gormDB)
+	patRepo := repository.NewPatientRepository(gormDB)
+	var hl7Enricher apihandlers.HL7Enricher
+	var hl7EnricherForPersister *hl7.Enricher
+	if hl7Client != nil {
+		hl7MappingRepo := repository.NewHL7MappingRepository(gormDB)
+		hl7EnricherForPersister = hl7.NewEnricher(hl7Client, patRepo, ecgRepo, hl7.WithMappingRepo(hl7MappingRepo))
+		hl7Enricher = hl7EnricherForPersister
+	}
+
 	router := api.NewRouterConfig(e, gormDB, authProvider, bridge, webhookNotifier, keycloakAdmin, permChecker, userRepo, activeModules,
 		apihandlers.DICOMStatus{Enabled: cfg.DICOM.Enabled, Port: cfg.DICOM.Port},
 		apihandlers.FTPStatus{Enabled: cfg.FTP.Enabled, Port: cfg.FTP.Port},
 		ectpStatus,
-		exportRepo, exportPool, connCheckers, cfg)
+		exportRepo, exportPool, connCheckers, hl7Client, hl7Enricher, cfg)
 
 	router.RegisterRoutes()
 
@@ -327,8 +357,6 @@ func main() {
 
 	// Step 7: Start persistence worker — writes files to volume and inserts ECG records (Story 2.4).
 	vol := storage.NewVolume(cfg.Storage.VolumePath)
-	ecgRepo := repository.NewECGRepository(gormDB)
-	patRepo := repository.NewPatientRepository(gormDB)
 	auditRepo := repository.NewAuditRepository(gormDB)
 	persister := ingestion.NewPersister(routedQueue, vol, ecgRepo, patRepo).
 		WithAuditWriter(auditRepo)
@@ -338,12 +366,9 @@ func main() {
 	quarantineStore := ingestion.NewQuarantineStore(cfg.Storage.QuarantinePath, quarantineRepo)
 	dispatcher.WithQuarantineRecorder(quarantineStore)
 
-	// Story 4.1 + 4.2: Wire HL7 enricher and retry job if host+port are configured (AC #6).
-	if cfg.HL7.Host != "" && cfg.HL7.Port != 0 {
-		hl7Client := hl7.NewClient(cfg.HL7.Host, cfg.HL7.Port, 10*time.Second)
-
-		enricher := hl7.NewEnricher(hl7Client, patRepo, ecgRepo)
-		persister.WithEnricher(enricher)
+	// Story 4.1 + 4.2: Wire HL7 enricher and retry job if HL7 client is available.
+	if hl7EnricherForPersister != nil {
+		persister.WithEnricher(hl7EnricherForPersister)
 		slog.Info("hl7: enricher enabled", "host", cfg.HL7.Host, "port", cfg.HL7.Port)
 
 		// Story 4.2: Retry job — parse interval, fail-fast if invalid (NFR-R3).
