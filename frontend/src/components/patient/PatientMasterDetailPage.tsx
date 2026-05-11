@@ -113,6 +113,33 @@ function VendorBadge({ vendor }: { vendor: string }) {
   );
 }
 
+function PatientHL7Status({ pending, sent, total }: { pending: number; sent: number; total: number }) {
+  if (total === 0) return null;
+  const exhausted = total - pending - sent;
+  if (sent === total) {
+    return (
+      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-green-500/10 text-green-400">
+        <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
+        HL7
+      </span>
+    );
+  }
+  if (exhausted > 0) {
+    return (
+      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-500/10 text-red-400">
+        <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
+        HL7
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-500/10 text-amber-400">
+      <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+      HL7
+    </span>
+  );
+}
+
 function formatDate(iso: string | null): string {
   if (!iso) return "—";
   return new Date(iso).toLocaleDateString("fr-FR", {
@@ -485,6 +512,7 @@ function PatientDetail({
                 <Copy className="w-3 h-3" />
               </button>
             </span>
+            <PatientHL7Status pending={pendingCount} sent={sentCount} total={ecgs.length} />
             <span className="text-border">·</span>
             <span>
               {patient.gender === "F"
