@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strconv"
@@ -74,10 +75,13 @@ func AdminStatsHandler(db *gorm.DB) echo.HandlerFunc {
 	}
 }
 
+// HL7Enricher is the interface for triggering HL7 enrichment.
+type HL7Enricher interface {
+	Enrich(ctx context.Context, ecgID string, patientID string) error
+}
+
 // ForceHL7Handler handles POST /api/v1/ecgs/:id/hl7/force.
-// Resets hl7_status to "pending" and hl7_retry_count to 0 so the retry job picks it up.
-//
-// Requires: RequireRole("admin")
+// Resets hl7_status to "pending", then immediately runs the HL7 query if an enricher is available.
 //
 // @Summary Force HL7 retry for an ECG
 // @Tags ECG
@@ -87,12 +91,13 @@ func AdminStatsHandler(db *gorm.DB) echo.HandlerFunc {
 // @Failure 404 {object} map[string]string
 // @Security BearerAuth
 // @Router /api/v1/ecgs/{id}/hl7/force [post]
-func ForceHL7Handler(db *gorm.DB) echo.HandlerFunc {
+func ForceHL7Handler(db *gorm.DB, enricher HL7Enricher) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		id := c.Param("id")
 
 		ecgRepo := repository.NewECGRepository(db)
-		if _, err := ecgRepo.FindByID(id); err != nil {
+		ecg, err := ecgRepo.FindByID(id)
+		if err != nil {
 			if errors.Is(err, repository.ErrECGNotFound) {
 				return c.JSON(http.StatusNotFound, mw.APIError("ECG_NOT_FOUND", "ecg not found"))
 			}
@@ -106,6 +111,11 @@ func ForceHL7Handler(db *gorm.DB) echo.HandlerFunc {
 		userID, _ := c.Get(mw.CtxKeyUserID).(string)
 		_ = mw.WriteAuditLog(c.Request().Context(), db, userID, "hl7_force",
 			id, map[string]any{"ecg_id": id})
+
+		// Execute enrichment immediately if available
+		if enricher != nil {
+			_ = enricher.Enrich(c.Request().Context(), id, ecg.PatientID)
+		}
 
 		return c.JSON(http.StatusOK, map[string]any{"hl7_status": "pending"})
 	}
