@@ -23,10 +23,16 @@ import {
   fetchPins,
   pinPatient,
   unpinPatient,
+  fetchPatientTags,
+  untagPatient,
+  type TagDTO,
 } from "../../lib/api";
 import { useTranslation } from "react-i18next";
+import { useAuth } from "../../hooks/useAuth";
 import { useNotification } from "../../context/NotificationContext";
 import { DownloadFormatPopup } from "../ecg/DownloadFormatPopup";
+import { TagBadge } from "../ui/TagBadge";
+import { TagManager } from "../tags/TagManager";
 import type { Patient, ECG } from "../../types";
 
 // ─── Small helpers ───────────────────────────────────────────────────────────
@@ -216,6 +222,7 @@ function PatientGrid({
               {patient.last_activity && (
                 <span>{formatDate(patient.last_activity)}</span>
               )}
+              <PatientTagDots patientId={patient.patient_id} />
             </div>
             {(selectedEcgCounts.get(patient.id) ?? 0) > 0 && (
               <span className="text-[10px] font-medium text-primary tabular-nums">
@@ -295,6 +302,77 @@ function PatientRow({
           fill={isPinned ? "currentColor" : "none"}
         />
       </button>
+    </div>
+  );
+}
+
+// ─── Patient tags row ────────────────────────────────────────────────────────
+
+function PatientTagsRow({ patientId }: { patientId: string }) {
+  const queryClient = useQueryClient();
+  const { hasPermission } = useAuth();
+  const canCreate = hasPermission("tag.create");
+  const canDeleteTag = hasPermission("tag.delete");
+  const canApply = hasPermission("tag.apply");
+
+  const { data: tags = [] } = useQuery({
+    queryKey: ["patient-tags", patientId],
+    queryFn: () => fetchPatientTags(patientId),
+    staleTime: 30_000,
+    enabled: !!patientId,
+  });
+
+  const handleRemove = async (tagId: string) => {
+    queryClient.setQueryData<TagDTO[]>(
+      ["patient-tags", patientId],
+      (old) => (old ?? []).filter((t) => t.id !== tagId),
+    );
+    await untagPatient(patientId, tagId);
+    void queryClient.invalidateQueries({ queryKey: ["patient-tags", patientId] });
+  };
+
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 mt-2">
+      {tags.map((tag) => (
+        <TagBadge
+          key={tag.id}
+          name={tag.name}
+          color={tag.color}
+          onRemove={canApply ? () => handleRemove(tag.id) : undefined}
+        />
+      ))}
+      {(canCreate || canApply) && (
+        <TagManager patientId={patientId} canCreate={canCreate} canDelete={canDeleteTag} canApply={canApply} />
+      )}
+    </div>
+  );
+}
+
+// ─── Patient tags dots (compact, for grid rows) ─────────────────────────────
+
+function PatientTagDots({ patientId }: { patientId: string }) {
+  const { data: tags = [] } = useQuery({
+    queryKey: ["patient-tags", patientId],
+    queryFn: () => fetchPatientTags(patientId),
+    staleTime: 30_000,
+    enabled: !!patientId,
+  });
+
+  if (tags.length === 0) return null;
+
+  return (
+    <div className="flex items-center gap-1">
+      {tags.slice(0, 4).map((tag) => (
+        <span
+          key={tag.id}
+          className="w-2 h-2 rounded-full"
+          style={{ backgroundColor: tag.color }}
+          title={tag.name}
+        />
+      ))}
+      {tags.length > 4 && (
+        <span className="text-[9px] text-muted-foreground">+{tags.length - 4}</span>
+      )}
     </div>
   );
 }
@@ -400,6 +478,7 @@ function PatientDetail({
               </>
             )}
           </div>
+          <PatientTagsRow patientId={patient.patient_id} />
         </div>
         <div className="flex gap-2 shrink-0">
           <button className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm border border-border text-foreground hover:bg-muted transition-colors">
