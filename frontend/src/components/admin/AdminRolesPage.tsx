@@ -9,7 +9,8 @@ import { useNotification } from '../../context/NotificationContext'
 
 const PERMISSION_GROUPS = [
   { key: 'patient',     labelKey: 'admin.roles.group.patient',     permissions: ['patient.read'] },
-  { key: 'ecg',         labelKey: 'admin.roles.group.ecg',         permissions: ['ecg.read', 'ecg.write', 'ecg.download', 'ecg.delete', 'ecg.force_hl7'] },
+  { key: 'ecg',         labelKey: 'admin.roles.group.ecg',         permissions: ['ecg.read', 'ecg.write', 'ecg.download', 'ecg.delete'] },
+  { key: 'hl7',         labelKey: 'admin.roles.group.hl7',         permissions: ['ecg.force_hl7', 'hl7.config'] },
   { key: 'tag',         labelKey: 'admin.roles.group.tag',         permissions: ['tag.create', 'tag.delete', 'tag.apply'] },
   { key: 'quarantine',  labelKey: 'admin.roles.group.quarantine',  permissions: ['quarantine.read', 'quarantine.delete'] },
   { key: 'admin',       labelKey: 'admin.roles.group.admin',       permissions: ['admin.users', 'admin.audit', 'admin.system'] },
