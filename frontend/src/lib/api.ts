@@ -706,6 +706,48 @@ export async function fetchActiveHL7Mappings(): Promise<{ data: HL7Mapping[]; ac
   return res.json();
 }
 
+// ─── HL7 Settings ────────────────────────────────────────────────────────────
+
+export interface HL7Settings {
+  id: string;
+  trigger_mode: "immediate" | "scheduled";
+  cron_expression: string;
+  max_retries: number;
+  enabled: boolean;
+  updated_at: string;
+  last_run?: string;
+  next_run?: string;
+}
+
+export async function fetchHL7Settings(): Promise<HL7Settings> {
+  const res = await fetch(`${BASE_URL}/api/v1/admin/hl7/settings`);
+  if (!res.ok) throw new Error("Failed to fetch HL7 settings");
+  const json = await res.json();
+  return json.data;
+}
+
+export async function updateHL7Settings(settings: Partial<Pick<HL7Settings, "trigger_mode" | "cron_expression" | "max_retries" | "enabled">>): Promise<HL7Settings> {
+  const res = await fetch(`${BASE_URL}/api/v1/admin/hl7/settings`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(settings),
+  });
+  if (!res.ok) {
+    const err: ErrorResponse = await res.json();
+    throw err;
+  }
+  const json = await res.json();
+  return json.data;
+}
+
+export async function triggerHL7Run(): Promise<void> {
+  const res = await fetch(`${BASE_URL}/api/v1/admin/hl7/run`, { method: "POST" });
+  if (!res.ok) {
+    const err: ErrorResponse = await res.json();
+    throw err;
+  }
+}
+
 // ─── Tags ───────────────────────────────────────────────────────────────────
 
 export interface TagDTO {
