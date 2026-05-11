@@ -16,6 +16,7 @@ import (
 	"github.com/LIRYC-IHU/ecg-hub/internal/config"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
 	"github.com/LIRYC-IHU/ecg-hub/internal/export"
+	"github.com/LIRYC-IHU/ecg-hub/internal/hl7"
 	appmetrics "github.com/LIRYC-IHU/ecg-hub/internal/metrics"
 	"github.com/LIRYC-IHU/ecg-hub/internal/module"
 	"github.com/LIRYC-IHU/ecg-hub/internal/webhook"
@@ -37,6 +38,8 @@ type RouterConfig struct {
 	exportRepo    *repository.ExportJobRepository
 	exportPool    *export.WorkerPool
 	connCheckers  []handlers.ConnectorHealthChecker
+	hl7Client     *hl7.Client          // nil when HL7 is disabled
+	hl7Enricher   handlers.HL7Enricher // nil when HL7 is disabled
 	cfg           *config.Config
 }
 
@@ -44,7 +47,7 @@ func NewRouterConfig(e *echo.Echo, gormDB *gorm.DB, authProvider auth.Provider, 
 	notifier *webhook.Notifier, keycloakAdmin *auth.KeycloakAdminClient, checker *auth.PermissionChecker, userRepo *repository.UserRepo,
 	activeModules []module.Module, dicomStatus handlers.DICOMStatus, ftpStatus handlers.FTPStatus,
 	ectpStatus handlers.ECTPStatus, exportRepo *repository.ExportJobRepository, exportPool *export.WorkerPool,
-	connCheckers []handlers.ConnectorHealthChecker, cfg *config.Config) *RouterConfig {
+	connCheckers []handlers.ConnectorHealthChecker, hl7Client *hl7.Client, hl7Enricher handlers.HL7Enricher, cfg *config.Config) *RouterConfig {
 	return &RouterConfig{
 		e:             e,
 		gormDB:        gormDB,
@@ -61,6 +64,8 @@ func NewRouterConfig(e *echo.Echo, gormDB *gorm.DB, authProvider auth.Provider, 
 		exportRepo:    exportRepo,
 		exportPool:    exportPool,
 		connCheckers:  connCheckers,
+		hl7Client:     hl7Client,
+		hl7Enricher:   hl7Enricher,
 		cfg:           cfg,
 	}
 }
@@ -151,7 +156,7 @@ func (r *RouterConfig) RegisterRoutes() {
 	apiV1.DELETE("/ecgs/:id", handlers.DeleteECGHandler(r.gormDB), mw.RequirePermission(r.checker, auth.PermECGDelete))
 
 	// Force HL7 retry — requires ecg.force_hl7
-	apiV1.POST("/ecgs/:id/hl7/force", handlers.ForceHL7Handler(r.gormDB), mw.RequirePermission(r.checker, auth.PermECGForceHL7))
+	apiV1.POST("/ecgs/:id/hl7/force", handlers.ForceHL7Handler(r.gormDB, r.hl7Enricher), mw.RequirePermission(r.checker, auth.PermECGForceHL7))
 
 	// Audit log — requires admin.audit
 	apiV1.GET("/audit-logs", handlers.ListAuditLogsHandler(r.gormDB), mw.RequirePermission(r.checker, auth.PermAdminAudit))
@@ -217,4 +222,16 @@ func (r *RouterConfig) RegisterRoutes() {
 	apiV1.DELETE("/tags/:id", handlers.DeleteTagHandler(tagRepo), mw.RequirePermission(r.checker, auth.PermTagDelete))
 	apiV1.POST("/patients/:id/tags", handlers.TagPatientHandler(tagRepo), mw.RequirePermission(r.checker, auth.PermTagApply))
 	apiV1.DELETE("/patients/:id/tags/:tag_id", handlers.UntagPatientHandler(tagRepo), mw.RequirePermission(r.checker, auth.PermTagApply))
+
+	// HL7 test query + mapping presets — requires admin.system
+	hl7MappingRepo := repository.NewHL7MappingRepository(r.gormDB)
+	apiV1.GET("/admin/hl7/presets", handlers.ListHL7PresetsHandler(hl7MappingRepo), mw.RequirePermission(r.checker, auth.PermHL7Config))
+	apiV1.POST("/admin/hl7/presets", handlers.CreateHL7PresetHandler(hl7MappingRepo), mw.RequirePermission(r.checker, auth.PermHL7Config))
+	apiV1.POST("/admin/hl7/presets/:id/activate", handlers.ActivateHL7PresetHandler(hl7MappingRepo), mw.RequirePermission(r.checker, auth.PermHL7Config))
+	apiV1.PUT("/admin/hl7/presets/:id/mappings", handlers.SaveHL7PresetMappingsHandler(hl7MappingRepo), mw.RequirePermission(r.checker, auth.PermHL7Config))
+	apiV1.DELETE("/admin/hl7/presets/:id", handlers.DeleteHL7PresetHandler(hl7MappingRepo), mw.RequirePermission(r.checker, auth.PermHL7Config))
+	apiV1.GET("/admin/hl7/active-mappings", handlers.GetActiveHL7MappingsHandler(hl7MappingRepo), mw.RequirePermission(r.checker, auth.PermPatientRead))
+	if r.hl7Client != nil {
+		apiV1.POST("/admin/hl7/test", handlers.HL7TestHandler(r.hl7Client), mw.RequirePermission(r.checker, auth.PermHL7Config))
+	}
 }
