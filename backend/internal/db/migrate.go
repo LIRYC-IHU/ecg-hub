@@ -103,10 +103,9 @@ func iniRole(db *gorm.DB) error {
 			perms: []string{
 				"patient.read", "ecg.read", "ecg.download",
 				"ecg.delete", "ecg.force_hl7", "ecg.write",
+				"tag.create", "tag.delete", "tag.apply",
 				"quarantine.read", "quarantine.delete",
 				"admin.audit", "admin.system", "admin.users",
-				"ecg.delete", "ecg.download", "ecg.write", "ecg.read",
-				"ecg.force_hl7", "patient.read", "quarantine.delete", "quarantine.read",
 				"swagger.read"},
 		},
 		{
@@ -120,6 +119,7 @@ func iniRole(db *gorm.DB) error {
 			perms: []string{
 				"patient.read", "ecg.read", "ecg.download",
 				"ecg.delete", "ecg.force_hl7", "ecg.write",
+				"tag.create", "tag.apply",
 				"quarantine.read", "quarantine.delete",
 			},
 		},

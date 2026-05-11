@@ -17,6 +17,9 @@ const (
 	PermECGDownload      = "ecg.download"
 	PermECGDelete        = "ecg.delete"
 	PermECGForceHL7      = "ecg.force_hl7"
+	PermTagCreate        = "tag.create"
+	PermTagDelete        = "tag.delete"
+	PermTagApply         = "tag.apply"
 	PermQuarantineRead   = "quarantine.read"   // list quarantine entries
 	PermQuarantineDelete = "quarantine.delete" // delete quarantine entries + physical files
 	PermAdminUsers       = "admin.users"
@@ -33,6 +36,9 @@ var AllPermissions = []string{
 	PermECGDownload,
 	PermECGDelete,
 	PermECGForceHL7,
+	PermTagCreate,
+	PermTagDelete,
+	PermTagApply,
 	PermQuarantineRead,
 	PermQuarantineDelete,
 	PermAdminUsers,
