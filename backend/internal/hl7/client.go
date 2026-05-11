@@ -31,7 +31,19 @@ type PatientDemographics struct {
 	FirstName   string
 	DateOfBirth string // "YYYYMMDD" raw from HL7 PID-7
 	Gender      string // "M", "F", or ""
+	Address     string // PID-11: street, city, zip, country joined
+	Phone       string // PID-13: primary phone number
 	Source      string // HL7 host that provided this data — used for hl7_source DB column
+}
+
+// MSHConfig holds the configurable MSH segment fields.
+type MSHConfig struct {
+	SendingApplication   string // MSH-3
+	SendingFacility      string // MSH-4
+	ReceivingApplication string // MSH-5
+	ReceivingFacility    string // MSH-6
+	Version              string // HL7 version (e.g. "2.5")
+	ProcessingID         string // P, T, or D
 }
 
 // Client is an HL7 v2 MLLP client. Each query opens a fresh TCP connection.
@@ -39,11 +51,18 @@ type Client struct {
 	host    string
 	port    int
 	timeout time.Duration
+	msh     MSHConfig
 }
 
-// NewClient returns an HL7 Client targeting host:port with the given timeout.
-func NewClient(host string, port int, timeout time.Duration) *Client {
-	return &Client{host: host, port: port, timeout: timeout}
+// NewClient returns an HL7 Client targeting host:port with the given timeout and MSH config.
+func NewClient(host string, port int, timeout time.Duration, msh MSHConfig) *Client {
+	if msh.Version == "" {
+		msh.Version = "2.5"
+	}
+	if msh.ProcessingID == "" {
+		msh.ProcessingID = "P"
+	}
+	return &Client{host: host, port: port, timeout: timeout, msh: msh}
 }
 
 // QueryPatient sends a QRY^A19 message for patientID and returns the parsed PID segment.
@@ -68,7 +87,7 @@ func (c *Client) QueryPatient(_ context.Context, patientID string) (*PatientDemo
 		return nil, fmt.Errorf("hl7: set deadline: %w", err)
 	}
 
-	msg := buildQRYMessage(patientID)
+	msg := c.buildQRYMessage(patientID)
 	frame := append([]byte{mllpStart}, append([]byte(msg), mllpEnd, mllpCR)...)
 	if _, err := conn.Write(frame); err != nil {
 		return nil, fmt.Errorf("hl7: write: %w", err)
@@ -95,11 +114,63 @@ func (c *Client) QueryPatient(_ context.Context, patientID string) (*PatientDemo
 	return d, nil
 }
 
-// buildQRYMessage constructs a minimal QRY^A19 HL7 v2.5 message.
-func buildQRYMessage(patientID string) string {
+// QueryResult holds both raw response and parsed demographics.
+type QueryResult struct {
+	Raw          string
+	Demographics *PatientDemographics
+	Tree         []SegmentNode
+}
+
+// QueryPatientFull sends a QRY^A19 and returns the full result including raw response and tree.
+func (c *Client) QueryPatientFull(_ context.Context, patientID string) (*QueryResult, error) {
+	if strings.ContainsAny(patientID, "|\r\n") {
+		return nil, fmt.Errorf("hl7: invalid patient_id: contains HL7 control characters")
+	}
+
+	addr := fmt.Sprintf("%s:%d", c.host, c.port)
+	conn, err := net.DialTimeout("tcp", addr, c.timeout)
+	if err != nil {
+		return nil, fmt.Errorf("hl7: dial %s: %w", addr, err)
+	}
+	defer conn.Close()
+
+	if err := conn.SetDeadline(time.Now().Add(c.timeout)); err != nil {
+		return nil, fmt.Errorf("hl7: set deadline: %w", err)
+	}
+
+	msg := c.buildQRYMessage(patientID)
+	frame := append([]byte{mllpStart}, append([]byte(msg), mllpEnd, mllpCR)...)
+	if _, err := conn.Write(frame); err != nil {
+		return nil, fmt.Errorf("hl7: write: %w", err)
+	}
+
+	raw, err := readMLLP(conn)
+	if err != nil {
+		return nil, fmt.Errorf("hl7: read response: %w", err)
+	}
+
+	result := &QueryResult{
+		Raw:  raw,
+		Tree: ParseToTree(raw),
+	}
+
+	d, err := parsePID(raw)
+	if err == nil {
+		d.Source = c.host
+		result.Demographics = d
+	}
+
+	return result, nil
+}
+
+// buildQRYMessage constructs a QRY^A19 HL7 message using the client's MSH config.
+func (c *Client) buildQRYMessage(patientID string) string {
 	ts := time.Now().UTC().Format("20060102150405")
 	return strings.Join([]string{
-		fmt.Sprintf("MSH|^~\\&|ECG-HUB|LIRYC|HIS||%s||QRY^A19|%s|P|2.5", ts, ts),
+		fmt.Sprintf("MSH|^~\\&|%s|%s|%s|%s|%s||QRY^A19|%s|%s|%s",
+			c.msh.SendingApplication, c.msh.SendingFacility,
+			c.msh.ReceivingApplication, c.msh.ReceivingFacility,
+			ts, ts, c.msh.ProcessingID, c.msh.Version),
 		fmt.Sprintf("QRD|%s|R|I|Q001|||1^RD|%s|DEM|||", ts, patientID),
 	}, "\r") + "\r"
 }

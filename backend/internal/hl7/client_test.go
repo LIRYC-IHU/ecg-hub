@@ -44,7 +44,7 @@ func TestQueryPatient_Success(t *testing.T) {
 	port, stop := startMockHIS(t, validADRResponse)
 	defer stop()
 
-	c := NewClient("127.0.0.1", port, 2*time.Second)
+	c := NewClient("127.0.0.1", port, 2*time.Second, MSHConfig{})
 	d, err := c.QueryPatient(context.TODO(), "P001")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -75,7 +75,7 @@ func TestQueryPatient_MalformedResponse(t *testing.T) {
 	port, stop := startMockHIS(t, noPatientResp)
 	defer stop()
 
-	c := NewClient("127.0.0.1", port, 2*time.Second)
+	c := NewClient("127.0.0.1", port, 2*time.Second, MSHConfig{})
 	_, err := c.QueryPatient(context.TODO(), "UNKNOWN")
 	// M5: assert the specific sentinel, not just err != nil
 	if !errors.Is(err, ErrNoPatientFound) {
@@ -87,7 +87,7 @@ func TestQueryPatient_MalformedResponse(t *testing.T) {
 
 func TestQueryPatient_InvalidPatientID_PipeRejected(t *testing.T) {
 	// M2: patientIDs with HL7 control characters must be rejected before dialling
-	c := NewClient("127.0.0.1", 19999, 200*time.Millisecond)
+	c := NewClient("127.0.0.1", 19999, 200*time.Millisecond, MSHConfig{})
 	_, err := c.QueryPatient(context.TODO(), "P001|inject")
 	if err == nil || !strings.Contains(err.Error(), "HL7 control characters") {
 		t.Fatalf("expected rejection of HL7-control char in patientID, got: %v", err)
@@ -95,7 +95,7 @@ func TestQueryPatient_InvalidPatientID_PipeRejected(t *testing.T) {
 }
 
 func TestQueryPatient_InvalidPatientID_CRRejected(t *testing.T) {
-	c := NewClient("127.0.0.1", 19999, 200*time.Millisecond)
+	c := NewClient("127.0.0.1", 19999, 200*time.Millisecond, MSHConfig{})
 	_, err := c.QueryPatient(context.TODO(), "P001\r fake segment")
 	if err == nil || !strings.Contains(err.Error(), "HL7 control characters") {
 		t.Fatalf("expected rejection of CR in patientID, got: %v", err)
@@ -106,7 +106,7 @@ func TestQueryPatient_InvalidPatientID_CRRejected(t *testing.T) {
 
 func TestQueryPatient_ConnectionRefused(t *testing.T) {
 	// Nothing listening on this port
-	c := NewClient("127.0.0.1", 19999, 200*time.Millisecond)
+	c := NewClient("127.0.0.1", 19999, 200*time.Millisecond, MSHConfig{})
 	_, err := c.QueryPatient(context.TODO(), "P001")
 	if err == nil {
 		t.Fatal("expected connection error, got nil")
@@ -134,7 +134,7 @@ func TestQueryPatient_Timeout(t *testing.T) {
 	}()
 
 	port := ln.Addr().(*net.TCPAddr).Port
-	c := NewClient("127.0.0.1", port, 200*time.Millisecond)
+	c := NewClient("127.0.0.1", port, 200*time.Millisecond, MSHConfig{})
 	start := time.Now()
 	_, err = c.QueryPatient(context.TODO(), "P001")
 	elapsed := time.Since(start)
@@ -220,7 +220,7 @@ func TestReadMLLP_ExceedsMaxSize_ReturnsError(t *testing.T) {
 	}()
 
 	port := ln.Addr().(*net.TCPAddr).Port
-	c := NewClient("127.0.0.1", port, 5*time.Second)
+	c := NewClient("127.0.0.1", port, 5*time.Second, MSHConfig{})
 	_, err = c.QueryPatient(context.TODO(), "P001")
 	if err == nil {
 		t.Fatal("expected error when response exceeds max size, got nil")
