@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -15,6 +16,7 @@ import (
 // PatientSearchParams holds query parameters for GET /api/v1/patients.
 type PatientSearchParams struct {
 	Q         string `query:"q"`
+	Tags      string `query:"tags"` // comma-separated tag IDs
 	SortBy    string `query:"sort_by"`    // "patient_id" | "last_name" | "created_at"
 	SortOrder string `query:"sort_order"` // "asc" | "desc"
 	Page      int    `query:"page"`
@@ -76,6 +78,11 @@ func SearchPatientsHandler(db *gorm.DB) echo.HandlerFunc {
 		if params.Q != "" {
 			like := "%" + params.Q + "%"
 			query = query.Where("patients.last_name ILIKE ? OR patients.first_name ILIKE ? OR patients.patient_id ILIKE ?", like, like, like)
+		}
+		if params.Tags != "" {
+			tagIDs := strings.Split(params.Tags, ",")
+			query = query.Where("patients.patient_id IN (?)",
+				db.Table("patient_tags").Select("patient_id").Where("tag_id IN ?", tagIDs))
 		}
 
 		var total int64
