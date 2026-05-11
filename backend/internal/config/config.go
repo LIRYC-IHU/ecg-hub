@@ -149,11 +149,18 @@ type FTPConfig struct {
 // HL7Config holds HL7 client settings for patient data enrichment (FR8, FR9).
 // username and password are in Config.HL7Username / Config.HL7Password (env vars).
 type HL7Config struct {
-	Host string `mapstructure:"host"`
-	Port int    `mapstructure:"port"`
-	// RetryInterval is the duration between HL7 retries (e.g., "5m").
-	RetryInterval string `mapstructure:"retry_interval"`
-	MaxRetries    int    `mapstructure:"max_retries"`
+	Enabled              bool   `mapstructure:"enabled"`
+	Host                 string `mapstructure:"host"`
+	Port                 int    `mapstructure:"port"`
+	SendingApplication   string `mapstructure:"sending_application"`   // MSH-3
+	SendingFacility      string `mapstructure:"sending_facility"`      // MSH-4
+	ReceivingApplication string `mapstructure:"receiving_application"` // MSH-5
+	ReceivingFacility    string `mapstructure:"receiving_facility"`    // MSH-6
+	Version              string `mapstructure:"version"`               // HL7 version (e.g. "2.5")
+	ProcessingID         string `mapstructure:"processing_id"`         // P=Production, T=Training, D=Debug
+	Timeout              string `mapstructure:"timeout"`               // TCP timeout (e.g. "10s")
+	RetryInterval        string `mapstructure:"retry_interval"`
+	MaxRetries           int    `mapstructure:"max_retries"`
 }
 
 // StorageConfig holds file volume settings (FR10).
