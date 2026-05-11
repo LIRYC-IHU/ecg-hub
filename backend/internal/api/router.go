@@ -23,50 +23,56 @@ import (
 )
 
 type RouterConfig struct {
-	e             *echo.Echo
-	gormDB        *gorm.DB
-	authProvider  auth.Provider
-	bridge        export.Converter
-	notifier      *webhook.Notifier
-	keycloakAdmin *auth.KeycloakAdminClient
-	checker       *auth.PermissionChecker
-	userRepo      *repository.UserRepo
-	activeModules []module.Module
-	dicomStatus   handlers.DICOMStatus
-	ftpStatus     handlers.FTPStatus
-	ectpStatus    handlers.ECTPStatus
-	exportRepo    *repository.ExportJobRepository
-	exportPool    *export.WorkerPool
-	connCheckers  []handlers.ConnectorHealthChecker
-	hl7Client     *hl7.Client          // nil when HL7 is disabled
-	hl7Enricher   handlers.HL7Enricher // nil when HL7 is disabled
-	cfg           *config.Config
+	e               *echo.Echo
+	gormDB          *gorm.DB
+	authProvider    auth.Provider
+	bridge          export.Converter
+	notifier        *webhook.Notifier
+	keycloakAdmin   *auth.KeycloakAdminClient
+	checker         *auth.PermissionChecker
+	userRepo        *repository.UserRepo
+	activeModules   []module.Module
+	dicomStatus     handlers.DICOMStatus
+	ftpStatus       handlers.FTPStatus
+	ectpStatus      handlers.ECTPStatus
+	exportRepo      *repository.ExportJobRepository
+	exportPool      *export.WorkerPool
+	connCheckers    []handlers.ConnectorHealthChecker
+	hl7Client       *hl7.Client          // nil when HL7 is disabled
+	hl7Enricher     handlers.HL7Enricher // nil when HL7 is disabled
+	hl7Scheduler    handlers.HL7SchedulerStatus           // nil when HL7 is disabled
+	hl7SettingsRepo *repository.HL7SettingsRepository     // nil when HL7 is disabled
+	cfg             *config.Config
 }
 
 func NewRouterConfig(e *echo.Echo, gormDB *gorm.DB, authProvider auth.Provider, bridge export.Converter,
 	notifier *webhook.Notifier, keycloakAdmin *auth.KeycloakAdminClient, checker *auth.PermissionChecker, userRepo *repository.UserRepo,
 	activeModules []module.Module, dicomStatus handlers.DICOMStatus, ftpStatus handlers.FTPStatus,
 	ectpStatus handlers.ECTPStatus, exportRepo *repository.ExportJobRepository, exportPool *export.WorkerPool,
-	connCheckers []handlers.ConnectorHealthChecker, hl7Client *hl7.Client, hl7Enricher handlers.HL7Enricher, cfg *config.Config) *RouterConfig {
+	connCheckers []handlers.ConnectorHealthChecker, hl7Client *hl7.Client, hl7Enricher handlers.HL7Enricher,
+	hl7Scheduler handlers.HL7SchedulerStatus, hl7SettingsRepo *repository.HL7SettingsRepository,
+	cfg *config.Config) *RouterConfig {
 	return &RouterConfig{
-		e:             e,
-		gormDB:        gormDB,
-		authProvider:  authProvider,
-		bridge:        bridge,
-		notifier:      notifier,
-		keycloakAdmin: keycloakAdmin,
-		checker:       checker,
-		userRepo:      userRepo,
-		activeModules: activeModules,
-		dicomStatus:   dicomStatus,
-		ftpStatus:     ftpStatus,
-		ectpStatus:    ectpStatus,
-		exportRepo:    exportRepo,
-		exportPool:    exportPool,
-		connCheckers:  connCheckers,
-		hl7Client:     hl7Client,
-		hl7Enricher:   hl7Enricher,
-		cfg:           cfg,
+		e:               e,
+		gormDB:          gormDB,
+		authProvider:    authProvider,
+		bridge:          bridge,
+		notifier:        notifier,
+		keycloakAdmin:   keycloakAdmin,
+		checker:         checker,
+		userRepo:        userRepo,
+		activeModules:   activeModules,
+		dicomStatus:     dicomStatus,
+		ftpStatus:       ftpStatus,
+		ectpStatus:      ectpStatus,
+		exportRepo:      exportRepo,
+		exportPool:      exportPool,
+		connCheckers:    connCheckers,
+		hl7Client:       hl7Client,
+		hl7Enricher:     hl7Enricher,
+		hl7Scheduler:    hl7Scheduler,
+		hl7SettingsRepo: hl7SettingsRepo,
+		cfg:             cfg,
 	}
 }
 
@@ -233,5 +239,14 @@ func (r *RouterConfig) RegisterRoutes() {
 	apiV1.GET("/admin/hl7/active-mappings", handlers.GetActiveHL7MappingsHandler(hl7MappingRepo), mw.RequirePermission(r.checker, auth.PermPatientRead))
 	if r.hl7Client != nil {
 		apiV1.POST("/admin/hl7/test", handlers.HL7TestHandler(r.hl7Client), mw.RequirePermission(r.checker, auth.PermHL7Config))
+	}
+
+	// HL7 scheduler settings — requires hl7.config
+	if r.hl7SettingsRepo != nil {
+		apiV1.GET("/admin/hl7/settings", handlers.GetHL7SettingsHandler(r.hl7SettingsRepo, r.hl7Scheduler), mw.RequirePermission(r.checker, auth.PermHL7Config))
+		apiV1.PUT("/admin/hl7/settings", handlers.UpdateHL7SettingsHandler(r.hl7SettingsRepo, r.hl7Scheduler), mw.RequirePermission(r.checker, auth.PermHL7Config))
+	}
+	if r.hl7Scheduler != nil {
+		apiV1.POST("/admin/hl7/run", handlers.ForceHL7RunHandler(r.hl7Scheduler), mw.RequirePermission(r.checker, auth.PermHL7Config))
 	}
 }
