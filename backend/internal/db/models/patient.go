@@ -23,6 +23,7 @@ type Patient struct {
 	LastName    string `gorm:"index"`
 	DateOfBirth *time.Time
 	Gender      string
+	NIP         string `gorm:"column:nip;index"`
 	HL7Source   string
 	Extra       datatypes.JSON
 
