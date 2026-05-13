@@ -292,7 +292,7 @@ function HL7FieldItem({ field, onDrag }: { field: { path: string; value: string;
 
 // ─── HL7 Mapping Drop Zone ──────────────────────────────────────────────────
 
-const TARGET_FIELDS = ["last_name", "first_name", "date_of_birth", "gender", "address", "phone"] as const;
+const TARGET_FIELDS = ["last_name", "first_name", "date_of_birth", "gender", "nip", "address", "phone"] as const;
 
 function HL7MappingZone({ mappings, onDrop, onRemove, onSave, onUpdate, saving, presets, activePresetId, onSelectPreset, onDeletePreset }: {
   mappings: { source_path: string; target_field: string }[];
