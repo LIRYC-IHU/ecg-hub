@@ -31,7 +31,14 @@ type HL7TestResponse struct {
 	Error        string                   `json:"error,omitempty"`
 	Raw          string                   `json:"raw,omitempty"`
 	Tree         []hl7.SegmentNode        `json:"tree,omitempty"`
+	MSA          *HL7MSAResponse          `json:"msa,omitempty"`
 	Demographics *HL7DemographicsResponse `json:"demographics,omitempty"`
+}
+
+// HL7MSAResponse is the MSA acknowledgment info.
+type HL7MSAResponse struct {
+	Code    string `json:"code"`
+	Message string `json:"message,omitempty"`
 }
 
 // HL7DemographicsResponse is the parsed patient demographics.
@@ -61,7 +68,7 @@ func HL7TestHandler(client HL7FullQuerier) echo.HandlerFunc {
 		result, err := client.QueryPatientFull(ctx, req.PatientID)
 		elapsed := time.Since(start)
 
-		if err != nil {
+		if err != nil && result == nil {
 			return c.JSON(http.StatusOK, HL7TestResponse{
 				Success:   false,
 				PatientID: req.PatientID,
@@ -71,11 +78,22 @@ func HL7TestHandler(client HL7FullQuerier) echo.HandlerFunc {
 		}
 
 		resp := HL7TestResponse{
-			Success:   true,
+			Success:   err == nil,
 			PatientID: req.PatientID,
 			Duration:  elapsed.Round(time.Millisecond).String(),
 			Raw:       result.Raw,
 			Tree:      result.Tree,
+		}
+
+		if err != nil {
+			resp.Error = err.Error()
+		}
+
+		if result.MSA != nil {
+			resp.MSA = &HL7MSAResponse{
+				Code:    result.MSA.Code,
+				Message: result.MSA.Message,
+			}
 		}
 
 		if result.Demographics != nil {
