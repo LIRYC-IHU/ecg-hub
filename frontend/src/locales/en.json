@@ -209,6 +209,7 @@
           "first_name": "First name",
           "date_of_birth": "Date of birth",
           "gender": "Gender",
+          "nip": "NIP (badge)",
           "address": "Address",
           "phone": "Phone",
           "source": "Source"

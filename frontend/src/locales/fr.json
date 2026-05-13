@@ -209,6 +209,7 @@
           "first_name": "Prénom",
           "date_of_birth": "Date de naissance",
           "gender": "Sexe",
+          "nip": "NIP (bracelet)",
           "address": "Adresse",
           "phone": "Téléphone",
           "source": "Source"
