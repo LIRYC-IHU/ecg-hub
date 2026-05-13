@@ -24,6 +24,15 @@ const (
 // ErrNoPatientFound is returned when the HIS response contains no PID segment.
 var ErrNoPatientFound = errors.New("hl7: no PID segment in response")
 
+// ErrMSARejected is returned when the HIS responds with MSA code AE (error) or AR (reject).
+var ErrMSARejected = errors.New("hl7: HIS rejected the query")
+
+// MSAResult holds the parsed MSA segment fields.
+type MSAResult struct {
+	Code    string // AA, AE, AR
+	Message string // MSA.3 text message (may be empty)
+}
+
 // PatientDemographics holds the demographic fields extracted from a PID segment.
 // Source is set by Client.QueryPatient to the HL7 host that answered the query (AC #2).
 type PatientDemographics struct {
@@ -31,6 +40,7 @@ type PatientDemographics struct {
 	FirstName   string
 	DateOfBirth string // "YYYYMMDD" raw from HL7 PID-7
 	Gender      string // "M", "F", or ""
+	NIP         string // PID-3.1: patient identification number (bracelet/badge)
 	Address     string // PID-11: street, city, zip, country joined
 	Phone       string // PID-13: primary phone number
 	Source      string // HL7 host that provided this data — used for hl7_source DB column
@@ -98,6 +108,15 @@ func (c *Client) QueryPatient(_ context.Context, patientID string) (*PatientDemo
 		return nil, fmt.Errorf("hl7: read response: %w", err)
 	}
 
+	// Check MSA acknowledgment — reject if HIS returned AE/AR.
+	if err := checkMSA(raw); err != nil {
+		slog.Warn("hl7: HIS rejected query",
+			"patient_id", patientID,
+			"error", err,
+		)
+		return nil, err
+	}
+
 	// H2 — log the raw response body on parse failure (AC #3: slog.Warn with patient_id + raw body).
 	d, err := parsePID(raw)
 	if err != nil {
@@ -119,6 +138,7 @@ type QueryResult struct {
 	Raw          string
 	Demographics *PatientDemographics
 	Tree         []SegmentNode
+	MSA          *MSAResult
 }
 
 // QueryPatientFull sends a QRY^A19 and returns the full result including raw response and tree.
@@ -152,6 +172,12 @@ func (c *Client) QueryPatientFull(_ context.Context, patientID string) (*QueryRe
 	result := &QueryResult{
 		Raw:  raw,
 		Tree: ParseToTree(raw),
+		MSA:  parseMSA(raw),
+	}
+
+	// Check MSA — if rejected, still return the result (with tree/raw) but no demographics.
+	if err := checkMSA(raw); err != nil {
+		return result, err
 	}
 
 	d, err := parsePID(raw)
@@ -224,4 +250,40 @@ func parsePID(raw string) (*PatientDemographics, error) {
 		return d, nil
 	}
 	return nil, ErrNoPatientFound
+}
+
+// parseMSA extracts MSA.1 (ack code) and MSA.3 (text message) from the raw response.
+// Returns nil if no MSA segment is found.
+func parseMSA(raw string) *MSAResult {
+	for _, seg := range strings.Split(raw, "\r") {
+		if !strings.HasPrefix(seg, "MSA") {
+			continue
+		}
+		fields := strings.Split(seg, "|")
+		if len(fields) < 2 {
+			return nil
+		}
+		r := &MSAResult{Code: fields[1]}
+		if len(fields) >= 4 {
+			r.Message = fields[3]
+		}
+		return r
+	}
+	return nil
+}
+
+// checkMSA validates the MSA acknowledgment code. Returns an error if AE or AR.
+func checkMSA(raw string) error {
+	msa := parseMSA(raw)
+	if msa == nil {
+		return nil
+	}
+	if msa.Code == "AE" || msa.Code == "AR" {
+		msg := msa.Message
+		if msg == "" {
+			msg = "no details"
+		}
+		return fmt.Errorf("%w (MSA=%s: %s)", ErrMSARejected, msa.Code, msg)
+	}
+	return nil
 }
