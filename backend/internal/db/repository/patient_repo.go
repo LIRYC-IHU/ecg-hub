@@ -46,13 +46,15 @@ func (r *PatientRepository) UpdateDemographics(patientID string, d *hl7.PatientD
 		"last_name":  d.LastName,
 		"first_name": d.FirstName,
 		"gender":     d.Gender,
-		"hl7_source": d.Source, // H1: populated from HL7 host by Client.QueryPatient (AC #2)
+		"hl7_source": d.Source,
+	}
+	if d.NIP != "" {
+		updates["nip"] = d.NIP
 	}
 	if d.DateOfBirth != "" {
 		if t, err := time.Parse("20060102", d.DateOfBirth); err == nil {
 			updates["date_of_birth"] = &t
 		}
-		// If parse fails: skip date_of_birth key entirely — preserve existing valid DOB.
 	}
 	result := r.db.Model(&models.Patient{}).
 		Where("patient_id = ?", patientID).
