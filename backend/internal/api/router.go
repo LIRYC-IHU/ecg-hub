@@ -229,6 +229,10 @@ func (r *RouterConfig) RegisterRoutes() {
 	apiV1.POST("/patients/:id/tags", handlers.TagPatientHandler(tagRepo), mw.RequirePermission(r.checker, auth.PermTagApply))
 	apiV1.DELETE("/patients/:id/tags/:tag_id", handlers.UntagPatientHandler(tagRepo), mw.RequirePermission(r.checker, auth.PermTagApply))
 
+	// HL7 attempt history — requires patient.read
+	hl7AttemptRepo := repository.NewHL7AttemptRepository(r.gormDB)
+	apiV1.GET("/patients/:id/hl7-history", handlers.ListHL7AttemptsHandler(hl7AttemptRepo), mw.RequirePermission(r.checker, auth.PermPatientRead))
+
 	// HL7 test query + mapping presets — requires admin.system
 	hl7MappingRepo := repository.NewHL7MappingRepository(r.gormDB)
 	apiV1.GET("/admin/hl7/presets", handlers.ListHL7PresetsHandler(hl7MappingRepo), mw.RequirePermission(r.checker, auth.PermHL7Config))
