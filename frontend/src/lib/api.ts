@@ -748,6 +748,22 @@ export async function triggerHL7Run(): Promise<void> {
   }
 }
 
+export interface HL7PingResult {
+  success: boolean;
+  host: string;
+  latency: string;
+  error?: string;
+}
+
+export async function pingHL7(): Promise<HL7PingResult> {
+  const res = await fetch(`${BASE_URL}/api/v1/admin/hl7/ping`, { method: "POST" });
+  if (!res.ok) {
+    const err: ErrorResponse = await res.json();
+    throw err;
+  }
+  return res.json();
+}
+
 // ─── Tags ───────────────────────────────────────────────────────────────────
 
 export interface TagDTO {
