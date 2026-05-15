@@ -774,6 +774,27 @@ export async function pingHL7(): Promise<HL7PingResult> {
   return res.json();
 }
 
+// ─── HL7 History ─────────────────────────────────────────────────────────────
+
+export interface HL7Attempt {
+  id: string;
+  ecg_id: string;
+  patient_id: string;
+  status: "success" | "failed" | "exhausted" | "rejected";
+  msa_code?: string;
+  msa_message?: string;
+  error?: string;
+  response_ms: number;
+  created_at: string;
+}
+
+export async function fetchHL7History(patientId: string): Promise<HL7Attempt[]> {
+  const res = await fetch(`${BASE_URL}/api/v1/patients/${patientId}/hl7-history`);
+  if (!res.ok) return [];
+  const json = await res.json();
+  return json.data ?? [];
+}
+
 // ─── Tags ───────────────────────────────────────────────────────────────────
 
 export interface TagDTO {
