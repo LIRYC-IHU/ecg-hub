@@ -50,7 +50,6 @@ func NewScheduler(
 	webhook retryWebhookNotifier,
 	client hl7Querier,
 	enricher *Enricher,
-	maxRetries int,
 ) *Scheduler {
 	return &Scheduler{
 		settings:   settings,
@@ -60,7 +59,7 @@ func NewScheduler(
 		webhook:    webhook,
 		client:     client,
 		enricher:   enricher,
-		maxRetries: maxRetries,
+		maxRetries: 3,
 		done:       make(chan struct{}),
 	}
 }
@@ -198,6 +197,13 @@ func (s *Scheduler) processPending() {
 	s.mu.Lock()
 	s.lastRun = time.Now()
 	s.mu.Unlock()
+
+	// Read max_retries from DB settings on each run.
+	if dbSettings, err := s.settings.Get(); err == nil {
+		s.mu.Lock()
+		s.maxRetries = dbSettings.MaxRetries
+		s.mu.Unlock()
+	}
 
 	ecgs, err := s.ecgRepo.FindPendingHL7(50)
 	if err != nil {
