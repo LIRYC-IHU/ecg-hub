@@ -18,6 +18,7 @@ const (
 	PermECGDelete        = "ecg.delete"
 	PermECGForceHL7      = "ecg.force_hl7"
 	PermHL7Config        = "hl7.config"
+	PermHL7BulkRetry     = "hl7.bulk_retry"
 	PermTagCreate        = "tag.create"
 	PermTagDelete        = "tag.delete"
 	PermTagApply         = "tag.apply"
@@ -38,6 +39,7 @@ var AllPermissions = []string{
 	PermECGDelete,
 	PermECGForceHL7,
 	PermHL7Config,
+	PermHL7BulkRetry,
 	PermTagCreate,
 	PermTagDelete,
 	PermTagApply,
