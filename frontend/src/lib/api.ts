@@ -755,6 +755,15 @@ export interface HL7PingResult {
   error?: string;
 }
 
+export async function bulkRetryHL7(): Promise<{ count: number; message: string }> {
+  const res = await fetch(`${BASE_URL}/api/v1/admin/hl7/bulk-retry`, { method: "POST" });
+  if (!res.ok) {
+    const err: ErrorResponse = await res.json();
+    throw err;
+  }
+  return res.json();
+}
+
 export async function pingHL7(): Promise<HL7PingResult> {
   const res = await fetch(`${BASE_URL}/api/v1/admin/hl7/ping`, { method: "POST" });
   if (!res.ok) {
