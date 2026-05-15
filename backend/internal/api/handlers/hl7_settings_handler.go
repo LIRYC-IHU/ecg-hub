@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"gorm.io/gorm"
 
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
@@ -190,6 +191,28 @@ func ForceHL7RunHandler(scheduler HL7SchedulerStatus) echo.HandlerFunc {
 
 		return c.JSON(http.StatusAccepted, map[string]string{
 			"message": "HL7 processing triggered",
+		})
+	}
+}
+
+// BulkRetryHL7Handler handles POST /admin/hl7/bulk-retry.
+// Resets all hl7_exhausted ECGs to pending with retry_count=0.
+func BulkRetryHL7Handler(db *gorm.DB) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		result := db.Model(&models.ECG{}).
+			Where("hl7_status = ?", "hl7_exhausted").
+			Updates(map[string]any{"hl7_status": "pending", "hl7_retry_count": 0})
+
+		if result.Error != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{
+				"code":    "DB_ERROR",
+				"message": "bulk retry failed",
+			})
+		}
+
+		return c.JSON(http.StatusOK, map[string]any{
+			"count":   result.RowsAffected,
+			"message": fmt.Sprintf("%d ECG(s) reset to pending", result.RowsAffected),
 		})
 	}
 }
