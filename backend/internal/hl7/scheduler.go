@@ -2,6 +2,7 @@ package hl7
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -25,20 +26,21 @@ type settingsProvider interface {
 // It reads settings from the DB, runs a cron job based on the cron expression,
 // and processes pending ECGs on each tick.
 type Scheduler struct {
-	cron       *cron.Cron
-	settings   settingsProvider
-	ecgRepo    retryECGRepo
-	patRepo    retryPatRepo
-	auditRepo  retryAuditWriter
-	webhook    retryWebhookNotifier
-	client     hl7Querier
-	enricher   *Enricher
-	maxRetries int
-	lastRun    time.Time
-	nextRun    time.Time
-	mu         sync.RWMutex
-	done       chan struct{}
-	stopOnce   sync.Once
+	cron        *cron.Cron
+	settings    settingsProvider
+	ecgRepo     retryECGRepo
+	patRepo     retryPatRepo
+	auditRepo   retryAuditWriter
+	webhook     retryWebhookNotifier
+	client      hl7Querier
+	enricher    *Enricher
+	attemptRepo AttemptRecorder
+	maxRetries  int
+	lastRun     time.Time
+	nextRun     time.Time
+	mu          sync.RWMutex
+	done        chan struct{}
+	stopOnce    sync.Once
 }
 
 // NewScheduler constructs a Scheduler with all required dependencies.
@@ -50,17 +52,19 @@ func NewScheduler(
 	webhook retryWebhookNotifier,
 	client hl7Querier,
 	enricher *Enricher,
+	attemptRepo AttemptRecorder,
 ) *Scheduler {
 	return &Scheduler{
-		settings:   settings,
-		ecgRepo:    ecgRepo,
-		patRepo:    patRepo,
-		auditRepo:  auditRepo,
-		webhook:    webhook,
-		client:     client,
-		enricher:   enricher,
-		maxRetries: 3,
-		done:       make(chan struct{}),
+		settings:    settings,
+		ecgRepo:     ecgRepo,
+		patRepo:     patRepo,
+		auditRepo:   auditRepo,
+		webhook:     webhook,
+		client:      client,
+		enricher:    enricher,
+		attemptRepo: attemptRepo,
+		maxRetries:  3,
+		done:        make(chan struct{}),
 	}
 }
 
@@ -226,6 +230,8 @@ func (s *Scheduler) processOne(ecg models.ECG) {
 	var d *PatientDemographics
 	var queryErr error
 
+	start := time.Now()
+
 	if fq, ok := s.client.(FullQuerier); ok && s.enricher != nil && s.enricher.HasMappings() {
 		// Use FullQuerier + dynamic mappings for richer extraction.
 		result, err := fq.QueryPatientFull(context.Background(), ecg.PatientID)
@@ -246,6 +252,8 @@ func (s *Scheduler) processOne(ecg models.ECG) {
 		d, queryErr = s.client.QueryPatient(context.Background(), ecg.PatientID)
 	}
 
+	elapsed := time.Since(start)
+
 	if queryErr != nil {
 		slog.Warn("hl7 scheduler: query failed",
 			"ecg_id", ecg.ID,
@@ -253,6 +261,10 @@ func (s *Scheduler) processOne(ecg models.ECG) {
 			"retry_count", ecg.HL7RetryCount,
 			"error", queryErr,
 		)
+
+		// Record the failed attempt.
+		s.recordAttempt(ecg.ID, ecg.PatientID, queryErr, elapsed)
+
 		newCount := ecg.HL7RetryCount + 1
 		if newCount >= maxRetries {
 			s.exhaust(ecg, maxRetries, queryErr)
@@ -263,6 +275,17 @@ func (s *Scheduler) processOne(ecg models.ECG) {
 			}
 		}
 		return
+	}
+
+	// Record the successful attempt.
+	if s.attemptRepo != nil {
+		_ = s.attemptRepo.Insert(&models.HL7Attempt{
+			ECGID:      ecg.ID,
+			PatientID:  ecg.PatientID,
+			Status:     "success",
+			MSACode:    "AA",
+			ResponseMs: int(elapsed.Milliseconds()),
+		})
 	}
 
 	if d != nil {
@@ -282,9 +305,54 @@ func (s *Scheduler) processOne(ecg models.ECG) {
 	)
 }
 
+// recordAttempt inserts a failed or rejected attempt record based on the error type.
+func (s *Scheduler) recordAttempt(ecgID, patientID string, err error, elapsed time.Duration) {
+	if s.attemptRepo == nil {
+		return
+	}
+
+	attempt := &models.HL7Attempt{
+		ECGID:      ecgID,
+		PatientID:  patientID,
+		ResponseMs: int(elapsed.Milliseconds()),
+	}
+
+	if errors.Is(err, ErrMSARejected) {
+		attempt.Status = "rejected"
+		code, msg := parseMSAFromError(err)
+		attempt.MSACode = code
+		attempt.MSAMessage = msg
+		attempt.Error = err.Error()
+	} else {
+		attempt.Status = "failed"
+		attempt.Error = err.Error()
+	}
+
+	_ = s.attemptRepo.Insert(attempt)
+}
+
 // exhaust sets the ECG to hl7_exhausted, writes an audit log, and fires a webhook notification.
 func (s *Scheduler) exhaust(ecg models.ECG, maxRetries int, lastErr error) {
 	appmetrics.HL7RetryAttempts.WithLabelValues("exhausted").Inc()
+
+	// Record a separate "exhausted" attempt to mark the final state.
+	if s.attemptRepo != nil {
+		exhaustAttempt := &models.HL7Attempt{
+			ECGID:     ecg.ID,
+			PatientID: ecg.PatientID,
+			Status:    "exhausted",
+		}
+		if lastErr != nil {
+			exhaustAttempt.Error = lastErr.Error()
+			if errors.Is(lastErr, ErrMSARejected) {
+				code, msg := parseMSAFromError(lastErr)
+				exhaustAttempt.MSACode = code
+				exhaustAttempt.MSAMessage = msg
+			}
+		}
+		_ = s.attemptRepo.Insert(exhaustAttempt)
+	}
+
 	if updErr := s.ecgRepo.UpdateHL7Lifecycle(ecg.ID, StatusExhausted, maxRetries); updErr != nil {
 		slog.Warn("hl7 scheduler: exhaustion status update failed", "ecg_id", ecg.ID, "error", updErr)
 	}
