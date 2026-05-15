@@ -248,5 +248,6 @@ func (r *RouterConfig) RegisterRoutes() {
 	}
 	if r.hl7Scheduler != nil {
 		apiV1.POST("/admin/hl7/run", handlers.ForceHL7RunHandler(r.hl7Scheduler), mw.RequirePermission(r.checker, auth.PermHL7Config))
+		apiV1.POST("/admin/hl7/ping", handlers.PingHL7Handler(r.cfg.HL7.Host, r.cfg.HL7.Port), mw.RequirePermission(r.checker, auth.PermHL7Config))
 	}
 }
