@@ -2,7 +2,9 @@ package hl7
 
 import (
 	"context"
+	"errors"
 	"log/slog"
+	"time"
 
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 )
@@ -44,6 +46,7 @@ type Enricher struct {
 	patRepo     patientUpdater
 	ecgRepo     ecgHL7Updater
 	mappingRepo mappingProvider // optional — nil means always use parsePID fallback
+	attemptRepo AttemptRecorder // optional — nil means no attempt history recording
 }
 
 // NewEnricher constructs an Enricher.
@@ -72,6 +75,13 @@ func WithMappingRepo(repo mappingProvider) EnricherOption {
 	}
 }
 
+// WithAttemptRepo sets the attempt recorder for tracking HL7 query history.
+func WithAttemptRepo(repo AttemptRecorder) EnricherOption {
+	return func(e *Enricher) {
+		e.attemptRepo = repo
+	}
+}
+
 // HasMappings returns true if a mapping repo is configured.
 func (e *Enricher) HasMappings() bool {
 	return e.mappingRepo != nil
@@ -88,10 +98,25 @@ func (e *Enricher) LoadMappings() ([]models.HL7Mapping, error) {
 // Enrich queries the HIS for patientID and updates the patient demographics and ECG HL7 status.
 // It always returns nil — errors are logged and the ingestion pipeline is never blocked (NFR-I3).
 func (e *Enricher) Enrich(ctx context.Context, ecgID string, patientID string) error {
+	start := time.Now()
 	d, err := e.enrichWithMappings(ctx, patientID)
+	elapsed := time.Since(start)
+
 	if err != nil {
 		slog.Warn("hl7: query failed", "patient_id", patientID, "error", err)
+		e.recordFailedAttempt(ecgID, patientID, err, elapsed)
 		return nil
+	}
+
+	// Record the successful attempt.
+	if e.attemptRepo != nil {
+		_ = e.attemptRepo.Insert(&models.HL7Attempt{
+			ECGID:      ecgID,
+			PatientID:  patientID,
+			Status:     "success",
+			MSACode:    "AA",
+			ResponseMs: int(elapsed.Milliseconds()),
+		})
 	}
 
 	if err := e.patRepo.UpdateDemographics(patientID, d); err != nil {
@@ -103,6 +128,32 @@ func (e *Enricher) Enrich(ctx context.Context, ecgID string, patientID string) e
 	}
 
 	return nil
+}
+
+// recordFailedAttempt inserts a failed or rejected attempt when the enricher query fails.
+func (e *Enricher) recordFailedAttempt(ecgID, patientID string, err error, elapsed time.Duration) {
+	if e.attemptRepo == nil {
+		return
+	}
+
+	attempt := &models.HL7Attempt{
+		ECGID:      ecgID,
+		PatientID:  patientID,
+		ResponseMs: int(elapsed.Milliseconds()),
+	}
+
+	if errors.Is(err, ErrMSARejected) {
+		attempt.Status = "rejected"
+		code, msg := parseMSAFromError(err)
+		attempt.MSACode = code
+		attempt.MSAMessage = msg
+		attempt.Error = err.Error()
+	} else {
+		attempt.Status = "failed"
+		attempt.Error = err.Error()
+	}
+
+	_ = e.attemptRepo.Insert(attempt)
 }
 
 // enrichWithMappings attempts to use the active mapping preset to extract demographics from
