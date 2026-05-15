@@ -531,6 +531,23 @@ function PatientDetail({
                 </span>
               </>
             )}
+            {patient.nip && (
+              <>
+                <span className="text-border">·</span>
+                <span className="inline-flex items-center gap-1 font-mono text-xs">
+                  NIP {patient.nip}
+                  <button
+                    onClick={() => {
+                      void navigator.clipboard.writeText(patient.nip!);
+                      notify("success", t("patient.nipCopied"));
+                    }}
+                    className="p-0.5 rounded text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <Copy className="w-3 h-3" />
+                  </button>
+                </span>
+              </>
+            )}
           </div>
           <PatientTagsRow patientId={patient.patient_id} />
         </div>
