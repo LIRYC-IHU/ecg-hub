@@ -280,11 +280,12 @@ func main() {
 	}
 
 	// Create HL7 client early so it can be injected into the router for the test endpoint.
+	hl7SettingsRepo := repository.NewHL7SettingsRepository(gormDB)
 	var hl7Client *hl7.Client
 	if cfg.HL7.Enabled && cfg.HL7.Host != "" && cfg.HL7.Port != 0 {
 		hl7Timeout := 10 * time.Second
-		if cfg.HL7.Timeout != "" {
-			if d, err := time.ParseDuration(cfg.HL7.Timeout); err == nil {
+		if settings, err := hl7SettingsRepo.Get(); err == nil && settings.Timeout != "" {
+			if d, err := time.ParseDuration(settings.Timeout); err == nil {
 				hl7Timeout = d
 			}
 		}
@@ -301,19 +302,18 @@ func main() {
 	// Create repos + HL7 enricher early so ForceHL7Handler can execute queries immediately.
 	ecgRepo := repository.NewECGRepository(gormDB)
 	patRepo := repository.NewPatientRepository(gormDB)
+	hl7AttemptRepo := repository.NewHL7AttemptRepository(gormDB)
 	var hl7Enricher apihandlers.HL7Enricher
 	var hl7EnricherForPersister *hl7.Enricher
 	if hl7Client != nil {
 		hl7MappingRepo := repository.NewHL7MappingRepository(gormDB)
-		hl7EnricherForPersister = hl7.NewEnricher(hl7Client, patRepo, ecgRepo, hl7.WithMappingRepo(hl7MappingRepo))
+		hl7EnricherForPersister = hl7.NewEnricher(hl7Client, patRepo, ecgRepo, hl7.WithMappingRepo(hl7MappingRepo), hl7.WithAttemptRepo(hl7AttemptRepo))
 		hl7Enricher = hl7EnricherForPersister
 	}
 
 	// HL7 Scheduler: database-driven cron replacement for the config-only RetryJob.
 	var hl7Scheduler *hl7.Scheduler
-	var hl7SettingsRepo *repository.HL7SettingsRepository
 	if hl7Client != nil {
-		hl7SettingsRepo = repository.NewHL7SettingsRepository(gormDB)
 		auditRepoForScheduler := repository.NewAuditRepository(gormDB)
 		hl7Scheduler = hl7.NewScheduler(
 			hl7SettingsRepo,
@@ -323,7 +323,7 @@ func main() {
 			webhookNotifier,
 			hl7Client,
 			hl7EnricherForPersister,
-			cfg.HL7.MaxRetries,
+			hl7AttemptRepo,
 		)
 		if err := hl7Scheduler.Start(); err != nil {
 			slog.Warn("hl7 scheduler: failed to start, falling back to retry job", "error", err)
@@ -418,22 +418,13 @@ func main() {
 
 		// Only start the legacy RetryJob if the new Scheduler is not running.
 		if hl7Scheduler == nil {
-			retryInterval, err := time.ParseDuration(cfg.HL7.RetryInterval)
-			if err != nil {
-				slog.Error("FATAL: hl7: invalid retry_interval in config",
-					"value", cfg.HL7.RetryInterval, "error", err)
-				os.Exit(1)
-			}
 			auditRepo := repository.NewAuditRepository(gormDB)
 			retryJob := hl7.NewRetryJob(
 				hl7Client, ecgRepo, patRepo, auditRepo, webhookNotifier,
-				cfg.HL7.MaxRetries, retryInterval,
+				3, 5*time.Minute,
 			)
 			retryJob.Start()
-			slog.Info("hl7: legacy retry job started (scheduler unavailable)",
-				"interval", retryInterval,
-				"max_retries", cfg.HL7.MaxRetries,
-			)
+			slog.Info("hl7: legacy retry job started (scheduler unavailable)")
 			defer func() {
 				retryJob.Stop()
 				<-retryJob.Done()
