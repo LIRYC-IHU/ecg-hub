@@ -187,6 +187,7 @@
         "modeScheduled": "Planifié (cron uniquement)",
         "cronExpr": "Expression cron",
         "maxRetries": "Tentatives max",
+        "timeout": "Timeout",
         "enabledLabel": "Activé",
         "lastRunLabel": "Dernier lancement",
         "nextRunLabel": "Prochain lancement",

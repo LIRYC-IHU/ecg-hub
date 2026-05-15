@@ -187,6 +187,7 @@
         "modeScheduled": "Scheduled (cron only)",
         "cronExpr": "Cron expression",
         "maxRetries": "Max retries",
+        "timeout": "Timeout",
         "enabledLabel": "Enabled",
         "lastRunLabel": "Last run",
         "nextRunLabel": "Next run",
