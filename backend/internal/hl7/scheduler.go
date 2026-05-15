@@ -20,10 +20,6 @@ type settingsProvider interface {
 	Get() (*models.HL7Settings, error)
 }
 
-// schedulerEnricher abstracts the HL7 enricher for the scheduler.
-type schedulerEnricher interface {
-	Enrich(ctx context.Context, ecgID string, patientID string) error
-}
 
 // Scheduler is a database-driven cron scheduler for HL7 retry processing.
 // It reads settings from the DB, runs a cron job based on the cron expression,
@@ -36,7 +32,7 @@ type Scheduler struct {
 	auditRepo  retryAuditWriter
 	webhook    retryWebhookNotifier
 	client     hl7Querier
-	enricher   schedulerEnricher
+	enricher   *Enricher
 	maxRetries int
 	lastRun    time.Time
 	nextRun    time.Time
@@ -53,7 +49,7 @@ func NewScheduler(
 	auditRepo retryAuditWriter,
 	webhook retryWebhookNotifier,
 	client hl7Querier,
-	enricher schedulerEnricher,
+	enricher *Enricher,
 	maxRetries int,
 ) *Scheduler {
 	return &Scheduler{
@@ -220,30 +216,40 @@ func (s *Scheduler) processOne(ecg models.ECG) {
 	maxRetries := s.maxRetries
 	s.mu.RUnlock()
 
-	// If we have an enricher, use it for richer mapping-based enrichment.
-	if s.enricher != nil {
-		_ = s.enricher.Enrich(context.Background(), ecg.ID, ecg.PatientID)
-		// Enricher handles success/failure internally; check if we need retry logic.
-		// The enricher only swallows errors; if the ECG is still pending after enricher returns,
-		// we need to fall back to the retry logic below. But Enricher sets success on its own.
-		// For the scheduler, we simply call enrich and let it handle the ECG status update.
-		// However, we still need to handle retry counting and exhaustion.
-		// The enricher does NOT increment retry counts — it just logs and returns nil.
-		// So we use the direct client approach (same as RetryJob) for retry semantics.
+	// Try full query with mapping support if available.
+	var d *PatientDemographics
+	var queryErr error
+
+	if fq, ok := s.client.(FullQuerier); ok && s.enricher != nil && s.enricher.HasMappings() {
+		// Use FullQuerier + dynamic mappings for richer extraction.
+		result, err := fq.QueryPatientFull(context.Background(), ecg.PatientID)
+		if err != nil {
+			queryErr = err
+		} else {
+			mappings, _ := s.enricher.LoadMappings()
+			if len(mappings) > 0 {
+				d = ApplyMappings(result.Raw, mappings)
+				if result.Demographics != nil {
+					d.Source = result.Demographics.Source
+				}
+			} else if result.Demographics != nil {
+				d = result.Demographics
+			}
+		}
+	} else {
+		d, queryErr = s.client.QueryPatient(context.Background(), ecg.PatientID)
 	}
 
-	// Use direct client query for proper retry counting (same as RetryJob).
-	d, err := s.client.QueryPatient(context.Background(), ecg.PatientID)
-	if err != nil {
+	if queryErr != nil {
 		slog.Warn("hl7 scheduler: query failed",
 			"ecg_id", ecg.ID,
 			"patient_id", ecg.PatientID,
 			"retry_count", ecg.HL7RetryCount,
-			"error", err,
+			"error", queryErr,
 		)
 		newCount := ecg.HL7RetryCount + 1
 		if newCount >= maxRetries {
-			s.exhaust(ecg, maxRetries, err)
+			s.exhaust(ecg, maxRetries, queryErr)
 		} else {
 			appmetrics.HL7RetryAttempts.WithLabelValues("failed").Inc()
 			if updErr := s.ecgRepo.UpdateHL7Lifecycle(ecg.ID, StatusPending, newCount); updErr != nil {
@@ -253,8 +259,10 @@ func (s *Scheduler) processOne(ecg models.ECG) {
 		return
 	}
 
-	if updErr := s.patRepo.UpdateDemographics(ecg.PatientID, d); updErr != nil {
-		slog.Warn("hl7 scheduler: demographics update failed", "ecg_id", ecg.ID, "error", updErr)
+	if d != nil {
+		if updErr := s.patRepo.UpdateDemographics(ecg.PatientID, d); updErr != nil {
+			slog.Warn("hl7 scheduler: demographics update failed", "ecg_id", ecg.ID, "error", updErr)
+		}
 	}
 
 	if updErr := s.ecgRepo.UpdateHL7Lifecycle(ecg.ID, StatusSuccess, ecg.HL7RetryCount); updErr != nil {
@@ -265,7 +273,6 @@ func (s *Scheduler) processOne(ecg models.ECG) {
 	slog.Info("hl7 scheduler: retry succeeded",
 		"ecg_id", ecg.ID,
 		"patient_id", ecg.PatientID,
-		"retry_count", ecg.HL7RetryCount,
 	)
 }
 
