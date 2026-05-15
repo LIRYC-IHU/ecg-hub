@@ -72,6 +72,19 @@ func WithMappingRepo(repo mappingProvider) EnricherOption {
 	}
 }
 
+// HasMappings returns true if a mapping repo is configured.
+func (e *Enricher) HasMappings() bool {
+	return e.mappingRepo != nil
+}
+
+// LoadMappings returns the active mappings from the repo.
+func (e *Enricher) LoadMappings() ([]models.HL7Mapping, error) {
+	if e.mappingRepo == nil {
+		return nil, nil
+	}
+	return e.mappingRepo.GetActiveMappings()
+}
+
 // Enrich queries the HIS for patientID and updates the patient demographics and ECG HL7 status.
 // It always returns nil — errors are logged and the ingestion pipeline is never blocked (NFR-I3).
 func (e *Enricher) Enrich(ctx context.Context, ecgID string, patientID string) error {
