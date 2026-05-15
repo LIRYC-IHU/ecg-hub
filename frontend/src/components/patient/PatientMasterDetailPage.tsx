@@ -30,7 +30,9 @@ import {
   untagPatient,
   forceHL7,
   fetchActiveHL7Mappings,
+  fetchHL7History,
   type TagDTO,
+  type HL7Attempt,
 } from "../../lib/api";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../../hooks/useAuth";
@@ -391,6 +393,74 @@ function PatientTagsRow({ patientId }: { patientId: string }) {
   );
 }
 
+// ─── HL7 History timeline ────────────────────────────────────────────────────
+
+function PatientHL7History({ patientId }: { patientId: string }) {
+  const { t } = useTranslation();
+  const [open, setOpen] = useState(false);
+  const { data: attempts = [] } = useQuery({
+    queryKey: ["hl7-history", patientId],
+    queryFn: () => fetchHL7History(patientId),
+    staleTime: 30_000,
+    enabled: open,
+  });
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        className="inline-flex items-center gap-1.5 mt-2 px-2.5 py-1 rounded-md text-[11px] font-medium border border-border text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+      >
+        <Clock className="w-3 h-3" />
+        {t("patient.hl7History")}
+      </button>
+    );
+  }
+
+  return (
+    <div className="mt-2">
+      <button
+        onClick={() => setOpen(false)}
+        className="text-[11px] font-medium text-muted-foreground hover:text-foreground transition-colors mb-2"
+      >
+        {t("patient.hl7HistoryHide")}
+      </button>
+      {attempts.length === 0 ? (
+        <p className="text-[11px] text-muted-foreground/60 italic">{t("patient.hl7NoHistory")}</p>
+      ) : (
+        <div className="space-y-1 max-h-40 overflow-y-auto">
+          {attempts.map((a) => (
+            <div key={a.id} className="flex items-center gap-2 text-[11px]">
+              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                a.status === "success" ? "bg-green-400" :
+                a.status === "rejected" ? "bg-amber-400" :
+                "bg-red-400"
+              }`} />
+              <span className="text-muted-foreground font-mono w-32 shrink-0">
+                {new Date(a.created_at).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+              </span>
+              <span className="text-muted-foreground font-mono w-12 shrink-0 text-right">
+                {a.response_ms}ms
+              </span>
+              {a.status === "success" && <span className="text-green-400 font-medium">OK</span>}
+              {a.status === "rejected" && (
+                <span className="text-amber-400 truncate" title={a.msa_message}>
+                  MSA {a.msa_code}: {a.msa_message || "rejected"}
+                </span>
+              )}
+              {(a.status === "failed" || a.status === "exhausted") && (
+                <span className="text-red-400 truncate" title={a.error}>
+                  {a.error || "failed"}
+                </span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Patient tags dots (compact, for grid rows) ─────────────────────────────
 
 function PatientTagDots({ patientId }: { patientId: string }) {
@@ -550,6 +620,7 @@ function PatientDetail({
             )}
           </div>
           <PatientTagsRow patientId={patient.patient_id} />
+          <PatientHL7History patientId={patient.patient_id} />
         </div>
         <div className="flex gap-2 shrink-0">
           {canForceHL7 && (
