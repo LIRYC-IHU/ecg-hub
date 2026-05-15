@@ -8,6 +8,7 @@ export interface Patient {
   last_name: string
   date_of_birth: string | null
   gender: string
+  nip?: string
   ecg_count: number
   last_activity: string | null // ISO 8601 UTC
 }
