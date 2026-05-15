@@ -77,7 +77,7 @@ func SearchPatientsHandler(db *gorm.DB) echo.HandlerFunc {
 		query := db.Model(&models.Patient{})
 		if params.Q != "" {
 			like := "%" + params.Q + "%"
-			query = query.Where("patients.last_name ILIKE ? OR patients.first_name ILIKE ? OR patients.patient_id ILIKE ?", like, like, like)
+			query = query.Where("patients.last_name ILIKE ? OR patients.first_name ILIKE ? OR patients.patient_id ILIKE ? OR patients.nip ILIKE ?", like, like, like, like)
 		}
 		if params.Tags != "" {
 			tagIDs := strings.Split(params.Tags, ",")
