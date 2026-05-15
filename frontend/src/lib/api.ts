@@ -713,6 +713,7 @@ export interface HL7Settings {
   trigger_mode: "immediate" | "scheduled";
   cron_expression: string;
   max_retries: number;
+  timeout: string;
   enabled: boolean;
   updated_at: string;
   last_run?: string;
