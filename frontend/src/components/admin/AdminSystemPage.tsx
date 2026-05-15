@@ -61,13 +61,14 @@ function HL7SchedulerForm({ settings, onSave, saving }: {
   const [triggerMode, setTriggerMode] = useState(settings.trigger_mode);
   const [cronExpr, setCronExpr] = useState(settings.cron_expression);
   const [maxRetries, setMaxRetries] = useState(settings.max_retries);
+  const [timeout, setTimeout] = useState(settings.timeout);
   const [enabled, setEnabled] = useState(settings.enabled);
 
-  const isDirty = triggerMode !== settings.trigger_mode || cronExpr !== settings.cron_expression || maxRetries !== settings.max_retries || enabled !== settings.enabled;
+  const isDirty = triggerMode !== settings.trigger_mode || cronExpr !== settings.cron_expression || maxRetries !== settings.max_retries || timeout !== settings.timeout || enabled !== settings.enabled;
 
   return (
     <div className="space-y-4 mb-4">
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         {/* Trigger mode */}
         <div>
           <label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -110,6 +111,20 @@ function HL7SchedulerForm({ settings, onSave, saving }: {
           />
         </div>
 
+        {/* Timeout */}
+        <div>
+          <label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            {t("admin.system.hl7.timeout")}
+          </label>
+          <input
+            type="text"
+            value={timeout}
+            onChange={(e) => setTimeout(e.target.value)}
+            placeholder="10s"
+            className="mt-1 w-full text-xs font-mono border border-border rounded-md px-2 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring/20"
+          />
+        </div>
+
         {/* Enabled toggle */}
         <div>
           <label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -128,7 +143,7 @@ function HL7SchedulerForm({ settings, onSave, saving }: {
 
       {isDirty && (
         <button
-          onClick={() => onSave({ trigger_mode: triggerMode, cron_expression: cronExpr, max_retries: maxRetries, enabled })}
+          onClick={() => onSave({ trigger_mode: triggerMode, cron_expression: cronExpr, max_retries: maxRetries, timeout, enabled })}
           disabled={saving}
           className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-medium bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50 transition-opacity"
         >
