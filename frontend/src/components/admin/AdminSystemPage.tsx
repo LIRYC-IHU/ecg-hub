@@ -38,6 +38,7 @@ import {
   fetchHL7Settings,
   updateHL7Settings,
   triggerHL7Run,
+  pingHL7,
   type HL7TestResult,
   type HL7SegmentNode,
   type HL7Preset,
@@ -171,6 +172,18 @@ function HL7SchedulerSection() {
     onError: () => notify("error", t("admin.system.hl7.runError")),
   });
 
+  const pingMutation = useMutation({
+    mutationFn: pingHL7,
+    onSuccess: (data) => {
+      if (data.success) {
+        notify("success", t("admin.system.hl7.pingOk", { latency: data.latency }));
+      } else {
+        notify("error", t("admin.system.hl7.pingFail", { error: data.error }));
+      }
+    },
+    onError: () => notify("error", t("admin.system.hl7.pingFail", { error: "request failed" })),
+  });
+
   if (isLoading || !settings) return null;
 
   return (
@@ -187,14 +200,24 @@ function HL7SchedulerSection() {
             {settings.enabled ? t("admin.system.hl7.schedulerEnabled") : t("admin.system.hl7.schedulerDisabled")}
           </span>
         </div>
-        <button
-          onClick={() => runMutation.mutate()}
-          disabled={runMutation.isPending || !settings.enabled}
-          className="inline-flex items-center gap-1.5 text-xs border border-border px-3 py-1.5 rounded-lg hover:bg-muted transition-colors disabled:opacity-50"
-        >
-          {runMutation.isPending && <Spinner size={11} />}
-          {t("admin.system.hl7.runNow")}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => pingMutation.mutate()}
+            disabled={pingMutation.isPending}
+            className="inline-flex items-center gap-1.5 text-xs border border-border px-3 py-1.5 rounded-lg hover:bg-muted transition-colors disabled:opacity-50"
+          >
+            {pingMutation.isPending && <Spinner size={11} />}
+            {t("admin.system.hl7.ping")}
+          </button>
+          <button
+            onClick={() => runMutation.mutate()}
+            disabled={runMutation.isPending || !settings.enabled}
+            className="inline-flex items-center gap-1.5 text-xs border border-border px-3 py-1.5 rounded-lg hover:bg-muted transition-colors disabled:opacity-50"
+          >
+            {runMutation.isPending && <Spinner size={11} />}
+            {t("admin.system.hl7.runNow")}
+          </button>
+        </div>
       </div>
 
       <HL7SchedulerForm settings={settings} onSave={(data) => updateMutation.mutate(data)} saving={updateMutation.isPending} />
