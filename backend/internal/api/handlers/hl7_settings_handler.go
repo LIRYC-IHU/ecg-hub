@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"fmt"
+	"net"
 	"net/http"
 	"time"
 
@@ -136,6 +138,40 @@ func UpdateHL7SettingsHandler(repo *repository.HL7SettingsRepository, scheduler 
 		}
 
 		return c.JSON(http.StatusOK, map[string]any{"data": settings})
+	}
+}
+
+// PingHL7Handler handles POST /admin/hl7/ping.
+// Tests TCP connectivity to the configured HIS without sending an HL7 message.
+func PingHL7Handler(host string, port int) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		if host == "" || port == 0 {
+			return c.JSON(http.StatusServiceUnavailable, map[string]string{
+				"code":    "HL7_DISABLED",
+				"message": "HL7 host/port not configured",
+			})
+		}
+
+		addr := fmt.Sprintf("%s:%d", host, port)
+		start := time.Now()
+		conn, err := net.DialTimeout("tcp", addr, 5*time.Second)
+		latency := time.Since(start)
+
+		if err != nil {
+			return c.JSON(http.StatusOK, map[string]any{
+				"success": false,
+				"host":    addr,
+				"latency": latency.Round(time.Millisecond).String(),
+				"error":   err.Error(),
+			})
+		}
+		conn.Close()
+
+		return c.JSON(http.StatusOK, map[string]any{
+			"success": true,
+			"host":    addr,
+			"latency": latency.Round(time.Millisecond).String(),
+		})
 	}
 }
 
