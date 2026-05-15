@@ -158,9 +158,6 @@ type HL7Config struct {
 	ReceivingFacility    string `mapstructure:"receiving_facility"`    // MSH-6
 	Version              string `mapstructure:"version"`               // HL7 version (e.g. "2.5")
 	ProcessingID         string `mapstructure:"processing_id"`         // P=Production, T=Training, D=Debug
-	Timeout              string `mapstructure:"timeout"`               // TCP timeout (e.g. "10s")
-	RetryInterval        string `mapstructure:"retry_interval"`
-	MaxRetries           int    `mapstructure:"max_retries"`
 }
 
 // StorageConfig holds file volume settings (FR10).
