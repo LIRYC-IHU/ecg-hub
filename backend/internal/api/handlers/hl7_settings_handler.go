@@ -33,6 +33,7 @@ type UpdateHL7SettingsRequest struct {
 	TriggerMode    *string `json:"trigger_mode"`
 	CronExpression *string `json:"cron_expression"`
 	MaxRetries     *int    `json:"max_retries"`
+	Timeout        *string `json:"timeout"`
 	Enabled        *bool   `json:"enabled"`
 }
 
@@ -116,6 +117,16 @@ func UpdateHL7SettingsHandler(repo *repository.HL7SettingsRepository, scheduler 
 				})
 			}
 			settings.MaxRetries = *req.MaxRetries
+		}
+		if req.Timeout != nil {
+			d, err := time.ParseDuration(*req.Timeout)
+			if err != nil || d < time.Second || d > 60*time.Second {
+				return c.JSON(http.StatusBadRequest, map[string]string{
+					"code":    "INVALID_PARAMS",
+					"message": "timeout must be between 1s and 60s",
+				})
+			}
+			settings.Timeout = *req.Timeout
 		}
 		if req.Enabled != nil {
 			settings.Enabled = *req.Enabled
