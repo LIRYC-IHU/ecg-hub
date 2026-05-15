@@ -38,6 +38,7 @@ func RunMigrations(db *gorm.DB) error {
 		&appmodels.HL7MappingPreset{},
 		&appmodels.HL7Mapping{},
 		&appmodels.HL7Settings{},
+		&appmodels.HL7Attempt{},
 	}
 	// for _, m := range models {
 	// 	err := db.Migrator().DropTable(m)
