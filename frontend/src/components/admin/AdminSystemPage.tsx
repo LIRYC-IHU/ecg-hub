@@ -39,6 +39,7 @@ import {
   updateHL7Settings,
   triggerHL7Run,
   pingHL7,
+  bulkRetryHL7,
   type HL7TestResult,
   type HL7SegmentNode,
   type HL7Preset,
@@ -184,6 +185,14 @@ function HL7SchedulerSection() {
     onError: () => notify("error", t("admin.system.hl7.pingFail", { error: "request failed" })),
   });
 
+  const bulkRetryMutation = useMutation({
+    mutationFn: bulkRetryHL7,
+    onSuccess: (data) => {
+      notify("success", t("admin.system.hl7.bulkRetryOk", { count: data.count }));
+    },
+    onError: () => notify("error", t("admin.system.hl7.bulkRetryError")),
+  });
+
   if (isLoading || !settings) return null;
 
   return (
@@ -216,6 +225,16 @@ function HL7SchedulerSection() {
           >
             {runMutation.isPending && <Spinner size={11} />}
             {t("admin.system.hl7.runNow")}
+          </button>
+          <button
+            onClick={() => {
+              if (confirm(t("admin.system.hl7.bulkRetryConfirm"))) bulkRetryMutation.mutate();
+            }}
+            disabled={bulkRetryMutation.isPending}
+            className="inline-flex items-center gap-1.5 text-xs border border-destructive/30 text-destructive px-3 py-1.5 rounded-lg hover:bg-destructive/5 transition-colors disabled:opacity-50"
+          >
+            {bulkRetryMutation.isPending && <Spinner size={11} />}
+            {t("admin.system.hl7.bulkRetry")}
           </button>
         </div>
       </div>
