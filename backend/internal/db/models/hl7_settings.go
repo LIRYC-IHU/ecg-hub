@@ -9,6 +9,7 @@ type HL7Settings struct {
 	TriggerMode    string    `gorm:"type:text;not null;default:'immediate'" json:"trigger_mode"` // "immediate" or "scheduled"
 	CronExpression string    `gorm:"type:text;not null;default:'*/5 * * * *'" json:"cron_expression"`
 	MaxRetries     int       `gorm:"not null;default:3" json:"max_retries"`
+	Timeout        string    `gorm:"type:text;not null;default:'10s'" json:"timeout"` // e.g. "10s", "30s"
 	Enabled        bool      `gorm:"not null;default:true" json:"enabled"`
 	UpdatedAt      time.Time `gorm:"autoUpdateTime" json:"updated_at"`
 }
