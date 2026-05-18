@@ -43,6 +43,7 @@ type RouterConfig struct {
 	hl7Scheduler    handlers.HL7SchedulerStatus           // nil when HL7 is disabled
 	hl7SettingsRepo *repository.HL7SettingsRepository     // nil when HL7 is disabled
 	cfg             *config.Config
+	authEncKey      string // encryption key for auth provider configs
 }
 
 func NewRouterConfig(e *echo.Echo, gormDB *gorm.DB, authProvider auth.Provider, bridge export.Converter,
@@ -51,7 +52,7 @@ func NewRouterConfig(e *echo.Echo, gormDB *gorm.DB, authProvider auth.Provider, 
 	ectpStatus handlers.ECTPStatus, exportRepo *repository.ExportJobRepository, exportPool *export.WorkerPool,
 	connCheckers []handlers.ConnectorHealthChecker, hl7Client *hl7.Client, hl7Enricher handlers.HL7Enricher,
 	hl7Scheduler handlers.HL7SchedulerStatus, hl7SettingsRepo *repository.HL7SettingsRepository,
-	cfg *config.Config) *RouterConfig {
+	cfg *config.Config, authEncKey string) *RouterConfig {
 	return &RouterConfig{
 		e:               e,
 		gormDB:          gormDB,
@@ -73,6 +74,7 @@ func NewRouterConfig(e *echo.Echo, gormDB *gorm.DB, authProvider auth.Provider, 
 		hl7Scheduler:    hl7Scheduler,
 		hl7SettingsRepo: hl7SettingsRepo,
 		cfg:             cfg,
+		authEncKey:      authEncKey,
 	}
 }
 
@@ -120,14 +122,23 @@ func (r *RouterConfig) RegisterRoutes() {
 	)
 	r.e.GET("/swagger/*", swaggerHandler, mw.AuthMiddleware(r.authProvider, r.userRepo), mw.RequirePermission(r.checker, auth.PermSwaggerRead))
 
-	// === Authentication (public — these endpoints issue JWTs) ===
-	r.e.GET("/api/v1/auth/provider", handlers.AuthProviderHandler(r.authProvider))
-	r.e.POST("/api/v1/auth/login", handlers.LoginHandler(r.authProvider))
+	// === Setup (public — system initialization) ===
+	localUserRepo := repository.NewLocalUserRepository(r.gormDB)
+	r.e.GET("/api/v1/setup/status", handlers.SetupStatusHandler(localUserRepo))
+	r.e.POST("/api/v1/setup", handlers.SetupHandler(localUserRepo, r.gormDB))
 
-	// OIDC Authorization Code Flow — registered only when an OIDC provider is configured.
-	if oidcFlow := auth.GetOIDCFlow(r.authProvider); oidcFlow != nil {
-		r.e.GET("/api/v1/auth/oidc/login", handlers.OIDCLoginHandler(oidcFlow))
-		r.e.GET("/api/v1/auth/oidc/callback", handlers.OIDCCallbackHandler(oidcFlow))
+	// === Authentication (public — these endpoints issue JWTs) ===
+	authConfigRepoForProvider := repository.NewAuthConfigRepository(r.gormDB)
+	r.e.GET("/api/v1/auth/provider", handlers.AuthProviderHandler(r.authProvider, authConfigRepoForProvider))
+	loginAuthConfigRepo := repository.NewAuthConfigRepository(r.gormDB)
+	r.e.POST("/api/v1/auth/login", handlers.LoginHandlerWithDB(r.authProvider, loginAuthConfigRepo, r.authEncKey, r.cfg.JWTSecret))
+
+	// OIDC Authorization Code Flow — always registered; initializes flow from DB config if not at startup.
+	{
+		oidcAuthConfigRepo := repository.NewAuthConfigRepository(r.gormDB)
+		oidcFlow := auth.GetOIDCFlow(r.authProvider)
+		r.e.GET("/api/v1/auth/oidc/login", handlers.OIDCLoginHandlerDynamic(oidcFlow, oidcAuthConfigRepo, r.authEncKey, r.cfg.JWTSecret))
+		r.e.GET("/api/v1/auth/oidc/callback", handlers.OIDCCallbackHandlerDynamic(oidcFlow, oidcAuthConfigRepo, r.authEncKey, r.cfg.JWTSecret, r.userRepo))
 	}
 
 	// Logout — public (user may have expired/no token); clears cookie + redirects.
@@ -258,4 +269,13 @@ func (r *RouterConfig) RegisterRoutes() {
 		apiV1.POST("/admin/hl7/ping", handlers.PingHL7Handler(r.cfg.HL7.Host, r.cfg.HL7.Port), mw.RequirePermission(r.checker, auth.PermHL7Config))
 		apiV1.POST("/admin/hl7/bulk-retry", handlers.BulkRetryHL7Handler(r.gormDB), mw.RequirePermission(r.checker, auth.PermHL7BulkRetry))
 	}
+
+	// Auth provider configuration (OIDC/LDAP from UI) — requires admin.auth_config
+	authConfigRepo := repository.NewAuthConfigRepository(r.gormDB)
+	apiV1.GET("/admin/auth/providers", handlers.ListAuthProvidersHandler(authConfigRepo, r.authEncKey), mw.RequirePermission(r.checker, auth.PermAdminAuthConfig))
+	apiV1.PUT("/admin/auth/oidc", handlers.SaveOIDCConfigHandler(authConfigRepo, r.authEncKey), mw.RequirePermission(r.checker, auth.PermAdminAuthConfig))
+	apiV1.PUT("/admin/auth/ldap", handlers.SaveLDAPConfigHandler(authConfigRepo, r.authEncKey), mw.RequirePermission(r.checker, auth.PermAdminAuthConfig))
+	apiV1.DELETE("/admin/auth/providers/:id", handlers.DeleteAuthProviderHandler(authConfigRepo), mw.RequirePermission(r.checker, auth.PermAdminAuthConfig))
+	apiV1.POST("/admin/auth/oidc/test", handlers.TestOIDCHandler(r.authEncKey), mw.RequirePermission(r.checker, auth.PermAdminAuthConfig))
+	apiV1.POST("/admin/auth/ldap/test", handlers.TestLDAPHandler(r.authEncKey), mw.RequirePermission(r.checker, auth.PermAdminAuthConfig))
 }
