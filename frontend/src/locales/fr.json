@@ -317,8 +317,53 @@
         "admin_users": "Gérer les rôles",
         "admin_audit": "Voir les audits",
         "admin_system": "Voir l'état système",
+        "admin_auth_config": "Configurer les fournisseurs d'auth",
         "swagger_read": "Accéder à la documentation API"
       }
+    },
+    "authProviders": {
+      "title": "Fournisseurs d'authentification",
+      "subtitle": "Configurez comment les utilisateurs s'authentifient sur ECG Hub.",
+      "oidc": {
+        "title": "OpenID Connect (OIDC)",
+        "issuerUrl": "URL de l'émetteur",
+        "internalUrl": "URL interne (Docker)",
+        "clientId": "Client ID",
+        "clientSecret": "Secret client",
+        "redirectUrl": "URL de redirection",
+        "logoutUrl": "URL de déconnexion (optionnel)",
+        "tls": "TLS",
+        "adminRoleName": "Nom du rôle admin",
+        "testOk": "Connexion OIDC réussie",
+        "testFail": "Connexion OIDC échouée : {{error}}"
+      },
+      "ldap": {
+        "title": "LDAP / Active Directory",
+        "host": "Hôte",
+        "port": "Port",
+        "tls": "TLS",
+        "baseDn": "Base DN",
+        "userSearchDn": "DN de recherche utilisateurs",
+        "userFilter": "Filtre utilisateur",
+        "bindDn": "Bind DN",
+        "bindPassword": "Mot de passe Bind",
+        "adminGroupDn": "DN groupe admin",
+        "writerGroupDn": "DN groupe rédacteur",
+        "adminUsers": "Utilisateurs admin (séparés par virgule)",
+        "testOk": "Connexion LDAP réussie",
+        "testFail": "Connexion LDAP échouée : {{error}}"
+      },
+      "save": "Enregistrer",
+      "saved": "Configuration enregistrée. Redémarrage requis pour appliquer.",
+      "saveError": "Erreur lors de l'enregistrement",
+      "test": "Tester la connexion",
+      "testing": "Test en cours...",
+      "delete": "Supprimer",
+      "deleteConfirm": "Supprimer cette configuration de fournisseur ?",
+      "deleted": "Fournisseur supprimé",
+      "active": "Actif",
+      "inactive": "Inactif",
+      "restartNotice": "Redémarrez le serveur pour appliquer les modifications d'authentification."
     }
   },
   "quarantine": {
@@ -353,6 +398,7 @@
     "roles": "Rôles",
     "audit": "Audit",
     "system": "Système",
+    "authConfig": "Auth",
     "quarantine": "Quarantaine"
   },
   "auth": {
@@ -364,6 +410,20 @@
     "password": "Mot de passe",
     "signingIn": "Connexion en cours…",
     "invalidCredentials": "Identifiants invalides"
+  },
+  "setup": {
+    "title": "Configuration initiale",
+    "subtitle": "Créez votre compte administrateur pour commencer.",
+    "username": "Nom d'utilisateur",
+    "password": "Mot de passe",
+    "confirmPassword": "Confirmer le mot de passe",
+    "submit": "Initialiser",
+    "usernameTooShort": "Le nom d'utilisateur doit contenir au moins 3 caractères",
+    "passwordTooShort": "Le mot de passe doit contenir au moins 8 caractères",
+    "passwordNeedsDigit": "Le mot de passe doit contenir au moins 1 chiffre",
+    "passwordMismatch": "Les mots de passe ne correspondent pas",
+    "success": "Compte administrateur créé. Veuillez vous connecter.",
+    "alreadyInitialized": "Le système est déjà initialisé"
   },
   "common": {
     "loading": "Chargement…",

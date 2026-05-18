@@ -317,8 +317,53 @@
         "admin_users": "Manage roles",
         "admin_audit": "View audit logs",
         "admin_system": "View system status",
+        "admin_auth_config": "Configure auth providers",
         "swagger_read": "Access API documentation"
       }
+    },
+    "authProviders": {
+      "title": "Authentication Providers",
+      "subtitle": "Configure how users authenticate to ECG Hub.",
+      "oidc": {
+        "title": "OpenID Connect (OIDC)",
+        "issuerUrl": "Issuer URL",
+        "internalUrl": "Internal URL (Docker)",
+        "clientId": "Client ID",
+        "clientSecret": "Client Secret",
+        "redirectUrl": "Redirect URL",
+        "logoutUrl": "Logout URL (optional)",
+        "tls": "TLS",
+        "adminRoleName": "Admin role name",
+        "testOk": "OIDC connection successful",
+        "testFail": "OIDC connection failed: {{error}}"
+      },
+      "ldap": {
+        "title": "LDAP / Active Directory",
+        "host": "Host",
+        "port": "Port",
+        "tls": "TLS",
+        "baseDn": "Base DN",
+        "userSearchDn": "User Search DN",
+        "userFilter": "User Filter",
+        "bindDn": "Bind DN",
+        "bindPassword": "Bind Password",
+        "adminGroupDn": "Admin Group DN",
+        "writerGroupDn": "Writer Group DN",
+        "adminUsers": "Admin Users (comma-separated)",
+        "testOk": "LDAP connection successful",
+        "testFail": "LDAP connection failed: {{error}}"
+      },
+      "save": "Save",
+      "saved": "Configuration saved. Restart required to apply.",
+      "saveError": "Error saving configuration",
+      "test": "Test connection",
+      "testing": "Testing...",
+      "delete": "Delete",
+      "deleteConfirm": "Delete this provider configuration?",
+      "deleted": "Provider deleted",
+      "active": "Active",
+      "inactive": "Inactive",
+      "restartNotice": "Restart the server to apply authentication changes."
     }
   },
   "quarantine": {
@@ -353,6 +398,7 @@
     "roles": "Roles",
     "audit": "Audit",
     "system": "System",
+    "authConfig": "Auth",
     "quarantine": "Quarantine"
   },
   "auth": {
@@ -364,6 +410,20 @@
     "password": "Password",
     "signingIn": "Signing in…",
     "invalidCredentials": "Invalid credentials"
+  },
+  "setup": {
+    "title": "Initial Setup",
+    "subtitle": "Create your administrator account to get started.",
+    "username": "Username",
+    "password": "Password",
+    "confirmPassword": "Confirm password",
+    "submit": "Initialize",
+    "usernameTooShort": "Username must be at least 3 characters",
+    "passwordTooShort": "Password must be at least 8 characters",
+    "passwordNeedsDigit": "Password must contain at least 1 digit",
+    "passwordMismatch": "Passwords do not match",
+    "success": "Admin account created. Please log in.",
+    "alreadyInitialized": "System is already initialized"
   },
   "common": {
     "loading": "Loading…",
