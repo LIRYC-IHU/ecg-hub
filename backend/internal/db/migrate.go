@@ -40,6 +40,8 @@ func RunMigrations(db *gorm.DB) error {
 		&appmodels.HL7Mapping{},
 		&appmodels.HL7Settings{},
 		&appmodels.HL7Attempt{},
+		&appmodels.LocalUser{},
+		&appmodels.AuthProviderConfig{},
 	}
 	// for _, m := range models {
 	// 	err := db.Migrator().DropTable(m)
@@ -111,6 +113,7 @@ func iniRole(db *gorm.DB) error {
 				"tag.create", "tag.delete", "tag.apply",
 				"quarantine.read", "quarantine.delete",
 				"admin.audit", "admin.system", "admin.users",
+				"admin.auth_config",
 				"swagger.read"},
 		},
 		{
