@@ -7,6 +7,9 @@ import {
   fetchPatientTags,
   tagPatient,
   untagPatient,
+  fetchECGTags,
+  tagECG,
+  untagECG,
   createTag,
   deleteTag,
   type TagDTO,
@@ -23,13 +26,16 @@ const PRESET_COLORS = [
 ];
 
 interface TagManagerProps {
-  patientId: string;
+  patientId?: string;
+  ecgId?: string;
   canCreate?: boolean;
   canDelete?: boolean;
   canApply?: boolean;
 }
 
-export function TagManager({ patientId, canCreate = true, canDelete = false, canApply = true }: TagManagerProps) {
+export function TagManager({ patientId, ecgId, canCreate = true, canDelete = false, canApply = true }: TagManagerProps) {
+  const entityId = patientId || ecgId || "";
+  const isECG = !!ecgId;
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
@@ -44,57 +50,53 @@ export function TagManager({ patientId, canCreate = true, canDelete = false, can
     staleTime: 60_000,
   });
 
-  const { data: patientTags = [] } = useQuery({
-    queryKey: ["patient-tags", patientId],
-    queryFn: () => fetchPatientTags(patientId),
+  const queryKey = isECG ? ["ecg-tags", entityId] : ["patient-tags", entityId];
+
+  const { data: entityTags = [] } = useQuery({
+    queryKey,
+    queryFn: () => isECG ? fetchECGTags(entityId) : fetchPatientTags(entityId),
     staleTime: 30_000,
-    enabled: !!patientId,
+    enabled: !!entityId,
   });
 
-  const patientTagIds = new Set(patientTags.map((t) => t.id));
+  const patientTagIds = new Set(entityTags.map((t) => t.id));
 
   const tagMutation = useMutation({
-    mutationFn: (tagId: string) => tagPatient(patientId, tagId),
+    mutationFn: (tagId: string) => isECG ? tagECG(entityId, tagId) : tagPatient(entityId, tagId),
     onMutate: async (tagId) => {
-      await queryClient.cancelQueries({ queryKey: ["patient-tags", patientId] });
-      const previous = queryClient.getQueryData<TagDTO[]>(["patient-tags", patientId]);
+      await queryClient.cancelQueries({ queryKey });
+      const previous = queryClient.getQueryData<TagDTO[]>(queryKey);
       const tagToAdd = allTags.find((t) => t.id === tagId);
       if (tagToAdd) {
-        queryClient.setQueryData<TagDTO[]>(
-          ["patient-tags", patientId],
-          (old) => [...(old ?? []), tagToAdd],
-        );
+        queryClient.setQueryData<TagDTO[]>(queryKey, (old) => [...(old ?? []), tagToAdd]);
       }
       return { previous };
     },
     onError: (_err, _tagId, context) => {
       if (context?.previous) {
-        queryClient.setQueryData(["patient-tags", patientId], context.previous);
+        queryClient.setQueryData(queryKey, context.previous);
       }
     },
     onSettled: () => {
-      void queryClient.invalidateQueries({ queryKey: ["patient-tags", patientId] });
+      void queryClient.invalidateQueries({ queryKey });
     },
   });
 
   const untagMutation = useMutation({
-    mutationFn: (tagId: string) => untagPatient(patientId, tagId),
+    mutationFn: (tagId: string) => isECG ? untagECG(entityId, tagId) : untagPatient(entityId, tagId),
     onMutate: async (tagId) => {
-      await queryClient.cancelQueries({ queryKey: ["patient-tags", patientId] });
-      const previous = queryClient.getQueryData<TagDTO[]>(["patient-tags", patientId]);
-      queryClient.setQueryData<TagDTO[]>(
-        ["patient-tags", patientId],
-        (old) => (old ?? []).filter((t) => t.id !== tagId),
-      );
+      await queryClient.cancelQueries({ queryKey });
+      const previous = queryClient.getQueryData<TagDTO[]>(queryKey);
+      queryClient.setQueryData<TagDTO[]>(queryKey, (old) => (old ?? []).filter((t) => t.id !== tagId));
       return { previous };
     },
     onError: (_err, _tagId, context) => {
       if (context?.previous) {
-        queryClient.setQueryData(["patient-tags", patientId], context.previous);
+        queryClient.setQueryData(queryKey, context.previous);
       }
     },
     onSettled: () => {
-      void queryClient.invalidateQueries({ queryKey: ["patient-tags", patientId] });
+      void queryClient.invalidateQueries({ queryKey });
     },
   });
 
@@ -112,7 +114,7 @@ export function TagManager({ patientId, canCreate = true, canDelete = false, can
     onSuccess: () => {
       setConfirmDeleteId(null);
       void queryClient.invalidateQueries({ queryKey: ["tags"] });
-      void queryClient.invalidateQueries({ queryKey: ["patient-tags", patientId] });
+      void queryClient.invalidateQueries({ queryKey });
     },
   });
 
