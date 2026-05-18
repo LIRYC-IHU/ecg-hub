@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Activity, Lock, User, Loader2, ShieldCheck } from 'lucide-react'
-import { fetchAuthProviders, loginWithLDAP } from '../lib/api'
+import { fetchAuthProviders, loginWithLDAP, loginWithLocal } from '../lib/api'
 
 export function LoginPage() {
   const { t } = useTranslation()
@@ -17,13 +17,19 @@ export function LoginPage() {
 
   const hasOIDC = providers.includes('oidc')
   const hasLDAP = providers.includes('ldap')
+  const hasLocal = providers.includes('local')
+  const hasCredentialForm = hasLDAP || hasLocal
 
-  async function handleLDAPSubmit(e: React.FormEvent) {
+  async function handleCredentialSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
     setLoading(true)
     try {
-      await loginWithLDAP(username, password)
+      if (hasLocal && !hasLDAP) {
+        await loginWithLocal(username, password)
+      } else {
+        await loginWithLDAP(username, password)
+      }
       window.location.reload()
     } catch {
       setError(t('auth.invalidCredentials'))
@@ -92,7 +98,7 @@ export function LoginPage() {
             </a>
           )}
 
-          {hasOIDC && hasLDAP && (
+          {hasOIDC && hasCredentialForm && (
             <div className="flex items-center gap-3 my-6">
               <div className="flex-1 h-px bg-border" />
               <span className="text-xs text-muted-foreground">ou</span>
@@ -100,8 +106,8 @@ export function LoginPage() {
             </div>
           )}
 
-          {hasLDAP && (
-            <form onSubmit={handleLDAPSubmit} className="space-y-4">
+          {hasCredentialForm && (
+            <form onSubmit={handleCredentialSubmit} className="space-y-4">
               <div>
                 <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
                   {t('auth.username')}
