@@ -112,3 +112,43 @@ func ListPatientTagsHandler(repo *repository.TagRepository) echo.HandlerFunc {
 		return c.JSON(http.StatusOK, map[string]any{"data": tags})
 	}
 }
+
+type tagECGBody struct {
+	TagID string `json:"tag_id" validate:"required"`
+}
+
+func TagECGHandler(repo *repository.TagRepository) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		ecgID := c.Param("id")
+		var body tagECGBody
+		if err := c.Bind(&body); err != nil || body.TagID == "" {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": "tag_id required"})
+		}
+		if err := repo.TagECG(ecgID, body.TagID); err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to tag ecg"})
+		}
+		return c.NoContent(http.StatusNoContent)
+	}
+}
+
+func UntagECGHandler(repo *repository.TagRepository) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		ecgID := c.Param("id")
+		tagID := c.Param("tag_id")
+		if err := repo.UntagECG(ecgID, tagID); err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to untag ecg"})
+		}
+		return c.NoContent(http.StatusNoContent)
+	}
+}
+
+func ListECGTagsHandler(repo *repository.TagRepository) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		ecgID := c.Param("id")
+		tags, err := repo.ListECGTags(ecgID)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to list ecg tags"})
+		}
+		return c.JSON(http.StatusOK, map[string]any{"data": tags})
+	}
+}
