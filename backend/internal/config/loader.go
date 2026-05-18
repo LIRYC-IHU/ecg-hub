@@ -86,15 +86,12 @@ func validate(cfg *Config) error {
 		errs = append(errs, "server.port is required")
 	}
 
-	if len(cfg.Auth.Providers) == 0 {
-		errs = append(errs, "auth.providers is required (e.g. providers: [oidc] or providers: [oidc, ldap])")
-	}
 	for _, p := range cfg.Auth.Providers {
 		switch p {
-		case "oidc", "ldap":
+		case "oidc", "ldap", "local":
 			// valid
 		default:
-			errs = append(errs, fmt.Sprintf("auth.providers: unknown provider %q (must be \"oidc\" or \"ldap\")", p))
+			errs = append(errs, fmt.Sprintf("auth.providers: unknown provider %q (must be \"oidc\", \"ldap\", or \"local\")", p))
 		}
 	}
 
