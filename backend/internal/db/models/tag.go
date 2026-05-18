@@ -25,3 +25,14 @@ type PatientTag struct {
 func (PatientTag) TableName() string {
 	return "patient_tags"
 }
+
+type ECGTag struct {
+	ID        string    `gorm:"type:uuid;default:gen_random_uuid();primaryKey" json:"id"`
+	ECGID     string    `gorm:"type:uuid;not null;uniqueIndex:idx_ecg_tag" json:"ecg_id"`
+	TagID     string    `gorm:"type:uuid;not null;uniqueIndex:idx_ecg_tag;index" json:"tag_id"`
+	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
+}
+
+func (ECGTag) TableName() string {
+	return "ecg_tags"
+}
