@@ -132,6 +132,92 @@ func NewOIDCProvider(ctx context.Context, cfg *config.Config, userStore UserStor
 	}, nil
 }
 
+// OIDCParams holds the parameters needed to create an OIDC provider from DB config.
+type OIDCParams struct {
+	IssuerURL     string
+	InternalURL   string
+	ClientID      string
+	ClientSecret  string
+	RedirectURL   string
+	TLS           bool
+	AdminRoleName string
+	JWTSecret     string
+}
+
+// NewOIDCProviderFromParams creates an OIDCProvider from explicit params (e.g. from DB config).
+func NewOIDCProviderFromParams(ctx context.Context, p OIDCParams, userStore UserStore) (*OIDCProvider, error) {
+	if p.IssuerURL == "" || p.ClientID == "" || p.ClientSecret == "" || p.RedirectURL == "" {
+		return nil, fmt.Errorf("auth: oidc: issuer_url, client_id, client_secret and redirect_url are required")
+	}
+	if p.JWTSecret == "" {
+		return nil, fmt.Errorf("auth: oidc: JWT_SECRET is required")
+	}
+
+	discoveryURL := p.IssuerURL
+	discoveryCtx := ctx
+
+	if !p.TLS {
+		insecureClient := &http.Client{
+			Transport: &http.Transport{
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec
+			},
+		}
+		discoveryCtx = context.WithValue(discoveryCtx, oauth2.HTTPClient, insecureClient)
+	}
+
+	// When InternalURL is set, fetch discovery from the internal address but accept
+	// the public issuer URL that Keycloak advertises in the document.
+	if p.InternalURL != "" {
+		discoveryURL = p.InternalURL
+	}
+	// InsecureIssuerURLContext tells go-oidc to accept p.IssuerURL even if the
+	// discovery URL differs (Docker: fetch via keycloak:8080, issuer claim = localhost:8888).
+	if p.InternalURL != "" || !p.TLS {
+		discoveryCtx = oidc.InsecureIssuerURLContext(discoveryCtx, p.IssuerURL)
+	}
+
+	provider, err := oidc.NewProvider(discoveryCtx, discoveryURL)
+	if err != nil {
+		return nil, fmt.Errorf("auth: oidc: fetch discovery document: %w", err)
+	}
+
+	verifier := provider.Verifier(&oidc.Config{ClientID: p.ClientID})
+	endpoint := provider.Endpoint()
+
+	if issuerParsed, err2 := url.Parse(p.IssuerURL); err2 == nil {
+		if authParsed, err3 := url.Parse(endpoint.AuthURL); err3 == nil {
+			authParsed.Scheme = issuerParsed.Scheme
+			authParsed.Host = issuerParsed.Host
+			endpoint.AuthURL = authParsed.String()
+		}
+	}
+	if p.InternalURL != "" {
+		endpoint.TokenURL = strings.ReplaceAll(endpoint.TokenURL, p.IssuerURL, p.InternalURL)
+	}
+
+	oauth2Cfg := oauth2.Config{
+		ClientID:     p.ClientID,
+		ClientSecret: p.ClientSecret,
+		RedirectURL:  p.RedirectURL,
+		Endpoint:     endpoint,
+		Scopes:       []string{oidc.ScopeOpenID, "profile", "email"},
+	}
+
+	adminRoleName := p.AdminRoleName
+	if adminRoleName == "" {
+		adminRoleName = "admin"
+	}
+
+	return &OIDCProvider{
+		verifier:      verifier,
+		oauth2Cfg:     oauth2Cfg,
+		jwtSecret:     []byte(p.JWTSecret),
+		issuerURL:     p.IssuerURL,
+		adminRoleName: adminRoleName,
+		userStore:     userStore,
+	}, nil
+}
+
 // LogoutURL returns the Keycloak end-session URL that clears the Keycloak session.
 // Keycloak 18+ requires post_logout_redirect_uri + client_id (redirect_uri is deprecated).
 // After logout Keycloak redirects the browser to redirectURI.
