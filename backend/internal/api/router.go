@@ -228,6 +228,9 @@ func (r *RouterConfig) RegisterRoutes() {
 	apiV1.DELETE("/tags/:id", handlers.DeleteTagHandler(tagRepo), mw.RequirePermission(r.checker, auth.PermTagDelete))
 	apiV1.POST("/patients/:id/tags", handlers.TagPatientHandler(tagRepo), mw.RequirePermission(r.checker, auth.PermTagApply))
 	apiV1.DELETE("/patients/:id/tags/:tag_id", handlers.UntagPatientHandler(tagRepo), mw.RequirePermission(r.checker, auth.PermTagApply))
+	apiV1.GET("/ecgs/:id/tags", handlers.ListECGTagsHandler(tagRepo), mw.RequirePermission(r.checker, auth.PermPatientRead))
+	apiV1.POST("/ecgs/:id/tags", handlers.TagECGHandler(tagRepo), mw.RequirePermission(r.checker, auth.PermTagApply))
+	apiV1.DELETE("/ecgs/:id/tags/:tag_id", handlers.UntagECGHandler(tagRepo), mw.RequirePermission(r.checker, auth.PermTagApply))
 
 	// HL7 attempt history — requires patient.read
 	hl7AttemptRepo := repository.NewHL7AttemptRepository(r.gormDB)
