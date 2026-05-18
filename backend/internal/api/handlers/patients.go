@@ -81,8 +81,13 @@ func SearchPatientsHandler(db *gorm.DB) echo.HandlerFunc {
 		}
 		if params.Tags != "" {
 			tagIDs := strings.Split(params.Tags, ",")
-			query = query.Where("patients.patient_id IN (?)",
-				db.Table("patient_tags").Select("patient_id").Where("tag_id IN ?", tagIDs))
+			query = query.Where(
+				"patients.patient_id IN (?) OR patients.patient_id IN (?)",
+				db.Table("patient_tags").Select("patient_id").Where("tag_id IN ?", tagIDs),
+				db.Table("ecgs").Select("DISTINCT ecgs.patient_id").
+					Joins("JOIN ecg_tags ON ecg_tags.ecg_id = ecgs.id").
+					Where("ecg_tags.tag_id IN ?", tagIDs),
+			)
 		}
 
 		var total int64
