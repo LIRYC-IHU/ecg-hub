@@ -14,6 +14,26 @@ export interface MeResponse {
   permissions: string[];
 }
 
+export async function fetchSetupStatus(): Promise<{ initialized: boolean }> {
+  const res = await fetch(`${BASE_URL}/api/v1/setup/status`);
+  return res.json();
+}
+
+export async function setupAdmin(
+  username: string,
+  password: string,
+): Promise<void> {
+  const res = await fetch(`${BASE_URL}/api/v1/setup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password }),
+  });
+  if (!res.ok) {
+    const err: ErrorResponse = await res.json();
+    throw err;
+  }
+}
+
 export async function fetchAuthProviders(): Promise<string[]> {
   const res = await fetch(`${BASE_URL}/api/v1/auth/provider`);
   const data: { providers: string[] } = await res.json();
@@ -28,6 +48,21 @@ export async function loginWithLDAP(
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ username, password }),
+  });
+  if (!res.ok) {
+    const err: ErrorResponse = await res.json();
+    throw err;
+  }
+}
+
+export async function loginWithLocal(
+  username: string,
+  password: string,
+): Promise<void> {
+  const res = await fetch(`${BASE_URL}/api/v1/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username, password, provider: "local" }),
   });
   if (!res.ok) {
     const err: ErrorResponse = await res.json();
@@ -383,6 +418,7 @@ export const ALL_PERMISSIONS = [
   "admin.users",
   "admin.audit",
   "admin.system",
+  "admin.auth_config",
 ] as const;
 
 export type Permission = (typeof ALL_PERMISSIONS)[number];
@@ -931,5 +967,73 @@ export async function fetchRecentErrors(
 ): Promise<RecentError[]> {
   const res = await fetch(`${BASE_URL}/api/v1/admin/errors?limit=${limit}`);
   if (!res.ok) return [];
+  return res.json();
+}
+
+// ─── Auth Providers (admin) ─────────────────────────────────────────────────
+
+export interface AuthProviderDTO {
+  id: string;
+  provider_type: "oidc" | "ldap";
+  active: boolean;
+  config: Record<string, unknown>;
+}
+
+export async function fetchAdminAuthProviders(): Promise<AuthProviderDTO[]> {
+  const res = await fetch(`${BASE_URL}/api/v1/admin/auth/providers`);
+  if (!res.ok) return [];
+  const json = await res.json();
+  return json.data ?? [];
+}
+
+export async function saveOIDCConfig(config: Record<string, unknown>): Promise<void> {
+  const res = await fetch(`${BASE_URL}/api/v1/admin/auth/oidc`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(config),
+  });
+  if (!res.ok) {
+    const err: ErrorResponse = await res.json();
+    throw err;
+  }
+}
+
+export async function saveLDAPConfig(config: Record<string, unknown>): Promise<void> {
+  const res = await fetch(`${BASE_URL}/api/v1/admin/auth/ldap`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(config),
+  });
+  if (!res.ok) {
+    const err: ErrorResponse = await res.json();
+    throw err;
+  }
+}
+
+export async function deleteAuthProvider(id: string): Promise<void> {
+  const res = await fetch(`${BASE_URL}/api/v1/admin/auth/providers/${id}`, {
+    method: "DELETE",
+  });
+  if (!res.ok && res.status !== 404) {
+    const err: ErrorResponse = await res.json();
+    throw err;
+  }
+}
+
+export async function testOIDCConnection(config: Record<string, unknown>): Promise<{ success: boolean; error?: string }> {
+  const res = await fetch(`${BASE_URL}/api/v1/admin/auth/oidc/test`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(config),
+  });
+  return res.json();
+}
+
+export async function testLDAPConnection(config: Record<string, unknown>): Promise<{ success: boolean; error?: string }> {
+  const res = await fetch(`${BASE_URL}/api/v1/admin/auth/ldap/test`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(config),
+  });
   return res.json();
 }
