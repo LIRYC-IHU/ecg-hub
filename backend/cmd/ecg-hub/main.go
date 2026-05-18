@@ -93,9 +93,10 @@ func main() {
 	// Step 2c: Create user repository — used by auth providers to register logins in DB.
 	userRepo := repository.NewUserRepo(gormDB)
 
-	// Step 3: Initialize auth provider — OIDC or LDAP (Story 1.4).
+	// Step 3: Initialize auth provider — local + OIDC/LDAP (Story 1.4).
 	// The server must not start if the auth provider cannot be initialized (fail-fast).
-	authProvider, err := auth.New(context.Background(), cfg, userRepo)
+	localUserRepo := repository.NewLocalUserRepository(gormDB)
+	authProvider, err := auth.NewWithLocalRepo(context.Background(), cfg, userRepo, localUserRepo)
 	if err != nil {
 		slog.Error("FATAL: " + err.Error())
 		os.Exit(1)
@@ -339,12 +340,19 @@ func main() {
 		hl7SchedulerStatus = hl7Scheduler
 	}
 
+	// Auth encryption key for storing provider configs encrypted in DB.
+	authEncKey := os.Getenv("AUTH_ENCRYPTION_KEY")
+	if authEncKey == "" {
+		authEncKey = "ecg-hub-dev-key-do-not-use-in-prod"
+		slog.Warn("AUTH_ENCRYPTION_KEY not set, using insecure default — do NOT use in production")
+	}
+
 	router := api.NewRouterConfig(e, gormDB, authProvider, bridge, webhookNotifier, keycloakAdmin, permChecker, userRepo, activeModules,
 		apihandlers.DICOMStatus{Enabled: cfg.DICOM.Enabled, Port: cfg.DICOM.Port},
 		apihandlers.FTPStatus{Enabled: cfg.FTP.Enabled, Port: cfg.FTP.Port},
 		ectpStatus,
 		exportRepo, exportPool, connCheckers, hl7Client, hl7Enricher,
-		hl7SchedulerStatus, hl7SettingsRepo, cfg)
+		hl7SchedulerStatus, hl7SettingsRepo, cfg, authEncKey)
 
 	router.RegisterRoutes()
 
