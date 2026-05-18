@@ -209,6 +209,8 @@ func (s *Scheduler) processPending() {
 		s.mu.Unlock()
 	}
 
+	appmetrics.HL7SchedulerRuns.Inc()
+
 	ecgs, err := s.ecgRepo.FindPendingHL7(50)
 	if err != nil {
 		slog.Warn("hl7 scheduler: find pending failed", "error", err)
@@ -253,6 +255,7 @@ func (s *Scheduler) processOne(ecg models.ECG) {
 	}
 
 	elapsed := time.Since(start)
+	appmetrics.HL7QueryDuration.Observe(elapsed.Seconds())
 
 	if queryErr != nil {
 		slog.Warn("hl7 scheduler: query failed",
@@ -261,6 +264,18 @@ func (s *Scheduler) processOne(ecg models.ECG) {
 			"retry_count", ecg.HL7RetryCount,
 			"error", queryErr,
 		)
+
+		// Metrics: classify the failure.
+		if errors.Is(queryErr, ErrMSARejected) {
+			appmetrics.HL7QueriesTotal.WithLabelValues("rejected").Inc()
+			code, _ := parseMSAFromError(queryErr)
+			if code == "" {
+				code = "AE"
+			}
+			appmetrics.HL7MSARejections.WithLabelValues(code).Inc()
+		} else {
+			appmetrics.HL7QueriesTotal.WithLabelValues("failed").Inc()
+		}
 
 		// Record the failed attempt.
 		s.recordAttempt(ecg.ID, ecg.PatientID, queryErr, elapsed)
@@ -276,6 +291,9 @@ func (s *Scheduler) processOne(ecg models.ECG) {
 		}
 		return
 	}
+
+	// Success metrics.
+	appmetrics.HL7QueriesTotal.WithLabelValues("success").Inc()
 
 	// Record the successful attempt.
 	if s.attemptRepo != nil {
@@ -334,6 +352,8 @@ func (s *Scheduler) recordAttempt(ecgID, patientID string, err error, elapsed ti
 // exhaust sets the ECG to hl7_exhausted, writes an audit log, and fires a webhook notification.
 func (s *Scheduler) exhaust(ecg models.ECG, maxRetries int, lastErr error) {
 	appmetrics.HL7RetryAttempts.WithLabelValues("exhausted").Inc()
+	appmetrics.HL7QueriesTotal.WithLabelValues("exhausted").Inc()
+	appmetrics.HL7ExhaustedGauge.Inc()
 
 	// Record a separate "exhausted" attempt to mark the final state.
 	if s.attemptRepo != nil {
