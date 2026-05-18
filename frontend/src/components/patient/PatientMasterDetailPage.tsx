@@ -28,6 +28,8 @@ import {
   fetchPatientTags,
   fetchTags,
   untagPatient,
+  fetchECGTags,
+  untagECG,
   forceHL7,
   fetchActiveHL7Mappings,
   fetchHL7History,
@@ -461,6 +463,38 @@ function PatientHL7History({ patientId }: { patientId: string }) {
   );
 }
 
+// ─── ECG tags (inline dots on ECG rows) ─────────────────────────────────────
+
+function ECGTagDots({ ecgId, canApply }: { ecgId: string; canApply: boolean }) {
+  const queryClient = useQueryClient();
+  const { data: tags = [] } = useQuery({
+    queryKey: ["ecg-tags", ecgId],
+    queryFn: () => fetchECGTags(ecgId),
+    staleTime: 30_000,
+  });
+
+  if (tags.length === 0 && !canApply) return null;
+
+  return (
+    <div className="flex items-center gap-1 mt-1">
+      {tags.map((tag) => (
+        <TagBadge
+          key={tag.id}
+          name={tag.name}
+          color={tag.color}
+          onRemove={canApply ? () => {
+            void untagECG(ecgId, tag.id);
+            void queryClient.invalidateQueries({ queryKey: ["ecg-tags", ecgId] });
+          } : undefined}
+        />
+      ))}
+      {canApply && (
+        <TagManager ecgId={ecgId} canCreate={false} canDelete={false} canApply={canApply} />
+      )}
+    </div>
+  );
+}
+
 // ─── Patient tags dots (compact, for grid rows) ─────────────────────────────
 
 function PatientTagDots({ patientId }: { patientId: string }) {
@@ -752,6 +786,7 @@ function PatientDetail({
                   >
                     {ecg.original_filename}
                   </div>
+                  <ECGTagDots ecgId={String(ecg.id)} canApply={canForceHL7} />
                 </div>
 
                 <div
