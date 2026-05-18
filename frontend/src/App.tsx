@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
   Users,
@@ -9,12 +9,14 @@ import {
   AlertTriangle,
   Heart,
   Filter,
+  KeyRound,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Spinner } from "./components/ui/Spinner";
 import { useAuth } from "./hooks/useAuth";
 import { PatientMasterDetailPage } from "./components/patient/PatientMasterDetailPage";
 import { LoginPage } from "./components/LoginPage";
+import { SetupPage } from "./components/SetupPage";
 import { Header } from "./components/layout/Header";
 import { Sidebar } from "./components/layout/Sidebar";
 import type { SidebarNavItem } from "./components/layout/Sidebar";
@@ -24,16 +26,25 @@ import { AdminSystemPage } from "./components/admin/AdminSystemPage";
 import { AdminRolesPage } from "./components/admin/AdminRolesPage";
 import { AdminAppUsersPage } from "./components/admin/AdminAppUsersPage";
 import { AdminQuarantinePage } from "./components/admin/AdminQuarantinePage";
-import { fetchAdminStats, fetchECGFilterFacets } from "./lib/api";
+import { AdminAuthPage } from "./components/admin/AdminAuthPage";
+import { fetchAdminStats, fetchECGFilterFacets, fetchSetupStatus } from "./lib/api";
 import type { AllECGFilters } from "./lib/api";
 import i18n from "./lib/i18n";
 
 function App() {
   const { status, user, logout, hasPermission } = useAuth();
   const { t, i18n: i18next } = useTranslation();
+  const location = useLocation();
   const [globalSearch, setGlobalSearch] = useState("");
   const [filters, setFilters] = useState<Pick<AllECGFilters, "vendor" | "device_model" | "file_format" | "hl7_status" | "from" | "to">>({});
   const [filtersOpen, setFiltersOpen] = useState(false);
+
+  const { data: setupStatus, isLoading: setupLoading } = useQuery({
+    queryKey: ["setup-status"],
+    queryFn: fetchSetupStatus,
+    staleTime: 30_000,
+    retry: 1,
+  });
 
   const { data: facets } = useQuery({
     queryKey: ["ecg-filter-facets"],
@@ -61,8 +72,10 @@ function App() {
     status === "authenticated" && hasPermission("quarantine.read");
   const canDeleteQuarantine =
     status === "authenticated" && hasPermission("quarantine.delete");
+  const canViewAuthConfig =
+    status === "authenticated" && hasPermission("admin.auth_config");
   const isAdmin =
-    canViewUsers || canViewAudit || canViewSystem || canViewQuarantine;
+    canViewUsers || canViewAudit || canViewSystem || canViewQuarantine || canViewAuthConfig;
 
   const { data: adminStats } = useQuery({
     queryKey: ["admin", "stats"],
@@ -76,7 +89,7 @@ function App() {
     localStorage.setItem("lang", lang);
   };
 
-  if (status === "loading")
+  if (status === "loading" || setupLoading)
     return (
       <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4">
         <span className="font-semibold text-xl tracking-tight text-foreground">
@@ -85,7 +98,26 @@ function App() {
         <Spinner size={24} className="text-primary" />
       </div>
     );
-  if (status === "unauthenticated") return <LoginPage />;
+
+  // If not yet initialized, show setup page (or redirect to it)
+  if (setupStatus && !setupStatus.initialized) {
+    if (location.pathname !== "/setup") {
+      return <Navigate to="/setup" replace />;
+    }
+    return <SetupPage />;
+  }
+
+  // If already initialized and user navigates to /setup, redirect to /login
+  if (setupStatus?.initialized && location.pathname === "/setup") {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (status === "unauthenticated") {
+    if (location.pathname === "/login") {
+      return <LoginPage />;
+    }
+    return <LoginPage />;
+  }
 
   const sidebarNavItems: SidebarNavItem[] = [
     { to: "/", icon: Heart, labelKey: "nav.patients" },
@@ -93,6 +125,7 @@ function App() {
     canViewUsers && { to: "/roles", icon: Shield, labelKey: "nav.roles" },
     canViewAudit && { to: "/audit", icon: FileText, labelKey: "nav.audit" },
     canViewSystem && { to: "/system", icon: Server, labelKey: "nav.system" },
+    canViewAuthConfig && { to: "/auth-config", icon: KeyRound, labelKey: "nav.authConfig" },
     canViewQuarantine && {
       to: "/quarantine",
       icon: AlertTriangle,
@@ -267,6 +300,16 @@ function App() {
                 element={
                   <div className="p-6 overflow-auto">
                     <AdminSystemPage />
+                  </div>
+                }
+              />
+            )}
+            {canViewAuthConfig && (
+              <Route
+                path="/auth-config"
+                element={
+                  <div className="overflow-auto">
+                    <AdminAuthPage />
                   </div>
                 }
               />
