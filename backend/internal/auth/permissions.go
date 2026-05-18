@@ -27,6 +27,7 @@ const (
 	PermAdminUsers       = "admin.users"
 	PermAdminAudit       = "admin.audit"
 	PermAdminSystem      = "admin.system"
+	PermAdminAuthConfig  = "admin.auth_config"
 	PermSwaggerRead      = "swagger.read"
 )
 
@@ -48,6 +49,7 @@ var AllPermissions = []string{
 	PermAdminUsers,
 	PermAdminAudit,
 	PermAdminSystem,
+	PermAdminAuthConfig,
 	PermSwaggerRead,
 }
 
