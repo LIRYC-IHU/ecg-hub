@@ -35,6 +35,7 @@ func RunMigrations(db *gorm.DB) error {
 		&appmodels.UserPin{},
 		&appmodels.Tag{},
 		&appmodels.PatientTag{},
+		&appmodels.ECGTag{},
 		&appmodels.HL7MappingPreset{},
 		&appmodels.HL7Mapping{},
 		&appmodels.HL7Settings{},
