@@ -47,6 +47,9 @@ func (r *TagRepository) DeleteTag(id string) error {
 		if err := tx.Where("tag_id = ?", id).Delete(&models.PatientTag{}).Error; err != nil {
 			return err
 		}
+		if err := tx.Where("tag_id = ?", id).Delete(&models.ECGTag{}).Error; err != nil {
+			return err
+		}
 		return tx.Delete(&models.Tag{}, "id = ?", id).Error
 	})
 }
@@ -65,6 +68,24 @@ func (r *TagRepository) ListPatientTags(patientID string) ([]models.Tag, error) 
 	var tags []models.Tag
 	err := r.db.Joins("JOIN patient_tags ON patient_tags.tag_id = tags.id").
 		Where("patient_tags.patient_id = ?", patientID).
+		Find(&tags).Error
+	return tags, err
+}
+
+func (r *TagRepository) TagECG(ecgID, tagID string) error {
+	et := models.ECGTag{ECGID: ecgID, TagID: tagID}
+	return r.db.Clauses(clause.OnConflict{DoNothing: true}).Create(&et).Error
+}
+
+func (r *TagRepository) UntagECG(ecgID, tagID string) error {
+	return r.db.Where("ecg_id = ? AND tag_id = ?", ecgID, tagID).
+		Delete(&models.ECGTag{}).Error
+}
+
+func (r *TagRepository) ListECGTags(ecgID string) ([]models.Tag, error) {
+	var tags []models.Tag
+	err := r.db.Joins("JOIN ecg_tags ON ecg_tags.tag_id = tags.id").
+		Where("ecg_tags.ecg_id = ?", ecgID).
 		Find(&tags).Error
 	return tags, err
 }
