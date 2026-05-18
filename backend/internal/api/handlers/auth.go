@@ -8,6 +8,7 @@ import (
 
 	mw "github.com/LIRYC-IHU/ecg-hub/internal/api/middleware"
 	"github.com/LIRYC-IHU/ecg-hub/internal/auth"
+	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
 )
 
 // LoginRequest is the JSON body for POST /api/v1/auth/login.
@@ -51,10 +52,27 @@ func clearJWTCookie(c echo.Context) {
 //	@Produce		json
 //	@Success		200	{object}	map[string]string
 //	@Router			/api/v1/auth/provider [get]
-func AuthProviderHandler(provider auth.Provider) echo.HandlerFunc {
+func AuthProviderHandler(provider auth.Provider, authConfigRepo *repository.AuthConfigRepository) echo.HandlerFunc {
 	return func(c echo.Context) error {
+		names := auth.GetProviderNames(provider)
+		// Also include providers configured in DB (even if not yet loaded at startup).
+		if authConfigRepo != nil {
+			active, _ := authConfigRepo.ListActive()
+			for _, cfg := range active {
+				found := false
+				for _, n := range names {
+					if n == cfg.ProviderType {
+						found = true
+						break
+					}
+				}
+				if !found {
+					names = append(names, cfg.ProviderType)
+				}
+			}
+		}
 		return c.JSON(http.StatusOK, map[string][]string{
-			"providers": auth.GetProviderNames(provider),
+			"providers": names,
 		})
 	}
 }
@@ -74,6 +92,11 @@ func AuthProviderHandler(provider auth.Provider) echo.HandlerFunc {
 //	@Failure		401		{object}	map[string]string	"UNAUTHENTICATED"
 //	@Router			/api/v1/auth/login [post]
 func LoginHandler(provider auth.Provider) echo.HandlerFunc {
+	return LoginHandlerWithDB(provider, nil, "", "")
+}
+
+// LoginHandlerWithDB is like LoginHandler but also tries LDAP config from DB when ldapAuth is nil.
+func LoginHandlerWithDB(provider auth.Provider, authConfigRepo *repository.AuthConfigRepository, encKey, jwtSecret string) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		var req LoginRequest
 		if err := c.Bind(&req); err != nil {
@@ -86,19 +109,25 @@ func LoginHandler(provider auth.Provider) echo.HandlerFunc {
 			return c.JSON(http.StatusBadRequest, mw.APIError("BAD_REQUEST", "password is required"))
 		}
 
-		authenticator, ok := provider.(auth.Authenticator)
-		if !ok {
-			return c.JSON(http.StatusBadRequest, mw.APIError("UNSUPPORTED_PROVIDER",
-				"login endpoint requires LDAP provider; OIDC users authenticate via the identity provider"))
+		// Try provider (includes local + any statically configured LDAP).
+		if authenticator, ok := provider.(auth.Authenticator); ok {
+			token, err := authenticator.Login(c.Request().Context(), req.Username, req.Password)
+			if err == nil {
+				setJWTCookie(c, token)
+				return c.NoContent(http.StatusNoContent)
+			}
 		}
 
-		token, err := authenticator.Login(c.Request().Context(), req.Username, req.Password)
-		if err != nil {
-			return c.JSON(http.StatusUnauthorized, mw.APIError("UNAUTHENTICATED", "invalid credentials"))
+		// Fallback: try LDAP from DB config if available.
+		if authConfigRepo != nil {
+			token, err := auth.LoginWithLDAPFromDB(c.Request().Context(), req.Username, req.Password, jwtSecret, authConfigRepo, encKey)
+			if err == nil {
+				setJWTCookie(c, token)
+				return c.NoContent(http.StatusNoContent)
+			}
 		}
 
-		setJWTCookie(c, token)
-		return c.NoContent(http.StatusNoContent)
+		return c.JSON(http.StatusUnauthorized, mw.APIError("UNAUTHENTICATED", "invalid credentials"))
 	}
 }
 
