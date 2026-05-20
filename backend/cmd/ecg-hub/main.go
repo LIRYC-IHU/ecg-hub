@@ -19,6 +19,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 
 	_ "github.com/LIRYC-IHU/ecg-hub/docs"
@@ -347,23 +348,43 @@ func main() {
 		slog.Warn("AUTH_ENCRYPTION_KEY not set, using insecure default — do NOT use in production")
 	}
 
+	// Step 5: Start FTP ingestion server (Story 2.2).
+	// ftpQueue is created before RegisterRoutes so StartModuleHandler can reference it.
+	ftpQueue := ingestion.NewIngestQueue(100)
+	moduleConfigRepo := repository.NewModuleConfigRepository(gormDB)
+
 	router := api.NewRouterConfig(e, gormDB, authProvider, bridge, webhookNotifier, keycloakAdmin, permChecker, userRepo, activeModules,
 		apihandlers.DICOMStatus{Enabled: cfg.DICOM.Enabled, Port: cfg.DICOM.Port},
 		apihandlers.FTPStatus{Enabled: cfg.FTP.Enabled, Port: cfg.FTP.Port},
 		ectpStatus,
 		exportRepo, exportPool, connCheckers, hl7Client, hl7Enricher,
-		hl7SchedulerStatus, hl7SettingsRepo, cfg, authEncKey)
+		hl7SchedulerStatus, hl7SettingsRepo, cfg, authEncKey,
+		moduleConfigRepo, ftpQueue)
 
 	router.RegisterRoutes()
 
-	// Step 5: Start FTP ingestion server (Story 2.2).
-	ftpQueue := ingestion.NewIngestQueue(100)
-	ftpServer := ingestion.New(cfg, ftpQueue)
-	if err := ftpServer.Start(); err != nil {
-		slog.Error("FATAL: " + err.Error())
-		os.Exit(1)
+	// Check DB for FTP enabled flag — DB takes priority over config.yaml.
+	ftpEnabledFromCfg := cfg.FTP.Enabled
+	if dbFTPCfg, err := moduleConfigRepo.Get("ftp"); err == nil && dbFTPCfg != nil {
+		ftpEnabledFromCfg = dbFTPCfg.Enabled
 	}
-	defer ftpServer.Stop()
+
+	ftpServer := ingestion.New(cfg, ftpQueue)
+	if ftpEnabledFromCfg {
+		if err := ftpServer.Start(); err != nil {
+			slog.Error("FATAL: " + err.Error())
+			os.Exit(1)
+		}
+		defer ftpServer.Stop()
+	}
+
+	// EPIC-007 Phase 1: register FTP server in the GlobalRegistry for hot-control.
+	initialFTPStatus := module.StatusStopped
+	if ftpEnabledFromCfg {
+		initialFTPStatus = module.StatusRunning
+	}
+	ftpWrapper := &ftpModuleWrapper{server: ftpServer, status: initialFTPStatus}
+	module.GlobalRegistry.Register("ftp", ftpWrapper)
 
 	// Wire FTP file-received hook for modules that implement FTPFileTracker
 	// (e.g. nihon-kohden uses it for ECTP FILE|ENDS verification).
@@ -380,12 +401,28 @@ func main() {
 
 	// Step 8: Start DICOM C-STORE SCP server (Story 7.1).
 	// Shares the same ftpQueue — DICOM and FTP files flow through the same Dispatcher.
-	dicomServer := dicomsrv.New(cfg, ftpQueue)
-	if err := dicomServer.Start(); err != nil {
-		slog.Error("FATAL: " + err.Error())
-		os.Exit(1)
+	// Check DB for DICOM enabled flag — DB takes priority over config.yaml.
+	dicomEnabledFromCfg := cfg.DICOM.Enabled
+	if dbDICOMCfg, err := moduleConfigRepo.Get("dicom"); err == nil && dbDICOMCfg != nil {
+		dicomEnabledFromCfg = dbDICOMCfg.Enabled
 	}
-	defer dicomServer.Stop()
+
+	dicomServer := dicomsrv.New(cfg, ftpQueue)
+	if dicomEnabledFromCfg {
+		if err := dicomServer.Start(); err != nil {
+			slog.Error("FATAL: " + err.Error())
+			os.Exit(1)
+		}
+		defer dicomServer.Stop()
+	}
+
+	// EPIC-007: register DICOM server in the GlobalRegistry for hot-control.
+	initialDICOMStatus := module.StatusStopped
+	if dicomEnabledFromCfg {
+		initialDICOMStatus = module.StatusRunning
+	}
+	dicomWrapper := &dicomModuleWrapper{server: dicomServer, status: initialDICOMStatus}
+	module.GlobalRegistry.Register("dicom", dicomWrapper)
 
 	// Step 6: Start ingestion dispatcher — routes FTP uploads to vendor modules (Story 2.3).
 	// Modules are used in the order defined in cfg.Modules.Active for deterministic routing.
@@ -498,6 +535,75 @@ func main() {
 		os.Exit(1)
 	}
 
+}
+
+// ftpModuleWrapper wraps ingestion.Server as a module.ControllableModule so it
+// can be registered in the GlobalRegistry for hot-control.
+// It satisfies module.Module minimally (Name, AcceptedExtensions, Health,
+// SupportedFormats, Validate, Parse, UpdateFile, RenamePatientID) plus the
+// ControllableModule extension (Stop, Status).
+type ftpModuleWrapper struct {
+	server interface{ Stop() }
+	mu     sync.Mutex
+	status module.ModuleStatus
+}
+
+func (w *ftpModuleWrapper) Name() string                    { return "ftp" }
+func (w *ftpModuleWrapper) AcceptedExtensions() []string    { return nil }
+func (w *ftpModuleWrapper) Health() error                   { return nil }
+func (w *ftpModuleWrapper) SupportedFormats() []module.ExportFormat { return nil }
+func (w *ftpModuleWrapper) Validate(_ []byte) error         { return nil }
+func (w *ftpModuleWrapper) Parse(_ context.Context, _ []byte) (*module.ECGMetadata, error) {
+	return nil, nil
+}
+func (w *ftpModuleWrapper) UpdateFile(_ string, _ module.MetadataPatch) error { return nil }
+func (w *ftpModuleWrapper) RenamePatientID(_ []byte, _ string) ([]byte, error) { return nil, nil }
+
+func (w *ftpModuleWrapper) Stop() error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.server.Stop()
+	w.status = module.StatusStopped
+	return nil
+}
+
+func (w *ftpModuleWrapper) Status() module.ModuleStatus {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.status
+}
+
+// dicomModuleWrapper wraps dicom.Server as a module.ControllableModule so it
+// can be registered in the GlobalRegistry for hot-control.
+type dicomModuleWrapper struct {
+	server interface{ Stop() }
+	mu     sync.Mutex
+	status module.ModuleStatus
+}
+
+func (w *dicomModuleWrapper) Name() string                    { return "dicom" }
+func (w *dicomModuleWrapper) AcceptedExtensions() []string    { return nil }
+func (w *dicomModuleWrapper) Health() error                   { return nil }
+func (w *dicomModuleWrapper) SupportedFormats() []module.ExportFormat { return nil }
+func (w *dicomModuleWrapper) Validate(_ []byte) error         { return nil }
+func (w *dicomModuleWrapper) Parse(_ context.Context, _ []byte) (*module.ECGMetadata, error) {
+	return nil, nil
+}
+func (w *dicomModuleWrapper) UpdateFile(_ string, _ module.MetadataPatch) error { return nil }
+func (w *dicomModuleWrapper) RenamePatientID(_ []byte, _ string) ([]byte, error) { return nil, nil }
+
+func (w *dicomModuleWrapper) Stop() error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.server.Stop()
+	w.status = module.StatusStopped
+	return nil
+}
+
+func (w *dicomModuleWrapper) Status() module.ModuleStatus {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.status
 }
 
 // envOr returns the value of the environment variable key, or fallback if unset or empty.
