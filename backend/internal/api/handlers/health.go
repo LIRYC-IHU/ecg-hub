@@ -8,6 +8,7 @@ import (
 
 	mw "github.com/LIRYC-IHU/ecg-hub/internal/api/middleware"
 	appmetrics "github.com/LIRYC-IHU/ecg-hub/internal/metrics"
+	"github.com/LIRYC-IHU/ecg-hub/internal/module"
 	"github.com/labstack/echo/v4"
 )
 
@@ -112,8 +113,16 @@ func HealthHandler(pinger DBPinger, dicom DICOMStatus, ftp FTPStatus, ectp ECTPS
 
 		connEntries := buildConnectorEntries(connCheckers)
 
+		// Override FTP status from registry — reflects actual runtime state.
+		liveFTP := ftp
+		if ftpMod, ok := module.GlobalRegistry.Get("ftp"); ok {
+			liveFTP.Enabled = ftpMod.Status() == module.StatusRunning
+		}
+
 		role, _ := c.Get(mw.CtxKeyRole).(string)
-		if role == "admin" {
+		// Show full health details to any authenticated user with a role.
+		// The healthz endpoint is public but details are only shown when logged in.
+		if role != "" {
 			if err := pinger.PingContext(ctx); err != nil {
 				slog.Warn("health check: database unreachable", "error", err)
 				return c.JSON(http.StatusServiceUnavailable, HealthResponse{
@@ -121,8 +130,8 @@ func HealthHandler(pinger DBPinger, dicom DICOMStatus, ftp FTPStatus, ectp ECTPS
 					Database:     "error",
 					DicomEnabled: dicom.Enabled,
 					DicomPort:    dicom.Port,
-					FTPEnabled:   ftp.Enabled,
-					FTPPort:      ftp.Port,
+					FTPEnabled:   liveFTP.Enabled,
+					FTPPort:      liveFTP.Port,
 					ECTPEnabled:  ectp.Enabled,
 					ECTPPort:     ectp.Port,
 					Connectors:   connEntries,
@@ -134,8 +143,8 @@ func HealthHandler(pinger DBPinger, dicom DICOMStatus, ftp FTPStatus, ectp ECTPS
 				Database:     "ok",
 				DicomEnabled: dicom.Enabled,
 				DicomPort:    dicom.Port,
-				FTPEnabled:   ftp.Enabled,
-				FTPPort:      ftp.Port,
+				FTPEnabled:   liveFTP.Enabled,
+				FTPPort:      liveFTP.Port,
 				ECTPEnabled:  ectp.Enabled,
 				ECTPPort:     ectp.Port,
 				Connectors:   connEntries,

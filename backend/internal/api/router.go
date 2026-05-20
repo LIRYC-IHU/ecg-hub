@@ -17,6 +17,7 @@ import (
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
 	"github.com/LIRYC-IHU/ecg-hub/internal/export"
 	"github.com/LIRYC-IHU/ecg-hub/internal/hl7"
+	"github.com/LIRYC-IHU/ecg-hub/internal/ingestion"
 	appmetrics "github.com/LIRYC-IHU/ecg-hub/internal/metrics"
 	"github.com/LIRYC-IHU/ecg-hub/internal/module"
 	"github.com/LIRYC-IHU/ecg-hub/internal/webhook"
@@ -42,8 +43,10 @@ type RouterConfig struct {
 	hl7Enricher     handlers.HL7Enricher // nil when HL7 is disabled
 	hl7Scheduler    handlers.HL7SchedulerStatus           // nil when HL7 is disabled
 	hl7SettingsRepo *repository.HL7SettingsRepository     // nil when HL7 is disabled
-	cfg             *config.Config
-	authEncKey      string // encryption key for auth provider configs
+	cfg              *config.Config
+	authEncKey       string // encryption key for auth provider configs
+	moduleConfigRepo *repository.ModuleConfigRepository
+	ftpQueue         ingestion.IngestQueue
 }
 
 func NewRouterConfig(e *echo.Echo, gormDB *gorm.DB, authProvider auth.Provider, bridge export.Converter,
@@ -52,29 +55,32 @@ func NewRouterConfig(e *echo.Echo, gormDB *gorm.DB, authProvider auth.Provider, 
 	ectpStatus handlers.ECTPStatus, exportRepo *repository.ExportJobRepository, exportPool *export.WorkerPool,
 	connCheckers []handlers.ConnectorHealthChecker, hl7Client *hl7.Client, hl7Enricher handlers.HL7Enricher,
 	hl7Scheduler handlers.HL7SchedulerStatus, hl7SettingsRepo *repository.HL7SettingsRepository,
-	cfg *config.Config, authEncKey string) *RouterConfig {
+	cfg *config.Config, authEncKey string,
+	moduleConfigRepo *repository.ModuleConfigRepository, ftpQueue ingestion.IngestQueue) *RouterConfig {
 	return &RouterConfig{
-		e:               e,
-		gormDB:          gormDB,
-		authProvider:    authProvider,
-		bridge:          bridge,
-		notifier:        notifier,
-		keycloakAdmin:   keycloakAdmin,
-		checker:         checker,
-		userRepo:        userRepo,
-		activeModules:   activeModules,
-		dicomStatus:     dicomStatus,
-		ftpStatus:       ftpStatus,
-		ectpStatus:      ectpStatus,
-		exportRepo:      exportRepo,
-		exportPool:      exportPool,
-		connCheckers:    connCheckers,
-		hl7Client:       hl7Client,
-		hl7Enricher:     hl7Enricher,
-		hl7Scheduler:    hl7Scheduler,
-		hl7SettingsRepo: hl7SettingsRepo,
-		cfg:             cfg,
-		authEncKey:      authEncKey,
+		e:                e,
+		gormDB:           gormDB,
+		authProvider:     authProvider,
+		bridge:           bridge,
+		notifier:         notifier,
+		keycloakAdmin:    keycloakAdmin,
+		checker:          checker,
+		userRepo:         userRepo,
+		activeModules:    activeModules,
+		dicomStatus:      dicomStatus,
+		ftpStatus:        ftpStatus,
+		ectpStatus:       ectpStatus,
+		exportRepo:       exportRepo,
+		exportPool:       exportPool,
+		connCheckers:     connCheckers,
+		hl7Client:        hl7Client,
+		hl7Enricher:      hl7Enricher,
+		hl7Scheduler:     hl7Scheduler,
+		hl7SettingsRepo:  hl7SettingsRepo,
+		cfg:              cfg,
+		authEncKey:       authEncKey,
+		moduleConfigRepo: moduleConfigRepo,
+		ftpQueue:         ftpQueue,
 	}
 }
 
@@ -122,27 +128,30 @@ func (r *RouterConfig) RegisterRoutes() {
 	)
 	r.e.GET("/swagger/*", swaggerHandler, mw.AuthMiddleware(r.authProvider, r.userRepo), mw.RequirePermission(r.checker, auth.PermSwaggerRead))
 
-	// === Setup (public — system initialization) ===
+	// === Public API group (no auth required) ===
+	publicV1 := r.e.Group("/api/v1")
+
+	// Setup (public — system initialization)
 	localUserRepo := repository.NewLocalUserRepository(r.gormDB)
-	r.e.GET("/api/v1/setup/status", handlers.SetupStatusHandler(localUserRepo))
-	r.e.POST("/api/v1/setup", handlers.SetupHandler(localUserRepo, r.gormDB))
+	publicV1.GET("/setup/status", handlers.SetupStatusHandler(localUserRepo))
+	publicV1.POST("/setup", handlers.SetupHandler(localUserRepo, r.gormDB))
 
-	// === Authentication (public — these endpoints issue JWTs) ===
+	// Authentication (public — these endpoints issue JWTs)
 	authConfigRepoForProvider := repository.NewAuthConfigRepository(r.gormDB)
-	r.e.GET("/api/v1/auth/provider", handlers.AuthProviderHandler(r.authProvider, authConfigRepoForProvider))
+	publicV1.GET("/auth/provider", handlers.AuthProviderHandler(r.authProvider, authConfigRepoForProvider))
 	loginAuthConfigRepo := repository.NewAuthConfigRepository(r.gormDB)
-	r.e.POST("/api/v1/auth/login", handlers.LoginHandlerWithDB(r.authProvider, loginAuthConfigRepo, r.authEncKey, r.cfg.JWTSecret))
+	publicV1.POST("/auth/login", handlers.LoginHandlerWithDB(r.authProvider, loginAuthConfigRepo, r.authEncKey, r.cfg.JWTSecret))
 
-	// OIDC Authorization Code Flow — always registered; initializes flow from DB config if not at startup.
+	// OIDC Authorization Code Flow
 	{
 		oidcAuthConfigRepo := repository.NewAuthConfigRepository(r.gormDB)
 		oidcFlow := auth.GetOIDCFlow(r.authProvider)
-		r.e.GET("/api/v1/auth/oidc/login", handlers.OIDCLoginHandlerDynamic(oidcFlow, oidcAuthConfigRepo, r.authEncKey, r.cfg.JWTSecret))
-		r.e.GET("/api/v1/auth/oidc/callback", handlers.OIDCCallbackHandlerDynamic(oidcFlow, oidcAuthConfigRepo, r.authEncKey, r.cfg.JWTSecret, r.userRepo))
+		publicV1.GET("/auth/oidc/login", handlers.OIDCLoginHandlerDynamic(oidcFlow, oidcAuthConfigRepo, r.authEncKey, r.cfg.JWTSecret))
+		publicV1.GET("/auth/oidc/callback", handlers.OIDCCallbackHandlerDynamic(oidcFlow, oidcAuthConfigRepo, r.authEncKey, r.cfg.JWTSecret, r.userRepo))
 	}
 
 	// Logout — public (user may have expired/no token); clears cookie + redirects.
-	r.e.GET("/api/v1/auth/logout", handlers.LogoutHandler(r.authProvider))
+	publicV1.GET("/auth/logout", handlers.LogoutHandler(r.authProvider))
 
 	// === Protected API group ===
 	apiV1 := r.e.Group("/api/v1", mw.AuthMiddleware(r.authProvider, r.userRepo))
@@ -208,6 +217,19 @@ func (r *RouterConfig) RegisterRoutes() {
 
 	// Active modules — requires admin.system
 	apiV1.GET("/modules", handlers.ModulesHandler(r.activeModules), mw.RequirePermission(r.checker, auth.PermAdminSystem))
+
+	// Module hot-control (EPIC-007 Phase 1) — requires admin.system
+	apiV1.GET("/admin/modules/status", handlers.ListModuleStatusHandler(module.GlobalRegistry), mw.RequirePermission(r.checker, auth.PermAdminSystem))
+	apiV1.POST("/admin/modules/:name/stop", handlers.StopModuleHandler(module.GlobalRegistry), mw.RequirePermission(r.checker, auth.PermAdminSystem))
+	apiV1.POST("/admin/modules/:name/start", handlers.StartModuleHandler(module.GlobalRegistry, r.moduleConfigRepo, r.authEncKey, r.cfg, r.ftpQueue), mw.RequirePermission(r.checker, auth.PermAdminSystem))
+
+	// FTP module configuration — requires admin.system
+	apiV1.GET("/admin/modules/ftp/config", handlers.GetFTPConfigHandler(r.moduleConfigRepo, r.authEncKey), mw.RequirePermission(r.checker, auth.PermAdminSystem))
+	apiV1.PUT("/admin/modules/ftp/config", handlers.SaveFTPConfigHandler(r.moduleConfigRepo, r.authEncKey, module.GlobalRegistry), mw.RequirePermission(r.checker, auth.PermAdminSystem))
+
+	// DICOM module configuration — requires admin.system
+	apiV1.GET("/admin/modules/dicom/config", handlers.GetDICOMConfigHandler(r.moduleConfigRepo, r.authEncKey), mw.RequirePermission(r.checker, auth.PermAdminSystem))
+	apiV1.PUT("/admin/modules/dicom/config", handlers.SaveDICOMConfigHandler(r.moduleConfigRepo, r.authEncKey, module.GlobalRegistry), mw.RequirePermission(r.checker, auth.PermAdminSystem))
 
 	// Outbound PACS connectors — requires admin.system
 	apiV1.GET("/admin/connectors", handlers.ConnectorsHandler(r.connCheckers), mw.RequirePermission(r.checker, auth.PermAdminSystem))

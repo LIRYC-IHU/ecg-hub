@@ -42,6 +42,7 @@ func RunMigrations(db *gorm.DB) error {
 		&appmodels.HL7Attempt{},
 		&appmodels.LocalUser{},
 		&appmodels.AuthProviderConfig{},
+		&appmodels.ModuleConfig{},
 	}
 	// for _, m := range models {
 	// 	err := db.Migrator().DropTable(m)
