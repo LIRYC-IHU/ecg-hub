@@ -1037,3 +1037,99 @@ export async function testLDAPConnection(config: Record<string, unknown>): Promi
   });
   return res.json();
 }
+
+// ─── Module Control ──────────────────────────────────────────────────────────
+
+export interface FTPModuleConfig {
+  port: number;
+  passive_port_range: string;
+  public_host: string;
+  tls: boolean;
+  username: string;
+  password: string;
+  enabled: boolean;
+}
+
+export interface ModuleControlStatus {
+  name: string;
+  status: "running" | "stopped" | "error";
+}
+
+export async function fetchModuleStatuses(): Promise<ModuleControlStatus[]> {
+  const res = await fetch(`${BASE_URL}/api/v1/admin/modules/status`);
+  if (!res.ok) return [];
+  const json = await res.json();
+  return json.data ?? [];
+}
+
+export async function stopModule(name: string): Promise<void> {
+  const res = await fetch(`${BASE_URL}/api/v1/admin/modules/${encodeURIComponent(name)}/stop`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    const err: ErrorResponse = await res.json();
+    throw err;
+  }
+}
+
+export async function startModule(name: string): Promise<void> {
+  const res = await fetch(`${BASE_URL}/api/v1/admin/modules/${encodeURIComponent(name)}/start`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    const err: ErrorResponse = await res.json();
+    throw err;
+  }
+}
+
+export async function fetchFTPConfig(): Promise<FTPModuleConfig> {
+  const res = await fetch(`${BASE_URL}/api/v1/admin/modules/ftp/config`);
+  if (!res.ok) {
+    const err: ErrorResponse = await res.json();
+    throw err;
+  }
+  const json = await res.json();
+  return json.data;
+}
+
+export async function saveFTPConfig(config: Partial<FTPModuleConfig>): Promise<void> {
+  const res = await fetch(`${BASE_URL}/api/v1/admin/modules/ftp/config`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(config),
+  });
+  if (!res.ok) {
+    const err: ErrorResponse = await res.json();
+    throw err;
+  }
+}
+
+export interface DICOMModuleConfig {
+  port: number;
+  ae_title: string;
+  echo_enabled: boolean;
+  tls: boolean;
+  enabled: boolean;
+}
+
+export async function fetchDICOMConfig(): Promise<DICOMModuleConfig> {
+  const res = await fetch(`${BASE_URL}/api/v1/admin/modules/dicom/config`);
+  if (!res.ok) {
+    const err: ErrorResponse = await res.json();
+    throw err;
+  }
+  const json = await res.json();
+  return json.data;
+}
+
+export async function saveDICOMConfig(config: Partial<DICOMModuleConfig>): Promise<void> {
+  const res = await fetch(`${BASE_URL}/api/v1/admin/modules/dicom/config`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(config),
+  });
+  if (!res.ok) {
+    const err: ErrorResponse = await res.json();
+    throw err;
+  }
+}
