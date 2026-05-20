@@ -10,6 +10,7 @@ import {
   Heart,
   Filter,
   KeyRound,
+  Settings2,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Spinner } from "./components/ui/Spinner";
@@ -27,6 +28,7 @@ import { AdminRolesPage } from "./components/admin/AdminRolesPage";
 import { AdminAppUsersPage } from "./components/admin/AdminAppUsersPage";
 import { AdminQuarantinePage } from "./components/admin/AdminQuarantinePage";
 import { AdminAuthPage } from "./components/admin/AdminAuthPage";
+import { AdminModulesPage } from "./components/admin/AdminModulesPage";
 import { fetchAdminStats, fetchECGFilterFacets, fetchSetupStatus } from "./lib/api";
 import type { AllECGFilters } from "./lib/api";
 import i18n from "./lib/i18n";
@@ -46,11 +48,12 @@ function App() {
     retry: 1,
   });
 
+  const canPatientRead = status === "authenticated" && hasPermission("patient.read");
   const { data: facets } = useQuery({
     queryKey: ["ecg-filter-facets"],
     queryFn: fetchECGFilterFacets,
     staleTime: 5 * 60_000,
-    enabled: status === "authenticated",
+    enabled: canPatientRead,
   });
 
   const activeFilterCount = Object.values(filters).filter(Boolean).length;
@@ -125,6 +128,7 @@ function App() {
     canViewUsers && { to: "/roles", icon: Shield, labelKey: "nav.roles" },
     canViewAudit && { to: "/audit", icon: FileText, labelKey: "nav.audit" },
     canViewSystem && { to: "/system", icon: Server, labelKey: "nav.system" },
+    canViewSystem && { to: "/modules-config", icon: Settings2, labelKey: "nav.modulesConfig" },
     canViewAuthConfig && { to: "/auth-config", icon: KeyRound, labelKey: "nav.authConfig" },
     canViewQuarantine && {
       to: "/quarantine",
@@ -300,6 +304,16 @@ function App() {
                 element={
                   <div className="p-6 overflow-auto">
                     <AdminSystemPage />
+                  </div>
+                }
+              />
+            )}
+            {canViewSystem && (
+              <Route
+                path="/modules-config"
+                element={
+                  <div className="overflow-auto">
+                    <AdminModulesPage />
                   </div>
                 }
               />
