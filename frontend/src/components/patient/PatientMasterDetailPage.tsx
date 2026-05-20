@@ -42,6 +42,7 @@ import { useNotification } from "../../context/NotificationContext";
 import { DownloadFormatPopup } from "../ecg/DownloadFormatPopup";
 import { TagBadge } from "../ui/TagBadge";
 import { TagManager } from "../tags/TagManager";
+import { ECGViewerModal } from "../ecg/ECGViewerModal";
 import type { Patient, ECG } from "../../types";
 
 // ─── Small helpers ───────────────────────────────────────────────────────────
@@ -555,6 +556,7 @@ function PatientDetail({
   const { notify } = useNotification();
   const queryClient = useQueryClient();
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [viewerEcgId, setViewerEcgId] = useState<string | null>(null);
   const [downloadOpenId, setDownloadOpenId] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
   const deleteMutation = useMutation({
@@ -793,7 +795,10 @@ function PatientDetail({
                   className="flex items-center gap-1.5 shrink-0"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  <button className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-colors">
+                  <button
+                    onClick={() => setViewerEcgId(String(ecg.id))}
+                    className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-colors"
+                  >
                     <Eye className="w-3 h-3" />
                     {t("ecg.open")}
                   </button>
@@ -872,6 +877,15 @@ function PatientDetail({
           })
         )}
       </div>
+
+      {/* ECG Viewer modal */}
+      {viewerEcgId && (
+        <ECGViewerModal
+          ecgId={viewerEcgId}
+          filename={ecgs.find((e) => String(e.id) === viewerEcgId)?.original_filename}
+          onClose={() => setViewerEcgId(null)}
+        />
+      )}
     </div>
   );
 }
