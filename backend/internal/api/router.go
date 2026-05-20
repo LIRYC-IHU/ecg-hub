@@ -172,6 +172,9 @@ func (r *RouterConfig) RegisterRoutes() {
 	// ECG download — requires ecg.download
 	apiV1.GET("/ecgs/:id/download", handlers.DownloadECGHandler(r.gormDB, r.bridge), mw.RequirePermission(r.checker, auth.PermECGDownload))
 
+	// ECG waveform for viewer (auto-converts to DICOM if needed) — requires ecg.read
+	apiV1.GET("/ecgs/:id/waveform", handlers.ECGWaveformHandler(r.gormDB, r.cfg.Storage.VolumePath, r.bridge), mw.RequirePermission(r.checker, auth.PermECGRead))
+
 	// ECG metadata read — requires ecg.read (future graphical viewer + metadata panel)
 	apiV1.GET("/ecgs/:id/metadata", handlers.ECGMetadataHandler(r.gormDB), mw.RequirePermission(r.checker, auth.PermECGRead))
 
