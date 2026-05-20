@@ -122,6 +122,22 @@ type Module interface {
 	RenamePatientID(data []byte, newID string) ([]byte, error)
 }
 
+// ModuleStatus represents the current run state of a module.
+type ModuleStatus string
+
+const (
+	StatusRunning ModuleStatus = "running"
+	StatusStopped ModuleStatus = "stopped"
+	StatusError   ModuleStatus = "error"
+)
+
+// ControllableModule extends Module with runtime start/stop/status capabilities.
+type ControllableModule interface {
+	Module
+	Stop() error
+	Status() ModuleStatus
+}
+
 // Startable est optionnelle — modules nécessitant un serveur ou une goroutine.
 type Startable interface {
 	Start(cfg *config.Config) error
