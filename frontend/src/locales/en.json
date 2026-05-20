@@ -316,7 +316,7 @@
         "quarantine_delete": "Delete quarantine files",
         "admin_users": "Manage roles",
         "admin_audit": "View audit logs",
-        "admin_system": "View system status",
+        "admin_system": "System status & module control",
         "admin_auth_config": "Configure auth providers",
         "swagger_read": "Access API documentation"
       }
@@ -398,8 +398,46 @@
     "roles": "Roles",
     "audit": "Audit",
     "system": "System",
+    "modulesConfig": "Modules",
     "authConfig": "Auth",
     "quarantine": "Quarantine"
+  },
+  "modules": {
+    "title": "Module Control",
+    "subtitle": "Start, stop and configure server modules.",
+    "ftp": {
+      "title": "FTP Server",
+      "port": "Port",
+      "passiveRange": "Passive port range",
+      "publicHost": "Public host (LAN IP)",
+      "tls": "TLS",
+      "username": "Username",
+      "password": "Password",
+      "restartNotice": "Port changes require a module restart.",
+      "startOk": "FTP server started",
+      "stopOk": "FTP server stopped",
+      "saveOk": "FTP configuration saved",
+      "saveError": "Error saving FTP configuration"
+    },
+    "dicom": {
+      "title": "DICOM Server",
+      "port": "Port",
+      "aeTitle": "AE Title",
+      "echoEnabled": "Echo enabled",
+      "tls": "TLS",
+      "startOk": "DICOM server started",
+      "stopOk": "DICOM server stopped",
+      "saveOk": "DICOM configuration saved",
+      "saveError": "Error saving DICOM configuration"
+    },
+    "status": {
+      "running": "Running",
+      "stopped": "Stopped",
+      "error": "Error"
+    },
+    "start": "Start",
+    "stop": "Stop",
+    "save": "Save"
   },
   "auth": {
     "login": "Login",

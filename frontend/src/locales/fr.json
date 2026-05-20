@@ -316,7 +316,7 @@
         "quarantine_delete": "Supprimer des fichiers en quarantaine",
         "admin_users": "Gérer les rôles",
         "admin_audit": "Voir les audits",
-        "admin_system": "Voir l'état système",
+        "admin_system": "État système & contrôle des modules",
         "admin_auth_config": "Configurer les fournisseurs d'auth",
         "swagger_read": "Accéder à la documentation API"
       }
@@ -398,8 +398,46 @@
     "roles": "Rôles",
     "audit": "Audit",
     "system": "Système",
+    "modulesConfig": "Modules",
     "authConfig": "Auth",
     "quarantine": "Quarantaine"
+  },
+  "modules": {
+    "title": "Contrôle des modules",
+    "subtitle": "Démarrer, arrêter et configurer les modules serveur.",
+    "ftp": {
+      "title": "Serveur FTP",
+      "port": "Port",
+      "passiveRange": "Plage de ports passifs",
+      "publicHost": "Hôte public (IP LAN)",
+      "tls": "TLS",
+      "username": "Nom d'utilisateur",
+      "password": "Mot de passe",
+      "restartNotice": "Un changement de port nécessite un redémarrage du module.",
+      "startOk": "Serveur FTP démarré",
+      "stopOk": "Serveur FTP arrêté",
+      "saveOk": "Configuration FTP enregistrée",
+      "saveError": "Erreur lors de l'enregistrement de la configuration FTP"
+    },
+    "dicom": {
+      "title": "Serveur DICOM",
+      "port": "Port",
+      "aeTitle": "AE Title",
+      "echoEnabled": "Echo activé",
+      "tls": "TLS",
+      "startOk": "Serveur DICOM démarré",
+      "stopOk": "Serveur DICOM arrêté",
+      "saveOk": "Configuration DICOM enregistrée",
+      "saveError": "Erreur lors de l'enregistrement de la configuration DICOM"
+    },
+    "status": {
+      "running": "En cours",
+      "stopped": "Arrêté",
+      "error": "Erreur"
+    },
+    "start": "Démarrer",
+    "stop": "Arrêter",
+    "save": "Enregistrer"
   },
   "auth": {
     "login": "Connexion",
