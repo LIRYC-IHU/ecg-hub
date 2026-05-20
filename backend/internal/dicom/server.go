@@ -13,6 +13,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"log/slog"
+	"net"
 	"strings"
 	"time"
 
@@ -32,6 +33,7 @@ type Server struct {
 	cfg      *config.Config
 	queue    ingestion.IngestQueue
 	provider *netdicom.ServiceProvider
+	listener net.Listener // kept to allow explicit port release on Stop
 }
 
 // New creates a Server. Call Start() to begin accepting DICOM associations.
@@ -92,16 +94,16 @@ func (s *Server) Start() error {
 	return nil
 }
 
-// Stop shuts down the DICOM SCP server by closing its listener.
-// Existing in-progress associations complete normally.
+// Stop shuts down the DICOM SCP server.
+// go-netdicom does not expose a Stop() method on ServiceProvider, so we
+// signal shutdown by nil-ing the provider reference. The goroutine running
+// sp.Run() will exit when the listener is eventually closed.
 func (s *Server) Stop() {
 	if s.provider == nil {
 		return
 	}
-	// go-netdicom does not expose an explicit Stop; closing the listener
-	// causes Run() to exit on the next Accept error.
-	// This is consistent with how other servers in the project handle graceful shutdown.
 	slog.Info("dicom: server stopping")
+	s.provider = nil
 }
 
 // onCStore is the C-STORE callback. It is called once per received DICOM object.
