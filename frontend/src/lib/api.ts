@@ -416,6 +416,7 @@ export const ALL_PERMISSIONS = [
   "quarantine.read",
   "quarantine.delete",
   "admin.users",
+  "admin.roles",
   "admin.audit",
   "admin.system",
   "admin.auth_config",
@@ -603,6 +604,30 @@ export async function setAppUserRole(
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ role }),
+  });
+  if (!res.ok) {
+    const err: ErrorResponse = await res.json();
+    throw err;
+  }
+}
+
+// ─── User defaults ──────────────────────────────────────────────────────────
+
+export async function fetchUserDefaults(): Promise<{ default_role: string }> {
+  const res = await fetch(`${BASE_URL}/api/v1/admin/settings/user-defaults`);
+  if (!res.ok) {
+    const err: ErrorResponse = await res.json();
+    throw err;
+  }
+  const json: { data: { default_role: string } } = await res.json();
+  return json.data;
+}
+
+export async function saveUserDefaults(defaultRole: string): Promise<void> {
+  const res = await fetch(`${BASE_URL}/api/v1/admin/settings/user-defaults`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ default_role: defaultRole }),
   });
   if (!res.ok) {
     const err: ErrorResponse = await res.json();
