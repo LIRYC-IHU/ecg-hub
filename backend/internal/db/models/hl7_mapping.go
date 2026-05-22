@@ -19,6 +19,7 @@ func (HL7MappingPreset) TableName() string {
 type HL7Mapping struct {
 	ID          string    `gorm:"type:uuid;default:gen_random_uuid();primaryKey" json:"id"`
 	PresetID    string    `gorm:"type:uuid;not null;index" json:"preset_id"`
+	Preset      *HL7MappingPreset `gorm:"foreignKey:PresetID;constraint:OnDelete:CASCADE"`
 	SourcePath  string    `gorm:"type:text;not null" json:"source_path"`
 	TargetField string    `gorm:"type:text;not null" json:"target_field"`
 	CreatedAt   time.Time `gorm:"autoCreateTime" json:"created_at"`
