@@ -183,8 +183,8 @@ func ApplyMappings(raw string, mappings []models.HL7Mapping) *PatientDemographic
 			d.DateOfBirth = value
 		case "gender":
 			d.Gender = value
-		case "nip":
-			d.NIP = value
+		case "nda":
+			d.NDA = value
 		case "address":
 			d.Address = value
 		case "phone":
