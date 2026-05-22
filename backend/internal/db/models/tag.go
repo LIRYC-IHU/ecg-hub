@@ -18,8 +18,9 @@ func (Tag) TableName() string {
 type PatientTag struct {
 	ID        string    `gorm:"type:uuid;default:gen_random_uuid();primaryKey" json:"id"`
 	PatientID string    `gorm:"type:text;not null;uniqueIndex:idx_patient_tag" json:"patient_id"`
-	TagID     string    `gorm:"type:uuid;not null;uniqueIndex:idx_patient_tag;index" json:"tag_id"`
+	TagID     string    `gorm:"type:uuid;not null;uniqueIndex:idx_patient_tag;index;constraint:OnDelete:CASCADE" json:"tag_id"`
 	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
+	Tag       *Tag      `gorm:"foreignKey:TagID;constraint:OnDelete:CASCADE"`
 }
 
 func (PatientTag) TableName() string {
@@ -31,6 +32,7 @@ type ECGTag struct {
 	ECGID     string    `gorm:"type:uuid;not null;uniqueIndex:idx_ecg_tag" json:"ecg_id"`
 	TagID     string    `gorm:"type:uuid;not null;uniqueIndex:idx_ecg_tag;index" json:"tag_id"`
 	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
+	Tag       *Tag      `gorm:"foreignKey:TagID;constraint:OnDelete:CASCADE"`
 }
 
 func (ECGTag) TableName() string {
