@@ -271,7 +271,10 @@
       "colProvider": "Fournisseur",
       "colRole": "Rôle actuel",
       "noUsers": "Aucun utilisateur connecté",
-      "oidcNote": "Pour les utilisateurs OIDC avec un rôle Keycloak, ce rôle a la priorité sur le réglage ci-dessus."
+      "oidcNote": "Pour les utilisateurs OIDC avec un rôle Keycloak, ce rôle a la priorité sur le réglage ci-dessus.",
+      "defaultRole": "Rôle par défaut pour les nouveaux utilisateurs",
+      "defaultRoleHint": "Rôle attribué automatiquement lors de la première connexion d'un utilisateur.",
+      "defaultRoleSaved": "Rôle par défaut défini sur « {{role}} »"
     },
     "audit": {
       "title": "Journal d'audit",
@@ -305,6 +308,7 @@
       "createError": "Erreur lors de la création",
       "deleted": "Rôle supprimé",
       "deleteError": "Erreur lors de la suppression",
+      "errorHasUsers": "Impossible — des utilisateurs ont encore ce rôle. Réassignez-les d'abord.",
       "deleteConfirm": "Supprimer le rôle \"{{name}}\" ?",
       "group": {
         "patient": "Patient",
@@ -329,7 +333,8 @@
         "tag_apply": "Appliquer des tags aux patients",
         "quarantine_read": "Voir la quarantaine",
         "quarantine_delete": "Supprimer des fichiers en quarantaine",
-        "admin_users": "Gérer les rôles",
+        "admin_users": "Gérer les utilisateurs",
+        "admin_roles": "Gérer les rôles",
         "admin_audit": "Voir les audits",
         "admin_system": "État système & contrôle des modules",
         "admin_auth_config": "Configurer les fournisseurs d'auth",

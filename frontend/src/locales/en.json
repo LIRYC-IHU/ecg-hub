@@ -271,7 +271,10 @@
       "colProvider": "Provider",
       "colRole": "Current role",
       "noUsers": "No users have logged in yet",
-      "oidcNote": "For OIDC users with a Keycloak realm role, that role takes priority over this setting."
+      "oidcNote": "For OIDC users with a Keycloak realm role, that role takes priority over this setting.",
+      "defaultRole": "Default role for new users",
+      "defaultRoleHint": "Role assigned automatically when a user logs in for the first time.",
+      "defaultRoleSaved": "Default role set to \"{{role}}\""
     },
     "audit": {
       "title": "Audit log",
@@ -305,6 +308,7 @@
       "createError": "Error creating role",
       "deleted": "Role deleted",
       "deleteError": "Error deleting role",
+      "errorHasUsers": "Cannot delete — users are still assigned to this role. Reassign them first.",
       "deleteConfirm": "Delete role \"{{name}}\"?",
       "group": {
         "patient": "Patient",
@@ -329,7 +333,8 @@
         "tag_apply": "Apply tags to patients",
         "quarantine_read": "View quarantine",
         "quarantine_delete": "Delete quarantine files",
-        "admin_users": "Manage roles",
+        "admin_users": "Manage users",
+        "admin_roles": "Manage roles",
         "admin_audit": "View audit logs",
         "admin_system": "System status & module control",
         "admin_auth_config": "Configure auth providers",
