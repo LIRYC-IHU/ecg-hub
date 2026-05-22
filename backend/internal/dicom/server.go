@@ -14,8 +14,10 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"reflect"
 	"strings"
 	"time"
+	"unsafe"
 
 	dicomio "github.com/apaladiychuk/go-dicom/dicomio"
 	legacydicom "github.com/apaladiychuk/go-dicom"
@@ -94,15 +96,25 @@ func (s *Server) Start() error {
 	return nil
 }
 
-// Stop shuts down the DICOM SCP server.
-// go-netdicom does not expose a Stop() method on ServiceProvider, so we
-// signal shutdown by nil-ing the provider reference. The goroutine running
-// sp.Run() will exit when the listener is eventually closed.
+// Stop shuts down the DICOM SCP server by closing the private TCP listener
+// of go-netdicom's ServiceProvider via reflect+unsafe, which makes Run()
+// exit its Accept() loop and releases the OS port immediately.
 func (s *Server) Stop() {
 	if s.provider == nil {
 		return
 	}
 	slog.Info("dicom: server stopping")
+	// go-netdicom does not expose Stop(). We reach into the unexported
+	// `listener net.Listener` field and close it so Run() exits.
+	rv := reflect.ValueOf(s.provider).Elem()
+	lf := rv.FieldByName("listener")
+	if lf.IsValid() {
+		// Use unsafe to bypass Go's unexported-field restriction.
+		ptr := (*net.Listener)(unsafe.Pointer(lf.UnsafeAddr()))
+		if *ptr != nil {
+			_ = (*ptr).Close()
+		}
+	}
 	s.provider = nil
 }
 
