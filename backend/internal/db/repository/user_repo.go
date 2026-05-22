@@ -33,11 +33,14 @@ type AppUser struct {
 
 // UserRepo provides access to the ecg_hub_users table.
 type UserRepo struct {
-	db *gorm.DB
+	db              *gorm.DB
+	settingsRepo    *ModuleSettingsRepository
 }
 
 // NewUserRepo creates a UserRepo backed by db.
-func NewUserRepo(db *gorm.DB) *UserRepo { return &UserRepo{db: db} }
+func NewUserRepo(db *gorm.DB) *UserRepo {
+	return &UserRepo{db: db, settingsRepo: NewModuleSettingsRepository(db)}
+}
 
 // UpsertLogin implements auth.UserStore.
 // Creates or updates the user record, syncing the role if provided.
@@ -50,8 +53,9 @@ func (r *UserRepo) UpsertLogin(ctx context.Context, externalID, provider, roleNa
 	err := r.db.WithContext(ctx).Where("external_id = ?", externalID).First(&rec).Error
 
 	if err == gorm.ErrRecordNotFound {
-		// New user: resolve role_id from roleName (or default to reader).
-		roleID, resolvedName, err := r.resolveRole(ctx, roleName, "reader")
+		// New user: resolve role_id from roleName, falling back to the configured default role.
+		defaultRole, _ := r.settingsRepo.GetDefaultRole()
+		roleID, resolvedName, err := r.resolveRole(ctx, roleName, defaultRole)
 		if err != nil {
 			return "", err
 		}
@@ -94,11 +98,12 @@ func (r *UserRepo) UpsertLogin(ctx context.Context, externalID, provider, roleNa
 	}
 
 	if effectiveName == "" {
-		// Last resort: assign reader.
-		roleID, _, _ := r.resolveRole(ctx, "reader", "reader")
+		// Last resort: assign the configured default role.
+		defaultRole, _ := r.settingsRepo.GetDefaultRole()
+		roleID, _, _ := r.resolveRole(ctx, defaultRole, defaultRole)
 		if roleID != "" {
 			updates["role_id"] = roleID
-			effectiveName = "reader"
+			effectiveName = defaultRole
 		}
 	}
 
