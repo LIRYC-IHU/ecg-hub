@@ -637,15 +637,15 @@ function PatientDetail({
                 </span>
               </>
             )}
-            {patient.nip && (
+            {patient.nda && (
               <>
                 <span className="text-border">·</span>
                 <span className="inline-flex items-center gap-1 font-mono text-xs">
-                  NIP {patient.nip}
+                  {t("patient.ndaLabel")} {patient.nda}
                   <button
                     onClick={() => {
-                      void navigator.clipboard.writeText(patient.nip!);
-                      notify("success", t("patient.nipCopied"));
+                      void navigator.clipboard.writeText(patient.nda!);
+                      notify("success", t("patient.ndaCopied"));
                     }}
                     className="p-0.5 rounded text-muted-foreground hover:text-foreground transition-colors"
                   >
