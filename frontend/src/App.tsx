@@ -11,6 +11,7 @@ import {
   Filter,
   KeyRound,
   Settings2,
+  Activity,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Spinner } from "./components/ui/Spinner";
@@ -29,6 +30,7 @@ import { AdminAppUsersPage } from "./components/admin/AdminAppUsersPage";
 import { AdminQuarantinePage } from "./components/admin/AdminQuarantinePage";
 import { AdminAuthPage } from "./components/admin/AdminAuthPage";
 import { AdminModulesPage } from "./components/admin/AdminModulesPage";
+import { AdminHL7Page } from "./components/admin/AdminHL7Page";
 import { fetchAdminStats, fetchECGFilterFacets, fetchSetupStatus } from "./lib/api";
 import type { AllECGFilters } from "./lib/api";
 import i18n from "./lib/i18n";
@@ -77,8 +79,10 @@ function App() {
     status === "authenticated" && hasPermission("quarantine.delete");
   const canViewAuthConfig =
     status === "authenticated" && hasPermission("admin.auth_config");
+  const canViewHL7 =
+    status === "authenticated" && (hasPermission("hl7.config") || canViewSystem);
   const isAdmin =
-    canViewUsers || canViewAudit || canViewSystem || canViewQuarantine || canViewAuthConfig;
+    canViewUsers || canViewAudit || canViewSystem || canViewQuarantine || canViewAuthConfig || canViewHL7;
 
   const { data: adminStats } = useQuery({
     queryKey: ["admin", "stats"],
@@ -129,6 +133,7 @@ function App() {
     canViewAudit && { to: "/audit", icon: FileText, labelKey: "nav.audit" },
     canViewSystem && { to: "/system", icon: Server, labelKey: "nav.system" },
     canViewSystem && { to: "/modules-config", icon: Settings2, labelKey: "nav.modulesConfig" },
+    canViewHL7 && { to: "/hl7", icon: Activity, labelKey: "nav.hl7" },
     canViewAuthConfig && { to: "/auth-config", icon: KeyRound, labelKey: "nav.authConfig" },
     canViewQuarantine && {
       to: "/quarantine",
@@ -314,6 +319,16 @@ function App() {
                 element={
                   <div className="overflow-auto">
                     <AdminModulesPage />
+                  </div>
+                }
+              />
+            )}
+            {canViewHL7 && (
+              <Route
+                path="/hl7"
+                element={
+                  <div className="overflow-auto">
+                    <AdminHL7Page />
                   </div>
                 }
               />
