@@ -29,7 +29,8 @@
     "noTags": "Aucun tag disponible",
     "hl7NotConfigured": "Le mapping HL7 n'est pas configuré. Les données patients ne seront pas enrichies. Configurer dans Système > HL7.",
     "idCopied": "ID patient copié",
-    "nipCopied": "NIP copié",
+    "ndaCopied": "NDA copié",
+    "ndaLabel": "NDA",
     "copyId": "Copier l'ID",
     "forceHL7": "Forcer HL7",
     "hl7Forced": "Requête HL7 envoyée avec succès",
@@ -116,6 +117,9 @@
     "dismiss": "Fermer"
   },
   "admin": {
+    "hl7": {
+      "subtitle": "Configurer la connexion HL7, le planificateur et le mapping des champs."
+    },
     "quarantine": {
       "title": "Quarantaine",
       "empty": "Aucun fichier en quarantaine",
@@ -172,6 +176,17 @@
         "testError": "Webhook — impossible de joindre le serveur distant"
       },
       "hl7": {
+        "connectionTitle": "Connexion HL7",
+        "host": "Hôte",
+        "port": "Port",
+        "portError": "Le port doit être compris entre 1 et 65535",
+        "sendingApp": "Application émettrice (MSH-3)",
+        "sendingFacility": "Établissement émetteur (MSH-4)",
+        "receivingApp": "Application destinataire (MSH-5)",
+        "receivingFacility": "Établissement destinataire (MSH-6)",
+        "version": "Version HL7",
+        "processingId": "Processing ID",
+        "restartNotice": "Redémarrage nécessaire pour appliquer les modifications de connexion",
         "schedulerTitle": "Planificateur HL7",
         "schedulerEnabled": "Actif",
         "schedulerDisabled": "Désactivé",
@@ -221,7 +236,7 @@
           "first_name": "Prénom",
           "date_of_birth": "Date de naissance",
           "gender": "Sexe",
-          "nip": "NIP (bracelet)",
+          "nip": "NDA (dossier)",
           "address": "Adresse",
           "phone": "Téléphone",
           "source": "Source"
@@ -307,7 +322,7 @@
         "ecg_download": "Télécharger les ECG",
         "ecg_delete": "Supprimer les ECG",
         "ecg_force_hl7": "Forcer la tentative HL7",
-        "hl7_config": "Configurer le mapping HL7",
+        "hl7_config": "Configurer HL7",
         "hl7_bulk_retry": "Relance en masse des épuisés",
         "tag_create": "Créer et modifier des tags",
         "tag_delete": "Supprimer des tags",
@@ -399,6 +414,7 @@
     "audit": "Audit",
     "system": "Système",
     "modulesConfig": "Modules",
+    "hl7": "HL7",
     "authConfig": "Auth",
     "quarantine": "Quarantaine"
   },
@@ -430,6 +446,40 @@
       "saveOk": "Configuration DICOM enregistrée",
       "saveError": "Erreur lors de l'enregistrement de la configuration DICOM"
     },
+    "connectors": {
+      "title": "Connecteurs proxy",
+      "add": "Ajouter un connecteur",
+      "addPolaris": "+ Ajouter un connecteur Polaris",
+      "addPacsDicom": "+ Ajouter un connecteur PACS DICOM",
+      "polaris": "Polaris",
+      "pacsDicom": "PACS DICOM",
+      "protocol": "Protocole",
+      "ectp_ftp": "ECTP / FTP",
+      "dicom_cstore": "DICOM C-STORE",
+      "extensions": "Extensions (séparées par virgule, vide=toutes)",
+      "vendors": "Fabricants (séparés par virgule, vide=tous)",
+      "maxAttempts": "Tentatives max",
+      "interval": "Intervalle de relance",
+      "ectpHost": "Hôte ECTP",
+      "ectpPort": "Port ECTP",
+      "ftpHost": "Hôte FTP",
+      "ftpPort": "Port FTP",
+      "ftpUsername": "Utilisateur FTP",
+      "ftpPassword": "Mot de passe FTP",
+      "dicomHost": "Hôte DICOM",
+      "dicomPort": "Port DICOM",
+      "callingAe": "AE appelant",
+      "calledAe": "AE appelé",
+      "dicomTimeout": "Timeout",
+      "label": "Nom / libellé",
+      "enabled": "Activé",
+      "saveOk": "Connecteur enregistré",
+      "saveError": "Erreur lors de l'enregistrement du connecteur",
+      "deleteOk": "Connecteur supprimé",
+      "deleteConfirm": "Supprimer ce connecteur ?",
+      "testOk": "Connexion réussie ({{latency}})",
+      "testFail": "Échec de connexion : {{error}}"
+    },
     "status": {
       "running": "En cours",
       "stopped": "Arrêté",
@@ -437,7 +487,19 @@
     },
     "start": "Démarrer",
     "stop": "Arrêter",
-    "save": "Enregistrer"
+    "save": "Enregistrer",
+    "vendorModules": {
+      "title": "Modules fabricants",
+      "subtitle": "Sélectionnez les modules ECG actifs. Les changements s'appliquent immédiatement aux nouveaux fichiers.",
+      "restartNotice": "Redémarrez le serveur pour appliquer les changements de modules.",
+      "appliedNotice": "Liste de modules mise à jour — les nouveaux fichiers utiliseront cette configuration.",
+      "all": "Tous les modules",
+      "descriptions": {
+        "philips": "Philips SierraECG XML",
+        "dicom": "DICOM C-STORE",
+        "nihon-kohden": "Nihon Kohden DAT"
+      }
+    }
   },
   "auth": {
     "login": "Connexion",

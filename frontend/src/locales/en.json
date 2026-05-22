@@ -29,7 +29,8 @@
     "noTags": "No tags available",
     "hl7NotConfigured": "HL7 mapping is not configured. Patient data won't be enriched. Configure it in System > HL7.",
     "idCopied": "Patient ID copied",
-    "nipCopied": "NIP copied",
+    "ndaCopied": "MRN copied",
+    "ndaLabel": "MRN",
     "copyId": "Copy ID",
     "forceHL7": "Force HL7",
     "hl7Forced": "HL7 query sent successfully",
@@ -116,6 +117,9 @@
     "dismiss": "Dismiss"
   },
   "admin": {
+    "hl7": {
+      "subtitle": "Configure HL7 connection, scheduler, and field mapping."
+    },
     "quarantine": {
       "title": "Quarantine",
       "empty": "No files in quarantine",
@@ -172,6 +176,17 @@
         "testError": "Webhook — unable to reach remote server"
       },
       "hl7": {
+        "connectionTitle": "HL7 Connection",
+        "host": "Host",
+        "port": "Port",
+        "portError": "Port must be between 1 and 65535",
+        "sendingApp": "Sending Application (MSH-3)",
+        "sendingFacility": "Sending Facility (MSH-4)",
+        "receivingApp": "Receiving Application (MSH-5)",
+        "receivingFacility": "Receiving Facility (MSH-6)",
+        "version": "HL7 Version",
+        "processingId": "Processing ID",
+        "restartNotice": "Restart required to apply connection changes",
         "schedulerTitle": "HL7 Scheduler",
         "schedulerEnabled": "Active",
         "schedulerDisabled": "Disabled",
@@ -221,7 +236,7 @@
           "first_name": "First name",
           "date_of_birth": "Date of birth",
           "gender": "Gender",
-          "nip": "NIP (badge)",
+          "nip": "MRN (Medical Record Number)",
           "address": "Address",
           "phone": "Phone",
           "source": "Source"
@@ -307,7 +322,7 @@
         "ecg_download": "Download ECGs",
         "ecg_delete": "Delete ECGs",
         "ecg_force_hl7": "Force HL7 retry",
-        "hl7_config": "Configure HL7 mapping",
+        "hl7_config": "Configure HL7",
         "hl7_bulk_retry": "Bulk retry exhausted",
         "tag_create": "Create and edit tags",
         "tag_delete": "Delete tags",
@@ -399,6 +414,7 @@
     "audit": "Audit",
     "system": "System",
     "modulesConfig": "Modules",
+    "hl7": "HL7",
     "authConfig": "Auth",
     "quarantine": "Quarantine"
   },
@@ -430,6 +446,40 @@
       "saveOk": "DICOM configuration saved",
       "saveError": "Error saving DICOM configuration"
     },
+    "connectors": {
+      "title": "Proxy Connectors",
+      "add": "Add connector",
+      "addPolaris": "+ Add Polaris connector",
+      "addPacsDicom": "+ Add PACS DICOM connector",
+      "polaris": "Polaris",
+      "pacsDicom": "PACS DICOM",
+      "protocol": "Protocol",
+      "ectp_ftp": "ECTP / FTP",
+      "dicom_cstore": "DICOM C-STORE",
+      "extensions": "Extensions (comma-sep, empty=all)",
+      "vendors": "Vendors (comma-sep, empty=all)",
+      "maxAttempts": "Max attempts",
+      "interval": "Retry interval",
+      "ectpHost": "ECTP host",
+      "ectpPort": "ECTP port",
+      "ftpHost": "FTP host",
+      "ftpPort": "FTP port",
+      "ftpUsername": "FTP username",
+      "ftpPassword": "FTP password",
+      "dicomHost": "DICOM host",
+      "dicomPort": "DICOM port",
+      "callingAe": "Calling AE",
+      "calledAe": "Called AE",
+      "dicomTimeout": "Timeout",
+      "label": "Name / label",
+      "enabled": "Enabled",
+      "saveOk": "Connector saved",
+      "saveError": "Error saving connector",
+      "deleteOk": "Connector deleted",
+      "deleteConfirm": "Delete this connector?",
+      "testOk": "Connection successful ({{latency}})",
+      "testFail": "Connection failed: {{error}}"
+    },
     "status": {
       "running": "Running",
       "stopped": "Stopped",
@@ -437,7 +487,19 @@
     },
     "start": "Start",
     "stop": "Stop",
-    "save": "Save"
+    "save": "Save",
+    "vendorModules": {
+      "title": "Vendor Modules",
+      "subtitle": "Select which ECG vendor modules are active. Changes apply immediately to new files.",
+      "restartNotice": "Restart the server to apply module changes.",
+      "appliedNotice": "Module list updated — new files will use this configuration.",
+      "all": "All modules",
+      "descriptions": {
+        "philips": "Philips SierraECG XML",
+        "dicom": "DICOM C-STORE",
+        "nihon-kohden": "Nihon Kohden DAT"
+      }
+    }
   },
   "auth": {
     "login": "Login",
