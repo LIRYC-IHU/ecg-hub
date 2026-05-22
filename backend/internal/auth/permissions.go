@@ -25,6 +25,7 @@ const (
 	PermQuarantineRead   = "quarantine.read"   // list quarantine entries
 	PermQuarantineDelete = "quarantine.delete" // delete quarantine entries + physical files
 	PermAdminUsers       = "admin.users"
+	PermAdminRoles       = "admin.roles"
 	PermAdminAudit       = "admin.audit"
 	PermAdminSystem      = "admin.system"
 	PermAdminAuthConfig  = "admin.auth_config"
@@ -47,6 +48,7 @@ var AllPermissions = []string{
 	PermQuarantineRead,
 	PermQuarantineDelete,
 	PermAdminUsers,
+	PermAdminRoles,
 	PermAdminAudit,
 	PermAdminSystem,
 	PermAdminAuthConfig,
