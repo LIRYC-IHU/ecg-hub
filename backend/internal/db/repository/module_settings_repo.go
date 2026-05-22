@@ -28,6 +28,7 @@ func (r *ModuleSettingsRepository) Get() (*models.ModuleSettings, error) {
 			s = models.ModuleSettings{
 				ID:            "singleton",
 				ActiveModules: "[]",
+				DefaultRole:   "reader",
 			}
 			if err := r.db.Create(&s).Error; err != nil {
 				return nil, err
@@ -37,6 +38,29 @@ func (r *ModuleSettingsRepository) Get() (*models.ModuleSettings, error) {
 		return nil, result.Error
 	}
 	return &s, nil
+}
+
+// GetDefaultRole returns the role name assigned to new users on first login.
+// Falls back to "reader" if not set.
+func (r *ModuleSettingsRepository) GetDefaultRole() (string, error) {
+	s, err := r.Get()
+	if err != nil {
+		return "reader", err
+	}
+	if s.DefaultRole == "" {
+		return "reader", nil
+	}
+	return s.DefaultRole, nil
+}
+
+// SetDefaultRole updates the default role for new user creation.
+func (r *ModuleSettingsRepository) SetDefaultRole(roleName string) error {
+	s, err := r.Get()
+	if err != nil {
+		return err
+	}
+	s.DefaultRole = roleName
+	return r.db.Save(s).Error
 }
 
 // GetActiveModules returns the parsed list of active module names.
