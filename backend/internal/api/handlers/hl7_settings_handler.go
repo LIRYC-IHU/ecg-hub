@@ -30,11 +30,22 @@ type HL7SettingsResponse struct {
 
 // UpdateHL7SettingsRequest is the body for PUT /admin/hl7/settings.
 type UpdateHL7SettingsRequest struct {
+	// Scheduler fields
 	TriggerMode    *string `json:"trigger_mode"`
 	CronExpression *string `json:"cron_expression"`
 	MaxRetries     *int    `json:"max_retries"`
 	Timeout        *string `json:"timeout"`
 	Enabled        *bool   `json:"enabled"`
+
+	// Connection fields
+	Host                 *string `json:"host"`
+	Port                 *int    `json:"port"`
+	SendingApplication   *string `json:"sending_application"`
+	SendingFacility      *string `json:"sending_facility"`
+	ReceivingApplication *string `json:"receiving_application"`
+	ReceivingFacility    *string `json:"receiving_facility"`
+	Version              *string `json:"version"`
+	ProcessingID         *string `json:"processing_id"`
 }
 
 // GetHL7SettingsHandler returns GET /admin/hl7/settings.
@@ -132,6 +143,38 @@ func UpdateHL7SettingsHandler(repo *repository.HL7SettingsRepository, scheduler 
 			settings.Enabled = *req.Enabled
 		}
 
+		// Apply connection field updates.
+		if req.Host != nil {
+			settings.Host = *req.Host
+		}
+		if req.Port != nil {
+			if *req.Port < 1 || *req.Port > 65535 {
+				return c.JSON(http.StatusBadRequest, map[string]string{
+					"code":    "INVALID_PARAMS",
+					"message": "port must be between 1 and 65535",
+				})
+			}
+			settings.Port = *req.Port
+		}
+		if req.SendingApplication != nil {
+			settings.SendingApplication = *req.SendingApplication
+		}
+		if req.SendingFacility != nil {
+			settings.SendingFacility = *req.SendingFacility
+		}
+		if req.ReceivingApplication != nil {
+			settings.ReceivingApplication = *req.ReceivingApplication
+		}
+		if req.ReceivingFacility != nil {
+			settings.ReceivingFacility = *req.ReceivingFacility
+		}
+		if req.Version != nil {
+			settings.Version = *req.Version
+		}
+		if req.ProcessingID != nil {
+			settings.ProcessingID = *req.ProcessingID
+		}
+
 		if err := repo.Update(settings); err != nil {
 			return c.JSON(http.StatusInternalServerError, map[string]string{
 				"code":    "DB_ERROR",
@@ -175,6 +218,41 @@ func PingHL7Handler(host string, port int) echo.HandlerFunc {
 				"host":    addr,
 				"latency": latency.Round(time.Millisecond).String(),
 				"error":   err.Error(),
+			})
+		}
+		conn.Close()
+
+		return c.JSON(http.StatusOK, map[string]any{
+			"success": true,
+			"host":    addr,
+			"latency": latency.Round(time.Millisecond).String(),
+		})
+	}
+}
+
+// PingHL7HandlerFromRepo handles POST /admin/hl7/ping.
+// Reads host/port from the DB settings row so changes take effect without restart.
+func PingHL7HandlerFromRepo(repo *repository.HL7SettingsRepository) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		settings, err := repo.Get()
+		if err != nil || settings.Host == "" || settings.Port == 0 {
+			return c.JSON(http.StatusServiceUnavailable, map[string]string{
+				"code":    "HL7_DISABLED",
+				"message": "HL7 host/port not configured",
+			})
+		}
+
+		addr := fmt.Sprintf("%s:%d", settings.Host, settings.Port)
+		start := time.Now()
+		conn, dialErr := net.DialTimeout("tcp", addr, 5*time.Second)
+		latency := time.Since(start)
+
+		if dialErr != nil {
+			return c.JSON(http.StatusOK, map[string]any{
+				"success": false,
+				"host":    addr,
+				"latency": latency.Round(time.Millisecond).String(),
+				"error":   dialErr.Error(),
 			})
 		}
 		conn.Close()
