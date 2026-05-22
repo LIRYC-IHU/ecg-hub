@@ -45,8 +45,10 @@ type RouterConfig struct {
 	hl7SettingsRepo *repository.HL7SettingsRepository     // nil when HL7 is disabled
 	cfg              *config.Config
 	authEncKey       string // encryption key for auth provider configs
-	moduleConfigRepo *repository.ModuleConfigRepository
-	ftpQueue         ingestion.IngestQueue
+	moduleConfigRepo    *repository.ModuleConfigRepository
+	moduleSettingsRepo  *repository.ModuleSettingsRepository
+	ftpQueue            ingestion.IngestQueue
+	ingestRouter        *ingestion.Router // for hot module reload
 }
 
 func NewRouterConfig(e *echo.Echo, gormDB *gorm.DB, authProvider auth.Provider, bridge export.Converter,
@@ -56,31 +58,34 @@ func NewRouterConfig(e *echo.Echo, gormDB *gorm.DB, authProvider auth.Provider, 
 	connCheckers []handlers.ConnectorHealthChecker, hl7Client *hl7.Client, hl7Enricher handlers.HL7Enricher,
 	hl7Scheduler handlers.HL7SchedulerStatus, hl7SettingsRepo *repository.HL7SettingsRepository,
 	cfg *config.Config, authEncKey string,
-	moduleConfigRepo *repository.ModuleConfigRepository, ftpQueue ingestion.IngestQueue) *RouterConfig {
+	moduleConfigRepo *repository.ModuleConfigRepository, moduleSettingsRepo *repository.ModuleSettingsRepository,
+	ftpQueue ingestion.IngestQueue, ingestRouter *ingestion.Router) *RouterConfig {
 	return &RouterConfig{
-		e:                e,
-		gormDB:           gormDB,
-		authProvider:     authProvider,
-		bridge:           bridge,
-		notifier:         notifier,
-		keycloakAdmin:    keycloakAdmin,
-		checker:          checker,
-		userRepo:         userRepo,
-		activeModules:    activeModules,
-		dicomStatus:      dicomStatus,
-		ftpStatus:        ftpStatus,
-		ectpStatus:       ectpStatus,
-		exportRepo:       exportRepo,
-		exportPool:       exportPool,
-		connCheckers:     connCheckers,
-		hl7Client:        hl7Client,
-		hl7Enricher:      hl7Enricher,
-		hl7Scheduler:     hl7Scheduler,
-		hl7SettingsRepo:  hl7SettingsRepo,
-		cfg:              cfg,
-		authEncKey:       authEncKey,
-		moduleConfigRepo: moduleConfigRepo,
-		ftpQueue:         ftpQueue,
+		e:                   e,
+		gormDB:              gormDB,
+		authProvider:        authProvider,
+		bridge:              bridge,
+		notifier:            notifier,
+		keycloakAdmin:       keycloakAdmin,
+		checker:             checker,
+		userRepo:            userRepo,
+		activeModules:       activeModules,
+		dicomStatus:         dicomStatus,
+		ftpStatus:           ftpStatus,
+		ectpStatus:          ectpStatus,
+		exportRepo:          exportRepo,
+		exportPool:          exportPool,
+		connCheckers:        connCheckers,
+		hl7Client:           hl7Client,
+		hl7Enricher:         hl7Enricher,
+		hl7Scheduler:        hl7Scheduler,
+		hl7SettingsRepo:     hl7SettingsRepo,
+		cfg:                 cfg,
+		authEncKey:          authEncKey,
+		moduleConfigRepo:    moduleConfigRepo,
+		moduleSettingsRepo:  moduleSettingsRepo,
+		ftpQueue:            ftpQueue,
+		ingestRouter:        ingestRouter,
 	}
 }
 
@@ -234,6 +239,16 @@ func (r *RouterConfig) RegisterRoutes() {
 	apiV1.GET("/admin/modules/dicom/config", handlers.GetDICOMConfigHandler(r.moduleConfigRepo, r.authEncKey), mw.RequirePermission(r.checker, auth.PermAdminSystem))
 	apiV1.PUT("/admin/modules/dicom/config", handlers.SaveDICOMConfigHandler(r.moduleConfigRepo, r.authEncKey, module.GlobalRegistry), mw.RequirePermission(r.checker, auth.PermAdminSystem))
 
+	// Vendor module activation settings (DB-backed, replaces config.yaml modules.active) — requires admin.system
+	apiV1.GET("/admin/settings/modules", handlers.GetModuleSettingsHandler(r.moduleSettingsRepo, r.activeModules), mw.RequirePermission(r.checker, auth.PermAdminSystem))
+	apiV1.PUT("/admin/settings/modules", handlers.SaveModuleSettingsHandler(r.moduleSettingsRepo, r.ingestRouter), mw.RequirePermission(r.checker, auth.PermAdminSystem))
+
+	// Proxy connector configuration (Story 7.6) — requires admin.system
+	apiV1.GET("/admin/connectors/config", handlers.ListConnectorConfigsHandler(r.moduleConfigRepo, r.authEncKey), mw.RequirePermission(r.checker, auth.PermAdminSystem))
+	apiV1.PUT("/admin/connectors/:name/config", handlers.SaveConnectorConfigHandler(r.moduleConfigRepo, r.authEncKey, module.GlobalRegistry), mw.RequirePermission(r.checker, auth.PermAdminSystem))
+	apiV1.DELETE("/admin/connectors/:name", handlers.DeleteConnectorConfigHandler(r.moduleConfigRepo), mw.RequirePermission(r.checker, auth.PermAdminSystem))
+	apiV1.POST("/admin/connectors/:name/test", handlers.TestConnectorHandler(r.moduleConfigRepo, r.authEncKey), mw.RequirePermission(r.checker, auth.PermAdminSystem))
+
 	// Outbound PACS connectors — requires admin.system
 	apiV1.GET("/admin/connectors", handlers.ConnectorsHandler(r.connCheckers), mw.RequirePermission(r.checker, auth.PermAdminSystem))
 
@@ -291,7 +306,7 @@ func (r *RouterConfig) RegisterRoutes() {
 	}
 	if r.hl7Scheduler != nil {
 		apiV1.POST("/admin/hl7/run", handlers.ForceHL7RunHandler(r.hl7Scheduler), mw.RequirePermission(r.checker, auth.PermHL7Config))
-		apiV1.POST("/admin/hl7/ping", handlers.PingHL7Handler(r.cfg.HL7.Host, r.cfg.HL7.Port), mw.RequirePermission(r.checker, auth.PermHL7Config))
+		apiV1.POST("/admin/hl7/ping", handlers.PingHL7HandlerFromRepo(r.hl7SettingsRepo), mw.RequirePermission(r.checker, auth.PermHL7Config))
 		apiV1.POST("/admin/hl7/bulk-retry", handlers.BulkRetryHL7Handler(r.gormDB), mw.RequirePermission(r.checker, auth.PermHL7BulkRetry))
 	}
 
