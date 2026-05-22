@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { useState, useMemo } from 'react'
 import { Search, Check } from 'lucide-react'
-import { fetchAppUsers, setAppUserRole, fetchRoles } from '../../lib/api'
+import { fetchAppUsers, setAppUserRole, fetchRoles, fetchUserDefaults, saveUserDefaults } from '../../lib/api'
 import { Spinner } from '../ui/Spinner'
 import { useNotification } from '../../context/NotificationContext'
 
@@ -25,6 +25,7 @@ export function AdminAppUsersPage() {
   const [search, setSearch] = useState('')
   const [pendingRole, setPendingRole] = useState<Record<number, string>>({})
   const [feedback, setFeedback] = useState<Record<number, 'success' | 'error'>>({})
+  const [pendingDefault, setPendingDefault] = useState<string | undefined>(undefined)
 
   const { data: users = [], isLoading, isError } = useQuery({
     queryKey: ['admin', 'app-users'],
@@ -36,6 +37,22 @@ export function AdminAppUsersPage() {
     queryKey: ['admin', 'roles'],
     queryFn: fetchRoles,
     staleTime: 30_000,
+  })
+
+  const { data: userDefaults } = useQuery({
+    queryKey: ['admin', 'user-defaults'],
+    queryFn: fetchUserDefaults,
+    staleTime: 60_000,
+  })
+
+  const defaultRoleMutation = useMutation({
+    mutationFn: (role: string) => saveUserDefaults(role),
+    onSuccess: (_, role) => {
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'user-defaults'] })
+      notify('success', t('admin.appUsers.defaultRoleSaved', { role }))
+      setPendingDefault(undefined)
+    },
+    onError: () => notify('error', t('common.error')),
   })
 
   const filtered = useMemo(() => {
@@ -78,6 +95,39 @@ export function AdminAppUsersPage() {
       <div className="mb-6">
         <h1 className="text-lg font-semibold text-foreground">{t('admin.appUsers.title')}</h1>
         <p className="text-sm text-muted-foreground mt-1">{t('admin.appUsers.subtitle')}</p>
+      </div>
+
+      {/* Default role for new users */}
+      <div className="bg-card border border-border rounded-lg px-4 py-3 mb-5 flex items-center justify-between gap-4">
+        <div>
+          <p className="text-sm font-medium text-foreground">{t('admin.appUsers.defaultRole')}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">{t('admin.appUsers.defaultRoleHint')}</p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <select
+            value={pendingDefault ?? userDefaults?.default_role ?? 'reader'}
+            onChange={(e) => setPendingDefault(e.target.value)}
+            className={`text-xs bg-card border rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring/20 transition-colors ${
+              pendingDefault !== undefined && pendingDefault !== userDefaults?.default_role
+                ? 'border-primary'
+                : 'border-border'
+            }`}
+          >
+            {roles.map((r) => (
+              <option key={r.name} value={r.name}>{r.name}</option>
+            ))}
+          </select>
+          {pendingDefault !== undefined && pendingDefault !== userDefaults?.default_role && (
+            <button
+              onClick={() => defaultRoleMutation.mutate(pendingDefault)}
+              disabled={defaultRoleMutation.isPending}
+              className="text-xs bg-primary text-primary-foreground px-2.5 py-1 rounded font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center gap-1"
+            >
+              {defaultRoleMutation.isPending && <Spinner size={11} className="text-primary-foreground" />}
+              {t('common.save')}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Search */}
