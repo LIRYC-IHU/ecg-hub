@@ -754,6 +754,15 @@ export interface HL7Settings {
   updated_at: string;
   last_run?: string;
   next_run?: string;
+  // Connection settings
+  host: string;
+  port: number;
+  sending_application: string;
+  sending_facility: string;
+  receiving_application: string;
+  receiving_facility: string;
+  version: string;
+  processing_id: string;
 }
 
 export async function fetchHL7Settings(): Promise<HL7Settings> {
@@ -763,7 +772,7 @@ export async function fetchHL7Settings(): Promise<HL7Settings> {
   return json.data;
 }
 
-export async function updateHL7Settings(settings: Partial<Pick<HL7Settings, "trigger_mode" | "cron_expression" | "max_retries" | "enabled">>): Promise<HL7Settings> {
+export async function updateHL7Settings(settings: Partial<Pick<HL7Settings, "trigger_mode" | "cron_expression" | "max_retries" | "enabled" | "timeout" | "host" | "port" | "sending_application" | "sending_facility" | "receiving_application" | "receiving_facility" | "version" | "processing_id">>): Promise<HL7Settings> {
   const res = await fetch(`${BASE_URL}/api/v1/admin/hl7/settings`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
@@ -1127,6 +1136,131 @@ export async function saveDICOMConfig(config: Partial<DICOMModuleConfig>): Promi
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(config),
+  });
+  if (!res.ok) {
+    const err: ErrorResponse = await res.json();
+    throw err;
+  }
+}
+
+// ─── Connector Config (Story 7.6) ────────────────────────────────────────────
+
+// ConnectorType represents the logical UI type of a connector.
+// "polaris" maps to protocol "ectp_ftp" (Nihon-Kohden ECTP + FTP forwarding).
+// "pacs_dicom" maps to protocol "dicom_cstore" (any DICOM C-STORE target).
+export type ConnectorType = "polaris" | "pacs_dicom";
+
+export interface ConnectorConfig {
+  name: string;
+  protocol: "ectp_ftp" | "dicom_cstore";
+  // connector_type is derived from protocol on the client side for display purposes.
+  // "polaris" = ectp_ftp, "pacs_dicom" = dicom_cstore
+  connector_type?: ConnectorType;
+  enabled: boolean;
+  extensions: string[];
+  vendors: string[];
+  max_attempts: number;
+  interval: string;
+  ectp_host?: string;
+  ectp_port?: number;
+  ftp_host?: string;
+  ftp_port?: number;
+  ftp_username?: string;
+  ftp_password?: string;
+  dicom_host?: string;
+  dicom_port?: number;
+  calling_ae?: string;
+  called_ae?: string;
+  dicom_timeout?: string;
+}
+
+// connectorTypeFromProtocol maps a backend protocol string to a ConnectorType.
+export function connectorTypeFromProtocol(protocol: string): ConnectorType {
+  return protocol === "dicom_cstore" ? "pacs_dicom" : "polaris";
+}
+
+// protocolFromConnectorType maps a ConnectorType back to the backend protocol string.
+export function protocolFromConnectorType(ct: ConnectorType): ConnectorConfig["protocol"] {
+  return ct === "pacs_dicom" ? "dicom_cstore" : "ectp_ftp";
+}
+
+export async function fetchConnectorConfigs(): Promise<
+  { module_type: string; enabled: boolean; config: ConnectorConfig }[]
+> {
+  const res = await fetch(`${BASE_URL}/api/v1/admin/connectors/config`);
+  if (!res.ok) {
+    const err: ErrorResponse = await res.json();
+    throw err;
+  }
+  const json = await res.json();
+  return json.data ?? [];
+}
+
+export async function saveConnectorConfig(
+  name: string,
+  config: ConnectorConfig & { enabled: boolean },
+): Promise<void> {
+  const res = await fetch(
+    `${BASE_URL}/api/v1/admin/connectors/${encodeURIComponent(name)}/config`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(config),
+    },
+  );
+  if (!res.ok) {
+    const err: ErrorResponse = await res.json();
+    throw err;
+  }
+}
+
+export async function deleteConnectorConfig(name: string): Promise<void> {
+  const res = await fetch(
+    `${BASE_URL}/api/v1/admin/connectors/${encodeURIComponent(name)}`,
+    { method: "DELETE" },
+  );
+  if (!res.ok && res.status !== 404) {
+    const err: ErrorResponse = await res.json();
+    throw err;
+  }
+}
+
+export async function testConnector(
+  name: string,
+): Promise<{ success: boolean; latency: string; error?: string }> {
+  const res = await fetch(
+    `${BASE_URL}/api/v1/admin/connectors/${encodeURIComponent(name)}/test`,
+    { method: "POST" },
+  );
+  if (!res.ok) {
+    const err: ErrorResponse = await res.json();
+    throw err;
+  }
+  return res.json();
+}
+
+// ─── Module Settings ─────────────────────────────────────────────────────────
+
+export interface ModuleSettingsData {
+  active: string[];    // currently active in DB (empty = all)
+  available: string[]; // all compiled-in module names
+}
+
+export async function fetchModuleSettings(): Promise<ModuleSettingsData> {
+  const res = await fetch(`${BASE_URL}/api/v1/admin/settings/modules`);
+  if (!res.ok) {
+    const err: ErrorResponse = await res.json();
+    throw err;
+  }
+  const body: { data: ModuleSettingsData } = await res.json();
+  return body.data;
+}
+
+export async function saveModuleSettings(active: string[]): Promise<void> {
+  const res = await fetch(`${BASE_URL}/api/v1/admin/settings/modules`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ active }),
   });
   if (!res.ok) {
     const err: ErrorResponse = await res.json();
