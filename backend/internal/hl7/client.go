@@ -40,7 +40,7 @@ type PatientDemographics struct {
 	FirstName   string
 	DateOfBirth string // "YYYYMMDD" raw from HL7 PID-7
 	Gender      string // "M", "F", or ""
-	NIP         string // PID-3.1: patient identification number (bracelet/badge)
+	NDA         string // PID-18: Numéro de Dossier Administratif (NDA)
 	Address     string // PID-11: street, city, zip, country joined
 	Phone       string // PID-13: primary phone number
 	Source      string // HL7 host that provided this data — used for hl7_source DB column
