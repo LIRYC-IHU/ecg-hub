@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/LIRYC-IHU/ecg-hub/internal/metrics"
 	"github.com/LIRYC-IHU/ecg-hub/internal/module"
@@ -12,8 +13,8 @@ import (
 
 // Router matches IngestItems to registered vendor modules by file extension
 // and invokes module.SafeParse to extract normalized ECG metadata.
-// Each Router instance holds an immutable snapshot of modules taken at construction time.
 type Router struct {
+	mu      sync.RWMutex
 	modules []module.Module
 }
 
@@ -22,6 +23,14 @@ type Router struct {
 // In tests, pass stub modules directly for isolation.
 func NewRouter(modules []module.Module) *Router {
 	return &Router{modules: modules}
+}
+
+// SetModules replaces the active module list at runtime without restart.
+func (r *Router) SetModules(modules []module.Module) {
+	r.mu.Lock()
+	r.modules = modules
+	r.mu.Unlock()
+	slog.Info("ingestion: module list updated", "count", len(modules))
 }
 
 // Route finds the module for item by probing Validate() on extension candidates,
@@ -76,8 +85,11 @@ func (r *Router) Route(ctx context.Context, item IngestItem) (RoutedItem, string
 // fallback (Parse will fail and the file will be quarantined).
 // Returns (nil, false) when no module claims the extension.
 func (r *Router) probeModule(ext string, data []byte) (module.Module, bool) {
+	r.mu.RLock()
+	modules := r.modules
+	r.mu.RUnlock()
 	var candidates []module.Module
-	for _, m := range r.modules {
+	for _, m := range modules {
 		for _, e := range m.AcceptedExtensions() {
 			if e == ext {
 				candidates = append(candidates, m)
