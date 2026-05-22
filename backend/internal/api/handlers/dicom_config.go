@@ -100,10 +100,10 @@ func SaveDICOMConfigHandler(repo *repository.ModuleConfigRepository, encKey stri
 			})
 		}
 
-		if req.Port == 0 {
+		if req.Port < 1 || req.Port > 65535 {
 			return c.JSON(http.StatusBadRequest, map[string]string{
 				"code":    "INVALID_PARAMS",
-				"message": "port is required",
+				"message": "port must be between 1 and 65535",
 			})
 		}
 
