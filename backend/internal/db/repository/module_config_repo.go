@@ -55,3 +55,9 @@ func (r *ModuleConfigRepository) SetEnabled(moduleType string, enabled bool) err
 		Where("module_type = ?", moduleType).
 		Update("enabled", enabled).Error
 }
+
+// Delete removes the ModuleConfig for the given module type.
+// Returns nil when the record does not exist.
+func (r *ModuleConfigRepository) Delete(moduleType string) error {
+	return r.db.Where("module_type = ?", moduleType).Delete(&models.ModuleConfig{}).Error
+}
