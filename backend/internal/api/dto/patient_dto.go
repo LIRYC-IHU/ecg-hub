@@ -15,7 +15,7 @@ type PatientDTO struct {
 	LastName     string  `json:"last_name"`
 	DateOfBirth  *string `json:"date_of_birth"` // ISO 8601 UTC string, or null
 	Gender       string  `json:"gender"`
-	NIP          string  `json:"nip,omitempty"`
+	NDA          string  `json:"nda,omitempty"`
 	ECGCount     int     `json:"ecg_count"`
 	LastActivity *string `json:"last_activity"` // ISO 8601 UTC; MAX(COALESCE(recorded_at, ingested_at))
 }
@@ -46,7 +46,7 @@ func PatientWithStatsToDTO(p *PatientWithStats) PatientDTO {
 		LastName:     p.LastName,
 		DateOfBirth:  dob,
 		Gender:       p.Gender,
-		NIP:          p.NIP,
+		NDA:          p.NDA,
 		ECGCount:     p.ECGCount,
 		LastActivity: lastActivity,
 	}
@@ -66,6 +66,6 @@ func PatientToDTO(p *models.Patient) PatientDTO {
 		LastName:    p.LastName,
 		DateOfBirth: dob,
 		Gender:      p.Gender,
-		NIP:         p.NIP,
+		NDA:         p.NDA,
 	}
 }
