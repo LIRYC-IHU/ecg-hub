@@ -6,7 +6,7 @@ import "time"
 // The "rejected" status indicates the HIS responded with MSA code AE or AR.
 type HL7Attempt struct {
 	ID         string    `gorm:"type:uuid;default:gen_random_uuid();primaryKey" json:"id"`
-	ECGID      string    `gorm:"type:uuid;not null;index" json:"ecg_id"`
+	ECGID      string    `gorm:"type:uuid;not null;index;constraint:OnDelete:CASCADE" json:"ecg_id"`
 	PatientID  string    `gorm:"type:text;not null;index" json:"patient_id"`
 	Status     string    `gorm:"type:text;not null" json:"status"` // "success", "failed", "exhausted", "rejected"
 	MSACode    string    `gorm:"type:text" json:"msa_code,omitempty"`    // AA, AE, AR
