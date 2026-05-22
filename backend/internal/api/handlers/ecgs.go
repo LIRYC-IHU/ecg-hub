@@ -18,6 +18,7 @@ import (
 	"github.com/LIRYC-IHU/ecg-hub/internal/api/dto"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
+	stor "github.com/LIRYC-IHU/ecg-hub/internal/storage"
 	"github.com/LIRYC-IHU/ecg-hub/internal/ecgmeta"
 	"github.com/LIRYC-IHU/ecg-hub/internal/export"
 	"github.com/LIRYC-IHU/ecg-hub/internal/module"
@@ -83,6 +84,16 @@ func downloadECGHandler(repo ecgByIDFinder, patRepo patientByIDFinder, bridge ex
 		// Verify file exists before streaming — returns JSON 404, not an HTML error page.
 		if _, statErr := os.Stat(ecg.FilePath); os.IsNotExist(statErr) {
 			return c.JSON(http.StatusNotFound, mw.APIError("ECG_FILE_NOT_FOUND", "ECG file not found on storage volume"))
+		}
+
+		// Integrity check: verify the file has not been tampered with since ingestion.
+		if err := stor.VerifyFile(ecg.FilePath, ecg.ContentHash); err != nil {
+			slog.Error("ecg: integrity check failed on download",
+				"ecg_id", id,
+				"file", ecg.FilePath,
+				"error", err,
+			)
+			return c.JSON(http.StatusUnprocessableEntity, mw.APIError("INTEGRITY_FAILURE", "ECG file integrity check failed — the file may have been modified"))
 		}
 
 		userID, _ := c.Get(mw.CtxKeyUserID).(string)
