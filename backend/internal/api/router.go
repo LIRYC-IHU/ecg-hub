@@ -206,11 +206,11 @@ func (r *RouterConfig) RegisterRoutes() {
 	apiV1.GET("/admin/users", handlers.ListUsersHandler(r.keycloakAdmin), mw.RequirePermission(r.checker, auth.PermAdminUsers))
 	apiV1.PUT("/admin/users/:id/role", handlers.SetUserRoleHandler(r.keycloakAdmin), mw.RequirePermission(r.checker, auth.PermAdminUsers))
 
-	// Role CRUD — requires admin.users
-	apiV1.GET("/admin/roles", handlers.ListRolesHandler(roleRepo), mw.RequirePermission(r.checker, auth.PermAdminUsers))
-	apiV1.POST("/admin/roles", handlers.CreateRoleHandler(roleRepo, r.checker), mw.RequirePermission(r.checker, auth.PermAdminUsers))
-	apiV1.PUT("/admin/roles/:id", handlers.UpdateRoleHandler(roleRepo, r.checker), mw.RequirePermission(r.checker, auth.PermAdminUsers))
-	apiV1.DELETE("/admin/roles/:id", handlers.DeleteRoleHandler(roleRepo, r.checker), mw.RequirePermission(r.checker, auth.PermAdminUsers))
+	// Role CRUD — requires admin.roles
+	apiV1.GET("/admin/roles", handlers.ListRolesHandler(roleRepo), mw.RequirePermission(r.checker, auth.PermAdminRoles))
+	apiV1.POST("/admin/roles", handlers.CreateRoleHandler(roleRepo, r.checker), mw.RequirePermission(r.checker, auth.PermAdminRoles))
+	apiV1.PUT("/admin/roles/:id", handlers.UpdateRoleHandler(roleRepo, r.checker), mw.RequirePermission(r.checker, auth.PermAdminRoles))
+	apiV1.DELETE("/admin/roles/:id", handlers.DeleteRoleHandler(roleRepo, r.checker), mw.RequirePermission(r.checker, auth.PermAdminRoles))
 
 	// DB user registry — users who have logged in + their roles
 	apiV1.GET("/admin/app-users", handlers.ListAppUsersHandler(r.userRepo), mw.RequirePermission(r.checker, auth.PermAdminUsers))
@@ -242,6 +242,10 @@ func (r *RouterConfig) RegisterRoutes() {
 	// Vendor module activation settings (DB-backed, replaces config.yaml modules.active) — requires admin.system
 	apiV1.GET("/admin/settings/modules", handlers.GetModuleSettingsHandler(r.moduleSettingsRepo, r.activeModules), mw.RequirePermission(r.checker, auth.PermAdminSystem))
 	apiV1.PUT("/admin/settings/modules", handlers.SaveModuleSettingsHandler(r.moduleSettingsRepo, r.ingestRouter), mw.RequirePermission(r.checker, auth.PermAdminSystem))
+
+	// User creation defaults (default role for new logins) — requires admin.roles
+	apiV1.GET("/admin/settings/user-defaults", handlers.GetUserDefaultsHandler(r.moduleSettingsRepo), mw.RequirePermission(r.checker, auth.PermAdminRoles))
+	apiV1.PUT("/admin/settings/user-defaults", handlers.SaveUserDefaultsHandler(r.moduleSettingsRepo), mw.RequirePermission(r.checker, auth.PermAdminRoles))
 
 	// Proxy connector configuration (Story 7.6) — requires admin.system
 	apiV1.GET("/admin/connectors/config", handlers.ListConnectorConfigsHandler(r.moduleConfigRepo, r.authEncKey), mw.RequirePermission(r.checker, auth.PermAdminSystem))
