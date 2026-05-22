@@ -14,6 +14,7 @@ import (
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
 	"github.com/LIRYC-IHU/ecg-hub/internal/ecgwaveform"
 	"github.com/LIRYC-IHU/ecg-hub/internal/export"
+	"github.com/LIRYC-IHU/ecg-hub/internal/storage"
 )
 
 const waveformDisplayDuration = 10.0 // seconds shown by default
@@ -38,6 +39,14 @@ func ECGWaveformHandler(db *gorm.DB, volumePath string, bridge export.Converter)
 		filePath := ecg.FilePath
 		if !filepath.IsAbs(filePath) {
 			filePath = filepath.Join(volumePath, filePath)
+		}
+
+		// Integrity check before serving waveform data.
+		if err := storage.VerifyFile(filePath, ecg.ContentHash); err != nil {
+			return c.JSON(http.StatusUnprocessableEntity, map[string]string{
+				"code":    "INTEGRITY_FAILURE",
+				"message": "ECG file integrity check failed — the file may have been modified",
+			})
 		}
 
 		var dicomData []byte
