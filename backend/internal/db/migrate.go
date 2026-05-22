@@ -71,6 +71,20 @@ func RunMigrations(db *gorm.DB) error {
 		}
 	}
 
+	// Rename patients.nip → patients.nda (NIP was incorrect, NDA = Numéro de Dossier Administratif).
+	if db.Migrator().HasColumn(&appmodels.Patient{}, "nip") && !db.Migrator().HasColumn(&appmodels.Patient{}, "nda") {
+		if err := db.Exec(`ALTER TABLE patients RENAME COLUMN nip TO nda`).Error; err != nil {
+			slog.Warn("db: rename patients.nip to nda failed", "error", err)
+		}
+	}
+
+	// Drop hl7_mappings.label — removed from model (was used to store sample values, serves no purpose).
+	if db.Migrator().HasColumn(&appmodels.HL7Mapping{}, "label") {
+		if err := db.Migrator().DropColumn(&appmodels.HL7Mapping{}, "label"); err != nil {
+			slog.Warn("db: drop hl7_mappings.label failed", "error", err)
+		}
+	}
+
 	// Drop the stale FK constraint on audit_logs if it still exists from a previous migration attempt.
 	for _, stmt := range []string{
 		`ALTER TABLE audit_logs DROP CONSTRAINT IF EXISTS fk_ecg_hub_users_audit_log`,
@@ -108,15 +122,16 @@ func iniRole(db *gorm.DB) error {
 	seeds := []roleSeed{
 		{
 			name: "admin",
-			desc: "Accès complet — bypass toutes les permissions",
+			desc: "Accès complet — toutes les permissions",
 			perms: []string{
-				"patient.read", "ecg.read", "ecg.download",
-				"ecg.delete", "ecg.force_hl7", "ecg.write",
+				"patient.read",
+				"ecg.read", "ecg.write", "ecg.download", "ecg.delete", "ecg.force_hl7",
+				"hl7.config", "hl7.bulk_retry",
 				"tag.create", "tag.delete", "tag.apply",
 				"quarantine.read", "quarantine.delete",
-				"admin.audit", "admin.system", "admin.users",
-				"admin.auth_config",
-				"swagger.read"},
+				"admin.audit", "admin.system", "admin.users", "admin.roles", "admin.auth_config",
+				"swagger.read",
+			},
 		},
 		{
 			name:  "reader",
@@ -139,6 +154,32 @@ func iniRole(db *gorm.DB) error {
 	if result.Error != nil {
 		return fmt.Errorf("query roles: %w", result.Error)
 
+	}
+
+	// Always sync permissions for seeded roles — ensures new permissions
+	// added in code are granted on existing installations without a DB reset.
+	for _, s := range seeds {
+		var existing repository.RoleRecord
+		if err := db.Where("name = ?", s.name).First(&existing).Error; err != nil {
+			// Role doesn't exist — create it.
+			fmt.Printf("Creating role %s\n", s.name)
+			existing = repository.RoleRecord{Name: s.name, Description: s.desc}
+			if err := db.Create(&existing).Error; err != nil {
+				fmt.Printf("Error creating role %s: %v\n", s.name, err)
+				continue
+			}
+		}
+		// Ensure every permission in the seed exists (add missing ones, never remove).
+		for _, perm := range s.perms {
+			var count int64
+			db.Model(&repository.RolePermRecord{}).Where("role_id = ? AND permission = ?", existing.ID, perm).Count(&count)
+			if count == 0 {
+				p := repository.RolePermRecord{RoleID: existing.ID, Permission: perm, Role: existing}
+				if err := db.Create(&p).Error; err != nil {
+					slog.Warn("db: add permission to role", "role", s.name, "perm", perm, "error", err)
+				}
+			}
+		}
 	}
 
 	if len(roles) == 0 {
