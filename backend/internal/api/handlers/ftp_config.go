@@ -2,8 +2,10 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 
@@ -112,11 +114,41 @@ func SaveFTPConfigHandler(repo *repository.ModuleConfigRepository, encKey string
 			})
 		}
 
-		if req.Port == 0 {
+		if req.Port < 1 || req.Port > 65535 {
 			return c.JSON(http.StatusBadRequest, map[string]string{
 				"code":    "INVALID_PARAMS",
-				"message": "port is required",
+				"message": "port must be between 1 and 65535",
 			})
+		}
+
+		// Validate passive_port_range format: "NNNNN-NNNNN" with low <= high, both in 1-65535.
+		if req.PassivePortRange != "" {
+			parts := strings.SplitN(req.PassivePortRange, "-", 2)
+			if len(parts) != 2 {
+				return c.JSON(http.StatusBadRequest, map[string]string{
+					"code":    "INVALID_PARAMS",
+					"message": "passive_port_range must be in format \"low-high\" (e.g. \"30000-30010\")",
+				})
+			}
+			var low, high int
+			if _, err := fmt.Sscan(parts[0], &low); err != nil || low < 1 || low > 65535 {
+				return c.JSON(http.StatusBadRequest, map[string]string{
+					"code":    "INVALID_PARAMS",
+					"message": "passive_port_range low port must be between 1 and 65535",
+				})
+			}
+			if _, err := fmt.Sscan(parts[1], &high); err != nil || high < 1 || high > 65535 {
+				return c.JSON(http.StatusBadRequest, map[string]string{
+					"code":    "INVALID_PARAMS",
+					"message": "passive_port_range high port must be between 1 and 65535",
+				})
+			}
+			if low > high {
+				return c.JSON(http.StatusBadRequest, map[string]string{
+					"code":    "INVALID_PARAMS",
+					"message": "passive_port_range low port must be <= high port",
+				})
+			}
 		}
 
 		// If password is masked or empty, preserve the existing password from DB.
