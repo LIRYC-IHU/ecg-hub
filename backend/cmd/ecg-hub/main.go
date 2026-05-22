@@ -15,6 +15,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -31,6 +32,7 @@ import (
 	dicomconn "github.com/LIRYC-IHU/ecg-hub/internal/connector/dicom"
 	"github.com/LIRYC-IHU/ecg-hub/internal/connector/polaris"
 	dbpkg "github.com/LIRYC-IHU/ecg-hub/internal/db"
+	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
 	dicomsrv "github.com/LIRYC-IHU/ecg-hub/internal/dicom"
 	"github.com/LIRYC-IHU/ecg-hub/internal/export"
@@ -157,10 +159,27 @@ func main() {
 	}
 	permChecker := auth.NewPermissionChecker(gormDB, adminRoleName)
 
-	// Step 5b: Resolve active modules from config.
-	// module.Active returns modules in the order listed in cfg.Modules.Active,
-	// or all registered modules when the list is empty.
-	activeModules := module.Active(cfg.Modules.Active)
+	// Step 5b: Resolve active modules — DB takes priority over config.yaml.
+	// module.Active returns modules in the order listed, or all registered modules when empty.
+	moduleSettingsRepoEarly := repository.NewModuleSettingsRepository(gormDB)
+	dbActiveModules, dbErr := moduleSettingsRepoEarly.GetActiveModules()
+	var effectiveModuleNames []string
+	if dbErr == nil && len(dbActiveModules) > 0 {
+		effectiveModuleNames = dbActiveModules
+		slog.Info("modules: using active list from database", "modules", effectiveModuleNames)
+	} else {
+		effectiveModuleNames = cfg.Modules.Active // fallback to YAML (may be empty = all)
+		slog.Info("modules: using active list from config.yaml", "modules", effectiveModuleNames)
+	}
+	// Seed: on first run, if DB has empty active_modules and config.yaml has a non-empty list, seed it.
+	if (dbErr != nil || len(dbActiveModules) == 0) && len(cfg.Modules.Active) > 0 {
+		if seedErr := moduleSettingsRepoEarly.SetActiveModules(cfg.Modules.Active); seedErr != nil {
+			slog.Warn("modules: failed to seed active modules from config.yaml", "error", seedErr)
+		} else {
+			slog.Info("modules: seeded active modules from config.yaml", "modules", cfg.Modules.Active)
+		}
+	}
+	activeModules := module.Active(effectiveModuleNames)
 	for _, m := range activeModules {
 		slog.Info("module: loaded", "name", m.Name(), "extensions", m.AcceptedExtensions())
 		// Wire DB before Start so modules can build their own repositories.
@@ -283,22 +302,56 @@ func main() {
 
 	// Create HL7 client early so it can be injected into the router for the test endpoint.
 	hl7SettingsRepo := repository.NewHL7SettingsRepository(gormDB)
-	var hl7Client *hl7.Client
-	if cfg.HL7.Enabled && cfg.HL7.Host != "" && cfg.HL7.Port != 0 {
-		hl7Timeout := 10 * time.Second
-		if settings, err := hl7SettingsRepo.Get(); err == nil && settings.Timeout != "" {
-			if d, err := time.ParseDuration(settings.Timeout); err == nil {
-				hl7Timeout = d
+
+	// Seed HL7 connection settings from config.yaml on first run (when DB host is still empty).
+	if cfg.HL7.Host != "" {
+		if s, err := hl7SettingsRepo.Get(); err == nil && s.Host == "" {
+			s.Host = cfg.HL7.Host
+			s.Port = cfg.HL7.Port
+			if cfg.HL7.SendingApplication != "" {
+				s.SendingApplication = cfg.HL7.SendingApplication
+			}
+			if cfg.HL7.SendingFacility != "" {
+				s.SendingFacility = cfg.HL7.SendingFacility
+			}
+			if cfg.HL7.ReceivingApplication != "" {
+				s.ReceivingApplication = cfg.HL7.ReceivingApplication
+			}
+			if cfg.HL7.ReceivingFacility != "" {
+				s.ReceivingFacility = cfg.HL7.ReceivingFacility
+			}
+			if cfg.HL7.Version != "" {
+				s.Version = cfg.HL7.Version
+			}
+			if cfg.HL7.ProcessingID != "" {
+				s.ProcessingID = cfg.HL7.ProcessingID
+			}
+			if err := hl7SettingsRepo.Update(s); err != nil {
+				slog.Warn("hl7: failed to seed connection settings from config.yaml", "error", err)
+			} else {
+				slog.Info("hl7: seeded connection settings from config.yaml", "host", s.Host, "port", s.Port)
 			}
 		}
-		hl7Client = hl7.NewClient(cfg.HL7.Host, cfg.HL7.Port, hl7Timeout, hl7.MSHConfig{
-			SendingApplication:   cfg.HL7.SendingApplication,
-			SendingFacility:      cfg.HL7.SendingFacility,
-			ReceivingApplication: cfg.HL7.ReceivingApplication,
-			ReceivingFacility:    cfg.HL7.ReceivingFacility,
-			Version:              cfg.HL7.Version,
-			ProcessingID:         cfg.HL7.ProcessingID,
-		})
+	}
+
+	var hl7Client *hl7.Client
+	if cfg.HL7.Enabled {
+		if dbSettings, err := hl7SettingsRepo.Get(); err == nil && dbSettings.Host != "" && dbSettings.Port != 0 {
+			hl7Timeout := 10 * time.Second
+			if dbSettings.Timeout != "" {
+				if d, err := time.ParseDuration(dbSettings.Timeout); err == nil {
+					hl7Timeout = d
+				}
+			}
+			hl7Client = hl7.NewClient(dbSettings.Host, dbSettings.Port, hl7Timeout, hl7.MSHConfig{
+				SendingApplication:   dbSettings.SendingApplication,
+				SendingFacility:      dbSettings.SendingFacility,
+				ReceivingApplication: dbSettings.ReceivingApplication,
+				ReceivingFacility:    dbSettings.ReceivingFacility,
+				Version:              dbSettings.Version,
+				ProcessingID:         dbSettings.ProcessingID,
+			})
+		}
 	}
 
 	// Create repos + HL7 enricher early so ForceHL7Handler can execute queries immediately.
@@ -349,9 +402,14 @@ func main() {
 	}
 
 	// Step 5: Start FTP ingestion server (Story 2.2).
-	// ftpQueue is created before RegisterRoutes so StartModuleHandler can reference it.
+	// ftpQueue and ingestRouter are created before RegisterRoutes so handlers can reference them.
 	ftpQueue := ingestion.NewIngestQueue(100)
+	ingestRouter := ingestion.NewRouter(activeModules) // created early for hot-reload via API
 	moduleConfigRepo := repository.NewModuleConfigRepository(gormDB)
+	moduleSettingsRepo := repository.NewModuleSettingsRepository(gormDB)
+
+	// Seed connectors defined in config.yaml into DB at startup (idempotent).
+	seedConnectorsIfMissing(moduleConfigRepo, cfg, authEncKey)
 
 	router := api.NewRouterConfig(e, gormDB, authProvider, bridge, webhookNotifier, keycloakAdmin, permChecker, userRepo, activeModules,
 		apihandlers.DICOMStatus{Enabled: cfg.DICOM.Enabled, Port: cfg.DICOM.Port},
@@ -359,7 +417,7 @@ func main() {
 		ectpStatus,
 		exportRepo, exportPool, connCheckers, hl7Client, hl7Enricher,
 		hl7SchedulerStatus, hl7SettingsRepo, cfg, authEncKey,
-		moduleConfigRepo, ftpQueue)
+		moduleConfigRepo, moduleSettingsRepo, ftpQueue, ingestRouter)
 
 	router.RegisterRoutes()
 
@@ -427,7 +485,7 @@ func main() {
 	// Step 6: Start ingestion dispatcher — routes FTP uploads to vendor modules (Story 2.3).
 	// Modules are used in the order defined in cfg.Modules.Active for deterministic routing.
 	routedQueue := ingestion.NewRoutedQueue(100)
-	dispatcher := ingestion.NewDispatcher(ftpQueue, routedQueue, ingestion.NewRouter(activeModules))
+	dispatcher := ingestion.NewDispatcher(ftpQueue, routedQueue, ingestRouter)
 	dispatcher.Start()
 	defer dispatcher.Stop()
 
@@ -458,7 +516,7 @@ func main() {
 		}
 		if wireEnricher {
 			persister.WithEnricher(hl7EnricherForPersister)
-			slog.Info("hl7: enricher enabled (immediate mode)", "host", cfg.HL7.Host, "port", cfg.HL7.Port)
+			slog.Info("hl7: enricher enabled (immediate mode)")
 		}
 
 		// Only start the legacy RetryJob if the new Scheduler is not running.
@@ -604,6 +662,83 @@ func (w *dicomModuleWrapper) Status() module.ModuleStatus {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return w.status
+}
+
+// seedConnectorsIfMissing writes each connector defined in cfg.Proxy.Connectors into the
+// DB (as a connector.<name> module config) when it does not already exist.
+// This is idempotent: calling it multiple times is safe and will not overwrite
+// a connector that an operator has already edited via the UI.
+func seedConnectorsIfMissing(repo *repository.ModuleConfigRepository, cfg *config.Config, encKey string) {
+	if !cfg.Proxy.Enabled {
+		return
+	}
+	for _, connCfg := range cfg.Proxy.Connectors {
+		moduleType := "connector." + connCfg.Name
+		existing, err := repo.Get(moduleType)
+		if err != nil {
+			slog.Warn("seed_connectors: failed to check existing config", "name", connCfg.Name, "error", err)
+			continue
+		}
+		if existing != nil {
+			// Already seeded — do not overwrite user edits.
+			continue
+		}
+
+		// Build the stored config from the YAML connector definition.
+		stored := apihandlers.ConnectorStoredConfig{
+			Name:        connCfg.Name,
+			Protocol:    connCfg.Protocol,
+			Extensions:  connCfg.Filters.Extensions,
+			Vendors:     connCfg.Filters.Vendors,
+			MaxAttempts: connCfg.Retry.MaxAttempts,
+			Interval:    connCfg.Retry.Interval,
+			// ECTP / FTP fields (ectp_ftp protocol)
+			ECTPHost:    connCfg.ECTP.Host,
+			ECTPPort:    connCfg.ECTP.Port,
+			FTPHost:     connCfg.FTP.Host,
+			FTPPort:     connCfg.FTP.Port,
+			FTPUsername: connCfg.FTPUsername,
+			FTPPassword: connCfg.FTPPassword,
+			// DICOM fields (dicom_cstore protocol)
+			DICOMHost:    connCfg.DICOM.Host,
+			DICOMPort:    connCfg.DICOM.Port,
+			CallingAE:    connCfg.DICOM.CallingAE,
+			CalledAE:     connCfg.DICOM.CalledAE,
+			DICOMTimeout: connCfg.DICOM.Timeout,
+		}
+
+		if stored.Extensions == nil {
+			stored.Extensions = []string{}
+		}
+		if stored.Vendors == nil {
+			stored.Vendors = []string{}
+		}
+
+		configJSON, err := json.Marshal(stored)
+		if err != nil {
+			slog.Warn("seed_connectors: failed to marshal config", "name", connCfg.Name, "error", err)
+			continue
+		}
+
+		encrypted, err := auth.EncryptString(string(configJSON), encKey)
+		if err != nil {
+			slog.Warn("seed_connectors: failed to encrypt config", "name", connCfg.Name, "error", err)
+			continue
+		}
+
+		record := &models.ModuleConfig{
+			ModuleType:      moduleType,
+			ConfigEncrypted: encrypted,
+			Enabled:         connCfg.Enabled,
+		}
+
+		if err := repo.Upsert(record); err != nil {
+			slog.Warn("seed_connectors: failed to upsert config", "name", connCfg.Name, "error", err)
+			continue
+		}
+
+		slog.Info("seed_connectors: seeded connector from config.yaml", "name", connCfg.Name, "protocol", connCfg.Protocol)
+	}
 }
 
 // envOr returns the value of the environment variable key, or fallback if unset or empty.
