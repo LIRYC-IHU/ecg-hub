@@ -48,8 +48,8 @@ func (r *PatientRepository) UpdateDemographics(patientID string, d *hl7.PatientD
 		"gender":     d.Gender,
 		"hl7_source": d.Source,
 	}
-	if d.NIP != "" {
-		updates["nip"] = d.NIP
+	if d.NDA != "" {
+		updates["nda"] = d.NDA
 	}
 	if d.DateOfBirth != "" {
 		if t, err := time.Parse("20060102", d.DateOfBirth); err == nil {
