@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
@@ -102,21 +103,21 @@ func UpdateRoleHandler(repo roleRepoIface, checker *auth.PermissionChecker) echo
 		if len(req.Permissions) == 0 {
 			return c.JSON(http.StatusBadRequest, mw.APIError("BAD_REQUEST", "permissions must not be empty"))
 		}
-		// Prevent removing admin.users if no other role has it — would lock out role management.
-		hasAdminUsers := false
+		// Prevent removing admin.roles if no other role has it — would lock out role management.
+		hasAdminRoles := false
 		for _, p := range req.Permissions {
-			if p == "admin.users" {
-				hasAdminUsers = true
+			if p == "admin.roles" {
+				hasAdminRoles = true
 				break
 			}
 		}
-		if !hasAdminUsers {
-			covered, err := repo.AnyOtherRoleHasPermission(c.Request().Context(), "admin.users", id)
+		if !hasAdminRoles {
+			covered, err := repo.AnyOtherRoleHasPermission(c.Request().Context(), "admin.roles", id)
 			if err != nil {
 				return c.JSON(http.StatusInternalServerError, mw.APIError("INTERNAL", err.Error()))
 			}
 			if !covered {
-				return c.JSON(http.StatusUnprocessableEntity, mw.APIError("LAST_ADMIN_ROLE", "at least one role must keep the admin.users permission"))
+				return c.JSON(http.StatusUnprocessableEntity, mw.APIError("LAST_ADMIN_ROLE", "at least one role must keep the admin.roles permission"))
 			}
 		}
 		if err := repo.Update(c.Request().Context(), id, req.Description, req.Permissions); err != nil {
@@ -140,6 +141,9 @@ func DeleteRoleHandler(repo roleRepoIface, checker *auth.PermissionChecker) echo
 	return func(c echo.Context) error {
 		id := c.Param("id")
 		if err := repo.Delete(c.Request().Context(), id); err != nil {
+			if errors.Is(err, repository.ErrRoleHasUsers) {
+				return c.JSON(http.StatusConflict, mw.APIError("ROLE_HAS_USERS", "This role is still assigned to users — reassign them before deleting"))
+			}
 			return c.JSON(http.StatusInternalServerError, mw.APIError("INTERNAL", err.Error()))
 		}
 		return c.NoContent(http.StatusNoContent)
