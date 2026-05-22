@@ -82,12 +82,30 @@ func (r *RoleRepo) Update(ctx context.Context, id string, description string, pe
 	return r.setPermissions(ctx, id, permissions)
 }
 
+// ErrRoleHasUsers is returned when trying to delete a role that still has assigned users.
+var ErrRoleHasUsers = fmt.Errorf("role_repo: role still has assigned users — reassign them first")
+
 // Delete removes a role and cascades to role_permissions.
+// Returns ErrRoleHasUsers if any ecg_hub_users row still references the role.
 func (r *RoleRepo) Delete(ctx context.Context, id string) error {
-	if err := r.db.WithContext(ctx).Delete(&RoleRecord{}, id).Error; err != nil {
-		return fmt.Errorf("role_repo: delete: %w", err)
-	}
-	return nil
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		// Guard: refuse if users are still assigned to this role.
+		var userCount int64
+		if err := tx.Table("ecg_hub_users").Where("role_id = ?", id).Count(&userCount).Error; err != nil {
+			return fmt.Errorf("role_repo: count users: %w", err)
+		}
+		if userCount > 0 {
+			return ErrRoleHasUsers
+		}
+		// Delete permissions first to avoid FK violations.
+		if err := tx.Where("role_id = ?", id).Delete(&RolePermRecord{}).Error; err != nil {
+			return fmt.Errorf("role_repo: delete permissions: %w", err)
+		}
+		if err := tx.Where("id = ?", id).Delete(&RoleRecord{}).Error; err != nil {
+			return fmt.Errorf("role_repo: delete: %w", err)
+		}
+		return nil
+	})
 }
 
 // AnyOtherRoleHasPermission reports whether at least one role other than excludeID
