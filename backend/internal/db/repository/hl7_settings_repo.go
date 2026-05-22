@@ -22,11 +22,16 @@ func (r *HL7SettingsRepository) Get() (*models.HL7Settings, error) {
 	if result.Error != nil {
 		if result.Error == gorm.ErrRecordNotFound {
 			s = models.HL7Settings{
-				ID:             "singleton",
-				TriggerMode:    "immediate",
-				CronExpression: "*/5 * * * *",
-				MaxRetries:     3,
-				Enabled:        true,
+				ID:                   "singleton",
+				TriggerMode:          "immediate",
+				CronExpression:       "*/5 * * * *",
+				MaxRetries:           3,
+				Enabled:              true,
+				Port:                 2575,
+				SendingApplication:   "ECG-HUB",
+				ReceivingApplication: "HIS",
+				Version:              "2.5",
+				ProcessingID:         "P",
 			}
 			if err := r.db.Create(&s).Error; err != nil {
 				return nil, err
