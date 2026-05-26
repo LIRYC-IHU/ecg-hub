@@ -386,7 +386,8 @@ export async function fetchPatients(
 ): Promise<ListResponse<Patient>> {
   const params = new URLSearchParams();
   if (filters.q) params.set("q", filters.q);
-  if (filters.tags && filters.tags.length > 0) params.set("tags", filters.tags.join(","));
+  if (filters.tags && filters.tags.length > 0)
+    params.set("tags", filters.tags.join(","));
   if (filters.sort_by) params.set("sort_by", filters.sort_by);
   if (filters.sort_order) params.set("sort_order", filters.sort_order);
   params.set("page", String(filters.page ?? 1));
@@ -727,7 +728,10 @@ export async function fetchHL7Presets(): Promise<HL7Preset[]> {
   return json.data ?? [];
 }
 
-export async function createHL7Preset(name: string, mappings: { source_path: string; target_field: string }[]): Promise<HL7Preset> {
+export async function createHL7Preset(
+  name: string,
+  mappings: { source_path: string; target_field: string }[],
+): Promise<HL7Preset> {
   const res = await fetch(`${BASE_URL}/api/v1/admin/hl7/presets`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -742,26 +746,39 @@ export async function createHL7Preset(name: string, mappings: { source_path: str
 }
 
 export async function activateHL7Preset(id: string): Promise<void> {
-  await fetch(`${BASE_URL}/api/v1/admin/hl7/presets/${id}/activate`, { method: "POST" });
+  await fetch(`${BASE_URL}/api/v1/admin/hl7/presets/${id}/activate`, {
+    method: "POST",
+  });
 }
 
 export async function deleteHL7Preset(id: string): Promise<void> {
-  await fetch(`${BASE_URL}/api/v1/admin/hl7/presets/${id}`, { method: "DELETE" });
+  await fetch(`${BASE_URL}/api/v1/admin/hl7/presets/${id}`, {
+    method: "DELETE",
+  });
 }
 
-export async function saveHL7PresetMappings(presetId: string, mappings: { source_path: string; target_field: string }[]): Promise<void> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/hl7/presets/${presetId}/mappings`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ mappings }),
-  });
+export async function saveHL7PresetMappings(
+  presetId: string,
+  mappings: { source_path: string; target_field: string }[],
+): Promise<void> {
+  const res = await fetch(
+    `${BASE_URL}/api/v1/admin/hl7/presets/${presetId}/mappings`,
+    {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mappings }),
+    },
+  );
   if (!res.ok) {
     const err: ErrorResponse = await res.json();
     throw err;
   }
 }
 
-export async function fetchActiveHL7Mappings(): Promise<{ data: HL7Mapping[]; active: boolean }> {
+export async function fetchActiveHL7Mappings(): Promise<{
+  data: HL7Mapping[];
+  active: boolean;
+}> {
   const res = await fetch(`${BASE_URL}/api/v1/admin/hl7/active-mappings`);
   if (!res.ok) return { data: [], active: false };
   return res.json();
@@ -797,7 +814,26 @@ export async function fetchHL7Settings(): Promise<HL7Settings> {
   return json.data;
 }
 
-export async function updateHL7Settings(settings: Partial<Pick<HL7Settings, "trigger_mode" | "cron_expression" | "max_retries" | "enabled" | "timeout" | "host" | "port" | "sending_application" | "sending_facility" | "receiving_application" | "receiving_facility" | "version" | "processing_id">>): Promise<HL7Settings> {
+export async function updateHL7Settings(
+  settings: Partial<
+    Pick<
+      HL7Settings,
+      | "trigger_mode"
+      | "cron_expression"
+      | "max_retries"
+      | "enabled"
+      | "timeout"
+      | "host"
+      | "port"
+      | "sending_application"
+      | "sending_facility"
+      | "receiving_application"
+      | "receiving_facility"
+      | "version"
+      | "processing_id"
+    >
+  >,
+): Promise<HL7Settings> {
   const res = await fetch(`${BASE_URL}/api/v1/admin/hl7/settings`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
@@ -812,7 +848,9 @@ export async function updateHL7Settings(settings: Partial<Pick<HL7Settings, "tri
 }
 
 export async function triggerHL7Run(): Promise<void> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/hl7/run`, { method: "POST" });
+  const res = await fetch(`${BASE_URL}/api/v1/admin/hl7/run`, {
+    method: "POST",
+  });
   if (!res.ok) {
     const err: ErrorResponse = await res.json();
     throw err;
@@ -826,8 +864,13 @@ export interface HL7PingResult {
   error?: string;
 }
 
-export async function bulkRetryHL7(): Promise<{ count: number; message: string }> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/hl7/bulk-retry`, { method: "POST" });
+export async function bulkRetryHL7(): Promise<{
+  count: number;
+  message: string;
+}> {
+  const res = await fetch(`${BASE_URL}/api/v1/admin/hl7/bulk-retry`, {
+    method: "POST",
+  });
   if (!res.ok) {
     const err: ErrorResponse = await res.json();
     throw err;
@@ -836,7 +879,9 @@ export async function bulkRetryHL7(): Promise<{ count: number; message: string }
 }
 
 export async function pingHL7(): Promise<HL7PingResult> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/hl7/ping`, { method: "POST" });
+  const res = await fetch(`${BASE_URL}/api/v1/admin/hl7/ping`, {
+    method: "POST",
+  });
   if (!res.ok) {
     const err: ErrorResponse = await res.json();
     throw err;
@@ -858,8 +903,12 @@ export interface HL7Attempt {
   created_at: string;
 }
 
-export async function fetchHL7History(patientId: string): Promise<HL7Attempt[]> {
-  const res = await fetch(`${BASE_URL}/api/v1/patients/${patientId}/hl7-history`);
+export async function fetchHL7History(
+  patientId: string,
+): Promise<HL7Attempt[]> {
+  const res = await fetch(
+    `${BASE_URL}/api/v1/patients/${patientId}/hl7-history`,
+  );
   if (!res.ok) return [];
   const json = await res.json();
   return json.data ?? [];
@@ -892,7 +941,11 @@ export async function createTag(name: string, color?: string): Promise<TagDTO> {
   return json.data;
 }
 
-export async function updateTag(id: string, name: string, color: string): Promise<TagDTO> {
+export async function updateTag(
+  id: string,
+  name: string,
+  color: string,
+): Promise<TagDTO> {
   const res = await fetch(`${BASE_URL}/api/v1/tags/${id}`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
@@ -913,7 +966,10 @@ export async function fetchPatientTags(patientId: string): Promise<TagDTO[]> {
   return json.data ?? [];
 }
 
-export async function tagPatient(patientId: string, tagId: string): Promise<void> {
+export async function tagPatient(
+  patientId: string,
+  tagId: string,
+): Promise<void> {
   const res = await fetch(`${BASE_URL}/api/v1/patients/${patientId}/tags`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -925,10 +981,16 @@ export async function tagPatient(patientId: string, tagId: string): Promise<void
   }
 }
 
-export async function untagPatient(patientId: string, tagId: string): Promise<void> {
-  const res = await fetch(`${BASE_URL}/api/v1/patients/${patientId}/tags/${tagId}`, {
-    method: "DELETE",
-  });
+export async function untagPatient(
+  patientId: string,
+  tagId: string,
+): Promise<void> {
+  const res = await fetch(
+    `${BASE_URL}/api/v1/patients/${patientId}/tags/${tagId}`,
+    {
+      method: "DELETE",
+    },
+  );
   if (!res.ok && res.status !== 404) {
     const err: ErrorResponse = await res.json();
     throw err;
@@ -996,9 +1058,7 @@ export interface RecentError {
   duration_ms: number;
 }
 
-export async function fetchRecentErrors(
-  limit = 20,
-): Promise<RecentError[]> {
+export async function fetchRecentErrors(limit = 20): Promise<RecentError[]> {
   const res = await fetch(`${BASE_URL}/api/v1/admin/errors?limit=${limit}`);
   if (!res.ok) return [];
   return res.json();
@@ -1020,7 +1080,9 @@ export async function fetchAdminAuthProviders(): Promise<AuthProviderDTO[]> {
   return json.data ?? [];
 }
 
-export async function saveOIDCConfig(config: Record<string, unknown>): Promise<void> {
+export async function saveOIDCConfig(
+  config: Record<string, unknown>,
+): Promise<void> {
   const res = await fetch(`${BASE_URL}/api/v1/admin/auth/oidc`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
@@ -1032,7 +1094,9 @@ export async function saveOIDCConfig(config: Record<string, unknown>): Promise<v
   }
 }
 
-export async function saveLDAPConfig(config: Record<string, unknown>): Promise<void> {
+export async function saveLDAPConfig(
+  config: Record<string, unknown>,
+): Promise<void> {
   const res = await fetch(`${BASE_URL}/api/v1/admin/auth/ldap`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
@@ -1054,7 +1118,9 @@ export async function deleteAuthProvider(id: string): Promise<void> {
   }
 }
 
-export async function testOIDCConnection(config: Record<string, unknown>): Promise<{ success: boolean; error?: string }> {
+export async function testOIDCConnection(
+  config: Record<string, unknown>,
+): Promise<{ success: boolean; error?: string }> {
   const res = await fetch(`${BASE_URL}/api/v1/admin/auth/oidc/test`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1063,7 +1129,9 @@ export async function testOIDCConnection(config: Record<string, unknown>): Promi
   return res.json();
 }
 
-export async function testLDAPConnection(config: Record<string, unknown>): Promise<{ success: boolean; error?: string }> {
+export async function testLDAPConnection(
+  config: Record<string, unknown>,
+): Promise<{ success: boolean; error?: string }> {
   const res = await fetch(`${BASE_URL}/api/v1/admin/auth/ldap/test`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1097,9 +1165,12 @@ export async function fetchModuleStatuses(): Promise<ModuleControlStatus[]> {
 }
 
 export async function stopModule(name: string): Promise<void> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/modules/${encodeURIComponent(name)}/stop`, {
-    method: "POST",
-  });
+  const res = await fetch(
+    `${BASE_URL}/api/v1/admin/modules/${encodeURIComponent(name)}/stop`,
+    {
+      method: "POST",
+    },
+  );
   if (!res.ok) {
     const err: ErrorResponse = await res.json();
     throw err;
@@ -1107,9 +1178,12 @@ export async function stopModule(name: string): Promise<void> {
 }
 
 export async function startModule(name: string): Promise<void> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/modules/${encodeURIComponent(name)}/start`, {
-    method: "POST",
-  });
+  const res = await fetch(
+    `${BASE_URL}/api/v1/admin/modules/${encodeURIComponent(name)}/start`,
+    {
+      method: "POST",
+    },
+  );
   if (!res.ok) {
     const err: ErrorResponse = await res.json();
     throw err;
@@ -1126,7 +1200,9 @@ export async function fetchFTPConfig(): Promise<FTPModuleConfig> {
   return json.data;
 }
 
-export async function saveFTPConfig(config: Partial<FTPModuleConfig>): Promise<void> {
+export async function saveFTPConfig(
+  config: Partial<FTPModuleConfig>,
+): Promise<void> {
   const res = await fetch(`${BASE_URL}/api/v1/admin/modules/ftp/config`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
@@ -1156,7 +1232,9 @@ export async function fetchDICOMConfig(): Promise<DICOMModuleConfig> {
   return json.data;
 }
 
-export async function saveDICOMConfig(config: Partial<DICOMModuleConfig>): Promise<void> {
+export async function saveDICOMConfig(
+  config: Partial<DICOMModuleConfig>,
+): Promise<void> {
   const res = await fetch(`${BASE_URL}/api/v1/admin/modules/dicom/config`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
@@ -1205,7 +1283,9 @@ export function connectorTypeFromProtocol(protocol: string): ConnectorType {
 }
 
 // protocolFromConnectorType maps a ConnectorType back to the backend protocol string.
-export function protocolFromConnectorType(ct: ConnectorType): ConnectorConfig["protocol"] {
+export function protocolFromConnectorType(
+  ct: ConnectorType,
+): ConnectorConfig["protocol"] {
   return ct === "pacs_dicom" ? "dicom_cstore" : "ectp_ftp";
 }
 
@@ -1267,7 +1347,7 @@ export async function testConnector(
 // ─── Module Settings ─────────────────────────────────────────────────────────
 
 export interface ModuleSettingsData {
-  active: string[];    // currently active in DB (empty = all)
+  active: string[]; // currently active in DB (empty = all)
   available: string[]; // all compiled-in module names
 }
 
