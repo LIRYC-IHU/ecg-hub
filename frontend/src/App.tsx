@@ -31,7 +31,11 @@ import { AdminQuarantinePage } from "./components/admin/AdminQuarantinePage";
 import { AdminAuthPage } from "./components/admin/AdminAuthPage";
 import { AdminModulesPage } from "./components/admin/AdminModulesPage";
 import { AdminHL7Page } from "./components/admin/AdminHL7Page";
-import { fetchAdminStats, fetchECGFilterFacets, fetchSetupStatus } from "./lib/api";
+import {
+  fetchAdminStats,
+  fetchECGFilterFacets,
+  fetchSetupStatus,
+} from "./lib/api";
 import type { AllECGFilters } from "./lib/api";
 import i18n from "./lib/i18n";
 
@@ -40,7 +44,12 @@ function App() {
   const { t, i18n: i18next } = useTranslation();
   const location = useLocation();
   const [globalSearch, setGlobalSearch] = useState("");
-  const [filters, setFilters] = useState<Pick<AllECGFilters, "vendor" | "device_model" | "file_format" | "hl7_status" | "from" | "to">>({});
+  const [filters, setFilters] = useState<
+    Pick<
+      AllECGFilters,
+      "vendor" | "device_model" | "file_format" | "hl7_status" | "from" | "to"
+    >
+  >({});
   const [filtersOpen, setFiltersOpen] = useState(false);
 
   const { data: setupStatus, isLoading: setupLoading } = useQuery({
@@ -50,7 +59,8 @@ function App() {
     retry: 1,
   });
 
-  const canPatientRead = status === "authenticated" && hasPermission("patient.read");
+  const canPatientRead =
+    status === "authenticated" && hasPermission("patient.read");
   const { data: facets } = useQuery({
     queryKey: ["ecg-filter-facets"],
     queryFn: fetchECGFilterFacets,
@@ -80,9 +90,15 @@ function App() {
   const canViewAuthConfig =
     status === "authenticated" && hasPermission("admin.auth_config");
   const canViewHL7 =
-    status === "authenticated" && (hasPermission("hl7.config") || canViewSystem);
+    status === "authenticated" &&
+    (hasPermission("hl7.config") || canViewSystem);
   const isAdmin =
-    canViewUsers || canViewAudit || canViewSystem || canViewQuarantine || canViewAuthConfig || canViewHL7;
+    canViewUsers ||
+    canViewAudit ||
+    canViewSystem ||
+    canViewQuarantine ||
+    canViewAuthConfig ||
+    canViewHL7;
 
   const { data: adminStats } = useQuery({
     queryKey: ["admin", "stats"],
@@ -108,6 +124,7 @@ function App() {
 
   // If not yet initialized, show setup page (or redirect to it)
   if (setupStatus && !setupStatus.initialized) {
+    console.log("System not initialized - redirecting to setup");
     if (location.pathname !== "/setup") {
       return <Navigate to="/setup" replace />;
     }
@@ -132,9 +149,17 @@ function App() {
     canViewUsers && { to: "/roles", icon: Shield, labelKey: "nav.roles" },
     canViewAudit && { to: "/audit", icon: FileText, labelKey: "nav.audit" },
     canViewSystem && { to: "/system", icon: Server, labelKey: "nav.system" },
-    canViewSystem && { to: "/modules-config", icon: Settings2, labelKey: "nav.modulesConfig" },
+    canViewSystem && {
+      to: "/modules-config",
+      icon: Settings2,
+      labelKey: "nav.modulesConfig",
+    },
     canViewHL7 && { to: "/hl7", icon: Activity, labelKey: "nav.hl7" },
-    canViewAuthConfig && { to: "/auth-config", icon: KeyRound, labelKey: "nav.authConfig" },
+    canViewAuthConfig && {
+      to: "/auth-config",
+      icon: KeyRound,
+      labelKey: "nav.authConfig",
+    },
     canViewQuarantine && {
       to: "/quarantine",
       icon: AlertTriangle,
@@ -194,57 +219,104 @@ function App() {
                       <div className="flex items-center gap-3 px-6 py-2 border-t border-border/50 bg-muted/20 flex-wrap">
                         <select
                           value={filters.vendor ?? ""}
-                          onChange={(e) => setFilters((f) => ({ ...f, vendor: e.target.value || undefined }))}
+                          onChange={(e) =>
+                            setFilters((f) => ({
+                              ...f,
+                              vendor: e.target.value || undefined,
+                            }))
+                          }
                           className="text-xs border border-border rounded-md px-2.5 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring/20"
                         >
                           <option value="">{t("filters.allVendors")}</option>
                           {facets?.vendors.map((v) => (
-                            <option key={v} value={v}>{v}</option>
+                            <option key={v} value={v}>
+                              {v}
+                            </option>
                           ))}
                         </select>
                         <select
                           value={filters.device_model ?? ""}
-                          onChange={(e) => setFilters((f) => ({ ...f, device_model: e.target.value || undefined }))}
+                          onChange={(e) =>
+                            setFilters((f) => ({
+                              ...f,
+                              device_model: e.target.value || undefined,
+                            }))
+                          }
                           className="text-xs border border-border rounded-md px-2.5 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring/20"
                         >
                           <option value="">{t("filters.allModels")}</option>
                           {facets?.device_models.map((m) => (
-                            <option key={m} value={m}>{m}</option>
+                            <option key={m} value={m}>
+                              {m}
+                            </option>
                           ))}
                         </select>
                         <select
                           value={filters.file_format ?? ""}
-                          onChange={(e) => setFilters((f) => ({ ...f, file_format: e.target.value || undefined }))}
+                          onChange={(e) =>
+                            setFilters((f) => ({
+                              ...f,
+                              file_format: e.target.value || undefined,
+                            }))
+                          }
                           className="text-xs border border-border rounded-md px-2.5 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring/20"
                         >
                           <option value="">{t("filters.allFormats")}</option>
                           {facets?.file_formats?.map((fmt) => (
-                            <option key={fmt} value={fmt}>.{fmt}</option>
+                            <option key={fmt} value={fmt}>
+                              .{fmt}
+                            </option>
                           ))}
                         </select>
                         <select
                           value={filters.hl7_status ?? ""}
-                          onChange={(e) => setFilters((f) => ({ ...f, hl7_status: (e.target.value || undefined) as AllECGFilters["hl7_status"] }))}
+                          onChange={(e) =>
+                            setFilters((f) => ({
+                              ...f,
+                              hl7_status: (e.target.value ||
+                                undefined) as AllECGFilters["hl7_status"],
+                            }))
+                          }
                           className="text-xs border border-border rounded-md px-2.5 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring/20"
                         >
                           <option value="">{t("filters.allHL7")}</option>
-                          <option value="pending">{t("ecg.status.pending")}</option>
-                          <option value="success">{t("ecg.status.success")}</option>
-                          <option value="hl7_exhausted">{t("ecg.status.hl7_exhausted")}</option>
+                          <option value="pending">
+                            {t("ecg.status.pending")}
+                          </option>
+                          <option value="success">
+                            {t("ecg.status.success")}
+                          </option>
+                          <option value="hl7_exhausted">
+                            {t("ecg.status.hl7_exhausted")}
+                          </option>
                         </select>
                         <div className="flex items-center gap-1.5">
-                          <span className="text-[10px] text-muted-foreground">{t("filters.from")}</span>
+                          <span className="text-[10px] text-muted-foreground">
+                            {t("filters.from")}
+                          </span>
                           <input
                             type="date"
                             value={filters.from ?? ""}
-                            onChange={(e) => setFilters((f) => ({ ...f, from: e.target.value || undefined }))}
+                            onChange={(e) =>
+                              setFilters((f) => ({
+                                ...f,
+                                from: e.target.value || undefined,
+                              }))
+                            }
                             className="text-xs border border-border rounded-md px-2 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring/20"
                           />
-                          <span className="text-[10px] text-muted-foreground">{t("filters.to")}</span>
+                          <span className="text-[10px] text-muted-foreground">
+                            {t("filters.to")}
+                          </span>
                           <input
                             type="date"
                             value={filters.to ?? ""}
-                            onChange={(e) => setFilters((f) => ({ ...f, to: e.target.value || undefined }))}
+                            onChange={(e) =>
+                              setFilters((f) => ({
+                                ...f,
+                                to: e.target.value || undefined,
+                              }))
+                            }
                             className="text-xs border border-border rounded-md px-2 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring/20"
                           />
                         </div>
