@@ -62,12 +62,15 @@ func RunMigrations(db *gorm.DB) error {
 
 	// Widen user_id columns from varchar(36) to text so any external ID length is accepted.
 	// AutoMigrate doesn't alter existing column types, so we do it explicitly.
-	for _, stmt := range []string{
-		`ALTER TABLE audit_logs ALTER COLUMN user_id TYPE text`,
-		`ALTER TABLE export_jobs ALTER COLUMN user_id TYPE text`,
-	} {
-		if err := db.Exec(stmt).Error; err != nil {
-			slog.Warn("db: migrate user_id column type", "stmt", stmt, "error", err)
+	// Only run when the table already exists (skipped on fresh installs).
+	if db.Migrator().HasTable("audit_logs") {
+		if err := db.Exec(`ALTER TABLE audit_logs ALTER COLUMN user_id TYPE text`).Error; err != nil {
+			slog.Warn("db: migrate user_id column type", "table", "audit_logs", "error", err)
+		}
+	}
+	if db.Migrator().HasTable("export_jobs") {
+		if err := db.Exec(`ALTER TABLE export_jobs ALTER COLUMN user_id TYPE text`).Error; err != nil {
+			slog.Warn("db: migrate user_id column type", "table", "export_jobs", "error", err)
 		}
 	}
 
@@ -85,20 +88,21 @@ func RunMigrations(db *gorm.DB) error {
 		}
 	}
 
-	// Drop the stale FK constraint on audit_logs if it still exists from a previous migration attempt.
-	for _, stmt := range []string{
-		`ALTER TABLE audit_logs DROP CONSTRAINT IF EXISTS fk_ecg_hub_users_audit_log`,
-		`ALTER TABLE export_jobs DROP CONSTRAINT IF EXISTS fk_ecg_hub_users_export_job`,
-	} {
-		if err := db.Exec(stmt).Error; err != nil {
-			slog.Warn("db: drop stale fk constraint", "stmt", stmt, "error", err)
+	// Drop stale FK constraints from previous migration attempts — only when the table exists.
+	if db.Migrator().HasTable("audit_logs") {
+		if err := db.Exec(`ALTER TABLE audit_logs DROP CONSTRAINT IF EXISTS fk_ecg_hub_users_audit_log`).Error; err != nil {
+			slog.Warn("db: drop stale fk constraint", "table", "audit_logs", "error", err)
+		}
+	}
+	if db.Migrator().HasTable("export_jobs") {
+		if err := db.Exec(`ALTER TABLE export_jobs DROP CONSTRAINT IF EXISTS fk_ecg_hub_users_export_job`).Error; err != nil {
+			slog.Warn("db: drop stale fk constraint", "table", "export_jobs", "error", err)
 		}
 	}
 
 	for _, m := range models {
-		err := db.AutoMigrate(m)
-		if err != nil {
-			slog.Warn("db: auto migrate %s: %w", m, err)
+		if err := db.AutoMigrate(m); err != nil {
+			slog.Warn("db: auto migrate", "model", fmt.Sprintf("%T", m), "error", err)
 		}
 	}
 
@@ -149,53 +153,26 @@ func iniRole(db *gorm.DB) error {
 			},
 		},
 	}
-	roles := []repository.RoleRecord{}
-	result := db.Find(&roles)
-	if result.Error != nil {
-		return fmt.Errorf("query roles: %w", result.Error)
-
-	}
-
-	// Always sync permissions for seeded roles — ensures new permissions
-	// added in code are granted on existing installations without a DB reset.
+	// Upsert seeded roles and sync permissions idempotently.
+	// Creates the role if missing, then adds any permissions not yet present.
+	// Never removes permissions set via the admin UI.
 	for _, s := range seeds {
 		var existing repository.RoleRecord
 		if err := db.Where("name = ?", s.name).First(&existing).Error; err != nil {
-			// Role doesn't exist — create it.
-			fmt.Printf("Creating role %s\n", s.name)
+			slog.Info("db: creating seeded role", "role", s.name)
 			existing = repository.RoleRecord{Name: s.name, Description: s.desc}
 			if err := db.Create(&existing).Error; err != nil {
-				fmt.Printf("Error creating role %s: %v\n", s.name, err)
+				slog.Warn("db: create seeded role", "role", s.name, "error", err)
 				continue
 			}
 		}
-		// Ensure every permission in the seed exists (add missing ones, never remove).
 		for _, perm := range s.perms {
 			var count int64
 			db.Model(&repository.RolePermRecord{}).Where("role_id = ? AND permission = ?", existing.ID, perm).Count(&count)
 			if count == 0 {
 				p := repository.RolePermRecord{RoleID: existing.ID, Permission: perm, Role: existing}
 				if err := db.Create(&p).Error; err != nil {
-					slog.Warn("db: add permission to role", "role", s.name, "perm", perm, "error", err)
-				}
-			}
-		}
-	}
-
-	if len(roles) == 0 {
-		for _, s := range seeds {
-			fmt.Printf("Creating role %s\n", s.name)
-
-			record := repository.RoleRecord{Name: s.name, Description: s.desc}
-			if err := db.Create(&record).Error; err != nil {
-				fmt.Printf("Error creating role %s: %v\n", s.name, err)
-				continue
-			}
-
-			for _, perm := range s.perms {
-				p := repository.RolePermRecord{RoleID: record.ID, Permission: perm, Role: record}
-				if err := db.Create(&p).Error; err != nil {
-					fmt.Printf("Error creating permission %s for role %s: %v\n", s.perms, s.name, err)
+					slog.Warn("db: add permission to seeded role", "role", s.name, "perm", perm, "error", err)
 				}
 			}
 		}
