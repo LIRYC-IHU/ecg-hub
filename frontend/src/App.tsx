@@ -124,7 +124,6 @@ function App() {
 
   // If not yet initialized, show setup page (or redirect to it)
   if (setupStatus && !setupStatus.initialized) {
-    console.log("System not initialized - redirecting to setup");
     if (location.pathname !== "/setup") {
       return <Navigate to="/setup" replace />;
     }
