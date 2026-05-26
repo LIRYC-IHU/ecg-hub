@@ -1,59 +1,63 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { useTranslation } from 'react-i18next'
-import { Activity, Lock, User, Loader2, ShieldCheck } from 'lucide-react'
-import { setupAdmin } from '../lib/api'
-import { useNotification } from '../context/NotificationContext'
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
+import { useQueryClient } from "@tanstack/react-query";
+import { Activity, Lock, User, Loader2, ShieldCheck } from "lucide-react";
+import { setupAdmin } from "../lib/api";
+import { useNotification } from "../context/NotificationContext";
 
 export function SetupPage() {
-  const { t } = useTranslation()
-  const navigate = useNavigate()
-  const { notify } = useNotification()
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { notify } = useNotification();
 
-  const [username, setUsername] = useState('')
-  const [password, setPassword] = useState('')
-  const [confirmPassword, setConfirmPassword] = useState('')
-  const [errors, setErrors] = useState<Record<string, string>>({})
-  const [loading, setLoading] = useState(false)
-  const [serverError, setServerError] = useState('')
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(false);
+  const [serverError, setServerError] = useState("");
 
   function validate(): boolean {
-    const newErrors: Record<string, string> = {}
+    const newErrors: Record<string, string> = {};
 
     if (username.length < 3) {
-      newErrors.username = t('setup.usernameTooShort')
+      newErrors.username = t("setup.usernameTooShort");
     }
     if (password.length < 8) {
-      newErrors.password = t('setup.passwordTooShort')
+      newErrors.password = t("setup.passwordTooShort");
     } else if (!/\d/.test(password)) {
-      newErrors.password = t('setup.passwordNeedsDigit')
+      newErrors.password = t("setup.passwordNeedsDigit");
     }
     if (password !== confirmPassword) {
-      newErrors.confirmPassword = t('setup.passwordMismatch')
+      newErrors.confirmPassword = t("setup.passwordMismatch");
     }
 
-    setErrors(newErrors)
-    return Object.keys(newErrors).length === 0
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   }
 
   async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setServerError('')
+    e.preventDefault();
+    setServerError("");
 
-    if (!validate()) return
+    if (!validate()) return;
 
-    setLoading(true)
+    setLoading(true);
     try {
-      await setupAdmin(username, password)
-      notify('success', t('setup.success'))
-      navigate('/login', { replace: true })
+      await setupAdmin(username, password);
+      await queryClient.invalidateQueries({ queryKey: ["setup-status"] });
+      notify("success", t("setup.success"));
+      navigate("/login", { replace: true });
     } catch (err: unknown) {
-      const message = (err && typeof err === 'object' && 'message' in err)
-        ? String((err as { message: string }).message)
-        : t('common.error')
-      setServerError(message)
+      const message =
+        err && typeof err === "object" && "message" in err
+          ? String((err as { message: string }).message)
+          : t("common.error");
+      setServerError(message);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
   }
 
@@ -63,9 +67,20 @@ export function SetupPage() {
       <div className="w-[40%] bg-primary flex flex-col items-center justify-center px-12 relative overflow-hidden">
         {/* ECG pattern overlay */}
         <div className="absolute inset-0 opacity-10">
-          <svg className="w-full h-full" viewBox="0 0 400 400" preserveAspectRatio="xMidYMid slice">
+          <svg
+            className="w-full h-full"
+            viewBox="0 0 400 400"
+            preserveAspectRatio="xMidYMid slice"
+          >
             <defs>
-              <pattern id="ecg-pattern-setup" x="0" y="0" width="100" height="50" patternUnits="userSpaceOnUse">
+              <pattern
+                id="ecg-pattern-setup"
+                x="0"
+                y="0"
+                width="100"
+                height="50"
+                patternUnits="userSpaceOnUse"
+              >
                 <polyline
                   points="0,25 20,25 25,10 30,40 35,15 40,35 45,25 100,25"
                   fill="none"
@@ -82,9 +97,11 @@ export function SetupPage() {
           <div className="w-16 h-16 bg-primary-foreground/20 rounded-2xl flex items-center justify-center mx-auto mb-6">
             <Activity className="w-8 h-8 text-primary-foreground" />
           </div>
-          <h1 className="text-3xl font-bold text-primary-foreground mb-3">ECG Hub</h1>
+          <h1 className="text-3xl font-bold text-primary-foreground mb-3">
+            ECG Hub
+          </h1>
           <p className="text-primary-foreground/70 text-sm leading-relaxed max-w-xs">
-            {t('setup.subtitle')}
+            {t("setup.subtitle")}
           </p>
           <div className="mt-8 flex items-center justify-center gap-2 text-primary-foreground/50 text-xs">
             <ShieldCheck className="w-3.5 h-3.5" />
@@ -96,15 +113,17 @@ export function SetupPage() {
       {/* Right form panel */}
       <div className="flex-1 bg-card flex items-center justify-center px-16">
         <div className="w-full max-w-sm">
-          <h2 className="text-xl font-semibold text-foreground mb-1">{t('setup.title')}</h2>
+          <h2 className="text-xl font-semibold text-foreground mb-1">
+            {t("setup.title")}
+          </h2>
           <p className="text-sm text-muted-foreground mb-8">
-            {t('setup.subtitle')}
+            {t("setup.subtitle")}
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
-                {t('setup.username')}
+                {t("setup.username")}
               </label>
               <div className="relative">
                 <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -119,13 +138,15 @@ export function SetupPage() {
                 />
               </div>
               {errors.username && (
-                <p className="text-xs text-destructive mt-1">{errors.username}</p>
+                <p className="text-xs text-destructive mt-1">
+                  {errors.username}
+                </p>
               )}
             </div>
 
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
-                {t('setup.password')}
+                {t("setup.password")}
               </label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -139,13 +160,15 @@ export function SetupPage() {
                 />
               </div>
               {errors.password && (
-                <p className="text-xs text-destructive mt-1">{errors.password}</p>
+                <p className="text-xs text-destructive mt-1">
+                  {errors.password}
+                </p>
               )}
             </div>
 
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1.5 block">
-                {t('setup.confirmPassword')}
+                {t("setup.confirmPassword")}
               </label>
               <div className="relative">
                 <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -159,7 +182,9 @@ export function SetupPage() {
                 />
               </div>
               {errors.confirmPassword && (
-                <p className="text-xs text-destructive mt-1">{errors.confirmPassword}</p>
+                <p className="text-xs text-destructive mt-1">
+                  {errors.confirmPassword}
+                </p>
               )}
             </div>
 
@@ -175,7 +200,7 @@ export function SetupPage() {
               className="w-full bg-primary text-primary-foreground font-medium text-sm py-2.5 px-4 rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
             >
               {loading && <Loader2 className="w-4 h-4 animate-spin" />}
-              {loading ? t('common.loading') : t('setup.submit')}
+              {loading ? t("common.loading") : t("setup.submit")}
             </button>
           </form>
 
@@ -185,5 +210,5 @@ export function SetupPage() {
         </div>
       </div>
     </div>
-  )
+  );
 }
