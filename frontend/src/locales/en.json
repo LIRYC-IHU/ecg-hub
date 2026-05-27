@@ -117,6 +117,18 @@
     "dismiss": "Dismiss"
   },
   "admin": {
+    "branding": {
+      "title": "Center Branding",
+      "subtitle": "Customize the name and logo shown on login and setup pages.",
+      "centerName": "Center name",
+      "centerNameHint": "Displayed in the login page footer and setup page. Leave blank to use the default.",
+      "logo": "Logo",
+      "logoHint": "PNG, JPEG, SVG or WebP — max 512 KB. Displayed as the icon on login and setup pages.",
+      "uploadLogo": "Upload image…",
+      "removeLogo": "Remove logo",
+      "saved": "Branding saved",
+      "logoRemoved": "Logo removed"
+    },
     "hl7": {
       "subtitle": "Configure HL7 connection, scheduler, and field mapping."
     },
@@ -335,6 +347,7 @@
         "quarantine_delete": "Delete quarantine files",
         "admin_users": "Manage users",
         "admin_roles": "Manage roles",
+        "admin_branding": "Manage branding",
         "admin_audit": "View audit logs",
         "admin_system": "System status & module control",
         "admin_auth_config": "Configure auth providers",
@@ -419,6 +432,7 @@
     "audit": "Audit",
     "system": "System",
     "modulesConfig": "Modules",
+    "branding": "Branding",
     "hl7": "HL7",
     "authConfig": "Auth",
     "quarantine": "Quarantine"

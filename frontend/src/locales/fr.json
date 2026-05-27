@@ -117,6 +117,18 @@
     "dismiss": "Fermer"
   },
   "admin": {
+    "branding": {
+      "title": "Identité visuelle",
+      "subtitle": "Personnalisez le nom et le logo affichés sur les pages de connexion et d'initialisation.",
+      "centerName": "Nom du centre",
+      "centerNameHint": "Affiché en bas des pages de connexion et d'initialisation. Laisser vide pour utiliser la valeur par défaut.",
+      "logo": "Logo",
+      "logoHint": "PNG, JPEG, SVG ou WebP — 512 Ko maximum. Affiché comme icône sur les pages de connexion et d'initialisation.",
+      "uploadLogo": "Importer une image…",
+      "removeLogo": "Supprimer le logo",
+      "saved": "Identité visuelle enregistrée",
+      "logoRemoved": "Logo supprimé"
+    },
     "hl7": {
       "subtitle": "Configurer la connexion HL7, le planificateur et le mapping des champs."
     },
@@ -335,6 +347,7 @@
         "quarantine_delete": "Supprimer des fichiers en quarantaine",
         "admin_users": "Gérer les utilisateurs",
         "admin_roles": "Gérer les rôles",
+        "admin_branding": "Gérer l'identité visuelle",
         "admin_audit": "Voir les audits",
         "admin_system": "État système & contrôle des modules",
         "admin_auth_config": "Configurer les fournisseurs d'auth",
@@ -419,6 +432,7 @@
     "audit": "Audit",
     "system": "Système",
     "modulesConfig": "Modules",
+    "branding": "Identité",
     "hl7": "HL7",
     "authConfig": "Auth",
     "quarantine": "Quarantaine"
