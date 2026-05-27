@@ -13,7 +13,7 @@ const PERMISSION_GROUPS = [
   { key: 'hl7',         labelKey: 'admin.roles.group.hl7',         permissions: ['ecg.force_hl7', 'hl7.config', 'hl7.bulk_retry'] },
   { key: 'tag',         labelKey: 'admin.roles.group.tag',         permissions: ['tag.create', 'tag.delete', 'tag.apply'] },
   { key: 'quarantine',  labelKey: 'admin.roles.group.quarantine',  permissions: ['quarantine.read', 'quarantine.delete'] },
-  { key: 'admin',       labelKey: 'admin.roles.group.admin',       permissions: ['admin.users', 'admin.roles', 'admin.audit', 'admin.system', 'admin.auth_config'] },
+  { key: 'admin',       labelKey: 'admin.roles.group.admin',       permissions: ['admin.users', 'admin.roles', 'admin.branding', 'admin.audit', 'admin.system', 'admin.auth_config'] },
   { key: 'swagger',     labelKey: 'admin.roles.group.swagger',     permissions: ['swagger.read'] },
 ]
 
