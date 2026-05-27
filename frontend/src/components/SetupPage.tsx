@@ -5,11 +5,13 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Activity, Lock, User, Loader2, ShieldCheck } from "lucide-react";
 import { setupAdmin } from "../lib/api";
 import { useNotification } from "../context/NotificationContext";
+import { useBranding } from "../hooks/useBranding";
 
 export function SetupPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { centerName, logoBase64, hasLogo } = useBranding();
   const { notify } = useNotification();
 
   const [username, setUsername] = useState("");
@@ -94,8 +96,11 @@ export function SetupPage() {
         </div>
 
         <div className="relative z-10 text-center">
-          <div className="w-16 h-16 bg-primary-foreground/20 rounded-2xl flex items-center justify-center mx-auto mb-6">
-            <Activity className="w-8 h-8 text-primary-foreground" />
+          <div className="w-16 h-16 bg-primary-foreground/20 rounded-2xl flex items-center justify-center mx-auto mb-6 overflow-hidden">
+            {hasLogo
+              ? <img src={logoBase64} alt="logo" className="w-full h-full object-contain p-1" />
+              : <Activity className="w-8 h-8 text-primary-foreground" />
+            }
           </div>
           <h1 className="text-3xl font-bold text-primary-foreground mb-3">
             ECG Hub
@@ -105,7 +110,7 @@ export function SetupPage() {
           </p>
           <div className="mt-8 flex items-center justify-center gap-2 text-primary-foreground/50 text-xs">
             <ShieldCheck className="w-3.5 h-3.5" />
-            <span>IHU Liryc — Bordeaux</span>
+            <span>{centerName}</span>
           </div>
         </div>
       </div>
@@ -205,7 +210,7 @@ export function SetupPage() {
           </form>
 
           <p className="text-[10px] text-muted-foreground text-center mt-8">
-            IHU Liryc — ECG Hub
+            {centerName} — ECG Hub
           </p>
         </div>
       </div>
