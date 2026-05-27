@@ -136,6 +136,9 @@ func (r *RouterConfig) RegisterRoutes() {
 	// === Public API group (no auth required) ===
 	publicV1 := r.e.Group("/api/v1")
 
+	// Branding (public — displayed on login and setup pages)
+	publicV1.GET("/branding", handlers.GetBrandingHandler(r.moduleSettingsRepo))
+
 	// Setup (public — system initialization)
 	localUserRepo := repository.NewLocalUserRepository(r.gormDB)
 	publicV1.GET("/setup/status", handlers.SetupStatusHandler(localUserRepo))
@@ -246,6 +249,10 @@ func (r *RouterConfig) RegisterRoutes() {
 	// User creation defaults (default role for new logins) — requires admin.roles
 	apiV1.GET("/admin/settings/user-defaults", handlers.GetUserDefaultsHandler(r.moduleSettingsRepo), mw.RequirePermission(r.checker, auth.PermAdminRoles))
 	apiV1.PUT("/admin/settings/user-defaults", handlers.SaveUserDefaultsHandler(r.moduleSettingsRepo), mw.RequirePermission(r.checker, auth.PermAdminRoles))
+
+	// Center branding (name + logo) — requires admin.branding
+	apiV1.PUT("/admin/settings/branding", handlers.SaveBrandingHandler(r.moduleSettingsRepo), mw.RequirePermission(r.checker, auth.PermAdminBranding))
+	apiV1.POST("/admin/settings/branding/logo", handlers.UploadLogoHandler(r.moduleSettingsRepo), mw.RequirePermission(r.checker, auth.PermAdminBranding))
 
 	// Proxy connector configuration (Story 7.6) — requires admin.system
 	apiV1.GET("/admin/connectors/config", handlers.ListConnectorConfigsHandler(r.moduleConfigRepo, r.authEncKey), mw.RequirePermission(r.checker, auth.PermAdminSystem))
