@@ -2,9 +2,11 @@ import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Activity, Lock, User, Loader2, ShieldCheck } from 'lucide-react'
 import { fetchAuthProviders, loginWithLDAP, loginWithLocal } from '../lib/api'
+import { useBranding } from '../hooks/useBranding'
 
 export function LoginPage() {
   const { t } = useTranslation()
+  const { centerName, logoBase64, hasLogo } = useBranding()
   const [providers, setProviders] = useState<string[]>([])
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -60,8 +62,11 @@ export function LoginPage() {
         </div>
 
         <div className="relative z-10 text-center">
-          <div className="w-16 h-16 bg-primary-foreground/20 rounded-2xl flex items-center justify-center mx-auto mb-6">
-            <Activity className="w-8 h-8 text-primary-foreground" />
+          <div className="w-16 h-16 bg-primary-foreground/20 rounded-2xl flex items-center justify-center mx-auto mb-6 overflow-hidden">
+            {hasLogo
+              ? <img src={logoBase64} alt="logo" className="w-full h-full object-contain p-1" />
+              : <Activity className="w-8 h-8 text-primary-foreground" />
+            }
           </div>
           <h1 className="text-3xl font-bold text-primary-foreground mb-3">ECG Hub</h1>
           <p className="text-primary-foreground/70 text-sm leading-relaxed max-w-xs">
@@ -69,7 +74,7 @@ export function LoginPage() {
           </p>
           <div className="mt-8 flex items-center justify-center gap-2 text-primary-foreground/50 text-xs">
             <ShieldCheck className="w-3.5 h-3.5" />
-            <span>IHU Liryc — Bordeaux</span>
+            <span>{centerName}</span>
           </div>
         </div>
       </div>
@@ -161,7 +166,7 @@ export function LoginPage() {
           )}
 
           <p className="text-[10px] text-muted-foreground text-center mt-8">
-            IHU Liryc — ECG Hub
+            {centerName} — ECG Hub
           </p>
         </div>
       </div>
