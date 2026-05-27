@@ -63,6 +63,26 @@ func (r *ModuleSettingsRepository) SetDefaultRole(roleName string) error {
 	return r.db.Save(s).Error
 }
 
+// GetBranding returns the center name and logo (base64 data URI).
+func (r *ModuleSettingsRepository) GetBranding() (centerName, logoBase64 string, err error) {
+	s, err := r.Get()
+	if err != nil {
+		return "", "", err
+	}
+	return s.CenterName, s.LogoBase64, nil
+}
+
+// SetBranding updates the center name and/or logo.
+func (r *ModuleSettingsRepository) SetBranding(centerName, logoBase64 string) error {
+	s, err := r.Get()
+	if err != nil {
+		return err
+	}
+	s.CenterName = centerName
+	s.LogoBase64 = logoBase64
+	return r.db.Save(s).Error
+}
+
 // GetActiveModules returns the parsed list of active module names.
 // Returns an empty slice when the stored value is empty or "[]".
 func (r *ModuleSettingsRepository) GetActiveModules() ([]string, error) {
