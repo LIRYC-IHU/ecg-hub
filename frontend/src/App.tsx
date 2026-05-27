@@ -12,6 +12,7 @@ import {
   KeyRound,
   Settings2,
   Activity,
+  Palette,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Spinner } from "./components/ui/Spinner";
@@ -31,6 +32,7 @@ import { AdminQuarantinePage } from "./components/admin/AdminQuarantinePage";
 import { AdminAuthPage } from "./components/admin/AdminAuthPage";
 import { AdminModulesPage } from "./components/admin/AdminModulesPage";
 import { AdminHL7Page } from "./components/admin/AdminHL7Page";
+import { AdminBrandingPage } from "./components/admin/AdminBrandingPage";
 import {
   fetchAdminStats,
   fetchECGFilterFacets,
@@ -83,6 +85,10 @@ function App() {
     status === "authenticated" && hasPermission("admin.audit");
   const canViewSystem =
     status === "authenticated" && hasPermission("admin.system");
+  const canViewRoles =
+    status === "authenticated" && hasPermission("admin.roles");
+  const canViewBranding =
+    status === "authenticated" && hasPermission("admin.branding");
   const canViewQuarantine =
     status === "authenticated" && hasPermission("quarantine.read");
   const canDeleteQuarantine =
@@ -94,6 +100,8 @@ function App() {
     (hasPermission("hl7.config") || canViewSystem);
   const isAdmin =
     canViewUsers ||
+    canViewRoles ||
+    canViewBranding ||
     canViewAudit ||
     canViewSystem ||
     canViewQuarantine ||
@@ -145,7 +153,8 @@ function App() {
   const sidebarNavItems: SidebarNavItem[] = [
     { to: "/", icon: Heart, labelKey: "nav.patients" },
     canViewUsers && { to: "/app-users", icon: Users, labelKey: "nav.appUsers" },
-    canViewUsers && { to: "/roles", icon: Shield, labelKey: "nav.roles" },
+    canViewRoles && { to: "/roles", icon: Shield, labelKey: "nav.roles" },
+    canViewBranding && { to: "/branding", icon: Palette, labelKey: "nav.branding" },
     canViewAudit && { to: "/audit", icon: FileText, labelKey: "nav.audit" },
     canViewSystem && { to: "/system", icon: Server, labelKey: "nav.system" },
     canViewSystem && {
@@ -347,14 +356,6 @@ function App() {
                   }
                 />
                 <Route
-                  path="/roles"
-                  element={
-                    <div className="overflow-auto">
-                      <AdminRolesPage />
-                    </div>
-                  }
-                />
-                <Route
                   path="/users"
                   element={
                     <div className="p-6 overflow-auto">
@@ -363,6 +364,26 @@ function App() {
                   }
                 />
               </>
+            )}
+            {canViewRoles && (
+              <Route
+                path="/roles"
+                element={
+                  <div className="overflow-auto">
+                    <AdminRolesPage />
+                  </div>
+                }
+              />
+            )}
+            {canViewBranding && (
+              <Route
+                path="/branding"
+                element={
+                  <div className="overflow-auto">
+                    <AdminBrandingPage />
+                  </div>
+                }
+              />
             )}
             {canViewAudit && (
               <Route
