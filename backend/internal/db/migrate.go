@@ -133,7 +133,7 @@ func iniRole(db *gorm.DB) error {
 				"hl7.config", "hl7.bulk_retry",
 				"tag.create", "tag.delete", "tag.apply",
 				"quarantine.read", "quarantine.delete",
-				"admin.audit", "admin.system", "admin.users", "admin.roles", "admin.auth_config",
+				"admin.audit", "admin.system", "admin.users", "admin.roles", "admin.branding", "admin.auth_config",
 				"swagger.read",
 			},
 		},
