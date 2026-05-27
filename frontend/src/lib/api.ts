@@ -418,6 +418,7 @@ export const ALL_PERMISSIONS = [
   "quarantine.delete",
   "admin.users",
   "admin.roles",
+  "admin.branding",
   "admin.audit",
   "admin.system",
   "admin.auth_config",
@@ -634,6 +635,47 @@ export async function saveUserDefaults(defaultRole: string): Promise<void> {
     const err: ErrorResponse = await res.json();
     throw err;
   }
+}
+
+// ─── Branding ────────────────────────────────────────────────────────────────
+
+export interface Branding {
+  center_name: string;
+  logo_base64: string;
+}
+
+export async function fetchBranding(): Promise<Branding> {
+  const res = await fetch(`${BASE_URL}/api/v1/branding`);
+  if (!res.ok) return { center_name: "", logo_base64: "" };
+  const json: { data: Branding } = await res.json();
+  return json.data ?? { center_name: "", logo_base64: "" };
+}
+
+export async function saveBranding(centerName: string, logoBase64?: string): Promise<void> {
+  const res = await fetch(`${BASE_URL}/api/v1/admin/settings/branding`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ center_name: centerName, logo_base64: logoBase64 ?? "" }),
+  });
+  if (!res.ok) {
+    const err: ErrorResponse = await res.json();
+    throw err;
+  }
+}
+
+export async function uploadLogo(file: File): Promise<string> {
+  const form = new FormData();
+  form.append("logo", file);
+  const res = await fetch(`${BASE_URL}/api/v1/admin/settings/branding/logo`, {
+    method: "POST",
+    body: form,
+  });
+  if (!res.ok) {
+    const err: ErrorResponse = await res.json();
+    throw err;
+  }
+  const json: { data: { logo_base64: string } } = await res.json();
+  return json.data.logo_base64;
 }
 
 // ─── Pins (favourites) ──────────────────────────────────────────────────────
