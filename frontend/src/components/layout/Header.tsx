@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
+import { useBranding } from "../../hooks/useBranding";
 
 interface HeaderProps {
   userId: string;
@@ -24,6 +25,10 @@ const BREADCRUMBS: Record<string, string> = {
   "/roles": "nav.roles",
   "/audit": "nav.audit",
   "/system": "nav.system",
+  "/modules-config": "nav.modulesConfig",
+  "/branding": "nav.branding",
+  "/hl7": "nav.hl7",
+  "/auth-config": "nav.authConfig",
   "/quarantine": "nav.quarantine",
 };
 
@@ -43,6 +48,7 @@ export function Header({
   const location = useLocation();
   const [open, setOpen] = useState(false);
   const { theme, setTheme } = useTheme();
+  const { logoBase64, hasLogo } = useBranding();
 
   const breadcrumb = t(BREADCRUMBS[location.pathname] ?? "");
 
@@ -50,7 +56,17 @@ export function Header({
     <header className="h-14 bg-card border-b border-border shadow-sm flex items-center px-4 relative z-40 shrink-0">
       {/* Left: Logo */}
       <div className="flex items-center gap-3">
-        <Activity className="w-5 h-5 text-primary" />
+        <div className="w-12 h-12 rounded flex items-center justify-center overflow-hidden shrink-0">
+          {hasLogo ? (
+            <img
+              src={logoBase64}
+              alt="logo"
+              className="w-full h-full object-contain"
+            />
+          ) : (
+            <Activity className="w-5 h-5 text-primary" />
+          )}
+        </div>
         <span className="font-semibold text-base text-foreground tracking-tight">
           ECG Hub
         </span>
