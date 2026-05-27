@@ -71,6 +71,18 @@ func (r *LocalUserRepository) UpdatePassword(id, newHash string) error {
 	return nil
 }
 
+// SetRole changes the role of a local user by ID.
+func (r *LocalUserRepository) SetRole(id, role string) error {
+	result := r.db.Model(&models.LocalUser{}).Where("id = ?", id).Update("role", role)
+	if result.Error != nil {
+		return fmt.Errorf("local_user_repo: set_role: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("local_user_repo: set_role: user not found")
+	}
+	return nil
+}
+
 // SetActive enables or disables a local user by ID.
 func (r *LocalUserRepository) SetActive(id string, active bool) error {
 	result := r.db.Model(&models.LocalUser{}).Where("id = ?", id).Update("active", active)
