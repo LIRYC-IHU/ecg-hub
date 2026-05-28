@@ -2,15 +2,21 @@ import { createContext, useCallback, useContext, useRef, useState } from 'react'
 
 export type NotifType = 'info' | 'success' | 'warn' | 'error' | 'progress'
 
+export interface NotificationAction {
+  label: string
+  href: string
+}
+
 export interface Notification {
   id: string
   type: NotifType
   message: string
   jobId?: string // only for type === 'progress'
+  action?: NotificationAction
 }
 
 interface NotificationContextValue {
-  notify: (type: NotifType, message: string) => void
+  notify: (type: NotifType, message: string, action?: NotificationAction) => void
   notifyProgress: (jobId: string, message: string) => void
   dismiss: (id: string) => void
   notifications: Notification[]
@@ -28,10 +34,10 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     if (t) { clearTimeout(t); timers.current.delete(id) }
   }, [])
 
-  const notify = useCallback((type: NotifType, message: string) => {
+  const notify = useCallback((type: NotifType, message: string, action?: NotificationAction) => {
     const id = Math.random().toString(36).slice(2)
-    setNotifications((prev) => [...prev, { id, type, message }])
-    const t = setTimeout(() => dismiss(id), 4000)
+    setNotifications((prev) => [...prev, { id, type, message, action }])
+    const t = setTimeout(() => dismiss(id), action ? 8000 : 4000)
     timers.current.set(id, t)
   }, [dismiss])
 
