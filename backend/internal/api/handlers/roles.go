@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
@@ -11,6 +12,25 @@ import (
 	"github.com/LIRYC-IHU/ecg-hub/internal/auth"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
 )
+
+// validPermissions is a set of all known permission strings for fast lookup.
+var validPermissions = func() map[string]bool {
+	m := make(map[string]bool, len(auth.AllPermissions))
+	for _, p := range auth.AllPermissions {
+		m[p] = true
+	}
+	return m
+}()
+
+// validatePermissions returns an error naming the first unknown permission.
+func validatePermissions(perms []string) error {
+	for _, p := range perms {
+		if !validPermissions[p] {
+			return fmt.Errorf("unknown permission: %s", p)
+		}
+	}
+	return nil
+}
 
 type roleRepoIface interface {
 	List(ctx context.Context) ([]repository.Role, error)
@@ -70,6 +90,9 @@ func CreateRoleHandler(repo roleRepoIface, checker *auth.PermissionChecker) echo
 		if req.Name == "" {
 			return c.JSON(http.StatusBadRequest, mw.APIError("BAD_REQUEST", "name is required"))
 		}
+		if err := validatePermissions(req.Permissions); err != nil {
+			return c.JSON(http.StatusBadRequest, mw.APIError("INVALID_PERMISSION", err.Error()))
+		}
 		role, err := repo.Create(c.Request().Context(), req.Name, req.Description, req.Permissions)
 		if err != nil {
 			return c.JSON(http.StatusConflict, mw.APIError("CONFLICT", err.Error()))
@@ -102,6 +125,9 @@ func UpdateRoleHandler(repo roleRepoIface, checker *auth.PermissionChecker) echo
 		}
 		if len(req.Permissions) == 0 {
 			return c.JSON(http.StatusBadRequest, mw.APIError("BAD_REQUEST", "permissions must not be empty"))
+		}
+		if err := validatePermissions(req.Permissions); err != nil {
+			return c.JSON(http.StatusBadRequest, mw.APIError("INVALID_PERMISSION", err.Error()))
 		}
 		// Prevent removing admin.roles if no other role has it — would lock out role management.
 		hasAdminRoles := false
