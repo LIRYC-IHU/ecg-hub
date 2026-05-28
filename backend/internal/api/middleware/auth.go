@@ -22,6 +22,7 @@ const (
 // Implemented by repository.UserRepo — injected to avoid import cycles.
 type RoleResolver interface {
 	GetCurrentRole(ctx context.Context, externalID string) (string, error)
+	ShouldRefreshToken(ctx context.Context, externalID string) bool
 }
 
 // Healthz Midleware validates the JWT on the /healthz endpoint
@@ -70,6 +71,12 @@ func AuthMiddleware(provider auth.Provider, roleResolver RoleResolver) echo.Midd
 			claims, err := provider.ValidateToken(c.Request().Context(), rawToken)
 			if err != nil {
 				return c.JSON(http.StatusUnauthorized, APIError("UNAUTHENTICATED", "invalid or expired token"))
+			}
+
+			// Force re-authentication when the user's session was invalidated
+			// (e.g. role changed by admin, password reset, concurrent login policy).
+			if roleResolver.ShouldRefreshToken(c.Request().Context(), claims.Sub) {
+				return c.JSON(http.StatusUnauthorized, APIError("TOKEN_REFRESH_REQUIRED", "session invalidated — please login again"))
 			}
 
 			// Resolve role from DB so admin changes take effect immediately,
