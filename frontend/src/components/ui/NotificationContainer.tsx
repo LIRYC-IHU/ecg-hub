@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { X, Download, AlertCircle } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useNotification, type NotifType, type Notification } from '../../context/NotificationContext'
@@ -88,6 +89,7 @@ function ProgressNotificationItem({ n, onDismiss }: { n: Notification; onDismiss
 
 export function NotificationContainer() {
   const { notifications, dismiss } = useNotification()
+  const navigate = useNavigate()
 
   if (notifications.length === 0) return null
 
@@ -102,7 +104,17 @@ export function NotificationContainer() {
             className={`flex items-start gap-2.5 px-3.5 py-2.5 rounded-lg border shadow-md text-sm pointer-events-auto animate-in slide-in-from-right-4 ${styles[n.type]}`}
           >
             <span className="font-bold shrink-0 mt-px">{icons[n.type]}</span>
-            <span className="flex-1 leading-snug">{n.message}</span>
+            <div className="flex-1 leading-snug">
+              <span>{n.message}</span>
+              {n.action && (
+                <button
+                  onClick={() => { navigate(n.action!.href); dismiss(n.id) }}
+                  className="ml-2 underline font-medium hover:opacity-80 transition-opacity"
+                >
+                  {n.action.label}
+                </button>
+              )}
+            </div>
             <button
               onClick={() => dismiss(n.id)}
               className="shrink-0 opacity-50 hover:opacity-100 transition-opacity mt-px"
