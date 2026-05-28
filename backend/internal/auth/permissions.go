@@ -89,12 +89,20 @@ func NewPermissionChecker(db *gorm.DB, adminRole string) *PermissionChecker {
 func (p *PermissionChecker) AdminRole() string { return p.adminRole }
 
 // HasPermission reports whether role has the given permission.
+// The configured admin role bypasses DB lookup and always returns true.
 func (p *PermissionChecker) HasPermission(ctx context.Context, role, permission string) bool {
+	if role == p.adminRole {
+		return true
+	}
 	return p.load(ctx, role)[permission]
 }
 
 // GetPermissions returns all permissions held by role.
+// The configured admin role returns all known permissions.
 func (p *PermissionChecker) GetPermissions(ctx context.Context, role string) []string {
+	if role == p.adminRole {
+		return AllPermissions
+	}
 	m := p.load(ctx, role)
 	out := make([]string, 0, len(m))
 	for perm := range m {
@@ -132,7 +140,7 @@ func (p *PermissionChecker) load(ctx context.Context, role string) map[string]bo
 	}
 
 	p.mu.Lock()
-	p.cache[role] = permEntry{perms: perms, expiresAt: time.Now().Add(60 * time.Second)}
+	p.cache[role] = permEntry{perms: perms, expiresAt: time.Now().Add(10 * time.Second)}
 	p.mu.Unlock()
 	return perms
 }
