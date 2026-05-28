@@ -11,13 +11,12 @@ import (
 // UserRecord is the GORM model for ecg_hub_users.
 type UserRecord struct {
 	ID         string    `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
-	ExternalID string    `gorm:"type:varchar(36);not null;index"`
+	ExternalID string    `gorm:"type:text;not null;index"`
 	Provider   string    `gorm:"not null;default:'oidc'"`
-	RoleID     string    `gorm:"type:varchar(36);not null;index"`
+	RoleID     string    `gorm:"type:uuid;not null;index"`
 	CreatedAt  time.Time `gorm:"autoCreateTime"`
 	LastLogin  time.Time `gorm:"not null"`
 	UpdateJWT  bool      `gorm:"not null;default:false"`
-
 }
 
 func (UserRecord) TableName() string { return "ecg_hub_users" }
@@ -183,7 +182,7 @@ func (r *UserRepo) SetRole(ctx context.Context, id string, roleName string) erro
 }
 
 // resolveRole returns the role ID and name for the given roleName.
-// Falls back to fallbackName if roleName is empty or not found.
+// Falls back to fallbackName if roleName is empty or not found in the DB.
 func (r *UserRepo) resolveRole(ctx context.Context, roleName, fallbackName string) (string, string, error) {
 	name := roleName
 	if name == "" {
@@ -194,9 +193,12 @@ func (r *UserRepo) resolveRole(ctx context.Context, roleName, fallbackName strin
 	}
 	var rec RoleRecord
 	if err := r.db.WithContext(ctx).Where("name = ?", name).First(&rec).Error; err != nil {
-		// Role not in DB (e.g. admin role bypasses DB, or fresh install).
-		// Return nil ID but no error — callers that need the ID skip the update,
-		// and the role name is still used directly (e.g. for PermissionChecker bypass).
+		// Role not in DB — try the fallback instead (prevents invalid OIDC/LDAP roles from being accepted).
+		if name != fallbackName && fallbackName != "" {
+			if err := r.db.WithContext(ctx).Where("name = ?", fallbackName).First(&rec).Error; err == nil {
+				return rec.ID, rec.Name, nil
+			}
+		}
 		return "", name, nil
 	}
 	return rec.ID, rec.Name, nil
@@ -211,7 +213,23 @@ func (r *UserRepo) roleNameByID(ctx context.Context, roleID string) (string, err
 	return rec.Name, nil
 }
 
-// Set UpdateJWT sets the update_jwt flag for a user, which signals that their JWT should be refreshed on next login.
+// SetUpdateJWT sets the update_jwt flag for a user, which signals that their JWT should be refreshed on next login.
 func (r *UserRepo) SetUpdateJWT(ctx context.Context, id string, update bool) error {
 	return r.db.WithContext(ctx).Model(&UserRecord{}).Where("id = ?", id).Update("update_jwt", update).Error
+}
+
+// ShouldRefreshToken returns true if the user's session has been invalidated
+// (role change, forced logout, etc.) and they must re-authenticate.
+// If true, the flag is cleared automatically so re-login succeeds.
+func (r *UserRepo) ShouldRefreshToken(ctx context.Context, externalID string) bool {
+	var rec UserRecord
+	if err := r.db.WithContext(ctx).Where("external_id = ?", externalID).First(&rec).Error; err != nil {
+		return false
+	}
+	if !rec.UpdateJWT {
+		return false
+	}
+	// Clear the flag so the next login succeeds.
+	r.db.WithContext(ctx).Model(&UserRecord{}).Where("id = ?", rec.ID).Update("update_jwt", false)
+	return true
 }
