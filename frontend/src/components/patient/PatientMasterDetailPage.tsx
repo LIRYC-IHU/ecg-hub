@@ -1042,17 +1042,22 @@ export function PatientMasterDetailPage({
     staleTime: 60_000,
   });
 
-  // Check HL7 mapping on mount — notify once if not configured
+  // Check HL7 mapping on mount — notify once if not configured (only for users with hl7.config permission)
+  const { hasPermission } = useAuth();
+  const canConfigHL7 = hasPermission("hl7.config");
   const hl7Notified = useRef(false);
   useEffect(() => {
-    if (hl7Notified.current) return;
+    if (hl7Notified.current || !canConfigHL7) return;
     hl7Notified.current = true;
     fetchActiveHL7Mappings().then(({ active }) => {
       if (!active) {
-        notify("warn", t("patient.hl7NotConfigured"));
+        notify("warn", t("patient.hl7NotConfigured"), {
+          label: t("patient.hl7Configure"),
+          href: "/hl7",
+        });
       }
     }).catch(() => {});
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [canConfigHL7]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const tagDropdownRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
