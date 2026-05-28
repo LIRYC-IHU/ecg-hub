@@ -8,7 +8,23 @@ import App from './App.tsx'
 import { NotificationProvider } from './context/NotificationContext'
 import { NotificationContainer } from './components/ui/NotificationContainer'
 
-const queryClient = new QueryClient()
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: (failureCount, error) => {
+        // Don't retry on auth failures — redirect to login instead.
+        if (error && typeof error === 'object' && 'code' in error) {
+          const code = (error as { code?: string }).code
+          if (code === 'TOKEN_REFRESH_REQUIRED' || code === 'UNAUTHENTICATED') {
+            window.location.href = '/login'
+            return false
+          }
+        }
+        return failureCount < 2
+      },
+    },
+  },
+})
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
