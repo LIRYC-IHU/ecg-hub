@@ -26,6 +26,7 @@ func (m *mockProvider) ValidateToken(_ context.Context, _ string) (*auth.Claims,
 type noopResolver struct{}
 
 func (noopResolver) GetCurrentRole(_ context.Context, _ string) (string, error) { return "", nil }
+func (noopResolver) ShouldRefreshToken(_ context.Context, _ string) bool        { return false }
 
 // newTestContext creates an Echo context and recorder for testing.
 func newTestContext(method, path, authHeader string) (echo.Context, *httptest.ResponseRecorder) {
