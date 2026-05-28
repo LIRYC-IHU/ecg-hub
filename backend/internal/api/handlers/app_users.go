@@ -13,6 +13,7 @@ import (
 type appUserRepo interface {
 	List(ctx context.Context) ([]repository.AppUser, error)
 	SetRole(ctx context.Context, id string, roleName string) error
+	SetUpdateJWT(ctx context.Context, id string, update bool) error
 }
 
 // ListAppUsersHandler returns all authenticated users with their DB roles.
@@ -65,6 +66,8 @@ func SetAppUserRoleHandler(repo appUserRepo) echo.HandlerFunc {
 		if err := repo.SetRole(c.Request().Context(), id, body.Role); err != nil {
 			return c.JSON(http.StatusInternalServerError, mw.APIError("INTERNAL", err.Error()))
 		}
+		// Invalidate all existing sessions for this user so they pick up the new role.
+		_ = repo.SetUpdateJWT(c.Request().Context(), id, true)
 		return c.NoContent(http.StatusNoContent)
 	}
 }
