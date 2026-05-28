@@ -18,7 +18,7 @@ type LoginRequest struct {
 }
 
 // setJWTCookie writes the HttpOnly "jwt" cookie on the response.
-// MaxAge 86400 = 24 h, matching the JWT expiry in the auth package.
+// MaxAge 3600 = 1 h, matching the JWT expiry in the auth package.
 func setJWTCookie(c echo.Context, token string) {
 	c.SetCookie(&http.Cookie{
 		Name:     "jwt",
@@ -26,7 +26,7 @@ func setJWTCookie(c echo.Context, token string) {
 		Path:     "/",
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
-		MaxAge:   86400,
+		MaxAge:   3600,
 	})
 }
 
