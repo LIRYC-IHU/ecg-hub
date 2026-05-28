@@ -25,6 +25,7 @@ func (m *mockProvider) ValidateToken(_ context.Context, _ string) (*auth.Claims,
 type noopResolver struct{}
 
 func (noopResolver) GetCurrentRole(_ context.Context, _ string) (string, error) { return "", nil }
+func (noopResolver) ShouldRefreshToken(_ context.Context, _ string) bool        { return false }
 
 func TestProtectedGroup_RequiresJWT(t *testing.T) {
 	e := echo.New()
