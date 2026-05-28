@@ -88,6 +88,39 @@ func RunMigrations(db *gorm.DB) error {
 		}
 	}
 
+	// Widen varchar(36) columns to correct types (uuid/text) on existing installs.
+	// AutoMigrate does not alter column types, so we do it explicitly.
+	if db.Migrator().HasTable("ecg_hub_users") {
+		for _, stmt := range []string{
+			`ALTER TABLE ecg_hub_users ALTER COLUMN external_id TYPE text`,
+			`ALTER TABLE ecg_hub_users ALTER COLUMN role_id TYPE uuid USING role_id::uuid`,
+		} {
+			if err := db.Exec(stmt).Error; err != nil {
+				slog.Warn("db: widen ecg_hub_users column", "stmt", stmt, "error", err)
+			}
+		}
+	}
+	if db.Migrator().HasTable("ecgs") {
+		if err := db.Exec(`ALTER TABLE ecgs ALTER COLUMN patient_id TYPE text`).Error; err != nil {
+			slog.Warn("db: widen ecgs.patient_id", "error", err)
+		}
+	}
+	if db.Migrator().HasTable("connector_jobs") {
+		if err := db.Exec(`ALTER TABLE connector_jobs ALTER COLUMN ecg_id TYPE uuid USING ecg_id::uuid`).Error; err != nil {
+			slog.Warn("db: widen connector_jobs.ecg_id", "error", err)
+		}
+	}
+	if db.Migrator().HasTable("export_job_ecgs") {
+		for _, stmt := range []string{
+			`ALTER TABLE export_job_ecgs ALTER COLUMN export_job_id TYPE uuid USING export_job_id::uuid`,
+			`ALTER TABLE export_job_ecgs ALTER COLUMN ecg_id TYPE uuid USING ecg_id::uuid`,
+		} {
+			if err := db.Exec(stmt).Error; err != nil {
+				slog.Warn("db: widen export_job_ecgs column", "stmt", stmt, "error", err)
+			}
+		}
+	}
+
 	// Drop stale FK constraints from previous migration attempts — only when the table exists.
 	if db.Migrator().HasTable("audit_logs") {
 		if err := db.Exec(`ALTER TABLE audit_logs DROP CONSTRAINT IF EXISTS fk_ecg_hub_users_audit_log`).Error; err != nil {
