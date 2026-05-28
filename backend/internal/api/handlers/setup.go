@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"regexp"
 
@@ -59,15 +60,6 @@ type SetupRequest struct {
 //	@Router			/api/v1/setup [post]
 func SetupHandler(repo *repository.LocalUserRepository, db *gorm.DB) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		// Check if already initialized.
-		count, err := repo.Count()
-		if err != nil {
-			return c.JSON(http.StatusInternalServerError, mw.APIError("INTERNAL_ERROR", "failed to check setup status"))
-		}
-		if count > 0 {
-			return c.JSON(http.StatusConflict, mw.APIError("ALREADY_INITIALIZED", "system is already initialized"))
-		}
-
 		var req SetupRequest
 		if err := c.Bind(&req); err != nil {
 			return c.JSON(http.StatusBadRequest, mw.APIError("BAD_REQUEST", "invalid request body"))
@@ -92,9 +84,37 @@ func SetupHandler(repo *repository.LocalUserRepository, db *gorm.DB) echo.Handle
 			return c.JSON(http.StatusInternalServerError, mw.APIError("INTERNAL_ERROR", "failed to hash password"))
 		}
 
-		// Create the admin user.
-		user, err := repo.Create(req.Username, hash, "admin")
-		if err != nil {
+		// Atomic initialization: use advisory lock + count check inside a transaction
+		// to prevent race conditions (two concurrent setup calls both passing the check).
+		var user *models.LocalUser
+		txErr := db.Transaction(func(tx *gorm.DB) error {
+			// pg_advisory_xact_lock ensures only one setup can run at a time.
+			if err := tx.Exec("SELECT pg_advisory_xact_lock(42)").Error; err != nil {
+				return err
+			}
+			var count int64
+			if err := tx.Model(&models.LocalUser{}).Count(&count).Error; err != nil {
+				return err
+			}
+			if count > 0 {
+				return fmt.Errorf("ALREADY_INITIALIZED")
+			}
+			u := &models.LocalUser{
+				Username:     req.Username,
+				PasswordHash: hash,
+				Role:         "admin",
+				Active:       true,
+			}
+			if err := tx.Create(u).Error; err != nil {
+				return err
+			}
+			user = u
+			return nil
+		})
+		if txErr != nil {
+			if txErr.Error() == "ALREADY_INITIALIZED" {
+				return c.JSON(http.StatusConflict, mw.APIError("ALREADY_INITIALIZED", "system is already initialized"))
+			}
 			return c.JSON(http.StatusInternalServerError, mw.APIError("INTERNAL_ERROR", "failed to create admin user"))
 		}
 
