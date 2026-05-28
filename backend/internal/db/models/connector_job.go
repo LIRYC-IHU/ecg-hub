@@ -10,14 +10,16 @@ import "time"
 // until max_attempts is reached, at which point the job is exhausted.
 type ConnectorJob struct {
 	ID            string     `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
-	ECGID         string     `gorm:"type:varchar(36);not null;index"`
+	ECGID         string     `gorm:"type:uuid;not null;index:idx_connector_status_retry"`
 	ConnectorName string     `gorm:"not null;size:64"`
-	Status        string     `gorm:"not null;default:'pending';index"`
+	Status        string     `gorm:"not null;default:'pending';index:idx_connector_status_retry"`
 	Attempts      int        `gorm:"not null;default:0"`
 	MaxAttempts   int        `gorm:"not null;default:3"`
 	LastError     *string    // non-nil only when status is failed or exhausted
-	NextRetryAt   *time.Time // nil when pending; set to now+interval after each failure
+	NextRetryAt   *time.Time `gorm:"index:idx_connector_status_retry"` // nil when pending; set to now+interval after each failure
 	SentAt        *time.Time // set when status transitions to sent
 	CreatedAt     time.Time  `gorm:"autoCreateTime"`
 	UpdatedAt     time.Time  `gorm:"autoUpdateTime"`
+
+	ECG *ECG `gorm:"foreignKey:ECGID;constraint:OnDelete:CASCADE"`
 }
