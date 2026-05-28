@@ -24,9 +24,10 @@ type ExportJob struct {
 // in the batch. Populated by ExportJobRepository.SaveECGList at job creation
 // and read back by GetECGIDs during ZIP assembly.
 type ExportJobECG struct {
-	ExportJobID string     `gorm:"type:varchar(36);primaryKey"`
-	ECGID       string     `gorm:"type:varchar(36);primaryKey"`
+	ExportJobID string     `gorm:"type:uuid;primaryKey"`
+	ECGID       string     `gorm:"type:uuid;primaryKey"`
 	ExportJob   *ExportJob `gorm:"foreignKey:ExportJobID;constraint:OnDelete:CASCADE"`
+	ECG         *ECG       `gorm:"foreignKey:ECGID;constraint:OnDelete:CASCADE"`
 }
 
 func (ExportJobECG) TableName() string { return "export_job_ecgs" }

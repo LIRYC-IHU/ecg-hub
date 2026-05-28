@@ -33,6 +33,7 @@ type ECGTag struct {
 	TagID     string    `gorm:"type:uuid;not null;uniqueIndex:idx_ecg_tag;index" json:"tag_id"`
 	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
 	Tag       *Tag      `gorm:"foreignKey:TagID;constraint:OnDelete:CASCADE"`
+	ECG       *ECG      `gorm:"foreignKey:ECGID;constraint:OnDelete:CASCADE"`
 }
 
 func (ECGTag) TableName() string {
