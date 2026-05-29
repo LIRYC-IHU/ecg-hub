@@ -22,6 +22,12 @@ type settingsProvider interface {
 }
 
 
+// EnricherWirer is called by the scheduler to hot-wire the HL7 enricher
+// to the persister when trigger_mode is "immediate" and a new client is created at runtime.
+type EnricherWirer interface {
+	SetEnricher(e interface{ Enrich(ctx context.Context, ecgID, patientID string) error })
+}
+
 // Scheduler is a database-driven cron scheduler for HL7 retry processing.
 // It reads settings from the DB, runs a cron job based on the cron expression,
 // and processes pending ECGs on each tick.
@@ -35,6 +41,7 @@ type Scheduler struct {
 	client      hl7Querier
 	enricher    *Enricher
 	attemptRepo AttemptRecorder
+	wirer       EnricherWirer // optional: wires enricher to persister on Reload in immediate mode
 	maxRetries  int
 	lastRun     time.Time
 	nextRun     time.Time
@@ -67,6 +74,9 @@ func NewScheduler(
 		done:        make(chan struct{}),
 	}
 }
+
+// SetWirer sets the optional enricher wirer for immediate mode hot-wiring.
+func (s *Scheduler) SetWirer(w EnricherWirer) { s.wirer = w }
 
 // Start reads settings from the DB and begins the cron scheduler.
 func (s *Scheduler) Start() error {
@@ -127,9 +137,46 @@ func (s *Scheduler) Reload() error {
 		return nil
 	}
 
+	// Recreate HL7 client from DB settings if not already set (first-time enable from UI).
 	s.mu.Lock()
+	clientJustCreated := false
+	if s.client == nil && settings.Host != "" && settings.Port != 0 {
+		timeout := 10 * time.Second
+		if settings.Timeout != "" {
+			if d, err := time.ParseDuration(settings.Timeout); err == nil {
+				timeout = d
+			}
+		}
+		s.client = NewClient(settings.Host, settings.Port, timeout, MSHConfig{
+			SendingApplication:   settings.SendingApplication,
+			SendingFacility:      settings.SendingFacility,
+			ReceivingApplication: settings.ReceivingApplication,
+			ReceivingFacility:    settings.ReceivingFacility,
+			Version:              settings.Version,
+			ProcessingID:         settings.ProcessingID,
+		})
+		clientJustCreated = true
+		slog.Info("hl7 scheduler: created client on reload", "host", settings.Host, "port", settings.Port)
+	}
 	s.maxRetries = settings.MaxRetries
 	s.mu.Unlock()
+
+	if s.client == nil {
+		return fmt.Errorf("hl7 scheduler: cannot start — host/port not configured")
+	}
+
+	// In immediate mode, wire the enricher to the persister so new ECGs are enriched on ingest.
+	if settings.TriggerMode == "immediate" && clientJustCreated && s.wirer != nil {
+		type hl7Updater interface{ UpdateHL7Status(ecgID string, status string) error }
+		if ecgUpdater, ok := s.ecgRepo.(hl7Updater); ok {
+			enricher := NewEnricher(s.client.(*Client), s.patRepo, ecgUpdater)
+			s.mu.Lock()
+			s.enricher = enricher
+			s.mu.Unlock()
+			s.wirer.SetEnricher(enricher)
+			slog.Info("hl7 scheduler: wired enricher to persister (immediate mode)")
+		}
+	}
 
 	return s.startCron(settings.CronExpression)
 }
