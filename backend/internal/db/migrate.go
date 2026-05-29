@@ -44,6 +44,7 @@ func RunMigrations(db *gorm.DB) error {
 		&appmodels.AuthProviderConfig{},
 		&appmodels.ModuleConfig{},
 		&appmodels.ModuleSettings{},
+		&appmodels.ModuleEndpoint{},
 	}
 	// for _, m := range models {
 	// 	err := db.Migrator().DropTable(m)
