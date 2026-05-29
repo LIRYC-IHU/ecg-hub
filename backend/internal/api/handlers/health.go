@@ -113,6 +113,12 @@ func HealthHandler(pinger DBPinger, dicom DICOMStatus, ftp FTPStatus, ectp ECTPS
 
 		connEntries := buildConnectorEntries(connCheckers)
 
+		// Override DICOM status from registry — reflects actual runtime state.
+		liveDICOM := dicom
+		if dicomMod, ok := module.GlobalRegistry.Get("dicom"); ok {
+			liveDICOM.Enabled = dicomMod.Status() == module.StatusRunning
+		}
+
 		// Override FTP status from registry — reflects actual runtime state.
 		liveFTP := ftp
 		if ftpMod, ok := module.GlobalRegistry.Get("ftp"); ok {
@@ -128,8 +134,8 @@ func HealthHandler(pinger DBPinger, dicom DICOMStatus, ftp FTPStatus, ectp ECTPS
 				return c.JSON(http.StatusServiceUnavailable, HealthResponse{
 					Status:       "degraded",
 					Database:     "error",
-					DicomEnabled: dicom.Enabled,
-					DicomPort:    dicom.Port,
+					DicomEnabled: liveDICOM.Enabled,
+					DicomPort:    liveDICOM.Port,
 					FTPEnabled:   liveFTP.Enabled,
 					FTPPort:      liveFTP.Port,
 					ECTPEnabled:  ectp.Enabled,
@@ -141,8 +147,8 @@ func HealthHandler(pinger DBPinger, dicom DICOMStatus, ftp FTPStatus, ectp ECTPS
 			return c.JSON(http.StatusOK, HealthResponse{
 				Status:       "ok",
 				Database:     "ok",
-				DicomEnabled: dicom.Enabled,
-				DicomPort:    dicom.Port,
+				DicomEnabled: liveDICOM.Enabled,
+				DicomPort:    liveDICOM.Port,
 				FTPEnabled:   liveFTP.Enabled,
 				FTPPort:      liveFTP.Port,
 				ECTPEnabled:  ectp.Enabled,
