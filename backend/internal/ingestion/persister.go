@@ -106,6 +106,14 @@ func (p *Persister) WithEnricher(e ecgEnricher) *Persister {
 	return p
 }
 
+// SetEnricher is the interface-compatible version of WithEnricher for hot-wiring
+// from the HL7 scheduler when immediate mode is enabled at runtime.
+func (p *Persister) SetEnricher(e interface{ Enrich(ctx context.Context, ecgID, patientID string) error }) {
+	p.enricherMu.Lock()
+	p.enricher = e
+	p.enricherMu.Unlock()
+}
+
 // WithAuditWriter attaches an optional audit writer to the Persister.
 // When set, a "ecg_ingested" entry is written after each successful ECG insert.
 func (p *Persister) WithAuditWriter(a auditWriter) *Persister {
