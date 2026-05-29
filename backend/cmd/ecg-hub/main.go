@@ -334,24 +334,24 @@ func main() {
 		}
 	}
 
+	// HL7 client: created from DB settings if host/port are configured (regardless of config.yaml).
 	var hl7Client *hl7.Client
-	if cfg.HL7.Enabled {
-		if dbSettings, err := hl7SettingsRepo.Get(); err == nil && dbSettings.Host != "" && dbSettings.Port != 0 {
-			hl7Timeout := 10 * time.Second
-			if dbSettings.Timeout != "" {
-				if d, err := time.ParseDuration(dbSettings.Timeout); err == nil {
-					hl7Timeout = d
-				}
+	if dbSettings, err := hl7SettingsRepo.Get(); err == nil && dbSettings.Host != "" && dbSettings.Port != 0 && dbSettings.Enabled {
+		hl7Timeout := 10 * time.Second
+		if dbSettings.Timeout != "" {
+			if d, err := time.ParseDuration(dbSettings.Timeout); err == nil {
+				hl7Timeout = d
 			}
-			hl7Client = hl7.NewClient(dbSettings.Host, dbSettings.Port, hl7Timeout, hl7.MSHConfig{
-				SendingApplication:   dbSettings.SendingApplication,
-				SendingFacility:      dbSettings.SendingFacility,
-				ReceivingApplication: dbSettings.ReceivingApplication,
-				ReceivingFacility:    dbSettings.ReceivingFacility,
-				Version:              dbSettings.Version,
-				ProcessingID:         dbSettings.ProcessingID,
-			})
 		}
+		hl7Client = hl7.NewClient(dbSettings.Host, dbSettings.Port, hl7Timeout, hl7.MSHConfig{
+			SendingApplication:   dbSettings.SendingApplication,
+			SendingFacility:      dbSettings.SendingFacility,
+			ReceivingApplication: dbSettings.ReceivingApplication,
+			ReceivingFacility:    dbSettings.ReceivingFacility,
+			Version:              dbSettings.Version,
+			ProcessingID:         dbSettings.ProcessingID,
+		})
+		slog.Info("hl7: client created from DB settings", "host", dbSettings.Host, "port", dbSettings.Port)
 	}
 
 	// Create repos + HL7 enricher early so ForceHL7Handler can execute queries immediately.
@@ -366,33 +366,31 @@ func main() {
 		hl7Enricher = hl7EnricherForPersister
 	}
 
-	// HL7 Scheduler: database-driven cron replacement for the config-only RetryJob.
-	var hl7Scheduler *hl7.Scheduler
+	// HL7 Scheduler: always created so it can be started from the UI via Reload().
+	// Starts immediately if HL7 client is available (host/port configured in DB).
+	auditRepoForScheduler := repository.NewAuditRepository(gormDB)
+	hl7Scheduler := hl7.NewScheduler(
+		hl7SettingsRepo,
+		ecgRepo,
+		patRepo,
+		auditRepoForScheduler,
+		webhookNotifier,
+		hl7Client,
+		hl7EnricherForPersister,
+		hl7AttemptRepo,
+	)
 	if hl7Client != nil {
-		auditRepoForScheduler := repository.NewAuditRepository(gormDB)
-		hl7Scheduler = hl7.NewScheduler(
-			hl7SettingsRepo,
-			ecgRepo,
-			patRepo,
-			auditRepoForScheduler,
-			webhookNotifier,
-			hl7Client,
-			hl7EnricherForPersister,
-			hl7AttemptRepo,
-		)
 		if err := hl7Scheduler.Start(); err != nil {
-			slog.Warn("hl7 scheduler: failed to start, falling back to retry job", "error", err)
-			hl7Scheduler = nil
+			slog.Warn("hl7 scheduler: failed to start", "error", err)
 		} else {
 			slog.Info("hl7 scheduler: started successfully")
 		}
+	} else {
+		slog.Info("hl7 scheduler: created but not started (no HL7 client yet — configure via UI)")
 	}
 
-	// Wrap scheduler as the handler interface (nil-safe).
-	var hl7SchedulerStatus apihandlers.HL7SchedulerStatus
-	if hl7Scheduler != nil {
-		hl7SchedulerStatus = hl7Scheduler
-	}
+	// Wrap scheduler as the handler interface — always non-nil since we create it unconditionally.
+	var hl7SchedulerStatus apihandlers.HL7SchedulerStatus = hl7Scheduler
 
 	// Auth encryption key for storing provider configs encrypted in DB.
 	authEncKey := os.Getenv("AUTH_ENCRYPTION_KEY")
@@ -421,66 +419,73 @@ func main() {
 
 	router.RegisterRoutes()
 
-	// Check DB for FTP enabled flag — DB takes priority over config.yaml.
+	// Auto-start FTP from DB configuration if enabled (survives container restart).
 	ftpEnabledFromCfg := cfg.FTP.Enabled
 	if dbFTPCfg, err := moduleConfigRepo.Get("ftp"); err == nil && dbFTPCfg != nil {
 		ftpEnabledFromCfg = dbFTPCfg.Enabled
 	}
 
-	ftpServer := ingestion.New(cfg, ftpQueue)
 	if ftpEnabledFromCfg {
-		if err := ftpServer.Start(); err != nil {
-			slog.Error("FATAL: " + err.Error())
-			os.Exit(1)
+		if err := apihandlers.StartFTPFromDB(moduleConfigRepo, authEncKey, cfg, ftpQueue, module.GlobalRegistry); err != nil {
+			slog.Error("startup: FTP auto-start failed — falling back to config.yaml", "error", err)
+			// Fallback: start with config.yaml values.
+			ftpServer := ingestion.New(cfg, ftpQueue)
+			if err := ftpServer.Start(); err != nil {
+				slog.Error("FATAL: " + err.Error())
+				os.Exit(1)
+			}
+			defer ftpServer.Stop()
+			module.GlobalRegistry.Register("ftp", &ftpModuleWrapper{server: ftpServer, status: module.StatusRunning})
+		} else {
+			slog.Info("startup: FTP auto-started from DB config")
 		}
-		defer ftpServer.Stop()
+	} else {
+		// Register a stopped entry so hot-control can start it later.
+		ftpServer := ingestion.New(cfg, ftpQueue)
+		module.GlobalRegistry.Register("ftp", &ftpModuleWrapper{server: ftpServer, status: module.StatusStopped})
 	}
-
-	// EPIC-007 Phase 1: register FTP server in the GlobalRegistry for hot-control.
-	initialFTPStatus := module.StatusStopped
-	if ftpEnabledFromCfg {
-		initialFTPStatus = module.StatusRunning
-	}
-	ftpWrapper := &ftpModuleWrapper{server: ftpServer, status: initialFTPStatus}
-	module.GlobalRegistry.Register("ftp", ftpWrapper)
 
 	// Wire FTP file-received hook for modules that implement FTPFileTracker
 	// (e.g. nihon-kohden uses it for ECTP FILE|ENDS verification).
-	for _, m := range activeModules {
-		if tracker, ok := m.(module.FTPFileTracker); ok {
-			name := m.Name()
-			ftpServer.SetFileReceivedHook(func(filename string) {
-				if err := tracker.RegisterFTPFile(filename); err != nil {
-					slog.Warn("ftp: failed to register transfer", "module", name, "filename", filename, "error", err)
+	// Uses the FTP server registered in GlobalRegistry (started from DB or config.yaml).
+	if ftpMod, ok := module.GlobalRegistry.Get("ftp"); ok {
+		if hookable, ok2 := ftpMod.(interface{ SetFileReceivedHook(func(string)) }); ok2 {
+			for _, m := range activeModules {
+				if tracker, ok := m.(module.FTPFileTracker); ok {
+					name := m.Name()
+					hookable.SetFileReceivedHook(func(filename string) {
+						if err := tracker.RegisterFTPFile(filename); err != nil {
+							slog.Warn("ftp: failed to register transfer", "module", name, "filename", filename, "error", err)
+						}
+					})
 				}
-			})
+			}
 		}
 	}
 
-	// Step 8: Start DICOM C-STORE SCP server (Story 7.1).
-	// Shares the same ftpQueue — DICOM and FTP files flow through the same Dispatcher.
-	// Check DB for DICOM enabled flag — DB takes priority over config.yaml.
+	// Auto-start DICOM from DB configuration if enabled (survives container restart).
 	dicomEnabledFromCfg := cfg.DICOM.Enabled
 	if dbDICOMCfg, err := moduleConfigRepo.Get("dicom"); err == nil && dbDICOMCfg != nil {
 		dicomEnabledFromCfg = dbDICOMCfg.Enabled
 	}
 
-	dicomServer := dicomsrv.New(cfg, ftpQueue)
 	if dicomEnabledFromCfg {
-		if err := dicomServer.Start(); err != nil {
-			slog.Error("FATAL: " + err.Error())
-			os.Exit(1)
+		if err := apihandlers.StartDICOMFromDB(moduleConfigRepo, authEncKey, cfg, ftpQueue, module.GlobalRegistry); err != nil {
+			slog.Error("startup: DICOM auto-start failed — falling back to config.yaml", "error", err)
+			dicomServer := dicomsrv.New(cfg, ftpQueue)
+			if err := dicomServer.Start(); err != nil {
+				slog.Error("FATAL: " + err.Error())
+				os.Exit(1)
+			}
+			defer dicomServer.Stop()
+			module.GlobalRegistry.Register("dicom", &dicomModuleWrapper{server: dicomServer, status: module.StatusRunning})
+		} else {
+			slog.Info("startup: DICOM auto-started from DB config")
 		}
-		defer dicomServer.Stop()
+	} else {
+		dicomServer := dicomsrv.New(cfg, ftpQueue)
+		module.GlobalRegistry.Register("dicom", &dicomModuleWrapper{server: dicomServer, status: module.StatusStopped})
 	}
-
-	// EPIC-007: register DICOM server in the GlobalRegistry for hot-control.
-	initialDICOMStatus := module.StatusStopped
-	if dicomEnabledFromCfg {
-		initialDICOMStatus = module.StatusRunning
-	}
-	dicomWrapper := &dicomModuleWrapper{server: dicomServer, status: initialDICOMStatus}
-	module.GlobalRegistry.Register("dicom", dicomWrapper)
 
 	// Step 6: Start ingestion dispatcher — routes FTP uploads to vendor modules (Story 2.3).
 	// Modules are used in the order defined in cfg.Modules.Active for deterministic routing.
@@ -535,13 +540,14 @@ func main() {
 		}
 	}
 
+	// Allow the scheduler to hot-wire the enricher to the persister on Reload (immediate mode).
+	hl7Scheduler.SetWirer(persister)
+
 	// Defer scheduler stop after persister setup.
-	if hl7Scheduler != nil {
-		defer func() {
-			hl7Scheduler.Stop()
-			<-hl7Scheduler.Done()
-		}()
-	}
+	defer func() {
+		hl7Scheduler.Stop()
+		<-hl7Scheduler.Done()
+	}()
 
 	// Story 3.4: Wire the connector Dispatcher into the Persister and start the RetryJob.
 	// connSettings was populated above (before RegisterRoutes) from cfg.PACS.
