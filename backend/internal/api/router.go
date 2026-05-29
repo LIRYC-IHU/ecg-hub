@@ -227,7 +227,7 @@ func (r *RouterConfig) RegisterRoutes() {
 	apiV1.GET("/admin/storage-metrics", handlers.VolumeMetricsHandler(r.cfg, r.gormDB), mw.RequirePermission(r.checker, auth.PermAdminSystem))
 
 	// Active modules — requires admin.system
-	apiV1.GET("/modules", handlers.ModulesHandler(r.activeModules), mw.RequirePermission(r.checker, auth.PermAdminSystem))
+	apiV1.GET("/modules", handlers.ModulesHandler(r.ingestRouter), mw.RequirePermission(r.checker, auth.PermAdminSystem))
 
 	// Module hot-control (EPIC-007 Phase 1) — requires admin.system
 	apiV1.GET("/admin/modules/status", handlers.ListModuleStatusHandler(module.GlobalRegistry), mw.RequirePermission(r.checker, auth.PermAdminSystem))
