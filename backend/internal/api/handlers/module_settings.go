@@ -10,10 +10,6 @@ import (
 	"github.com/LIRYC-IHU/ecg-hub/internal/module"
 )
 
-// moduleRouter is the interface the handler needs to hot-reload modules.
-type moduleRouter interface {
-	SetModules(modules []module.Module)
-}
 
 // moduleSettingsResponse is the JSON body for GET /admin/settings/modules.
 type moduleSettingsResponse struct {
@@ -27,9 +23,9 @@ type saveModuleSettingsRequest struct {
 }
 
 // GetModuleSettingsHandler handles GET /admin/settings/modules.
-// Returns the currently active module names from DB and all available (compiled-in) modules.
-// An empty active list means all modules are active.
-func GetModuleSettingsHandler(repo *repository.ModuleSettingsRepository, activeModules []module.Module) echo.HandlerFunc {
+// Returns the currently active module names from DB and all available modules
+// (compiled-in + remote gRPC modules — regardless of active filter).
+func GetModuleSettingsHandler(repo *repository.ModuleSettingsRepository, allProvider AllModulesProvider) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		dbActive, err := repo.GetActiveModules()
 		if err != nil {
@@ -39,10 +35,13 @@ func GetModuleSettingsHandler(repo *repository.ModuleSettingsRepository, activeM
 			})
 		}
 
-		// All compiled-in module names from the global registry.
-		available := module.All()
+		// All available modules — always the full set, not filtered by active.
+		allModules := allProvider.GetAllModules()
+		available := make([]string, len(allModules))
+		for i, m := range allModules {
+			available[i] = m.Name()
+		}
 
-		// Ensure slices are never nil in JSON output.
 		if dbActive == nil {
 			dbActive = []string{}
 		}
@@ -59,11 +58,17 @@ func GetModuleSettingsHandler(repo *repository.ModuleSettingsRepository, activeM
 	}
 }
 
+// AllModulesProvider returns ALL known modules (compiled-in + remote gRPC healthy).
+// Used by SaveModuleSettingsHandler to filter the active list.
+type AllModulesProvider interface {
+	GetAllModules() []module.Module
+}
+
 // SaveModuleSettingsHandler handles PUT /admin/settings/modules.
 // Body: { "active": ["philips", "dicom"] }
-// An empty array means "activate all compiled-in modules".
+// An empty array means "activate all modules".
 // If router is non-nil, updates the live ingestion router immediately (no restart needed).
-func SaveModuleSettingsHandler(repo *repository.ModuleSettingsRepository, router *ingestion.Router) echo.HandlerFunc {
+func SaveModuleSettingsHandler(repo *repository.ModuleSettingsRepository, router *ingestion.Router, allProvider AllModulesProvider) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		var req saveModuleSettingsRequest
 		if err := c.Bind(&req); err != nil {
@@ -84,10 +89,25 @@ func SaveModuleSettingsHandler(repo *repository.ModuleSettingsRepository, router
 			})
 		}
 
-		// Hot-reload: update the live router immediately so new files use the updated list.
-		if router != nil {
-			updated := module.Active(req.Active)
-			router.SetModules(updated)
+		// Hot-reload: filter the full module list by active names.
+		if router != nil && allProvider != nil {
+			all := allProvider.GetAllModules()
+			if len(req.Active) == 0 {
+				// Empty = all modules active.
+				router.SetModules(all)
+			} else {
+				activeSet := make(map[string]bool, len(req.Active))
+				for _, n := range req.Active {
+					activeSet[n] = true
+				}
+				var filtered []module.Module
+				for _, m := range all {
+					if activeSet[m.Name()] {
+						filtered = append(filtered, m)
+					}
+				}
+				router.SetModules(filtered)
+			}
 		}
 
 		return c.JSON(http.StatusOK, map[string]any{
