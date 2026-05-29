@@ -245,11 +245,24 @@ type DICOMConfig struct {
 //	  active:
 //	    - philips
 //	    - dicom
+//	  remote:
+//	    - name: philips
+//	      address: module-philips:50051
 type ModulesConfig struct {
 	// Active is the ordered list of module names to activate.
 	// Names must match the Module.Name() of a compiled-in module.
 	// Unknown names are skipped with a warning log.
 	Active []string `mapstructure:"active"`
+
+	// Remote lists gRPC module endpoints. Each entry connects to an independent
+	// module microservice running in its own container.
+	Remote []RemoteModuleEntry `mapstructure:"remote"`
+}
+
+// RemoteModuleEntry is one remote gRPC module endpoint.
+type RemoteModuleEntry struct {
+	Name    string `mapstructure:"name"`
+	Address string `mapstructure:"address"`
 }
 
 // Proxy holds outbound PACS connector settings (Connector Pack).
