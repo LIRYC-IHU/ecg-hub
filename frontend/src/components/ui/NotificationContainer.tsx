@@ -1,40 +1,55 @@
-import { useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { X, Download, AlertCircle } from 'lucide-react'
-import { useTranslation } from 'react-i18next'
-import { useNotification, type NotifType, type Notification } from '../../context/NotificationContext'
-import { useExportWebSocket } from '../../hooks/useExportWebSocket'
+import { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { X, Download, AlertCircle } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import {
+  useNotification,
+  type NotifType,
+  type Notification,
+} from "../../context/NotificationContext";
+import { useExportWebSocket } from "../../hooks/useExportWebSocket";
 
-const styles: Record<Exclude<NotifType, 'progress'>, string> = {
-  success: 'bg-success/15 dark:bg-success/25 border-success/30 dark:border-success/40 text-success backdrop-blur-sm',
-  info:    'bg-primary/15 dark:bg-primary/25 border-primary/30 dark:border-primary/40 text-primary backdrop-blur-sm',
-  warn:    'bg-warning/15 dark:bg-warning/25 border-warning/30 dark:border-warning/40 text-warning backdrop-blur-sm',
-  error:   'bg-destructive/15 dark:bg-destructive/25 border-destructive/30 dark:border-destructive/40 text-destructive backdrop-blur-sm',
-}
+const styles: Record<Exclude<NotifType, "progress">, string> = {
+  success:
+    "bg-success/15 dark:bg-success/25 border-success/30 dark:border-success/40 text-success backdrop-blur-sm",
+  info: "bg-primary/15 dark:bg-primary/25 border-primary/30 dark:border-primary/40 text-primary backdrop-blur-sm",
+  warn: "bg-warning/15 dark:bg-warning/25 border-warning/30 dark:border-warning/40 text-warning backdrop-blur-sm",
+  error:
+    "bg-destructive/15 dark:bg-destructive/25 border-destructive/30 dark:border-destructive/40 text-destructive backdrop-blur-sm",
+};
 
-const icons: Record<Exclude<NotifType, 'progress'>, string> = {
-  success: '✓',
-  info:    'ℹ',
-  warn:    '⚠',
-  error:   '✗',
-}
+const icons: Record<Exclude<NotifType, "progress">, string> = {
+  success: "✓",
+  info: "ℹ",
+  warn: "⚠",
+  error: "✗",
+};
 
-function ProgressNotificationItem({ n, onDismiss }: { n: Notification; onDismiss: () => void }) {
-  const { t } = useTranslation()
-  const { status, percent, processedCount, ecgCount, downloadUrl, error } = useExportWebSocket(n.jobId ?? null)
+function ProgressNotificationItem({
+  n,
+  onDismiss,
+}: {
+  n: Notification;
+  onDismiss: () => void;
+}) {
+  const { t } = useTranslation();
+  const { status, percent, processedCount, ecgCount, downloadUrl, error } =
+    useExportWebSocket(n.jobId ?? null);
 
   // Auto-dismiss on failure after 5 s
   useEffect(() => {
-    if (status === 'failed') {
-      const timer = setTimeout(onDismiss, 5000)
-      return () => clearTimeout(timer)
+    if (status === "failed") {
+      const timer = setTimeout(onDismiss, 5000);
+      return () => clearTimeout(timer);
     }
-  }, [status, onDismiss])
+  }, [status, onDismiss]);
 
   const title =
-    status === 'complete' ? t('export.overlayComplete') :
-    status === 'failed'   ? t('export.overlayFailed') :
-    n.message
+    status === "complete"
+      ? t("export.overlayComplete")
+      : status === "failed"
+        ? t("export.overlayFailed")
+        : n.message;
 
   return (
     <div className="flex flex-col gap-2 px-3.5 py-2.5 rounded-lg border shadow-md text-sm bg-card border-border text-foreground pointer-events-auto animate-in slide-in-from-right-4">
@@ -43,13 +58,15 @@ function ProgressNotificationItem({ n, onDismiss }: { n: Notification; onDismiss
         <button
           onClick={onDismiss}
           className="shrink-0 opacity-50 hover:opacity-100 transition-opacity"
-          aria-label={t('export.dismiss')}
+          aria-label={t("export.dismiss")}
         >
           <X size={14} />
         </button>
       </div>
 
-      {(status === 'connecting' || status === 'queued' || status === 'processing') && (
+      {(status === "connecting" ||
+        status === "queued" ||
+        status === "processing") && (
         <div className="space-y-1">
           <div className="h-1.5 bg-muted rounded-full overflow-hidden">
             <div
@@ -60,12 +77,12 @@ function ProgressNotificationItem({ n, onDismiss }: { n: Notification; onDismiss
           <p className="text-xs text-muted-foreground text-right">
             {ecgCount > 0
               ? `${processedCount} / ${ecgCount} (${percent}%)`
-              : t('export.preparing')}
+              : t("export.preparing")}
           </p>
         </div>
       )}
 
-      {status === 'complete' && downloadUrl && (
+      {status === "complete" && downloadUrl && (
         <a
           href={downloadUrl}
           download
@@ -73,31 +90,35 @@ function ProgressNotificationItem({ n, onDismiss }: { n: Notification; onDismiss
           className="flex items-center gap-2 w-full justify-center bg-primary text-primary-foreground text-xs font-medium px-3 py-1.5 rounded-lg hover:bg-primary/90 transition-colors"
         >
           <Download size={13} />
-          {t('export.done')}
+          {t("export.done")}
         </a>
       )}
 
-      {status === 'failed' && (
+      {status === "failed" && (
         <div className="flex items-start gap-2 text-destructive text-xs">
           <AlertCircle size={13} className="shrink-0 mt-px" />
-          <span>{error ?? t('export.error')}</span>
+          <span>{error ?? t("export.error")}</span>
         </div>
       )}
     </div>
-  )
+  );
 }
 
 export function NotificationContainer() {
-  const { notifications, dismiss } = useNotification()
-  const navigate = useNavigate()
+  const { notifications, dismiss } = useNotification();
+  const navigate = useNavigate();
 
-  if (notifications.length === 0) return null
+  if (notifications.length === 0) return null;
 
   return (
     <div className="fixed top-4 right-4 z-50 flex flex-col gap-2 w-80 pointer-events-none">
       {notifications.map((n) =>
-        n.type === 'progress' ? (
-          <ProgressNotificationItem key={n.id} n={n} onDismiss={() => dismiss(n.id)} />
+        n.type === "progress" ? (
+          <ProgressNotificationItem
+            key={n.id}
+            n={n}
+            onDismiss={() => dismiss(n.id)}
+          />
         ) : (
           <div
             key={n.id}
@@ -108,8 +129,11 @@ export function NotificationContainer() {
               <span>{n.message}</span>
               {n.action && (
                 <button
-                  onClick={() => { navigate(n.action!.href); dismiss(n.id) }}
-                  className="ml-2 underline font-medium hover:opacity-80 transition-opacity"
+                  onClick={() => {
+                    navigate(n.action!.href);
+                    dismiss(n.id);
+                  }}
+                  className="ml-2 underline font-medium hover:opacity-80 transition-opacity cursor-pointer"
                 >
                   {n.action.label}
                 </button>
@@ -117,14 +141,14 @@ export function NotificationContainer() {
             </div>
             <button
               onClick={() => dismiss(n.id)}
-              className="shrink-0 opacity-50 hover:opacity-100 transition-opacity mt-px"
+              className="shrink-0 opacity-50 hover:opacity-100 transition-opacity mt-px cursor-pointer"
               aria-label="Fermer"
             >
               <X size={14} />
             </button>
           </div>
-        )
+        ),
       )}
     </div>
-  )
+  );
 }
