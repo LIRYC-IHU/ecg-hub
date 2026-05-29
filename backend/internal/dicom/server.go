@@ -14,10 +14,8 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
-	"reflect"
 	"strings"
 	"time"
-	"unsafe"
 
 	dicomio "github.com/apaladiychuk/go-dicom/dicomio"
 	legacydicom "github.com/apaladiychuk/go-dicom"
@@ -34,8 +32,8 @@ import (
 type Server struct {
 	cfg      *config.Config
 	queue    ingestion.IngestQueue
-	provider *netdicom.ServiceProvider
-	listener net.Listener // kept to allow explicit port release on Stop
+	listener net.Listener // our own listener — closed in Stop() to break accept loop
+	done     chan struct{} // closed when accept loop exits
 }
 
 // New creates a Server. Call Start() to begin accepting DICOM associations.
@@ -77,45 +75,60 @@ func (s *Server) Start() error {
 	}
 
 	addr := fmt.Sprintf(":%d", s.cfg.DICOM.Port)
-	sp, err := netdicom.NewServiceProvider(params, addr)
-	if err != nil {
-		return fmt.Errorf("dicom: create service provider: %w", err)
+
+	// Open our own listener so we can close it cleanly in Stop().
+	// go-netdicom's Run() has a broken accept loop that never exits on close.
+	var ln net.Listener
+	var err error
+	if tlsCfg != nil {
+		ln, err = tls.Listen("tcp", addr, tlsCfg)
+	} else {
+		ln, err = net.Listen("tcp", addr)
 	}
-	s.provider = sp
+	if err != nil {
+		return fmt.Errorf("dicom: listen %s: %w", addr, err)
+	}
+	s.listener = ln
+	s.done = make(chan struct{})
 
 	go func() {
+		defer close(s.done)
 		slog.Info("dicom: SCP server started",
 			"port", s.cfg.DICOM.Port,
 			"ae_title", s.cfg.DICOM.AETitle,
 			"tls", s.cfg.DICOM.TLS,
 			"echo", s.cfg.DICOM.EchoEnabled,
 		)
-		sp.Run() // blocks; logs internally on accept errors
+		for {
+			conn, err := ln.Accept()
+			if err != nil {
+				if strings.Contains(err.Error(), "use of closed network connection") {
+					slog.Info("dicom: accept loop exiting (listener closed)")
+					return
+				}
+				slog.Warn("dicom: accept error", "error", err)
+				continue
+			}
+			go netdicom.RunProviderForConn(conn, params)
+		}
 	}()
 
 	return nil
 }
 
-// Stop shuts down the DICOM SCP server by closing the private TCP listener
-// of go-netdicom's ServiceProvider via reflect+unsafe, which makes Run()
-// exit its Accept() loop and releases the OS port immediately.
+// Stop shuts down the DICOM SCP server by closing our listener,
+// which causes the accept loop goroutine to exit cleanly.
 func (s *Server) Stop() {
-	if s.provider == nil {
+	if s.listener == nil {
 		return
 	}
 	slog.Info("dicom: server stopping")
-	// go-netdicom does not expose Stop(). We reach into the unexported
-	// `listener net.Listener` field and close it so Run() exits.
-	rv := reflect.ValueOf(s.provider).Elem()
-	lf := rv.FieldByName("listener")
-	if lf.IsValid() {
-		// Use unsafe to bypass Go's unexported-field restriction.
-		ptr := (*net.Listener)(unsafe.Pointer(lf.UnsafeAddr()))
-		if *ptr != nil {
-			_ = (*ptr).Close()
-		}
+	_ = s.listener.Close()
+	// Wait for the accept goroutine to finish.
+	if s.done != nil {
+		<-s.done
 	}
-	s.provider = nil
+	s.listener = nil
 }
 
 // onCStore is the C-STORE callback. It is called once per received DICOM object.
