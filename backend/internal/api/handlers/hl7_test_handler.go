@@ -111,6 +111,85 @@ func HL7TestHandler(client HL7FullQuerier) echo.HandlerFunc {
 	}
 }
 
+// HL7TestHandlerFromRepo is like HL7TestHandler but creates a temporary HL7
+// client on every request using the current DB settings. This allows the test
+// endpoint to work even when HL7 was not configured at startup.
+func HL7TestHandlerFromRepo(repo *repository.HL7SettingsRepository) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		settings, err := repo.Get()
+		if err != nil || settings.Host == "" || settings.Port == 0 {
+			return c.JSON(http.StatusServiceUnavailable, map[string]string{
+				"code":    "HL7_DISABLED",
+				"message": "HL7 host/port not configured in settings",
+			})
+		}
+
+		timeout := 10 * time.Second
+		if settings.Timeout != "" {
+			if d, parseErr := time.ParseDuration(settings.Timeout); parseErr == nil {
+				timeout = d
+			}
+		}
+
+		client := hl7.NewClient(settings.Host, settings.Port, timeout, hl7.MSHConfig{
+			SendingApplication:   settings.SendingApplication,
+			SendingFacility:      settings.SendingFacility,
+			ReceivingApplication: settings.ReceivingApplication,
+			ReceivingFacility:    settings.ReceivingFacility,
+			Version:              settings.Version,
+			ProcessingID:         settings.ProcessingID,
+		})
+
+		var req HL7TestRequest
+		if err := c.Bind(&req); err != nil || req.PatientID == "" {
+			return c.JSON(http.StatusBadRequest, map[string]string{
+				"code":    "INVALID_PARAMS",
+				"message": "patient_id is required",
+			})
+		}
+
+		start := time.Now()
+		ctx, cancel := context.WithTimeout(c.Request().Context(), 15*time.Second)
+		defer cancel()
+
+		result, queryErr := client.QueryPatientFull(ctx, req.PatientID)
+		elapsed := time.Since(start)
+
+		if queryErr != nil && result == nil {
+			return c.JSON(http.StatusOK, HL7TestResponse{
+				Success:   false,
+				PatientID: req.PatientID,
+				Duration:  elapsed.Round(time.Millisecond).String(),
+				Error:     queryErr.Error(),
+			})
+		}
+
+		resp := HL7TestResponse{
+			Success:   queryErr == nil,
+			PatientID: req.PatientID,
+			Duration:  elapsed.Round(time.Millisecond).String(),
+			Raw:       result.Raw,
+			Tree:      result.Tree,
+		}
+		if queryErr != nil {
+			resp.Error = queryErr.Error()
+		}
+		if result.MSA != nil {
+			resp.MSA = &HL7MSAResponse{Code: result.MSA.Code, Message: result.MSA.Message}
+		}
+		if result.Demographics != nil {
+			resp.Demographics = &HL7DemographicsResponse{
+				LastName:    result.Demographics.LastName,
+				FirstName:   result.Demographics.FirstName,
+				DateOfBirth: result.Demographics.DateOfBirth,
+				Gender:      result.Demographics.Gender,
+				Source:      result.Demographics.Source,
+			}
+		}
+		return c.JSON(http.StatusOK, resp)
+	}
+}
+
 // ─── HL7 Mapping Presets CRUD ────────────────────────────────────────────────
 
 // ListHL7PresetsHandler returns all presets with their mappings.
