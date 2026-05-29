@@ -121,9 +121,14 @@ func ForceHL7Handler(db *gorm.DB, enricher HL7Enricher) echo.HandlerFunc {
 	}
 }
 
+// ModuleListProvider returns the currently active modules (live, reflects hot-reload).
+type ModuleListProvider interface {
+	GetModules() []module.Module
+}
+
 // ModulesHandler handles GET /api/v1/modules.
 // Returns the active module list with their health status and accepted extensions.
-// Called by the System admin page to display which vendor modules are loaded.
+// Uses the ingest router's live module list so it reflects hot-reload changes.
 //
 // Requires: RequirePermission(admin.system)
 //
@@ -133,8 +138,9 @@ func ForceHL7Handler(db *gorm.DB, enricher HL7Enricher) echo.HandlerFunc {
 // @Success 200 {array} map[string]interface{}
 // @Security BearerAuth
 // @Router /api/v1/modules [get]
-func ModulesHandler(activeModules []module.Module) echo.HandlerFunc {
+func ModulesHandler(provider ModuleListProvider) echo.HandlerFunc {
 	return func(c echo.Context) error {
+		activeModules := provider.GetModules()
 		type moduleStatus struct {
 			Name       string                `json:"name"`
 			Extensions []string              `json:"extensions"`
