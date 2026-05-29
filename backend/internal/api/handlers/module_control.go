@@ -40,15 +40,15 @@ func ListModuleStatusHandler(reg *module.Registry) echo.HandlerFunc {
 	}
 }
 
-// StopModuleHandler stops the named module via the Registry.
+// StopModuleHandler stops the named module via the Registry and persists
+// enabled=false in the DB so the module stays stopped across restarts.
 //
 // POST /api/v1/admin/modules/:name/stop
 // Returns 404 when the module is not registered, 500 on stop error, 200 on success.
-func StopModuleHandler(reg *module.Registry) echo.HandlerFunc {
+func StopModuleHandler(reg *module.Registry, moduleConfigRepo *repository.ModuleConfigRepository) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		name := c.Param("name")
 		if err := reg.Stop(name); err != nil {
-			// Distinguish "not found" from "stop failed".
 			if _, ok := reg.Get(name); !ok {
 				return c.JSON(http.StatusNotFound, map[string]string{
 					"error": "module not found: " + name,
@@ -57,6 +57,10 @@ func StopModuleHandler(reg *module.Registry) echo.HandlerFunc {
 			return c.JSON(http.StatusInternalServerError, map[string]string{
 				"error": err.Error(),
 			})
+		}
+		// Persist disabled state in DB so it survives restarts.
+		if err := moduleConfigRepo.SetEnabled(name, false); err != nil {
+			slog.Warn("module_control: failed to persist disabled state", "module", name, "error", err)
 		}
 		return c.JSON(http.StatusOK, map[string]string{"status": "stopped"})
 	}
@@ -86,6 +90,7 @@ func StartModuleHandler(
 					"error": err.Error(),
 				})
 			}
+			_ = moduleConfigRepo.SetEnabled("ftp", true)
 		case "dicom":
 			if err := StartDICOMFromDB(moduleConfigRepo, encKey, cfg, ftpQueue, registry); err != nil {
 				slog.Error("module_control: failed to start DICOM module", "error", err)
@@ -93,6 +98,7 @@ func StartModuleHandler(
 					"error": err.Error(),
 				})
 			}
+			_ = moduleConfigRepo.SetEnabled("dicom", true)
 		default:
 			return c.JSON(http.StatusNotImplemented, map[string]string{
 				"error": "start from UI is only supported for the ftp and dicom modules",
