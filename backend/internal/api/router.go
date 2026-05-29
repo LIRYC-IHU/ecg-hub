@@ -49,6 +49,7 @@ type RouterConfig struct {
 	moduleSettingsRepo  *repository.ModuleSettingsRepository
 	ftpQueue            ingestion.IngestQueue
 	ingestRouter        *ingestion.Router // for hot module reload
+	allModulesProvider  handlers.AllModulesProvider
 }
 
 func NewRouterConfig(e *echo.Echo, gormDB *gorm.DB, authProvider auth.Provider, bridge export.Converter,
@@ -59,7 +60,7 @@ func NewRouterConfig(e *echo.Echo, gormDB *gorm.DB, authProvider auth.Provider, 
 	hl7Scheduler handlers.HL7SchedulerStatus, hl7SettingsRepo *repository.HL7SettingsRepository,
 	cfg *config.Config, authEncKey string,
 	moduleConfigRepo *repository.ModuleConfigRepository, moduleSettingsRepo *repository.ModuleSettingsRepository,
-	ftpQueue ingestion.IngestQueue, ingestRouter *ingestion.Router) *RouterConfig {
+	ftpQueue ingestion.IngestQueue, ingestRouter *ingestion.Router, allModulesProvider handlers.AllModulesProvider) *RouterConfig {
 	return &RouterConfig{
 		e:                   e,
 		gormDB:              gormDB,
@@ -86,6 +87,7 @@ func NewRouterConfig(e *echo.Echo, gormDB *gorm.DB, authProvider auth.Provider, 
 		moduleSettingsRepo:  moduleSettingsRepo,
 		ftpQueue:            ftpQueue,
 		ingestRouter:        ingestRouter,
+		allModulesProvider:  allModulesProvider,
 	}
 }
 
@@ -243,8 +245,8 @@ func (r *RouterConfig) RegisterRoutes() {
 	apiV1.PUT("/admin/modules/dicom/config", handlers.SaveDICOMConfigHandler(r.moduleConfigRepo, r.authEncKey, module.GlobalRegistry), mw.RequirePermission(r.checker, auth.PermAdminSystem))
 
 	// Vendor module activation settings (DB-backed, replaces config.yaml modules.active) — requires admin.system
-	apiV1.GET("/admin/settings/modules", handlers.GetModuleSettingsHandler(r.moduleSettingsRepo, r.activeModules), mw.RequirePermission(r.checker, auth.PermAdminSystem))
-	apiV1.PUT("/admin/settings/modules", handlers.SaveModuleSettingsHandler(r.moduleSettingsRepo, r.ingestRouter), mw.RequirePermission(r.checker, auth.PermAdminSystem))
+	apiV1.GET("/admin/settings/modules", handlers.GetModuleSettingsHandler(r.moduleSettingsRepo, r.allModulesProvider), mw.RequirePermission(r.checker, auth.PermAdminSystem))
+	apiV1.PUT("/admin/settings/modules", handlers.SaveModuleSettingsHandler(r.moduleSettingsRepo, r.ingestRouter, r.allModulesProvider), mw.RequirePermission(r.checker, auth.PermAdminSystem))
 
 	// User creation defaults (default role for new logins) — requires admin.roles
 	apiV1.GET("/admin/settings/user-defaults", handlers.GetUserDefaultsHandler(r.moduleSettingsRepo), mw.RequirePermission(r.checker, auth.PermAdminRoles))
