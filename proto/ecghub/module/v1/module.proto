@@ -1,0 +1,188 @@
+syntax = "proto3";
+
+package ecghub.module.v1;
+
+option go_package = "github.com/LIRYC-IHU/ecg-hub/proto/modulepb";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+
+// ModuleService is the contract every vendor module must implement as a gRPC server.
+// The ECG Hub backend is the client that calls these methods.
+service ModuleService {
+  // GetCapabilities returns static module metadata (name, extensions, formats).
+  // Called once at startup and cached by the hub.
+  rpc GetCapabilities(GetCapabilitiesRequest) returns (GetCapabilitiesResponse);
+
+  // Validate performs a quick format check without full parsing.
+  // Used by the hub's routing logic to probe module candidacy.
+  rpc Validate(ValidateRequest) returns (ValidateResponse);
+
+  // Parse extracts normalized ECG metadata from raw file bytes.
+  // This is the main ingestion path.
+  rpc Parse(ParseRequest) returns (ParseResponse);
+
+  // UpdateFile applies a metadata patch to a file stored on shared volume.
+  // The module reads the file, modifies it, writes it back.
+  rpc UpdateFile(UpdateFileRequest) returns (UpdateFileResponse);
+
+  // RenamePatientID rewrites the patient identifier inside file bytes.
+  // Operates on in-memory bytes (not filesystem).
+  rpc RenamePatientID(RenamePatientIDRequest) returns (RenamePatientIDResponse);
+
+  // Health returns the module's operational status.
+  // Used by Docker HEALTHCHECK and the hub's module status endpoint.
+  rpc Health(HealthRequest) returns (HealthResponse);
+}
+
+// =============================================================================
+// Capabilities
+// =============================================================================
+
+message GetCapabilitiesRequest {}
+
+message GetCapabilitiesResponse {
+  // Unique module identifier (e.g. "philips", "dicom", "nihon-kohden").
+  string name = 1;
+
+  // Lowercase file extensions this module handles (e.g. [".xml", ".dcm"]).
+  repeated string accepted_extensions = 2;
+
+  // Export formats the module supports.
+  repeated ExportFormat supported_formats = 3;
+
+  // Semantic version of the module (e.g. "1.2.0").
+  string version = 4;
+
+  // Human-readable description for UI display.
+  string description = 5;
+}
+
+message ExportFormat {
+  // Unique format ID (e.g. "original", "xmlfda", "dicom", "pdf").
+  string id = 1;
+
+  // Human-readable label for the UI.
+  string label = 2;
+
+  // Output file extension (e.g. ".xml", ".dcm").
+  string extension = 3;
+}
+
+// =============================================================================
+// Validate
+// =============================================================================
+
+message ValidateRequest {
+  // Raw file content to validate.
+  bytes data = 1;
+
+  // Original filename (for extension-based hints).
+  string filename = 2;
+}
+
+message ValidateResponse {
+  // True if the file is recognized by this module.
+  bool valid = 1;
+
+  // Human-readable reason if invalid.
+  string error_message = 2;
+}
+
+// =============================================================================
+// Parse
+// =============================================================================
+
+message ParseRequest {
+  // Raw file content to parse.
+  bytes data = 1;
+
+  // Original filename (informational).
+  string filename = 2;
+}
+
+message ParseResponse {
+  ECGMetadata metadata = 1;
+}
+
+message ECGMetadata {
+  string patient_id = 1;
+  google.protobuf.Timestamp recorded_at = 2;
+  string vendor_name = 3;
+  string source_format = 4;
+  string device_model = 5;
+  int32 lead_count = 6;
+  double duration_seconds = 7;
+  double sample_rate = 8;
+
+  // Vendor-specific fields not covered by the fixed schema.
+  // Serialized as JSON in the hub's PostgreSQL JSONB column.
+  google.protobuf.Struct extra = 9;
+}
+
+// =============================================================================
+// UpdateFile
+// =============================================================================
+
+message UpdateFileRequest {
+  // Absolute path to the file on the shared volume.
+  // Both hub and module containers mount the same ECG storage volume.
+  string file_path = 1;
+
+  // Patch — only populated fields are applied.
+  MetadataPatch patch = 2;
+}
+
+message MetadataPatch {
+  optional string patient_id = 1;
+  optional google.protobuf.Timestamp recorded_at = 2;
+  optional string last_name = 3;
+  optional string first_name = 4;
+  optional string sex = 5;
+  optional string device_model = 6;
+  optional string document_type = 7;
+  optional string document_version = 8;
+}
+
+message UpdateFileResponse {
+  bool success = 1;
+  string error_message = 2;
+}
+
+// =============================================================================
+// RenamePatientID
+// =============================================================================
+
+message RenamePatientIDRequest {
+  // File content (not a path — operates in-memory).
+  bytes data = 1;
+
+  // New patient identifier to write.
+  string new_patient_id = 2;
+}
+
+message RenamePatientIDResponse {
+  // Modified file content with the new patient ID embedded.
+  bytes data = 1;
+}
+
+// =============================================================================
+// Health
+// =============================================================================
+
+message HealthRequest {}
+
+message HealthResponse {
+  enum Status {
+    STATUS_UNSPECIFIED = 0;
+    STATUS_SERVING = 1;
+    STATUS_NOT_SERVING = 2;
+  }
+  Status status = 1;
+
+  // Optional diagnostic message when NOT_SERVING.
+  string message = 2;
+
+  // Uptime in seconds since module started.
+  int64 uptime_seconds = 3;
+}
