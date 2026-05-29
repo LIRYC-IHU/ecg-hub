@@ -33,6 +33,15 @@ func (r *Router) SetModules(modules []module.Module) {
 	slog.Info("ingestion: module list updated", "count", len(modules))
 }
 
+// GetModules returns the currently active module list (thread-safe snapshot).
+func (r *Router) GetModules() []module.Module {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]module.Module, len(r.modules))
+	copy(out, r.modules)
+	return out
+}
+
 // Route finds the module for item by probing Validate() on extension candidates,
 // calls module.SafeParse, and returns a RoutedItem on success.
 // Returns (RoutedItem{}, reason, false) when no module matches or parsing fails —
