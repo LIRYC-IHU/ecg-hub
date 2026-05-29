@@ -231,7 +231,7 @@ func (r *RouterConfig) RegisterRoutes() {
 
 	// Module hot-control (EPIC-007 Phase 1) — requires admin.system
 	apiV1.GET("/admin/modules/status", handlers.ListModuleStatusHandler(module.GlobalRegistry), mw.RequirePermission(r.checker, auth.PermAdminSystem))
-	apiV1.POST("/admin/modules/:name/stop", handlers.StopModuleHandler(module.GlobalRegistry), mw.RequirePermission(r.checker, auth.PermAdminSystem))
+	apiV1.POST("/admin/modules/:name/stop", handlers.StopModuleHandler(module.GlobalRegistry, r.moduleConfigRepo), mw.RequirePermission(r.checker, auth.PermAdminSystem))
 	apiV1.POST("/admin/modules/:name/start", handlers.StartModuleHandler(module.GlobalRegistry, r.moduleConfigRepo, r.authEncKey, r.cfg, r.ftpQueue), mw.RequirePermission(r.checker, auth.PermAdminSystem))
 
 	// FTP module configuration — requires admin.system
@@ -306,18 +306,20 @@ func (r *RouterConfig) RegisterRoutes() {
 	apiV1.PUT("/admin/hl7/presets/:id/mappings", handlers.SaveHL7PresetMappingsHandler(hl7MappingRepo), mw.RequirePermission(r.checker, auth.PermHL7Config))
 	apiV1.DELETE("/admin/hl7/presets/:id", handlers.DeleteHL7PresetHandler(hl7MappingRepo), mw.RequirePermission(r.checker, auth.PermHL7Config))
 	apiV1.GET("/admin/hl7/active-mappings", handlers.GetActiveHL7MappingsHandler(hl7MappingRepo), mw.RequirePermission(r.checker, auth.PermPatientRead))
-	if r.hl7Client != nil {
-		apiV1.POST("/admin/hl7/test", handlers.HL7TestHandler(r.hl7Client), mw.RequirePermission(r.checker, auth.PermHL7Config))
-	}
+	// HL7 test query — always available; creates a temporary client from DB settings.
+	apiV1.POST("/admin/hl7/test", handlers.HL7TestHandlerFromRepo(r.hl7SettingsRepo), mw.RequirePermission(r.checker, auth.PermHL7Config))
 
 	// HL7 scheduler settings — requires hl7.config
 	if r.hl7SettingsRepo != nil {
 		apiV1.GET("/admin/hl7/settings", handlers.GetHL7SettingsHandler(r.hl7SettingsRepo, r.hl7Scheduler), mw.RequirePermission(r.checker, auth.PermHL7Config))
 		apiV1.PUT("/admin/hl7/settings", handlers.UpdateHL7SettingsHandler(r.hl7SettingsRepo, r.hl7Scheduler), mw.RequirePermission(r.checker, auth.PermHL7Config))
 	}
+	// HL7 ping — always available (used to test connection before enabling scheduler)
+	if r.hl7SettingsRepo != nil {
+		apiV1.POST("/admin/hl7/ping", handlers.PingHL7HandlerFromRepo(r.hl7SettingsRepo), mw.RequirePermission(r.checker, auth.PermHL7Config))
+	}
 	if r.hl7Scheduler != nil {
 		apiV1.POST("/admin/hl7/run", handlers.ForceHL7RunHandler(r.hl7Scheduler), mw.RequirePermission(r.checker, auth.PermHL7Config))
-		apiV1.POST("/admin/hl7/ping", handlers.PingHL7HandlerFromRepo(r.hl7SettingsRepo), mw.RequirePermission(r.checker, auth.PermHL7Config))
 		apiV1.POST("/admin/hl7/bulk-retry", handlers.BulkRetryHL7Handler(r.gormDB), mw.RequirePermission(r.checker, auth.PermHL7BulkRetry))
 	}
 
