@@ -40,9 +40,7 @@ import (
 	"github.com/LIRYC-IHU/ecg-hub/internal/ingestion"
 	appmetrics "github.com/LIRYC-IHU/ecg-hub/internal/metrics"
 	"github.com/LIRYC-IHU/ecg-hub/internal/module"
-	_ "github.com/LIRYC-IHU/ecg-hub/internal/module/dicom"
-	_ "github.com/LIRYC-IHU/ecg-hub/internal/module/nihon-kohden"
-	_ "github.com/LIRYC-IHU/ecg-hub/internal/module/philips"
+	// All vendor modules extracted to modules/ (gRPC microservices, EPIC-010).
 	"github.com/LIRYC-IHU/ecg-hub/internal/storage"
 	"github.com/LIRYC-IHU/ecg-hub/internal/webhook"
 	"github.com/labstack/echo/v4"
@@ -194,6 +192,25 @@ func main() {
 		}
 	}
 
+	// Step 5b-remote: Connect to gRPC remote modules (EPIC-010).
+	var grpcModuleManager *module.GRPCClientManager
+	var grpcRouter *module.GRPCRouter
+	if len(cfg.Modules.Remote) > 0 {
+		remoteConfigs := make([]module.RemoteModuleConfig, len(cfg.Modules.Remote))
+		for i, r := range cfg.Modules.Remote {
+			remoteConfigs[i] = module.RemoteModuleConfig{Name: r.Name, Address: r.Address}
+		}
+		grpcModuleManager = module.NewGRPCClientManager(remoteConfigs)
+		grpcRouter = module.NewGRPCRouter(grpcModuleManager)
+
+		// Merge initially connected remote modules into the active list.
+		for _, rm := range grpcRouter.GetModules() {
+			activeModules = append(activeModules, rm)
+			slog.Info("module: remote loaded", "name", rm.Name(), "extensions", rm.AcceptedExtensions())
+		}
+		defer grpcModuleManager.Close()
+	}
+
 	// Step 5c: Wire module-level metrics when enabled.
 	if cfg.Metrics.Enabled {
 		for _, m := range activeModules {
@@ -240,14 +257,9 @@ func main() {
 	exportPool.Start()
 	defer exportPool.Stop()
 
-	// Detect ECTP status from any active module that exposes an ECTP server.
+	// ECTP is now handled by the module-nk container (EPIC-010).
+	// The hub no longer detects ECTP from compiled-in modules.
 	ectpStatus := apihandlers.ECTPStatus{}
-	for _, m := range activeModules {
-		if ep, ok := m.(module.ECTPProvider); ok {
-			ectpStatus = apihandlers.ECTPStatus{Enabled: true, Port: ep.ECTPListenPort()}
-			break
-		}
-	}
 
 	// Story 3.4: Build outbound connector instances from cfg.PACS.
 	// connSettings is used later to wire the Dispatcher + RetryJob after ecgRepo is available.
@@ -403,6 +415,24 @@ func main() {
 	// ftpQueue and ingestRouter are created before RegisterRoutes so handlers can reference them.
 	ftpQueue := ingestion.NewIngestQueue(100)
 	ingestRouter := ingestion.NewRouter(activeModules) // created early for hot-reload via API
+
+	// Wire gRPC module recovery: when a module reconnects, add it to the ingest router.
+	if grpcModuleManager != nil {
+		grpcModuleManager.SetRecoveryCallback(func(moduleName string) {
+			if grpcRouter != nil {
+				grpcRouter.RefreshCapabilities()
+			}
+			// Rebuild the full module list (local + all healthy remotes).
+			updated := module.Active([]string{}) // all compiled-in (may be empty now)
+			for _, rm := range grpcModuleManager.GetAllHealthy() {
+				updated = append(updated, rm)
+			}
+			ingestRouter.SetModules(updated)
+			slog.Info("grpc_client: module recovered — ingest router updated", "module", moduleName, "total", len(updated))
+		})
+		grpcModuleManager.StartHealthLoop(context.Background())
+	}
+
 	moduleConfigRepo := repository.NewModuleConfigRepository(gormDB)
 	moduleSettingsRepo := repository.NewModuleSettingsRepository(gormDB)
 
@@ -415,9 +445,18 @@ func main() {
 		ectpStatus,
 		exportRepo, exportPool, connCheckers, hl7Client, hl7Enricher,
 		hl7SchedulerStatus, hl7SettingsRepo, cfg, authEncKey,
-		moduleConfigRepo, moduleSettingsRepo, ftpQueue, ingestRouter)
+		moduleConfigRepo, moduleSettingsRepo, ftpQueue, ingestRouter,
+		module.NewCombinedModuleProvider(grpcModuleManager))
 
 	router.RegisterRoutes()
+
+	// Internal API — module self-registration (EPIC-010 Story 10.12).
+	// Not behind auth — only reachable from Docker internal network.
+	moduleEndpointRepo := repository.NewModuleEndpointRepository(gormDB)
+	internalAPI := e.Group("/internal")
+	internalAPI.POST("/modules/register", apihandlers.RegisterModuleHandler(moduleEndpointRepo, grpcModuleManager))
+	internalAPI.DELETE("/modules/:name", apihandlers.DeregisterModuleHandler(moduleEndpointRepo, grpcModuleManager))
+	internalAPI.GET("/modules", apihandlers.ListModuleEndpointsHandler(moduleEndpointRepo))
 
 	// Auto-start FTP from DB configuration if enabled (survives container restart).
 	ftpEnabledFromCfg := cfg.FTP.Enabled
@@ -445,23 +484,8 @@ func main() {
 		module.GlobalRegistry.Register("ftp", &ftpModuleWrapper{server: ftpServer, status: module.StatusStopped})
 	}
 
-	// Wire FTP file-received hook for modules that implement FTPFileTracker
-	// (e.g. nihon-kohden uses it for ECTP FILE|ENDS verification).
-	// Uses the FTP server registered in GlobalRegistry (started from DB or config.yaml).
-	if ftpMod, ok := module.GlobalRegistry.Get("ftp"); ok {
-		if hookable, ok2 := ftpMod.(interface{ SetFileReceivedHook(func(string)) }); ok2 {
-			for _, m := range activeModules {
-				if tracker, ok := m.(module.FTPFileTracker); ok {
-					name := m.Name()
-					hookable.SetFileReceivedHook(func(filename string) {
-						if err := tracker.RegisterFTPFile(filename); err != nil {
-							slog.Warn("ftp: failed to register transfer", "module", name, "filename", filename, "error", err)
-						}
-					})
-				}
-			}
-		}
-	}
+	// FTP file-received hook (ECTP verification) is now handled inside
+	// the module-nk container itself (EPIC-010 Story 10.10).
 
 	// Auto-start DICOM from DB configuration if enabled (survives container restart).
 	dicomEnabledFromCfg := cfg.DICOM.Enabled
