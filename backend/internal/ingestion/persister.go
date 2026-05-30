@@ -28,6 +28,8 @@ func marshalJSON(v any) (datatypes.JSON, error) {
 type fileWriter interface {
 	Write(filename string, data []byte) (string, error)
 	Exists(filename string) bool
+	WriteForPatient(patientID, filename string, data []byte) (string, error)
+	ExistsForPatient(patientID, filename string) bool
 }
 
 // ecgEnricher is the optional HL7 enrichment interface (implemented by *hl7.Enricher).
@@ -222,9 +224,14 @@ func (p *Persister) persist(ri RoutedItem) error {
 		patientID = stem
 	}
 	base := BuildBaseName(patientID, ri.Meta.RecordedAt, ri.Meta.VendorName)
-	filename := UniqueFilename(base, ext, p.volume.Exists)
+	existsFn := func(filename string) bool {
+		return p.volume.ExistsForPatient(patientID, filename)
+	}
+	filename := UniqueFilename(base, ext, existsFn)
 
-	fullPath, err := p.volume.Write(filename, ri.IngestItem.Data)
+	// Store under <patientID>/<filename> for organised on-disk layout.
+	// relPath is stored in DB (relative to volume root); it is portable across volume remounts.
+	fullPath, err := p.volume.WriteForPatient(patientID, filename, ri.IngestItem.Data)
 	if err != nil {
 		return fmt.Errorf("persister: write file: %w", err)
 	}

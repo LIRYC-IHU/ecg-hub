@@ -33,6 +33,22 @@ func (m *mockVolume) Exists(filename string) bool {
 	return m.existing[filename]
 }
 
+func (m *mockVolume) WriteForPatient(patientID, filename string, data []byte) (string, error) {
+	if m.writeErr != nil {
+		return "", m.writeErr
+	}
+	if m.written == nil {
+		m.written = make(map[string][]byte)
+	}
+	key := patientID + "/" + filename
+	m.written[key] = data
+	return key, nil
+}
+
+func (m *mockVolume) ExistsForPatient(patientID, filename string) bool {
+	return m.existing[patientID+"/"+filename]
+}
+
 type mockECGRepo struct {
 	inserted []*models.ECG
 	err      error
@@ -120,13 +136,14 @@ func TestPersister_Persist_Success(t *testing.T) {
 		t.Fatalf("persist returned error: %v", err)
 	}
 
-	// Volume should have received the renamed file
+	// Volume should have received the renamed file under patientID subdirectory.
 	if len(vol.written) != 1 {
 		t.Fatalf("expected 1 write, got %d", len(vol.written))
 	}
 	wantFilename := "P001_20240312T143000_philips.xml"
-	if _, ok := vol.written[wantFilename]; !ok {
-		t.Errorf("expected file %q to be written, got keys: %v", wantFilename, vol.written)
+	wantKey := "P001/" + wantFilename
+	if _, ok := vol.written[wantKey]; !ok {
+		t.Errorf("expected file %q to be written, got keys: %v", wantKey, vol.written)
 	}
 
 	// Patient upsert called
@@ -145,8 +162,8 @@ func TestPersister_Persist_Success(t *testing.T) {
 	if ecg.Vendor != "philips" {
 		t.Errorf("ECG.Vendor = %q, want %q", ecg.Vendor, "philips")
 	}
-	if ecg.FilePath != "/mock/"+wantFilename {
-		t.Errorf("ECG.FilePath = %q, want %q", ecg.FilePath, "/mock/"+wantFilename)
+	if ecg.FilePath != wantKey {
+		t.Errorf("ECG.FilePath = %q, want %q", ecg.FilePath, wantKey)
 	}
 	if ecg.OriginalFilename != "ecg.xml" {
 		t.Errorf("ECG.OriginalFilename = %q, want %q", ecg.OriginalFilename, "ecg.xml")
