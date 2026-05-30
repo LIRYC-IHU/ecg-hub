@@ -203,10 +203,17 @@ func main() {
 		grpcModuleManager = module.NewGRPCClientManager(remoteConfigs)
 		grpcRouter = module.NewGRPCRouter(grpcModuleManager)
 
-		// Merge initially connected remote modules into the active list.
+		// Merge initially connected remote modules into the active list,
+		// filtered by the DB active_modules setting (empty = all).
+		activeSet := make(map[string]bool, len(effectiveModuleNames))
+		for _, n := range effectiveModuleNames {
+			activeSet[n] = true
+		}
 		for _, rm := range grpcRouter.GetModules() {
-			activeModules = append(activeModules, rm)
-			slog.Info("module: remote loaded", "name", rm.Name(), "extensions", rm.AcceptedExtensions())
+			if len(effectiveModuleNames) == 0 || activeSet[rm.Name()] {
+				activeModules = append(activeModules, rm)
+				slog.Info("module: remote loaded", "name", rm.Name(), "extensions", rm.AcceptedExtensions())
+			}
 		}
 		defer grpcModuleManager.Close()
 	}
@@ -257,9 +264,15 @@ func main() {
 	exportPool.Start()
 	defer exportPool.Stop()
 
-	// ECTP is now handled by the module-nk container (EPIC-010).
-	// The hub no longer detects ECTP from compiled-in modules.
+	// ECTP is handled by the module-nk container (EPIC-010).
+	// Report as enabled only if nihon-kohden is both connected AND in the active list.
 	ectpStatus := apihandlers.ECTPStatus{}
+	for _, m := range activeModules {
+		if m.Name() == "nihon-kohden" {
+			ectpStatus = apihandlers.ECTPStatus{Enabled: true, Port: 30003}
+			break
+		}
+	}
 
 	// Story 3.4: Build outbound connector instances from cfg.PACS.
 	// connSettings is used later to wire the Dispatcher + RetryJob after ecgRepo is available.
