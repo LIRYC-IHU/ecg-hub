@@ -41,6 +41,7 @@ import (
 	appmetrics "github.com/LIRYC-IHU/ecg-hub/internal/metrics"
 	"github.com/LIRYC-IHU/ecg-hub/internal/module"
 	_ "github.com/LIRYC-IHU/ecg-hub/internal/module/dicom"
+	_ "github.com/LIRYC-IHU/ecg-hub/internal/module/mindray"
 	_ "github.com/LIRYC-IHU/ecg-hub/internal/module/nihon-kohden"
 	_ "github.com/LIRYC-IHU/ecg-hub/internal/module/philips"
 	"github.com/LIRYC-IHU/ecg-hub/internal/storage"
@@ -131,6 +132,8 @@ func main() {
 		"philips:dicom":       bridgeBin("BRIDGE_PHILIPS_TO_DICOM", "philips-to-dicom"),
 		"dicom:xmlfda":        bridgeBin("BRIDGE_DICOM_TO_FDA", "dicom-to-fda"),
 		"nihon-kohden:xmlfda": bridgeBin("BRIDGE_NK_TO_FDA", "nk-to-fda"),
+		"mindray:xmlfda":      bridgeBin("BRIDGE_MINDRAY_TO_FDA", "mindray-to-fda"),
+		"mindray:dicom":       bridgeBin("BRIDGE_MINDRAY_TO_DICOM", "mindray-to-dicom"),
 	}
 
 	bridge := export.NewECGBridge(binaries, 5*time.Second)
