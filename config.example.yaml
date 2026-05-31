@@ -2,8 +2,11 @@
 # Copy to config.yaml. Never put secrets here — use .env exclusively.
 
 server:
-  port: 8080
-  # tls: false  # true required in production (FTPS, HTTPS, DICOM TLS)
+  port: 4444
+  # tls: false  # true = terminate TLS directly on the Go server (bare-metal).
+  #             # Behind nginx (default deployment), keep false — TLS terminates at the proxy.
+  # cert_file: /certs/server.crt  # required when tls: true
+  # key_file: /certs/server.key   # required when tls: true
 
 database:
   # host, port, user, password, name are read from environment variables.

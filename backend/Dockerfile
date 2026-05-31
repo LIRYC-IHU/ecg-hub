@@ -20,10 +20,20 @@ FROM alpine:3.20
 
 RUN apk add --no-cache ca-certificates tzdata
 
+# Non-root runtime user (NFR-S1). Fixed UID/GID so mounted-volume ownership is predictable.
+RUN addgroup -g 10001 app && adduser -D -u 10001 -G app app
+
 WORKDIR /app
 
 COPY --from=builder /bin/ecg-hub /app/ecg-hub
 COPY --from=builder /app/converter-fda/bin/* /usr/local/bin/
+
+# Pre-create the storage dirs owned by the app user so named volumes inherit
+# writable ownership on first creation. FTP/DICOM listen on non-privileged
+# ports (>1024), so no root capabilities are required at runtime.
+RUN mkdir -p /data/ecg /data/ecg-quarantine && chown -R app:app /data /app
+
+USER app
 
 EXPOSE 4444
 

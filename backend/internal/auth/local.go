@@ -14,6 +14,12 @@ import (
 // BcryptCost is the bcrypt hashing cost used for local user passwords.
 const BcryptCost = 12
 
+// dummyPasswordHash is a precomputed bcrypt hash (cost = BcryptCost) used to equalize
+// login timing when a username does not exist. Comparing the supplied password against
+// this hash makes the "user not found" path take the same time as a real password check,
+// preventing username enumeration via response-time analysis. Generated once at startup.
+var dummyPasswordHash, _ = bcrypt.GenerateFromPassword([]byte("timing-equalizer-not-a-real-password"), BcryptCost)
+
 // LocalProvider authenticates users stored in the local database and issues
 // ECG Hub-signed JWTs. This provider is additive — it does not replace OIDC or LDAP.
 type LocalProvider struct {
@@ -37,6 +43,10 @@ func NewLocalProvider(repo *repository.LocalUserRepository, jwtSecret string) (*
 func (p *LocalProvider) Login(_ context.Context, username, password string) (string, error) {
 	user, err := p.repo.FindByUsername(username)
 	if err != nil {
+		// User not found: still run a bcrypt comparison against a dummy hash so the
+		// response time matches the "user exists" path. This prevents username
+		// enumeration via timing. The result is discarded — we always fail here.
+		_ = bcrypt.CompareHashAndPassword(dummyPasswordHash, []byte(password))
 		return "", fmt.Errorf("auth: local: invalid credentials")
 	}
 

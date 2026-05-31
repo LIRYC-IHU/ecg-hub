@@ -48,6 +48,7 @@ import (
 	"github.com/LIRYC-IHU/ecg-hub/internal/webhook"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"golang.org/x/time/rate"
 )
 
 func main() {
@@ -110,6 +111,29 @@ func main() {
 
 	// Middleware: recover from panics, structured logging.
 	e.Use(middleware.Recover())
+
+	// Security headers (NFR-S1). CSP is intentionally left to nginx for HTML
+	// responses (the SPA) — the API serves JSON and Swagger needs inline assets,
+	// so a strict CSP here would break Swagger UI without protecting much.
+	e.Use(middleware.SecureWithConfig(middleware.SecureConfig{
+		XFrameOptions:      "DENY",
+		ContentTypeNosniff: "nosniff",
+		ReferrerPolicy:     "strict-origin-when-cross-origin",
+	}))
+
+	// Bound request body size to prevent memory-exhaustion DoS (covers JSON
+	// payloads and the branding/logo upload). Adjust if larger uploads are added.
+	e.Use(middleware.BodyLimit("10M"))
+
+	// Global per-IP rate limit as a coarse DoS guard. Generous so it never trips
+	// on normal SPA usage; stricter per-route limits apply to /auth (see router).
+	e.Use(middleware.RateLimiterWithConfig(middleware.RateLimiterConfig{
+		Store: middleware.NewRateLimiterMemoryStoreWithConfig(middleware.RateLimiterMemoryStoreConfig{
+			Rate:      rate.Limit(50), // ~50 req/s per IP sustained
+			Burst:     100,
+			ExpiresIn: 3 * time.Minute,
+		}),
+	}))
 	e.Use(middleware.RequestLoggerWithConfig(middleware.RequestLoggerConfig{
 		LogStatus: true,
 		LogURI:    true,
@@ -395,12 +419,11 @@ func main() {
 	// Wrap scheduler as the handler interface — always non-nil since we create it unconditionally.
 	var hl7SchedulerStatus apihandlers.HL7SchedulerStatus = hl7Scheduler
 
-	// Auth encryption key for storing provider configs encrypted in DB.
-	authEncKey := os.Getenv("AUTH_ENCRYPTION_KEY")
-	if authEncKey == "" {
-		authEncKey = "ecg-hub-dev-key-do-not-use-in-prod"
-		slog.Warn("AUTH_ENCRYPTION_KEY not set, using insecure default — do NOT use in production")
-	}
+	// Auth encryption key for storing provider configs encrypted in DB
+	// (OIDC/LDAP secrets, FTP/HL7/connector credentials). This key is the only
+	// thing protecting those secrets at rest, so in production it MUST be a
+	// strong, operator-supplied value — never the public dev default.
+	authEncKey := resolveAuthEncKey(cfg)
 
 	// Step 5: Start FTP ingestion server (Story 2.2).
 	// ftpQueue and ingestRouter are created before RegisterRoutes so handlers can reference them.
@@ -594,10 +617,31 @@ func main() {
 		defer srv.Close()
 	}
 
-	port := ":4444"
-	slog.Info("starting ECG Hub", "port", port)
+	// Resolve the listen port: config-driven with a 4444 fallback so existing
+	// nginx/docker infrastructure (which targets backend:4444) keeps working.
+	serverPort := cfg.Server.Port
+	if serverPort == 0 {
+		serverPort = 4444
+	}
+	addr := fmt.Sprintf(":%d", serverPort)
 
-	if err := e.Start(port); err != nil && err != http.ErrServerClosed {
+	// TLS is enabled for bare-metal production deployments (no reverse proxy).
+	// Behind nginx, TLS terminates at the proxy and server.tls stays false.
+	if cfg.Server.TLS {
+		if cfg.Server.CertFile == "" || cfg.Server.KeyFile == "" {
+			slog.Error("FATAL: server.tls is enabled but server.cert_file / server.key_file are not set")
+			os.Exit(1)
+		}
+		slog.Info("starting ECG Hub (TLS)", "addr", addr)
+		if err := e.StartTLS(addr, cfg.Server.CertFile, cfg.Server.KeyFile); err != nil && err != http.ErrServerClosed {
+			slog.Error("server failed", "error", err)
+			os.Exit(1)
+		}
+		return
+	}
+
+	slog.Info("starting ECG Hub", "addr", addr)
+	if err := e.Start(addr); err != nil && err != http.ErrServerClosed {
 		slog.Error("server failed", "error", err)
 		os.Exit(1)
 	}
@@ -748,6 +792,52 @@ func seedConnectorsIfMissing(repo *repository.ModuleConfigRepository, cfg *confi
 
 		slog.Info("seed_connectors: seeded connector from config.yaml", "name", connCfg.Name, "protocol", connCfg.Protocol)
 	}
+}
+
+// insecureDefaultAuthEncKey is the well-known dev fallback for AUTH_ENCRYPTION_KEY.
+// It is public, so it provides NO protection — the server refuses to start with it
+// (or an empty key) in production mode.
+const insecureDefaultAuthEncKey = "ecg-hub-dev-key-do-not-use-in-prod"
+
+// minAuthEncKeyLen is the minimum acceptable length for AUTH_ENCRYPTION_KEY in production.
+const minAuthEncKeyLen = 32
+
+// isProduction reports whether the server is running in production mode.
+// Production is inferred from APP_ENV=production or from server.tls being enabled.
+func isProduction(cfg *config.Config) bool {
+	if v := os.Getenv("APP_ENV"); v == "production" || v == "prod" {
+		return true
+	}
+	return cfg.Server.TLS
+}
+
+// resolveAuthEncKey returns the auth-config encryption key, enforcing a strong
+// operator-supplied value in production. In production it calls os.Exit(1) when
+// the key is missing, equal to the public dev default, or too short. In development
+// it falls back to the insecure default with a warning so local setup stays simple.
+func resolveAuthEncKey(cfg *config.Config) string {
+	key := os.Getenv("AUTH_ENCRYPTION_KEY")
+	if isProduction(cfg) {
+		switch {
+		case key == "":
+			slog.Error("FATAL: AUTH_ENCRYPTION_KEY is required in production (it encrypts all secrets stored in the DB)")
+			os.Exit(1)
+		case key == insecureDefaultAuthEncKey:
+			slog.Error("FATAL: AUTH_ENCRYPTION_KEY is set to the insecure public default — set a strong, unique value in production")
+			os.Exit(1)
+		case len(key) < minAuthEncKeyLen:
+			slog.Error("FATAL: AUTH_ENCRYPTION_KEY is too short", "min_length", minAuthEncKeyLen, "got", len(key))
+			os.Exit(1)
+		}
+		return key
+	}
+
+	// Development: allow an empty key by falling back to the public default.
+	if key == "" {
+		slog.Warn("AUTH_ENCRYPTION_KEY not set, using insecure default — do NOT use in production")
+		return insecureDefaultAuthEncKey
+	}
+	return key
 }
 
 // envOr returns the value of the environment variable key, or fallback if unset or empty.

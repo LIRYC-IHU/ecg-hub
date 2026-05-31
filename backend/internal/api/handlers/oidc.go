@@ -100,7 +100,7 @@ func oidcFlowFromDB(c echo.Context, staticFlow auth.OIDCFlow, repo *repository.A
 	}, userStore)
 	if err != nil {
 		slog.Error("oidc: failed to build flow from DB", "error", err)
-		return nil, echo.NewHTTPError(http.StatusInternalServerError, "OIDC initialization failed: "+err.Error())
+		return nil, echo.NewHTTPError(http.StatusInternalServerError, "OIDC initialization failed")
 	}
 	return flow, nil
 }

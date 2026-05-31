@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -81,18 +82,22 @@ func ECGWaveformHandler(db *gorm.DB, volumePath string, bridge export.Converter)
 
 			dicomData, err = bridge.Convert(ctx, filePath, ecg.Vendor, "dicom", patient)
 			if err != nil {
+				// Log the underlying error server-side; return a generic message so
+				// internal paths / converter details are not exposed to the client.
+				slog.Error("ecg waveform: conversion failed", "ecg_id", id, "vendor", ecg.Vendor, "error", err)
 				return c.JSON(http.StatusUnprocessableEntity, map[string]string{
 					"code":    "CONVERSION_ERROR",
-					"message": "Failed to convert ECG to DICOM: " + err.Error(),
+					"message": "Failed to convert ECG to DICOM",
 				})
 			}
 		}
 
 		record, err := ecgwaveform.Parse(dicomData)
 		if err != nil {
+			slog.Error("ecg waveform: parse failed", "ecg_id", id, "vendor", ecg.Vendor, "error", err)
 			return c.JSON(http.StatusUnprocessableEntity, map[string]string{
 				"code":    "PARSE_ERROR",
-				"message": "Failed to parse ECG waveform: " + err.Error(),
+				"message": "Failed to parse ECG waveform",
 			})
 		}
 

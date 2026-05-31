@@ -60,10 +60,17 @@ type Config struct {
 
 // ServerConfig holds HTTP server settings.
 type ServerConfig struct {
-	// Port is the TCP port the Echo server listens on (e.g., 8080).
+	// Port is the TCP port the Echo server listens on (e.g., 4444).
+	// When 0, the server falls back to the default port 4444.
 	Port int `mapstructure:"port"`
-	// TLS enables TLS on the server. Required in production (NFR-S1). tls: false is dev-only.
+	// TLS enables TLS directly on the Echo server. Required in production (NFR-S1)
+	// for bare-metal deployments. When the server runs behind a TLS-terminating
+	// reverse proxy (nginx), keep this false and terminate TLS at the proxy.
 	TLS bool `mapstructure:"tls"`
+	// CertFile is the path to the TLS certificate PEM file. Required when tls: true.
+	CertFile string `mapstructure:"cert_file"`
+	// KeyFile is the path to the TLS private key PEM file. Required when tls: true.
+	KeyFile string `mapstructure:"key_file"`
 }
 
 // DatabaseConfig holds PostgreSQL connection pool settings.

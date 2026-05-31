@@ -3,6 +3,9 @@ package handlers
 import (
 	"context"
 	"net/http"
+	"strconv"
+	"strings"
+	"time"
 
 	"github.com/labstack/echo/v4"
 
@@ -11,32 +14,49 @@ import (
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
 )
 
+// loginThrottle guards the login endpoint against brute force: after 10 consecutive
+// failures for a given IP+username, that combination is locked out for 15 minutes.
+// Complemented by the IP-based rate limiter applied on the login route (see router).
+var loginThrottle = NewLoginThrottle(10, 15*time.Minute)
+
 // LoginRequest is the JSON body for POST /api/v1/auth/login.
 type LoginRequest struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
 }
 
+// isSecureRequest reports whether the request reached us over HTTPS.
+// Echo's c.Scheme() honours X-Forwarded-Proto, so this is correct behind a
+// TLS-terminating reverse proxy (nginx) as well as for direct e.StartTLS.
+// When true, the JWT cookie is marked Secure so it is never sent over plain HTTP.
+func isSecureRequest(c echo.Context) bool {
+	return c.Scheme() == "https"
+}
+
 // setJWTCookie writes the HttpOnly "jwt" cookie on the response.
 // MaxAge 3600 = 1 h, matching the JWT expiry in the auth package.
+// Secure is set when the request is HTTPS so the cookie is never transmitted in clear.
 func setJWTCookie(c echo.Context, token string) {
 	c.SetCookie(&http.Cookie{
 		Name:     "jwt",
 		Value:    token,
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   isSecureRequest(c),
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   3600,
 	})
 }
 
 // clearJWTCookie removes the "jwt" cookie from the browser.
+// Secure mirrors setJWTCookie so the browser reliably matches and clears the cookie.
 func clearJWTCookie(c echo.Context) {
 	c.SetCookie(&http.Cookie{
 		Name:     "jwt",
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   isSecureRequest(c),
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   -1,
 	})
@@ -109,10 +129,18 @@ func LoginHandlerWithDB(provider auth.Provider, authConfigRepo *repository.AuthC
 			return c.JSON(http.StatusBadRequest, mw.APIError("BAD_REQUEST", "password is required"))
 		}
 
+		// Brute-force guard: reject early when this IP+username is locked out.
+		throttleKey := c.RealIP() + "|" + strings.ToLower(req.Username)
+		if locked, remaining := loginThrottle.Locked(throttleKey); locked {
+			c.Response().Header().Set("Retry-After", strconv.Itoa(int(remaining.Seconds())+1))
+			return c.JSON(http.StatusTooManyRequests, mw.APIError("ACCOUNT_LOCKED", "too many failed attempts — try again later"))
+		}
+
 		// Try provider (includes local + any statically configured LDAP).
 		if authenticator, ok := provider.(auth.Authenticator); ok {
 			token, err := authenticator.Login(c.Request().Context(), req.Username, req.Password)
 			if err == nil {
+				loginThrottle.Reset(throttleKey)
 				setJWTCookie(c, token)
 				return c.NoContent(http.StatusNoContent)
 			}
@@ -122,11 +150,14 @@ func LoginHandlerWithDB(provider auth.Provider, authConfigRepo *repository.AuthC
 		if authConfigRepo != nil {
 			token, err := auth.LoginWithLDAPFromDB(c.Request().Context(), req.Username, req.Password, jwtSecret, authConfigRepo, encKey)
 			if err == nil {
+				loginThrottle.Reset(throttleKey)
 				setJWTCookie(c, token)
 				return c.NoContent(http.StatusNoContent)
 			}
 		}
 
+		// All authentication paths failed — record the failure for lockout accounting.
+		loginThrottle.Fail(throttleKey)
 		return c.JSON(http.StatusUnauthorized, mw.APIError("UNAUTHENTICATED", "invalid credentials"))
 	}
 }

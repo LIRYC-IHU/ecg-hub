@@ -143,3 +143,9 @@ vite.config.ts.timestamp-*
 _docs/
 .rtk/
 _bmad/
+
+# TLS certificates / private keys — never commit
+certs/
+*.pem
+*.key
+*.crt

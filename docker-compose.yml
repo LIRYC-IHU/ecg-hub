@@ -18,11 +18,21 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     env_file: .env
+    # Hardening (NFR-S1): drop all Linux capabilities and forbid privilege escalation.
+    # FTP/DICOM bind non-privileged ports (>1024), so no capability is needed.
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    # read_only root FS is recommended but commented until export/converter temp
+    # write paths are confirmed. To enable: uncomment and provide tmpfs for /tmp.
+    # read_only: true
+    # tmpfs:
+    #   - /tmp
     volumes:
       - ./config.yaml:/app/config.yaml:ro
-      # IT: replace named volumes below with bind mounts to mount external storage, e.g.:
-      # - ecg-storage:/data/ecg
-      # - ecg-quarantine:/data/ecg-quarantine
+      - ecg-storage:/data/ecg
+      - ecg-quarantine:/data/ecg-quarantine
     expose:
       - "4444"
     ports:
@@ -37,8 +47,13 @@ services:
       - backend
     ports:
       - "80:80"
+      - "443:443"
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      # TLS certificates — required by nginx.conf (production TLS termination).
+      # Drop your certificate + key here, or point to your PKI-managed paths.
+      - ./certs/server.crt:/etc/nginx/certs/server.crt:ro
+      - ./certs/server.key:/etc/nginx/certs/server.key:ro
 
 volumes:
   # postgres-data:

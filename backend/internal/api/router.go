@@ -4,11 +4,15 @@ package api
 
 import (
 	"log/slog"
+	"net/http"
+	"time"
 
 	echoSwagger "github.com/swaggo/echo-swagger"
+	"golang.org/x/time/rate"
 	"gorm.io/gorm"
 
 	"github.com/labstack/echo/v4"
+	emw "github.com/labstack/echo/v4/middleware"
 
 	"github.com/LIRYC-IHU/ecg-hub/internal/api/handlers"
 	mw "github.com/LIRYC-IHU/ecg-hub/internal/api/middleware"
@@ -22,6 +26,25 @@ import (
 	"github.com/LIRYC-IHU/ecg-hub/internal/module"
 	"github.com/LIRYC-IHU/ecg-hub/internal/webhook"
 )
+
+// newLoginRateLimiter builds a strict per-IP rate limiter for authentication
+// endpoints (~20 attempts/min/IP, burst 5). On denial it logs a security event
+// and returns 429 with a Retry-After header. This is the first line of defence
+// against brute force; per-account lockout (LoginThrottle) is the second.
+func newLoginRateLimiter() echo.MiddlewareFunc {
+	return emw.RateLimiterWithConfig(emw.RateLimiterConfig{
+		Store: emw.NewRateLimiterMemoryStoreWithConfig(emw.RateLimiterMemoryStoreConfig{
+			Rate:      rate.Limit(0.33), // ~20 req/min per IP sustained
+			Burst:     5,
+			ExpiresIn: 10 * time.Minute,
+		}),
+		DenyHandler: func(c echo.Context, identifier string, _ error) error {
+			slog.Warn("auth: login rate limit exceeded", "ip", c.RealIP(), "path", c.Path())
+			c.Response().Header().Set("Retry-After", "60")
+			return c.JSON(http.StatusTooManyRequests, mw.APIError("RATE_LIMITED", "too many attempts — please retry later"))
+		},
+	})
+}
 
 type RouterConfig struct {
 	e               *echo.Echo
@@ -144,17 +167,20 @@ func (r *RouterConfig) RegisterRoutes() {
 	publicV1.GET("/setup/status", handlers.SetupStatusHandler(localUserRepo))
 	publicV1.POST("/setup", handlers.SetupHandler(localUserRepo, r.gormDB))
 
+	// Strict rate limiter shared by the credential-accepting auth endpoints.
+	loginRateLimiter := newLoginRateLimiter()
+
 	// Authentication (public — these endpoints issue JWTs)
 	authConfigRepoForProvider := repository.NewAuthConfigRepository(r.gormDB)
 	publicV1.GET("/auth/provider", handlers.AuthProviderHandler(r.authProvider, authConfigRepoForProvider))
 	loginAuthConfigRepo := repository.NewAuthConfigRepository(r.gormDB)
-	publicV1.POST("/auth/login", handlers.LoginHandlerWithDB(r.authProvider, loginAuthConfigRepo, r.authEncKey, r.cfg.JWTSecret))
+	publicV1.POST("/auth/login", handlers.LoginHandlerWithDB(r.authProvider, loginAuthConfigRepo, r.authEncKey, r.cfg.JWTSecret), loginRateLimiter)
 
 	// OIDC Authorization Code Flow
 	{
 		oidcAuthConfigRepo := repository.NewAuthConfigRepository(r.gormDB)
 		oidcFlow := auth.GetOIDCFlow(r.authProvider)
-		publicV1.GET("/auth/oidc/login", handlers.OIDCLoginHandlerDynamic(oidcFlow, oidcAuthConfigRepo, r.authEncKey, r.cfg.JWTSecret))
+		publicV1.GET("/auth/oidc/login", handlers.OIDCLoginHandlerDynamic(oidcFlow, oidcAuthConfigRepo, r.authEncKey, r.cfg.JWTSecret), loginRateLimiter)
 		publicV1.GET("/auth/oidc/callback", handlers.OIDCCallbackHandlerDynamic(oidcFlow, oidcAuthConfigRepo, r.authEncKey, r.cfg.JWTSecret, r.userRepo))
 	}
 
