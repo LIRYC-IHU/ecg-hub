@@ -156,6 +156,7 @@ func main() {
 		"philips:dicom":       bridgeBin("BRIDGE_PHILIPS_TO_DICOM", "philips-to-dicom"),
 		"dicom:xmlfda":        bridgeBin("BRIDGE_DICOM_TO_FDA", "dicom-to-fda"),
 		"nihon-kohden:xmlfda": bridgeBin("BRIDGE_NK_TO_FDA", "nk-to-fda"),
+		"nihon-kohden:dicom":  bridgeBin("BRIDGE_NK_TO_DICOM", "nk-to-dicom"),
 		"mindray:xmlfda":      bridgeBin("BRIDGE_MINDRAY_TO_FDA", "mindray-to-fda"),
 		"mindray:dicom":       bridgeBin("BRIDGE_MINDRAY_TO_DICOM", "mindray-to-dicom"),
 	}
@@ -293,7 +294,7 @@ func main() {
 			case "dicom_cstore":
 				dc, err := dicomconn.New(connCfg)
 				if err != nil {
-					slog.Error("FATAL: "+err.Error())
+					slog.Error("FATAL: " + err.Error())
 					os.Exit(1)
 				}
 				c = dc
@@ -659,15 +660,15 @@ type ftpModuleWrapper struct {
 	status module.ModuleStatus
 }
 
-func (w *ftpModuleWrapper) Name() string                    { return "ftp" }
-func (w *ftpModuleWrapper) AcceptedExtensions() []string    { return nil }
-func (w *ftpModuleWrapper) Health() error                   { return nil }
+func (w *ftpModuleWrapper) Name() string                            { return "ftp" }
+func (w *ftpModuleWrapper) AcceptedExtensions() []string            { return nil }
+func (w *ftpModuleWrapper) Health() error                           { return nil }
 func (w *ftpModuleWrapper) SupportedFormats() []module.ExportFormat { return nil }
-func (w *ftpModuleWrapper) Validate(_ []byte) error         { return nil }
+func (w *ftpModuleWrapper) Validate(_ []byte) error                 { return nil }
 func (w *ftpModuleWrapper) Parse(_ context.Context, _ []byte) (*module.ECGMetadata, error) {
 	return nil, nil
 }
-func (w *ftpModuleWrapper) UpdateFile(_ string, _ module.MetadataPatch) error { return nil }
+func (w *ftpModuleWrapper) UpdateFile(_ string, _ module.MetadataPatch) error  { return nil }
 func (w *ftpModuleWrapper) RenamePatientID(_ []byte, _ string) ([]byte, error) { return nil, nil }
 
 func (w *ftpModuleWrapper) Stop() error {
@@ -692,15 +693,15 @@ type dicomModuleWrapper struct {
 	status module.ModuleStatus
 }
 
-func (w *dicomModuleWrapper) Name() string                    { return "dicom" }
-func (w *dicomModuleWrapper) AcceptedExtensions() []string    { return nil }
-func (w *dicomModuleWrapper) Health() error                   { return nil }
+func (w *dicomModuleWrapper) Name() string                            { return "dicom" }
+func (w *dicomModuleWrapper) AcceptedExtensions() []string            { return nil }
+func (w *dicomModuleWrapper) Health() error                           { return nil }
 func (w *dicomModuleWrapper) SupportedFormats() []module.ExportFormat { return nil }
-func (w *dicomModuleWrapper) Validate(_ []byte) error         { return nil }
+func (w *dicomModuleWrapper) Validate(_ []byte) error                 { return nil }
 func (w *dicomModuleWrapper) Parse(_ context.Context, _ []byte) (*module.ECGMetadata, error) {
 	return nil, nil
 }
-func (w *dicomModuleWrapper) UpdateFile(_ string, _ module.MetadataPatch) error { return nil }
+func (w *dicomModuleWrapper) UpdateFile(_ string, _ module.MetadataPatch) error  { return nil }
 func (w *dicomModuleWrapper) RenamePatientID(_ []byte, _ string) ([]byte, error) { return nil, nil }
 
 func (w *dicomModuleWrapper) Stop() error {
