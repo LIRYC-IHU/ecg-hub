@@ -14,14 +14,14 @@ import (
 	"github.com/labstack/echo/v4"
 	"gorm.io/gorm"
 
-	mw "github.com/LIRYC-IHU/ecg-hub/internal/api/middleware"
 	"github.com/LIRYC-IHU/ecg-hub/internal/api/dto"
+	mw "github.com/LIRYC-IHU/ecg-hub/internal/api/middleware"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
-	stor "github.com/LIRYC-IHU/ecg-hub/internal/storage"
 	"github.com/LIRYC-IHU/ecg-hub/internal/ecgmeta"
 	"github.com/LIRYC-IHU/ecg-hub/internal/export"
 	"github.com/LIRYC-IHU/ecg-hub/internal/module"
+	stor "github.com/LIRYC-IHU/ecg-hub/internal/storage"
 )
 
 // ecgMetaRepo is the ECG repository interface required by the metadata handlers.
