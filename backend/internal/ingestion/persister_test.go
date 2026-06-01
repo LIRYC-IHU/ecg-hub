@@ -29,6 +29,10 @@ func (m *mockVolume) Write(filename string, data []byte) (string, error) {
 	return "/mock/" + filename, nil
 }
 
+func (m *mockVolume) GetPath(filename string) string {
+	return "/mock/" + filename
+}
+
 func (m *mockVolume) Exists(filename string) bool {
 	return m.existing[filename]
 }
@@ -72,7 +76,6 @@ func (m *mockECGRepo) ExistsByContentHash(hash string) (bool, error) {
 	}
 	return m.hashes[hash], nil
 }
-
 
 type upsertCall struct {
 	patientID, firstName, lastName, gender string
