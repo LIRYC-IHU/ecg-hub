@@ -14,8 +14,8 @@ import (
 
 	"gorm.io/datatypes"
 
-	appmetrics "github.com/LIRYC-IHU/ecg-hub/internal/metrics"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
+	appmetrics "github.com/LIRYC-IHU/ecg-hub/internal/metrics"
 	"github.com/LIRYC-IHU/ecg-hub/internal/module"
 )
 
@@ -30,6 +30,7 @@ type fileWriter interface {
 	Exists(filename string) bool
 	WriteForPatient(patientID, filename string, data []byte) (string, error)
 	ExistsForPatient(patientID, filename string) bool
+	GetPath(filename string) string
 }
 
 // ecgEnricher is the optional HL7 enrichment interface (implemented by *hl7.Enricher).
@@ -67,7 +68,7 @@ type Persister struct {
 	volume       fileWriter
 	ecgRepo      ecgInserter
 	patRepo      patientUpserter
-	audit        auditWriter            // nil when audit logging is disabled; guarded by auditMu
+	audit        auditWriter // nil when audit logging is disabled; guarded by auditMu
 	auditMu      sync.RWMutex
 	enricher     ecgEnricher            // nil when HL7 is disabled; guarded by enricherMu
 	enricherMu   sync.RWMutex           // guards concurrent read (persist) / write (WithEnricher)
@@ -110,7 +111,9 @@ func (p *Persister) WithEnricher(e ecgEnricher) *Persister {
 
 // SetEnricher is the interface-compatible version of WithEnricher for hot-wiring
 // from the HL7 scheduler when immediate mode is enabled at runtime.
-func (p *Persister) SetEnricher(e interface{ Enrich(ctx context.Context, ecgID, patientID string) error }) {
+func (p *Persister) SetEnricher(e interface {
+	Enrich(ctx context.Context, ecgID, patientID string) error
+}) {
 	p.enricherMu.Lock()
 	p.enricher = e
 	p.enricherMu.Unlock()
@@ -246,7 +249,7 @@ func (p *Persister) persist(ri RoutedItem) error {
 	ecg := &models.ECG{
 		PatientID:        ri.Meta.PatientID,
 		Vendor:           ri.Meta.VendorName,
-		FilePath:         fullPath,
+		FilePath:         p.volume.GetPath(fullPath),
 		OriginalFilename: ri.IngestItem.Filename,
 		ContentHash:      contentHash,
 		IngestedAt:       time.Now(),
@@ -313,4 +316,3 @@ func (p *Persister) persist(ri RoutedItem) error {
 	)
 	return nil
 }
-
