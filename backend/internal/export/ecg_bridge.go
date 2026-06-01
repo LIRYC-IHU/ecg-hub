@@ -9,8 +9,8 @@ import (
 	"os/exec"
 	"time"
 
-	appmetrics "github.com/LIRYC-IHU/ecg-hub/internal/metrics"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
+	appmetrics "github.com/LIRYC-IHU/ecg-hub/internal/metrics"
 )
 
 var (
@@ -57,6 +57,7 @@ func (b *ECGBridge) SupportsFormat(vendor, format string) bool {
 // Returns ErrConversionFailed (wrapping stderr) on non-zero exit or deadline exceeded.
 func (b *ECGBridge) Convert(ctx context.Context, sourcePath, vendor, format string, patient *models.Patient) ([]byte, error) {
 	key := vendor + ":" + format
+	slog.Error("++++++++++++++++++++++++++ ECGBridge: converting %s with key %s using source file %s\n", format, key, sourcePath)
 	binary, ok := b.binaries[key]
 	if !ok {
 		return nil, fmt.Errorf("%w: %s", ErrFormatNotSupported, key)
@@ -89,4 +90,3 @@ func (b *ECGBridge) Convert(ctx context.Context, sourcePath, vendor, format stri
 func (b *ECGBridge) ConvertToXMLFDA(ctx context.Context, sourcePath, vendor string, patient *models.Patient) ([]byte, error) {
 	return b.Convert(ctx, sourcePath, vendor, "xmlfda", patient)
 }
-
