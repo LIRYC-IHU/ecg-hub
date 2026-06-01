@@ -24,6 +24,7 @@ import (
 var ECTPPort = 30003
 
 var nkToFDABinary = bridgeBin("BRIDGE_NK_TO_FDA", "nk-to-fda")
+var nkToDICOMBinary = bridgeBin("BRIDGE_NK_TO_DICOM", "nk-to-dicom")
 
 var _ module.Module = (*Module)(nil)
 
@@ -84,6 +85,7 @@ func (m *Module) SupportedFormats() []module.ExportFormat {
 	return []module.ExportFormat{
 		{ID: "original", Label: "Nihon Kohden DAT", Extension: ".DAT"},
 		{ID: "xmlfda", Label: "FDA HL7 aECG XML", Extension: ".xml"},
+		{ID: "dicom", Label: "DICOM ECG", Extension: ".dcm"},
 	}
 }
 
