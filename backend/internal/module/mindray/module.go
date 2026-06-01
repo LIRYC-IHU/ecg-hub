@@ -28,6 +28,7 @@ func init() {
 }
 
 var mindrayToFDABin = bridgeBin("BRIDGE_MINDRAY_TO_FDA", "mindray-to-fda")
+var mindrayToDICOMBin = bridgeBin("BRIDGE_MINDRAY_TO_DICOM", "mindray-to-dicom")
 
 func bridgeBin(envKey, name string) string {
 	if v := os.Getenv(envKey); v != "" {
@@ -48,7 +49,7 @@ func (m *Module) Name() string { return "mindray" }
 // Mindray files have no extension — they are matched by filename via the router's
 // fallback probing mechanism. The empty string catches files with no extension.
 func (m *Module) AcceptedExtensions() []string { return []string{"", "12lead_data_v1"} }
-func (m *Module) Health() error               { return nil }
+func (m *Module) Health() error                { return nil }
 
 func (m *Module) SupportedFormats() []module.ExportFormat {
 	return []module.ExportFormat{
