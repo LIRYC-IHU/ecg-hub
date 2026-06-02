@@ -56,7 +56,7 @@ export function Header({
     <header className="h-14 bg-card border-b border-border shadow-sm flex items-center px-4 relative z-40 shrink-0">
       {/* Left: Logo */}
       <div className="flex items-center gap-3">
-        <div className="w-12 h-12 rounded flex items-center justify-center overflow-hidden shrink-0">
+        <div className="w-8 h-8 rounded flex items-center justify-center overflow-hidden shrink-0">
           {hasLogo ? (
             <img
               src={logoBase64}
