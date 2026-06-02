@@ -51,6 +51,13 @@ func (s *stubConverter) SupportsFormat(_, _ string) bool {
 	return s.err == nil
 }
 
+func (s *stubConverter) SupportedFormats(_ string) []string {
+	if s.err == nil {
+		return []string{"original", "xmlfda", "dicom"}
+	}
+	return []string{"original"}
+}
+
 func (s *stubConverter) ConvertToXMLFDA(_ context.Context, _, _ string, _ *models.Patient) ([]byte, error) {
 	return s.data, s.err
 }

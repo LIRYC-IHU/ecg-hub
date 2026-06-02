@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"archive/zip"
+	"bytes"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -98,7 +100,17 @@ func downloadECGHandler(repo ecgByIDFinder, patRepo patientByIDFinder, bridge ex
 
 		userID, _ := c.Get(mw.CtxKeyUserID).(string)
 
-		format := c.QueryParam("format")
+		// Multiple formats requested (e.g. ?format=original,xmlfda) → bundle into a ZIP
+		// rather than forcing the browser to fire one download per format.
+		formats := parseDownloadFormats(c)
+		if len(formats) > 1 {
+			return handleZipDownload(c, ecg, id, userID, patRepo, bridge, formats, db)
+		}
+
+		format := ""
+		if len(formats) == 1 {
+			format = formats[0]
+		}
 		if format == "xmlfda" || format == "dicom" {
 			return handleConvertDownload(c, ecg, id, userID, patRepo, bridge, format, db)
 		}
@@ -537,9 +549,163 @@ func handleConvertDownload(
 		base = "ecg"
 	}
 	outName := base + outExt
+	slog.Debug("ecg-download: converting to format", "ecg_id", id, "format", format, "file", outName)
 	// Use mime.FormatMediaType so special characters in the filename are properly encoded.
 	disp := mime.FormatMediaType("attachment", map[string]string{"filename": outName})
 	c.Response().Header().Set("Content-Disposition", disp)
 	c.Response().Header().Set("Cache-Control", "no-store")
+	slog.Info("download",
+		"filename", outName,
+		"content_disposition", disp,
+	)
 	return c.Blob(http.StatusOK, contentType, outData)
+}
+
+// parseDownloadFormats collects the requested export formats from the query string.
+// It accepts both repeated params (?format=a&format=b) and comma-separated values
+// (?format=a,b), trims blanks, and de-duplicates while preserving order.
+func parseDownloadFormats(c echo.Context) []string {
+	var out []string
+	seen := make(map[string]bool)
+	for _, group := range c.QueryParams()["format"] {
+		for _, f := range strings.Split(group, ",") {
+			f = strings.TrimSpace(f)
+			if f == "" || seen[f] {
+				continue
+			}
+			seen[f] = true
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+// convertedName derives the output filename for a converted format from the original
+// filename: the extension is swapped for the format's extension.
+func convertedName(originalFilename, format string) string {
+	outExt := map[string]string{"xmlfda": ".xml", "dicom": ".dcm"}[format]
+	ext := filepath.Ext(originalFilename)
+	base := strings.TrimSuffix(originalFilename, ext)
+	if base == "" {
+		base = "ecg"
+	}
+	return base + outExt
+}
+
+// uniqueZipName ensures the entry name is unique within the archive. On collision it
+// inserts the format label before the extension (e.g. ecg.xml → ecg_xmlfda.xml).
+func uniqueZipName(seen map[string]bool, name, format string) string {
+	if !seen[name] {
+		seen[name] = true
+		return name
+	}
+	ext := filepath.Ext(name)
+	base := strings.TrimSuffix(name, ext)
+	candidate := fmt.Sprintf("%s_%s%s", base, format, ext)
+	for i := 2; seen[candidate]; i++ {
+		candidate = fmt.Sprintf("%s_%s_%d%s", base, format, i, ext)
+	}
+	seen[candidate] = true
+	return candidate
+}
+
+// handleZipDownload converts the ECG to each requested format and streams the results
+// as a single ZIP archive. Per-format failures (unsupported vendor, read errors) are
+// logged and skipped; the request fails with 422 only if no entry could be produced.
+func handleZipDownload(
+	c echo.Context,
+	ecg *models.ECG,
+	id string,
+	userID string,
+	patRepo patientByIDFinder,
+	bridge export.Converter,
+	formats []string,
+	db *gorm.DB,
+) error {
+	// Load patient demographics once if any converted format is requested
+	// (nil is acceptable — conversion proceeds without enrichment, NFR-R2).
+	var patient *models.Patient
+	for _, f := range formats {
+		if f == "xmlfda" || f == "dicom" {
+			if p, perr := patRepo.FindByPatientID(ecg.PatientID); perr != nil {
+				slog.Warn("ecg-download: patient lookup failed, proceeding without demographics",
+					"patient_id", ecg.PatientID, "error", perr)
+			} else {
+				patient = p
+			}
+			break
+		}
+	}
+
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	seen := make(map[string]bool)
+	added := 0
+
+	for _, f := range formats {
+		var data []byte
+		var name string
+
+		switch f {
+		case "original", "":
+			b, rerr := os.ReadFile(ecg.FilePath)
+			if rerr != nil {
+				slog.Warn("ecg-download: zip read original failed", "ecg_id", id, "error", rerr)
+				continue
+			}
+			data, name = b, ecg.OriginalFilename
+		case "xmlfda", "dicom":
+			out, cerr := bridge.Convert(c.Request().Context(), ecg.FilePath, ecg.Vendor, f, patient)
+			if cerr != nil {
+				slog.Warn("ecg-download: zip convert failed", "ecg_id", id, "format", f, "error", cerr)
+				continue
+			}
+			data, name = out, convertedName(ecg.OriginalFilename, f)
+		default:
+			slog.Warn("ecg-download: zip unknown format skipped", "ecg_id", id, "format", f)
+			continue
+		}
+
+		w, werr := zw.Create(uniqueZipName(seen, name, f))
+		if werr != nil {
+			slog.Warn("ecg-download: zip create entry failed", "ecg_id", id, "format", f, "error", werr)
+			continue
+		}
+		if _, werr := w.Write(data); werr != nil {
+			slog.Warn("ecg-download: zip write entry failed", "ecg_id", id, "format", f, "error", werr)
+			continue
+		}
+		added++
+	}
+
+	if cerr := zw.Close(); cerr != nil {
+		return c.JSON(http.StatusInternalServerError, mw.APIError("ZIP_FAILED", "failed to build archive"))
+	}
+	if added == 0 {
+		return c.JSON(http.StatusUnprocessableEntity,
+			mw.APIError("FORMAT_NOT_SUPPORTED", "none of the requested formats could be produced"))
+	}
+
+	// Audit log is non-blocking (NFR-R2).
+	if db != nil {
+		_ = mw.WriteAuditLog(c.Request().Context(), db, userID, "ecg_download",
+			id, map[string]any{
+				"format": strings.Join(formats, ","),
+				"vendor": ecg.Vendor,
+				"file":   ecg.OriginalFilename,
+				"zip":    true,
+			})
+	}
+
+	ext := filepath.Ext(ecg.OriginalFilename)
+	base := strings.TrimSuffix(ecg.OriginalFilename, ext)
+	if base == "" {
+		base = "ecg"
+	}
+	zipName := base + ".zip"
+	disp := mime.FormatMediaType("attachment", map[string]string{"filename": zipName})
+	c.Response().Header().Set("Content-Disposition", disp)
+	c.Response().Header().Set("Cache-Control", "no-store")
+	slog.Info("download", "filename", zipName, "formats", strings.Join(formats, ","), "entries", added)
+	return c.Blob(http.StatusOK, "application/zip", buf.Bytes())
 }
