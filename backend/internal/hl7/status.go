@@ -4,5 +4,6 @@ package hl7
 const (
 	StatusPending   = "pending"
 	StatusSuccess   = "success"
-	StatusExhausted = "hl7_exhausted"
+	StatusExhausted = "hl7_exhausted" // retries exhausted (network/timeout/no PID)
+	StatusRejected  = "hl7_rejected"  // HIS rejected the query (MSA AE/AR) after retries
 )
