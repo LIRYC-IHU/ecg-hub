@@ -2,6 +2,7 @@ package hl7
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -190,6 +191,34 @@ func TestRetryJob_Exhaustion_SetsStatusAndNotifies(t *testing.T) {
 	}
 	if webhook.calls[0].ecgID != "42" {
 		t.Errorf("webhook ecgID = %s, want 42", webhook.calls[0].ecgID)
+	}
+}
+
+func TestRetryJob_Exhaustion_MSARejection_SetsRejectedStatus(t *testing.T) {
+	// When the last error is an MSA rejection, the terminal status is hl7_rejected
+	// (not hl7_exhausted) and the audit/webhook events use the "hl7_rejected" name.
+	ecgRepo := &stubRetryECGRepo{
+		ecgs: []models.ECG{{ID: "99", PatientID: "P009", HL7RetryCount: 2}},
+	}
+	patRepo := &stubRetryPatRepo{}
+	auditRepo := &stubRetryAuditWriter{}
+	webhook := &stubRetryWebhook{}
+
+	rejectErr := fmt.Errorf("%w (MSA=AE: Patient introuvable)", ErrMSARejected)
+	j := newTestRetryJob(&stubQuerier{err: rejectErr}, ecgRepo, patRepo, auditRepo, webhook, 3)
+	j.processPending()
+
+	if len(ecgRepo.lifecycleCalls) != 1 {
+		t.Fatalf("ecgRepo.UpdateHL7Lifecycle calls = %d, want 1", len(ecgRepo.lifecycleCalls))
+	}
+	if got := ecgRepo.lifecycleCalls[0].status; got != StatusRejected {
+		t.Errorf("status = %q, want %q", got, StatusRejected)
+	}
+	if len(auditRepo.calls) != 1 || auditRepo.calls[0].Action != "hl7_rejected" {
+		t.Errorf("audit action = %v, want hl7_rejected", auditRepo.calls)
+	}
+	if len(webhook.calls) != 1 || webhook.calls[0].event != "hl7_rejected" {
+		t.Errorf("webhook event = %v, want hl7_rejected", webhook.calls)
 	}
 }
 

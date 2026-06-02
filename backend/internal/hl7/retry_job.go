@@ -2,6 +2,7 @@ package hl7
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -161,11 +162,23 @@ func (j *RetryJob) processOne(ecg models.ECG) {
 	)
 }
 
-// exhaust sets the ECG to hl7_exhausted, writes an audit log, and fires a webhook notification.
+// exhaust marks an ECG as terminal after its retries run out. When the last error is an
+// MSA rejection (the HIS answered with AE/AR), the ECG is set to hl7_rejected so the UI
+// can distinguish a deliberate HIS rejection from a transport/timeout exhaustion. Both
+// cases write an audit log and fire a webhook notification with the matching event name.
 func (j *RetryJob) exhaust(ecg models.ECG, lastErr error) {
-	appmetrics.HL7RetryAttempts.WithLabelValues("exhausted").Inc()
-	if updErr := j.ecgRepo.UpdateHL7Lifecycle(ecg.ID, StatusExhausted, j.maxRetries); updErr != nil {
-		slog.Warn("hl7: exhaustion status update failed", "ecg_id", ecg.ID, "error", updErr)
+	status := StatusExhausted
+	event := "hl7_exhausted"
+	metricLabel := "exhausted"
+	if errors.Is(lastErr, ErrMSARejected) {
+		status = StatusRejected
+		event = "hl7_rejected"
+		metricLabel = "rejected"
+	}
+
+	appmetrics.HL7RetryAttempts.WithLabelValues(metricLabel).Inc()
+	if updErr := j.ecgRepo.UpdateHL7Lifecycle(ecg.ID, status, j.maxRetries); updErr != nil {
+		slog.Warn("hl7: terminal status update failed", "ecg_id", ecg.ID, "status", status, "error", updErr)
 	}
 
 	errMsg := ""
@@ -174,20 +187,21 @@ func (j *RetryJob) exhaust(ecg models.ECG, lastErr error) {
 	}
 	_ = j.auditRepo.Insert(&models.AuditLog{
 		UserID:     "system",
-		Action:     "hl7_exhausted",
+		Action:     event,
 		ResourceID: ecg.ID,
 		Details:    datatypes.JSON(fmt.Sprintf(`{"max_retries":%d,"patient_id":%q,"last_error":%q}`, j.maxRetries, ecg.PatientID, errMsg)),
 	})
 
 	if j.webhook != nil {
-		if err := j.webhook.Notify("hl7_exhausted", ecg.ID); err != nil {
-			slog.Warn("hl7: exhaustion webhook failed", "ecg_id", ecg.ID, "error", err)
+		if err := j.webhook.Notify(event, ecg.ID); err != nil {
+			slog.Warn("hl7: terminal webhook failed", "ecg_id", ecg.ID, "event", event, "error", err)
 		}
 	}
 
-	slog.Info("hl7: ECG exhausted",
+	slog.Info("hl7: ECG reached terminal status",
 		"ecg_id", ecg.ID,
 		"patient_id", ecg.PatientID,
+		"status", status,
 		"max_retries", j.maxRetries,
 	)
 }
