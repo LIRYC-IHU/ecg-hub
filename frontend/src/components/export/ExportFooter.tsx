@@ -63,6 +63,7 @@ export function ExportFooter({ count, ecgIds, onClear }: Props) {
       <DownloadFormatPopup
         open={popupOpen}
         onClose={() => setPopupOpen(false)}
+        ecgIds={ecgIds}
         busy={exportMutation.isPending}
         onConfirm={(formats) => exportMutation.mutate(formats)}
       />
