@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { fetchBranding } from "../lib/api";
 
-export const BRANDING_FALLBACK = "IHU Liryc — Bordeaux";
+export const BRANDING_FALLBACK = "CHU — Name";
 
 export function useBranding() {
   const { data } = useQuery({
@@ -18,7 +18,9 @@ export function useBranding() {
   useEffect(() => {
     document.title = `ECG Hub — ${centerName}`;
     if (logoBase64) {
-      const favicon = document.getElementById("app-favicon") as HTMLLinkElement | null;
+      const favicon = document.getElementById(
+        "app-favicon",
+      ) as HTMLLinkElement | null;
       if (favicon) {
         favicon.href = logoBase64;
         // Derive mime type from data URI prefix, fall back to png.
