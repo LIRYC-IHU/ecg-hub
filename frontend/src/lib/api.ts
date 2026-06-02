@@ -192,6 +192,22 @@ export async function downloadECGFormat(
   }
 }
 
+// downloadECGFormats downloads one or more export formats for a single ECG.
+// A single format streams the file directly; multiple formats are bundled by the
+// backend into one ZIP archive (a single browser download instead of N).
+export async function downloadECGFormats(
+  id: number,
+  formats: string[],
+): Promise<void> {
+  if (formats.length === 0) return;
+  if (formats.length === 1) {
+    await downloadECGFormat(id, formats[0]);
+    return;
+  }
+  const query = formats.map((f) => `format=${encodeURIComponent(f)}`).join("&");
+  await triggerBlobDownload(`${BASE_URL}/api/v1/ecgs/${id}/download?${query}`);
+}
+
 export interface AdminStats {
   total_ecgs: number;
   total_patients: number;
@@ -318,6 +334,26 @@ export async function fetchModules(): Promise<ModuleStatus[]> {
     throw err;
   }
   return res.json();
+}
+
+// fetchExportFormats returns the export formats actually available for the given
+// ECGs — the union of formats the converter can produce for those ECGs' vendors
+// (always includes "original"). Used by the download dialog so it never offers a
+// format the backend would reject.
+export async function fetchExportFormats(
+  ecgIds: number[],
+): Promise<ExportFormat[]> {
+  const res = await fetch(`${BASE_URL}/api/v1/exports/formats`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ecg_ids: ecgIds }),
+  });
+  if (!res.ok) {
+    const err: ErrorResponse = await res.json();
+    throw err;
+  }
+  const json: { formats: ExportFormat[] } = await res.json();
+  return json.formats ?? [];
 }
 
 export async function testWebhook(): Promise<{
@@ -651,11 +687,17 @@ export async function fetchBranding(): Promise<Branding> {
   return json.data ?? { center_name: "", logo_base64: "" };
 }
 
-export async function saveBranding(centerName: string, logoBase64?: string): Promise<void> {
+export async function saveBranding(
+  centerName: string,
+  logoBase64?: string,
+): Promise<void> {
   const res = await fetch(`${BASE_URL}/api/v1/admin/settings/branding`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ center_name: centerName, logo_base64: logoBase64 ?? "" }),
+    body: JSON.stringify({
+      center_name: centerName,
+      logo_base64: logoBase64 ?? "",
+    }),
   });
   if (!res.ok) {
     const err: ErrorResponse = await res.json();
