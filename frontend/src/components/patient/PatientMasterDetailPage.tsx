@@ -20,7 +20,8 @@ import { usePatients } from "../../hooks/usePatients";
 import { useECGs } from "../../hooks/useECGs";
 import { Spinner } from "../ui/Spinner";
 import {
-  downloadECGFormat,
+  downloadECGFormats,
+  createExportJob,
   deleteECG,
   fetchPins,
   pinPatient,
@@ -118,7 +119,15 @@ function VendorBadge({ vendor }: { vendor: string }) {
   );
 }
 
-function PatientHL7Status({ pending, sent, total }: { pending: number; sent: number; total: number }) {
+function PatientHL7Status({
+  pending,
+  sent,
+  total,
+}: {
+  pending: number;
+  sent: number;
+  total: number;
+}) {
   if (total === 0) return null;
   const exhausted = total - pending - sent;
   if (sent === total) {
@@ -266,7 +275,11 @@ function PatientGrid({
                 {patient.ecg_count ?? 0} ECG
                 {(patient.ecg_count ?? 0) > 1 ? "s" : ""}
               </span>
-              {age !== null && <span>{age} {t("common.years", "ans")}</span>}
+              {age !== null && (
+                <span>
+                  {age} {t("common.years", "ans")}
+                </span>
+              )}
               {patient.last_activity && (
                 <span>{formatDate(patient.last_activity)}</span>
               )}
@@ -371,12 +384,13 @@ function PatientTagsRow({ patientId }: { patientId: string }) {
   });
 
   const handleRemove = async (tagId: string) => {
-    queryClient.setQueryData<TagDTO[]>(
-      ["patient-tags", patientId],
-      (old) => (old ?? []).filter((t) => t.id !== tagId),
+    queryClient.setQueryData<TagDTO[]>(["patient-tags", patientId], (old) =>
+      (old ?? []).filter((t) => t.id !== tagId),
     );
     await untagPatient(patientId, tagId);
-    void queryClient.invalidateQueries({ queryKey: ["patient-tags", patientId] });
+    void queryClient.invalidateQueries({
+      queryKey: ["patient-tags", patientId],
+    });
   };
 
   return (
@@ -390,7 +404,12 @@ function PatientTagsRow({ patientId }: { patientId: string }) {
         />
       ))}
       {(canCreate || canApply) && (
-        <TagManager patientId={patientId} canCreate={canCreate} canDelete={canDeleteTag} canApply={canApply} />
+        <TagManager
+          patientId={patientId}
+          canCreate={canCreate}
+          canDelete={canDeleteTag}
+          canApply={canApply}
+        />
       )}
     </div>
   );
@@ -429,23 +448,36 @@ function PatientHL7History({ patientId }: { patientId: string }) {
         {t("patient.hl7HistoryHide")}
       </button>
       {attempts.length === 0 ? (
-        <p className="text-[11px] text-muted-foreground/60 italic">{t("patient.hl7NoHistory")}</p>
+        <p className="text-[11px] text-muted-foreground/60 italic">
+          {t("patient.hl7NoHistory")}
+        </p>
       ) : (
         <div className="space-y-1 max-h-40 overflow-y-auto">
           {attempts.map((a) => (
             <div key={a.id} className="flex items-center gap-2 text-[11px]">
-              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                a.status === "success" ? "bg-green-400" :
-                a.status === "rejected" ? "bg-amber-400" :
-                "bg-red-400"
-              }`} />
+              <span
+                className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                  a.status === "success"
+                    ? "bg-green-400"
+                    : a.status === "rejected"
+                      ? "bg-amber-400"
+                      : "bg-red-400"
+                }`}
+              />
               <span className="text-muted-foreground font-mono w-32 shrink-0">
-                {new Date(a.created_at).toLocaleString("fr-FR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                {new Date(a.created_at).toLocaleString("fr-FR", {
+                  day: "2-digit",
+                  month: "2-digit",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
               </span>
               <span className="text-muted-foreground font-mono w-12 shrink-0 text-right">
                 {a.response_ms}ms
               </span>
-              {a.status === "success" && <span className="text-green-400 font-medium">OK</span>}
+              {a.status === "success" && (
+                <span className="text-green-400 font-medium">OK</span>
+              )}
               {a.status === "rejected" && (
                 <span className="text-amber-400 truncate" title={a.msa_message}>
                   MSA {a.msa_code}: {a.msa_message || "rejected"}
@@ -483,14 +515,25 @@ function ECGTagDots({ ecgId, canApply }: { ecgId: string; canApply: boolean }) {
           key={tag.id}
           name={tag.name}
           color={tag.color}
-          onRemove={canApply ? () => {
-            void untagECG(ecgId, tag.id);
-            void queryClient.invalidateQueries({ queryKey: ["ecg-tags", ecgId] });
-          } : undefined}
+          onRemove={
+            canApply
+              ? () => {
+                  void untagECG(ecgId, tag.id);
+                  void queryClient.invalidateQueries({
+                    queryKey: ["ecg-tags", ecgId],
+                  });
+                }
+              : undefined
+          }
         />
       ))}
       {canApply && (
-        <TagManager ecgId={ecgId} canCreate={false} canDelete={false} canApply={canApply} />
+        <TagManager
+          ecgId={ecgId}
+          canCreate={false}
+          canDelete={false}
+          canApply={canApply}
+        />
       )}
     </div>
   );
@@ -519,7 +562,9 @@ function PatientTagDots({ patientId }: { patientId: string }) {
         />
       ))}
       {tags.length > 4 && (
-        <span className="text-[9px] text-muted-foreground">+{tags.length - 4}</span>
+        <span className="text-[9px] text-muted-foreground">
+          +{tags.length - 4}
+        </span>
       )}
     </div>
   );
@@ -618,7 +663,11 @@ function PatientDetail({
                 <Copy className="w-3 h-3" />
               </button>
             </span>
-            <PatientHL7Status pending={pendingCount} sent={sentCount} total={ecgs.length} />
+            <PatientHL7Status
+              pending={pendingCount}
+              sent={sentCount}
+              total={ecgs.length}
+            />
             <span className="text-border">·</span>
             <span>
               {patient.gender === "F"
@@ -671,8 +720,12 @@ function PatientDetail({
                     await forceHL7(ecg.id);
                   }
                   notify("success", t("patient.hl7Forced"));
-                  void queryClient.invalidateQueries({ queryKey: ["ecgs", patient.id] });
-                  void queryClient.invalidateQueries({ queryKey: ["patients"] });
+                  void queryClient.invalidateQueries({
+                    queryKey: ["ecgs", patient.id],
+                  });
+                  void queryClient.invalidateQueries({
+                    queryKey: ["patients"],
+                  });
                 } catch {
                   notify("error", t("patient.hl7ForceError"));
                 }
@@ -681,12 +734,6 @@ function PatientDetail({
             >
               <RefreshCw className="w-3.5 h-3.5" />
               {t("patient.forceHL7")}
-            </button>
-          )}
-          {canRead && (
-            <button className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm bg-primary text-primary-foreground hover:opacity-90 transition-opacity">
-              <Download className="w-3.5 h-3.5" />
-              {t("patient.downloadAll")}
             </button>
           )}
         </div>
@@ -701,8 +748,16 @@ function PatientDetail({
             value: formatDate(patient.last_activity),
             cls: "text-foreground font-mono text-sm",
           },
-          { label: t("patient.hl7Sent"), value: sentCount, cls: "text-green-400" },
-          { label: t("patient.hl7Pending"), value: pendingCount, cls: "text-amber-400" },
+          {
+            label: t("patient.hl7Sent"),
+            value: sentCount,
+            cls: "text-green-400",
+          },
+          {
+            label: t("patient.hl7Pending"),
+            value: pendingCount,
+            cls: "text-amber-400",
+          },
         ].map((s) => (
           <div
             key={s.label}
@@ -824,17 +879,17 @@ function PatientDetail({
                       <DownloadFormatPopup
                         open={downloadOpenId === String(ecg.id)}
                         onClose={() => setDownloadOpenId(null)}
-                        vendor={ecg.vendor}
+                        ecgIds={[ecg.id]}
                         busy={downloading}
                         onConfirm={async (formats) => {
                           setDownloadOpenId(null);
                           setDownloading(true);
                           try {
-                            for (const fmt of formats) {
-                              await downloadECGFormat(ecg.id, fmt).catch(() => {
-                                notify("error", t("ecg.downloadError"));
-                              });
-                            }
+                            // One request: a single format streams the file,
+                            // multiple formats come back as one ZIP.
+                            await downloadECGFormats(ecg.id, formats);
+                          } catch {
+                            notify("error", t("ecg.downloadError"));
                           } finally {
                             setDownloading(false);
                           }
@@ -882,7 +937,9 @@ function PatientDetail({
       {viewerEcgId && (
         <ECGViewerModal
           ecgId={viewerEcgId}
-          filename={ecgs.find((e) => String(e.id) === viewerEcgId)?.original_filename}
+          filename={
+            ecgs.find((e) => String(e.id) === viewerEcgId)?.original_filename
+          }
           onClose={() => setViewerEcgId(null)}
         />
       )}
@@ -906,9 +963,10 @@ function BulkECGFooter({
   onClear: () => void;
 }) {
   const { t } = useTranslation();
-  const { notify } = useNotification();
+  const { notify, notifyProgress } = useNotification();
   const queryClient = useQueryClient();
   const [busy, setBusy] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
 
   return (
     <div className="absolute bottom-0 left-0 right-0 z-20 border-t border-border bg-card/95 backdrop-blur-sm px-6 py-3 flex items-center justify-between">
@@ -925,49 +983,54 @@ function BulkECGFooter({
           {t("common.deselect")}
         </button>
         {canRead && (
-          <button
-            disabled={busy}
-            onClick={async () => {
-              setBusy(true);
-              try {
-                const { createExportJob } = await import("../../lib/api");
-                await createExportJob({
-                  ecg_ids: Array.from(ecgIds),
-                  formats: ["original"],
-                });
-                notify("success", t("common.exportStarted", { count }));
-                onClear();
-              } catch {
-                notify("error", t("common.exportError"));
-              } finally {
-                setBusy(false);
-              }
-            }}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity disabled:opacity-50"
-          >
-            <Download className="w-3.5 h-3.5" />
-            {busy ? t("export.exporting") : t("ecg.download")}
-          </button>
+          <>
+            <button
+              disabled={busy}
+              onClick={() => setExportOpen(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity disabled:opacity-50"
+            >
+              <Download className="w-3.5 h-3.5" />
+              {busy ? t("export.exporting") : t("ecg.download")}
+            </button>
+            <DownloadFormatPopup
+              open={exportOpen}
+              onClose={() => setExportOpen(false)}
+              ecgIds={Array.from(ecgIds)}
+              busy={busy}
+              onConfirm={async (formats) => {
+                setExportOpen(false);
+                setBusy(true);
+                try {
+                  const job = await createExportJob({
+                    ecg_ids: Array.from(ecgIds),
+                    formats,
+                  });
+                  // Open the progress toast (WebSocket) which surfaces the ZIP
+                  // download link when the job completes.
+                  notifyProgress(job.id, t("export.overlayTitle"));
+                  // Defer clear so the notification renders before this footer unmounts.
+                  setTimeout(onClear, 100);
+                } catch {
+                  notify("error", t("common.exportError"));
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            />
+          </>
         )}
         {canDelete && (
           <button
             disabled={busy}
             onClick={async () => {
-              if (
-                !window.confirm(
-                  t("ecg.deleteConfirmBulk", { count }),
-                )
-              )
+              if (!window.confirm(t("ecg.deleteConfirmBulk", { count })))
                 return;
               setBusy(true);
               try {
                 for (const id of ecgIds) {
                   await deleteECG(id);
                 }
-                notify(
-                  "success",
-                  t("ecg.deletedBulk", { count }),
-                );
+                notify("success", t("ecg.deletedBulk", { count }));
                 onClear();
                 void queryClient.invalidateQueries({ queryKey: ["patients"] });
                 void queryClient.invalidateQueries({ queryKey: ["ecgs"] });
@@ -1024,7 +1087,9 @@ export function PatientMasterDetailPage({
   const [pinnedOnly, setPinnedOnly] = useState(false);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [tagDropdownOpen, setTagDropdownOpen] = useState(false);
-  const [sortBy, setSortBy] = useState<"last_name" | "last_activity">("last_name");
+  const [sortBy, setSortBy] = useState<"last_name" | "last_activity">(
+    "last_name",
+  );
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [ecgCountByPatient, setEcgCountByPatient] = useState<
     Map<number, number>
@@ -1049,21 +1114,26 @@ export function PatientMasterDetailPage({
   useEffect(() => {
     if (hl7Notified.current || !canConfigHL7) return;
     hl7Notified.current = true;
-    fetchActiveHL7Mappings().then(({ active }) => {
-      if (!active) {
-        notify("warn", t("patient.hl7NotConfigured"), {
-          label: t("patient.hl7Configure"),
-          href: "/hl7",
-        });
-      }
-    }).catch(() => {});
+    fetchActiveHL7Mappings()
+      .then(({ active }) => {
+        if (!active) {
+          notify("warn", t("patient.hl7NotConfigured"), {
+            label: t("patient.hl7Configure"),
+            href: "/hl7",
+          });
+        }
+      })
+      .catch(() => {});
   }, [canConfigHL7]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const tagDropdownRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!tagDropdownOpen) return;
     function handleClick(e: MouseEvent) {
-      if (tagDropdownRef.current && !tagDropdownRef.current.contains(e.target as Node)) {
+      if (
+        tagDropdownRef.current &&
+        !tagDropdownRef.current.contains(e.target as Node)
+      ) {
         setTagDropdownOpen(false);
       }
     }
@@ -1094,7 +1164,13 @@ export function PatientMasterDetailPage({
   useEffect(() => {
     if (selectedPatient) {
       const updated = patients.find((p) => p.id === selectedPatient.id);
-      if (updated && (updated.last_name !== selectedPatient.last_name || updated.first_name !== selectedPatient.first_name || updated.date_of_birth !== selectedPatient.date_of_birth || updated.gender !== selectedPatient.gender)) {
+      if (
+        updated &&
+        (updated.last_name !== selectedPatient.last_name ||
+          updated.first_name !== selectedPatient.first_name ||
+          updated.date_of_birth !== selectedPatient.date_of_birth ||
+          updated.gender !== selectedPatient.gender)
+      ) {
         setSelectedPatient(updated);
       }
     }
@@ -1342,7 +1418,10 @@ export function PatientMasterDetailPage({
                 : "text-muted-foreground border-border hover:text-foreground hover:bg-muted/50"
             }`}
           >
-            <Star className="w-3 h-3" fill={pinnedOnly ? "currentColor" : "none"} />
+            <Star
+              className="w-3 h-3"
+              fill={pinnedOnly ? "currentColor" : "none"}
+            />
             {t("patient.favorites")}
           </button>
           {/* Tag multi-select filter */}
@@ -1383,7 +1462,9 @@ export function PatientMasterDetailPage({
                             checked={isActive}
                             onChange={() => {
                               setSelectedTags((prev) =>
-                                isActive ? prev.filter((id) => id !== tag.id) : [...prev, tag.id],
+                                isActive
+                                  ? prev.filter((id) => id !== tag.id)
+                                  : [...prev, tag.id],
                               );
                               setPage(1);
                             }}
@@ -1393,7 +1474,9 @@ export function PatientMasterDetailPage({
                             className="w-2.5 h-2.5 rounded-full shrink-0"
                             style={{ backgroundColor: tag.color }}
                           />
-                          <span className="text-xs text-foreground truncate">{tag.name}</span>
+                          <span className="text-xs text-foreground truncate">
+                            {tag.name}
+                          </span>
                         </label>
                       );
                     })
@@ -1402,7 +1485,10 @@ export function PatientMasterDetailPage({
                 {selectedTags.length > 0 && (
                   <div className="border-t border-border p-2">
                     <button
-                      onClick={() => { setSelectedTags([]); setPage(1); }}
+                      onClick={() => {
+                        setSelectedTags([]);
+                        setPage(1);
+                      }}
                       className="w-full text-xs text-muted-foreground hover:text-foreground text-center py-1 transition-colors"
                     >
                       {t("common.clearAll")}
@@ -1452,7 +1538,9 @@ export function PatientMasterDetailPage({
             }`}
           >
             <Clock className="w-3 h-3" />
-            {sortBy === "last_activity" && sortOrder === "asc" ? t("patient.sortOldest") : t("patient.sortRecent")}
+            {sortBy === "last_activity" && sortOrder === "asc"
+              ? t("patient.sortOldest")
+              : t("patient.sortRecent")}
           </button>
           <div className="flex items-center gap-2 text-xs text-muted-foreground shrink-0">
             <span>
