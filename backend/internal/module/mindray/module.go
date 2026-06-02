@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/LIRYC-IHU/ecg-hub/internal/module"
@@ -176,6 +177,15 @@ func (m *Module) Parse(ctx context.Context, data []byte) (*module.ECGMetadata, e
 	}
 	if md.Name != "" {
 		extra["patient_name"] = md.Name
+		// Map the single name field to first/last so the persister stores patient
+		// demographics (it reads extra["last_name"]/["first_name"]/["sex"]).
+		last, first := splitName(md.Name)
+		if last != "" {
+			extra["last_name"] = last
+		}
+		if first != "" {
+			extra["first_name"] = first
+		}
 	}
 	if md.Gender != "" && md.Gender != "UN" {
 		extra["sex"] = md.Gender
@@ -192,6 +202,23 @@ func (m *Module) Parse(ctx context.Context, data []byte) (*module.ECGMetadata, e
 		SampleRate:      float64(md.SampleRate),
 		Extra:           extra,
 	}, nil
+}
+
+// splitName splits a Mindray patient name into (last, first). Mindray reports a
+// single "name" field; structured names use "^" (HL7-style) or "," as the
+// separator. When no separator is present the whole value is treated as the last
+// name (e.g. "moyles" → last="moyles", first="").
+func splitName(name string) (last, first string) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "", ""
+	}
+	for _, sep := range []string{"^", ","} {
+		if i := strings.Index(name, sep); i >= 0 {
+			return strings.TrimSpace(name[:i]), strings.TrimSpace(name[i+1:])
+		}
+	}
+	return name, ""
 }
 
 // UpdateFile — Mindray binary format is not editable; no-op.
