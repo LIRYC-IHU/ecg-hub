@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { Download, X } from 'lucide-react'
-import { fetchModules } from '../../lib/api'
+import { fetchExportFormats } from '../../lib/api'
 import type { ExportFormat } from '../../lib/api'
 import { Spinner } from '../ui/Spinner'
 import { useDownloadFormatPrefs } from '../../hooks/useDownloadFormatPrefs'
@@ -11,9 +11,10 @@ import { useDownloadFormatPrefs } from '../../hooks/useDownloadFormatPrefs'
 interface Props {
   open: boolean
   onClose: () => void
-  // Restrict the format list to a single vendor's module (per-ECG download).
-  // When omitted, formats from every loaded module are offered (multi-ECG batch).
-  vendor?: string
+  // The ECGs this download concerns (one for a per-ECG download, many for a batch).
+  // The available formats are the union of what the converter can produce for these
+  // ECGs' vendors — resolved by the backend so invalid combinations are never offered.
+  ecgIds: number[]
   busy?: boolean
   onConfirm: (formats: string[]) => void
 }
@@ -21,31 +22,20 @@ interface Props {
 // DownloadFormatPopup is a centered modal showing a checkbox list of available
 // export formats. The user's selection is persisted via useDownloadFormatPrefs
 // so the popup re-opens with the same checks across sessions.
-export function DownloadFormatPopup({ open, onClose, vendor, busy, onConfirm }: Props) {
+export function DownloadFormatPopup({ open, onClose, ecgIds, busy, onConfirm }: Props) {
   const { t } = useTranslation()
 
-  const { data: modules, isLoading } = useQuery({
-    queryKey: ['modules'],
-    queryFn: fetchModules,
+  // Stable key/identity for the requested ECGs so the query doesn't refetch on every render.
+  const idsKey = useMemo(() => [...ecgIds].sort((a, b) => a - b).join(','), [ecgIds])
+
+  const { data: formats, isLoading } = useQuery({
+    queryKey: ['export-formats', idsKey],
+    queryFn: () => fetchExportFormats(ecgIds),
     staleTime: 5 * 60_000,
-    enabled: open,
+    enabled: open && ecgIds.length > 0,
   })
 
-  const availableFormats = useMemo<ExportFormat[]>(() => {
-    if (!modules) return []
-    const list: ExportFormat[] = []
-    const seen = new Set<string>()
-    const sources = vendor ? modules.filter((m) => m.name === vendor) : modules
-    for (const mod of sources) {
-      for (const fmt of mod.formats ?? []) {
-        if (!seen.has(fmt.id)) {
-          seen.add(fmt.id)
-          list.push(fmt)
-        }
-      }
-    }
-    return list
-  }, [modules, vendor])
+  const availableFormats = useMemo<ExportFormat[]>(() => formats ?? [], [formats])
 
   const availableIds = availableFormats.map((f) => f.id)
   const { selected: persisted, save } = useDownloadFormatPrefs(availableIds)
