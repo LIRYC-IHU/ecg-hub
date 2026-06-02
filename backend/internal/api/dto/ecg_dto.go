@@ -50,7 +50,7 @@ type EcgDTO struct {
 	OriginalFilename string         `json:"original_filename"`
 	RecordedAt       *string        `json:"recorded_at"` // ISO 8601 UTC; nil for legacy records without acquisition timestamp
 	IngestedAt       string         `json:"ingested_at"` // ISO 8601 UTC
-	HL7Status        string         `json:"hl7_status"`  // "pending"|"success"|"hl7_exhausted"
+	HL7Status        string         `json:"hl7_status"`  // "pending"|"success"|"hl7_exhausted"|"hl7_rejected"
 	Extra            map[string]any `json:"extra"`       // editable vendor metadata
 }
 
