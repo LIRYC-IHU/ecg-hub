@@ -163,13 +163,45 @@ func extractComponent(fieldValue string, compIdx int) string {
 	return components[compIdx-1]
 }
 
+// Default HL7 paths for the acknowledgment/error fields when no explicit mapping
+// is configured. MSA.1 carries the ack code (AA/AE/AR), MSA.3 the human-readable text.
+const (
+	defaultErrorCodePath    = "MSA.1"
+	defaultErrorMessagePath = "MSA.3"
+)
+
+// ApplyErrorMapping extracts the HL7 acknowledgment code and error message from a raw
+// HL7 response using the configured mappings. The "error_code" and "error_message"
+// target fields override the default MSA.1 / MSA.3 paths, allowing a HIS that reports
+// errors in a non-standard location to be mapped like any demographic field.
+//
+// Returns the extracted (code, message). Empty strings mean the configured path
+// resolved to nothing in the response.
+func ApplyErrorMapping(raw string, mappings []models.HL7Mapping) (code string, message string) {
+	codePath, msgPath := defaultErrorCodePath, defaultErrorMessagePath
+	for _, m := range mappings {
+		switch m.TargetField {
+		case "error_code":
+			if m.SourcePath != "" {
+				codePath = m.SourcePath
+			}
+		case "error_message":
+			if m.SourcePath != "" {
+				msgPath = m.SourcePath
+			}
+		}
+	}
+	return ExtractByPath(raw, codePath), ExtractByPath(raw, msgPath)
+}
+
 // ApplyMappings applies a set of HL7 field mappings to a raw HL7 message and returns
 // a populated PatientDemographics struct. Each mapping's SourcePath is used to extract
 // a value from the raw message, and the TargetField determines which demographics field
 // receives the extracted value.
 //
 // Supported TargetField values: "last_name", "first_name", "date_of_birth", "gender",
-// "address", "phone".
+// "nda", "address", "phone". The "error_code"/"error_message" fields are handled
+// separately by ApplyErrorMapping and ignored here.
 func ApplyMappings(raw string, mappings []models.HL7Mapping) *PatientDemographics {
 	d := &PatientDemographics{}
 	for _, m := range mappings {

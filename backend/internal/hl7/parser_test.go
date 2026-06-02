@@ -134,3 +134,38 @@ func TestApplyMappings_EmptyMappings(t *testing.T) {
 		t.Errorf("expected empty demographics with nil mappings, got %+v", d)
 	}
 }
+
+func TestApplyErrorMapping_DefaultsToMSA(t *testing.T) {
+	// MSA|<code>|<control-id>|<text-message>
+	raw := "MSH|^~\\&|HIS|FAC|APP|RFAC|20250101120000||ACK|123|P|2.5\r" +
+		"MSA|AE|123|Patient introuvable\r"
+
+	// No error_* mappings → fall back to MSA.1 / MSA.3.
+	code, msg := ApplyErrorMapping(raw, nil)
+	if code != "AE" {
+		t.Errorf("code = %q, want %q", code, "AE")
+	}
+	if msg != "Patient introuvable" {
+		t.Errorf("message = %q, want %q", msg, "Patient introuvable")
+	}
+}
+
+func TestApplyErrorMapping_CustomPaths(t *testing.T) {
+	// A HIS that reports the human-readable error in ERR.3 instead of MSA.3.
+	raw := "MSH|^~\\&|HIS|FAC|APP|RFAC|20250101120000||ACK|123|P|2.5\r" +
+		"MSA|AR|123|\r" +
+		"ERR|||Unknown patient identifier\r"
+
+	mappings := []models.HL7Mapping{
+		{SourcePath: "MSA.1", TargetField: "error_code"},
+		{SourcePath: "ERR.3", TargetField: "error_message"},
+	}
+
+	code, msg := ApplyErrorMapping(raw, mappings)
+	if code != "AR" {
+		t.Errorf("code = %q, want %q", code, "AR")
+	}
+	if msg != "Unknown patient identifier" {
+		t.Errorf("message = %q, want %q", msg, "Unknown patient identifier")
+	}
+}
