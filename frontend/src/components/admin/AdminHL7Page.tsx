@@ -677,6 +677,8 @@ const TARGET_FIELDS = [
   "nip",
   "address",
   "phone",
+  "error_code",
+  "error_message",
 ] as const;
 
 function HL7MappingZone({
