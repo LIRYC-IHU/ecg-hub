@@ -36,6 +36,11 @@ func (v *Volume) Write(filename string, data []byte) (string, error) {
 	return fullPath, nil
 }
 
+// GetPath returns the absolute path for basePath/filename (supports relative sub-paths).
+func (v *Volume) GetPath(filename string) string {
+	return filepath.Join(v.basePath, filename)
+}
+
 // WriteForPatient stores the file under basePath/<patientID>/filename.
 // Creates the patient subdirectory if it does not exist.
 // Returns the path relative to basePath (e.g. "P001/ecg_2026-01-01.xml") stored in DB.
