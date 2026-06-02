@@ -34,7 +34,7 @@ func init() {
 // Module implements module.Module for DICOM ECG files.
 type Module struct{}
 
-func (m *Module) Name() string                { return "dicom" }
+func (m *Module) Name() string                 { return "dicom" }
 func (m *Module) AcceptedExtensions() []string { return []string{".dcm", ".dicom"} }
 
 // Health always returns nil — the DICOM module has no external dependencies.
@@ -44,7 +44,6 @@ func (m *Module) Health() error { return nil }
 func (m *Module) SupportedFormats() []module.ExportFormat {
 	return []module.ExportFormat{
 		{ID: "original", Label: "Original (DICOM ECG)", Extension: ".dcm"},
-		{ID: "xmlfda", Label: "FDA HL7 aECG XML", Extension: ".xml"},
 	}
 }
 
