@@ -13,6 +13,30 @@ import (
 	appmetrics "github.com/LIRYC-IHU/ecg-hub/internal/metrics"
 )
 
+// FormatMeta describes a downloadable export format for the UI.
+type FormatMeta struct {
+	ID        string `json:"id"`
+	Label     string `json:"label"`
+	Extension string `json:"extension"`
+}
+
+// ExportFormatOrder is the canonical display order of export formats.
+var ExportFormatOrder = []string{"original", "xmlfda", "dicom"}
+
+// exportFormatMeta holds UI metadata for each known format. "original" has no fixed
+// extension — it depends on the source vendor — so it is left blank.
+var exportFormatMeta = map[string]FormatMeta{
+	"original": {ID: "original", Label: "Original", Extension: ""},
+	"xmlfda":   {ID: "xmlfda", Label: "FDA HL7 aECG XML", Extension: ".xml"},
+	"dicom":    {ID: "dicom", Label: "DICOM ECG", Extension: ".dcm"},
+}
+
+// FormatMetaFor returns the UI metadata for a format ID.
+func FormatMetaFor(id string) (FormatMeta, bool) {
+	m, ok := exportFormatMeta[id]
+	return m, ok
+}
+
 var (
 	// ErrFormatNotSupported is returned when no converter binary is registered for the vendor+format combination.
 	ErrFormatNotSupported = errors.New("export: no converter available for this vendor/format combination")
@@ -25,6 +49,7 @@ var (
 type Converter interface {
 	Convert(ctx context.Context, sourcePath, vendor, format string, patient *models.Patient) ([]byte, error)
 	SupportsFormat(vendor, format string) bool
+	SupportedFormats(vendor string) []string
 	ConvertToXMLFDA(ctx context.Context, sourcePath, vendor string, patient *models.Patient) ([]byte, error)
 }
 
@@ -50,6 +75,20 @@ func (b *ECGBridge) SupportsFormat(vendor, format string) bool {
 	return ok
 }
 
+// SupportedFormats returns the ordered list of format IDs available for a vendor.
+// "original" is always included; conversion formats are included only when a
+// converter binary is registered for that vendor — this is the single source of
+// truth for what the UI may offer and what Convert can actually produce.
+func (b *ECGBridge) SupportedFormats(vendor string) []string {
+	out := make([]string, 0, len(ExportFormatOrder))
+	for _, f := range ExportFormatOrder {
+		if b.SupportsFormat(vendor, f) {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
 // Convert converts the ECG file at sourcePath to the requested format.
 // vendor and format must match a key in the binaries map (e.g. "philips", "xmlfda").
 // patient demographics are optional.
@@ -57,7 +96,6 @@ func (b *ECGBridge) SupportsFormat(vendor, format string) bool {
 // Returns ErrConversionFailed (wrapping stderr) on non-zero exit or deadline exceeded.
 func (b *ECGBridge) Convert(ctx context.Context, sourcePath, vendor, format string, patient *models.Patient) ([]byte, error) {
 	key := vendor + ":" + format
-	slog.Error("++++++++++++++++++++++++++ ECGBridge: converting %s with key %s using source file %s\n", format, key, sourcePath)
 	binary, ok := b.binaries[key]
 	if !ok {
 		return nil, fmt.Errorf("%w: %s", ErrFormatNotSupported, key)
