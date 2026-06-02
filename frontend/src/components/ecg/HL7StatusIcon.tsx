@@ -11,6 +11,7 @@ const dotColor: Record<ECG['hl7_status'], string> = {
   pending: 'bg-muted-foreground',
   success: 'bg-success',
   hl7_exhausted: 'bg-warning',
+  hl7_rejected: 'bg-destructive',
 }
 
 export function HL7StatusIcon({ status }: Props) {
