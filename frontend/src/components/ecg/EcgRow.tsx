@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Download, RefreshCw, Trash2, ChevronDown, ChevronUp } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { downloadECGFormat, fetchECGMeta, forceHL7, deleteECG, patchECGMetadata } from '../../lib/api'
+import { downloadECGFormats, fetchECGMeta, forceHL7, deleteECG, patchECGMetadata } from '../../lib/api'
 import { Spinner } from '../ui/Spinner'
 import { useNotification } from '../../context/NotificationContext'
 import { DownloadFormatPopup } from './DownloadFormatPopup'
@@ -12,6 +12,7 @@ const hl7StatusConfig: Record<string, { dot: string; label: string }> = {
   success:      { dot: 'bg-success',          label: 'Envoyé'     },
   pending:      { dot: 'bg-muted-foreground',  label: 'En attente' },
   hl7_exhausted:{ dot: 'bg-warning',           label: 'Épuisé'     },
+  hl7_rejected: { dot: 'bg-destructive',       label: 'Erreur'     },
 }
 
 interface Props {
@@ -130,19 +131,17 @@ export function EcgRow({ ecg, isSelected, onToggle, canForceHL7, canDelete, canR
           <DownloadFormatPopup
             open={downloadOpen}
             onClose={() => setDownloadOpen(false)}
-            vendor={ecg.vendor}
+            ecgIds={[ecg.id]}
             busy={downloading}
             onConfirm={async (formats) => {
               setDownloadOpen(false)
               setDownloading(true)
               try {
-                // Sequential so the browser doesn't silently swallow concurrent
-                // downloads of the same file — still fast enough in practice.
-                for (const fmt of formats) {
-                  await downloadECGFormat(ecg.id, fmt).catch((err: { message?: string }) => {
-                    notify('error', err?.message ?? t('ecg.downloadError'))
-                  })
-                }
+                // One request: a single format streams the file, multiple formats
+                // come back as one ZIP from the backend.
+                await downloadECGFormats(ecg.id, formats)
+              } catch (err) {
+                notify('error', (err as { message?: string })?.message ?? t('ecg.downloadError'))
               } finally {
                 setDownloading(false)
               }
@@ -150,7 +149,7 @@ export function EcgRow({ ecg, isSelected, onToggle, canForceHL7, canDelete, canR
           />
 
           {/* Force HL7 */}
-          {canForceHL7 && ecg.hl7_status === 'hl7_exhausted' && !forced && (
+          {canForceHL7 && (ecg.hl7_status === 'hl7_exhausted' || ecg.hl7_status === 'hl7_rejected') && !forced && (
             <button
               onClick={() => forceMutation.mutate()}
               disabled={forceMutation.isPending}
