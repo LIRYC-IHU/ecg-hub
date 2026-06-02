@@ -5,6 +5,7 @@ package api
 import (
 	"log/slog"
 	"net/http"
+	"os"
 	"time"
 
 	echoSwagger "github.com/swaggo/echo-swagger"
@@ -12,6 +13,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 	emw "github.com/labstack/echo/v4/middleware"
 
 	"github.com/LIRYC-IHU/ecg-hub/internal/api/handlers"
@@ -47,31 +49,31 @@ func newLoginRateLimiter() echo.MiddlewareFunc {
 }
 
 type RouterConfig struct {
-	e               *echo.Echo
-	gormDB          *gorm.DB
-	authProvider    auth.Provider
-	bridge          export.Converter
-	notifier        *webhook.Notifier
-	keycloakAdmin   *auth.KeycloakAdminClient
-	checker         *auth.PermissionChecker
-	userRepo        *repository.UserRepo
-	activeModules   []module.Module
-	dicomStatus     handlers.DICOMStatus
-	ftpStatus       handlers.FTPStatus
-	ectpStatus      handlers.ECTPStatus
-	exportRepo      *repository.ExportJobRepository
-	exportPool      *export.WorkerPool
-	connCheckers    []handlers.ConnectorHealthChecker
-	hl7Client       *hl7.Client          // nil when HL7 is disabled
-	hl7Enricher     handlers.HL7Enricher // nil when HL7 is disabled
-	hl7Scheduler    handlers.HL7SchedulerStatus           // nil when HL7 is disabled
-	hl7SettingsRepo *repository.HL7SettingsRepository     // nil when HL7 is disabled
-	cfg              *config.Config
-	authEncKey       string // encryption key for auth provider configs
-	moduleConfigRepo    *repository.ModuleConfigRepository
-	moduleSettingsRepo  *repository.ModuleSettingsRepository
-	ftpQueue            ingestion.IngestQueue
-	ingestRouter        *ingestion.Router // for hot module reload
+	e                  *echo.Echo
+	gormDB             *gorm.DB
+	authProvider       auth.Provider
+	bridge             export.Converter
+	notifier           *webhook.Notifier
+	keycloakAdmin      *auth.KeycloakAdminClient
+	checker            *auth.PermissionChecker
+	userRepo           *repository.UserRepo
+	activeModules      []module.Module
+	dicomStatus        handlers.DICOMStatus
+	ftpStatus          handlers.FTPStatus
+	ectpStatus         handlers.ECTPStatus
+	exportRepo         *repository.ExportJobRepository
+	exportPool         *export.WorkerPool
+	connCheckers       []handlers.ConnectorHealthChecker
+	hl7Client          *hl7.Client                       // nil when HL7 is disabled
+	hl7Enricher        handlers.HL7Enricher              // nil when HL7 is disabled
+	hl7Scheduler       handlers.HL7SchedulerStatus       // nil when HL7 is disabled
+	hl7SettingsRepo    *repository.HL7SettingsRepository // nil when HL7 is disabled
+	cfg                *config.Config
+	authEncKey         string // encryption key for auth provider configs
+	moduleConfigRepo   *repository.ModuleConfigRepository
+	moduleSettingsRepo *repository.ModuleSettingsRepository
+	ftpQueue           ingestion.IngestQueue
+	ingestRouter       *ingestion.Router // for hot module reload
 }
 
 func NewRouterConfig(e *echo.Echo, gormDB *gorm.DB, authProvider auth.Provider, bridge export.Converter,
@@ -84,31 +86,31 @@ func NewRouterConfig(e *echo.Echo, gormDB *gorm.DB, authProvider auth.Provider, 
 	moduleConfigRepo *repository.ModuleConfigRepository, moduleSettingsRepo *repository.ModuleSettingsRepository,
 	ftpQueue ingestion.IngestQueue, ingestRouter *ingestion.Router) *RouterConfig {
 	return &RouterConfig{
-		e:                   e,
-		gormDB:              gormDB,
-		authProvider:        authProvider,
-		bridge:              bridge,
-		notifier:            notifier,
-		keycloakAdmin:       keycloakAdmin,
-		checker:             checker,
-		userRepo:            userRepo,
-		activeModules:       activeModules,
-		dicomStatus:         dicomStatus,
-		ftpStatus:           ftpStatus,
-		ectpStatus:          ectpStatus,
-		exportRepo:          exportRepo,
-		exportPool:          exportPool,
-		connCheckers:        connCheckers,
-		hl7Client:           hl7Client,
-		hl7Enricher:         hl7Enricher,
-		hl7Scheduler:        hl7Scheduler,
-		hl7SettingsRepo:     hl7SettingsRepo,
-		cfg:                 cfg,
-		authEncKey:          authEncKey,
-		moduleConfigRepo:    moduleConfigRepo,
-		moduleSettingsRepo:  moduleSettingsRepo,
-		ftpQueue:            ftpQueue,
-		ingestRouter:        ingestRouter,
+		e:                  e,
+		gormDB:             gormDB,
+		authProvider:       authProvider,
+		bridge:             bridge,
+		notifier:           notifier,
+		keycloakAdmin:      keycloakAdmin,
+		checker:            checker,
+		userRepo:           userRepo,
+		activeModules:      activeModules,
+		dicomStatus:        dicomStatus,
+		ftpStatus:          ftpStatus,
+		ectpStatus:         ectpStatus,
+		exportRepo:         exportRepo,
+		exportPool:         exportPool,
+		connCheckers:       connCheckers,
+		hl7Client:          hl7Client,
+		hl7Enricher:        hl7Enricher,
+		hl7Scheduler:       hl7Scheduler,
+		hl7SettingsRepo:    hl7SettingsRepo,
+		cfg:                cfg,
+		authEncKey:         authEncKey,
+		moduleConfigRepo:   moduleConfigRepo,
+		moduleSettingsRepo: moduleSettingsRepo,
+		ftpQueue:           ftpQueue,
+		ingestRouter:       ingestRouter,
 	}
 }
 
@@ -128,6 +130,21 @@ func (r *RouterConfig) RegisterRoutes() {
 	}
 
 	roleRepo := repository.NewRoleRepo(r.gormDB)
+
+	host := os.Getenv("HOST_URL")
+
+	if host != "" {
+		host = "http://" + host
+	} else {
+		host = "http://localhost"
+	}
+
+	r.e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
+		AllowOrigins: []string{host},
+		ExposeHeaders: []string{
+			"Content-Disposition",
+		},
+	}))
 
 	// === Metrics middleware — active when enabled, regardless of port mode ===
 	if r.cfg.Metrics.Enabled {
@@ -295,6 +312,8 @@ func (r *RouterConfig) RegisterRoutes() {
 	// Batch export (FR19, Story 5.1) — requires ecg.download
 	ecgRepo := repository.NewECGRepository(r.gormDB)
 	apiV1.POST("/exports", handlers.CreateExportHandler(r.gormDB, r.exportRepo, ecgRepo, r.exportPool), mw.RequirePermission(r.checker, auth.PermECGDownload))
+	// Available formats for a set of ECGs — drives the download dialog (must precede /exports/:id is N/A: distinct method/path).
+	apiV1.POST("/exports/formats", handlers.ExportFormatsHandler(r.gormDB, r.bridge), mw.RequirePermission(r.checker, auth.PermECGDownload))
 	apiV1.GET("/exports/:id", handlers.GetExportHandler(r.exportRepo, r.checker.AdminRole()), mw.RequirePermission(r.checker, auth.PermECGDownload))
 
 	// Batch export — WebSocket progress + download (FR20, Story 5.2)
