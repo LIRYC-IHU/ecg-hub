@@ -76,7 +76,8 @@
     "status": {
       "pending": "En attente",
       "success": "Envoyé",
-      "hl7_exhausted": "HL7 épuisé"
+      "hl7_exhausted": "HL7 épuisé",
+      "hl7_rejected": "Erreur HL7"
     },
     "meta": {
       "title": "Métadonnées",
@@ -252,6 +253,8 @@
           "nip": "NDA (dossier)",
           "address": "Adresse",
           "phone": "Téléphone",
+          "error_code": "Code d'erreur (ACK)",
+          "error_message": "Message d'erreur",
           "source": "Source"
         }
       }
@@ -307,6 +310,12 @@
     "roles": {
       "title": "Rôles & Permissions",
       "subtitle": "Configurez les rôles et leurs permissions associées",
+      "export": "Exporter JSON",
+      "import": "Importer JSON",
+      "exported": "{{count}} rôle(s) exporté(s)",
+      "importDone": "Import terminé : {{created}} créé(s), {{updated}} mis à jour, {{failed}} échec(s)",
+      "importInvalid": "Fichier JSON invalide",
+      "importEmpty": "Aucun rôle valide trouvé dans le fichier",
       "create": "Nouveau rôle",
       "newRole": "Nouveau rôle",
       "namePlaceholder": "Nom du rôle (ex: infirmière)",

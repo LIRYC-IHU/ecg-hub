@@ -76,7 +76,8 @@
     "status": {
       "pending": "Pending",
       "success": "Sent",
-      "hl7_exhausted": "HL7 exhausted"
+      "hl7_exhausted": "HL7 exhausted",
+      "hl7_rejected": "HL7 error"
     },
     "meta": {
       "title": "Metadata",
@@ -252,6 +253,8 @@
           "nip": "MRN (Medical Record Number)",
           "address": "Address",
           "phone": "Phone",
+          "error_code": "Error code (ACK)",
+          "error_message": "Error message",
           "source": "Source"
         }
       }
@@ -307,6 +310,12 @@
     "roles": {
       "title": "Roles & Permissions",
       "subtitle": "Configure roles and their associated permissions",
+      "export": "Export JSON",
+      "import": "Import JSON",
+      "exported": "{{count}} role(s) exported",
+      "importDone": "Import complete: {{created}} created, {{updated}} updated, {{failed}} failed",
+      "importInvalid": "Invalid JSON file",
+      "importEmpty": "No valid roles found in the file",
       "create": "New role",
       "newRole": "New role",
       "namePlaceholder": "Role name (e.g. nurse)",
