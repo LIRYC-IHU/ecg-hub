@@ -99,12 +99,12 @@ func (e *Enricher) LoadMappings() ([]models.HL7Mapping, error) {
 // It always returns nil — errors are logged and the ingestion pipeline is never blocked (NFR-I3).
 func (e *Enricher) Enrich(ctx context.Context, ecgID string, patientID string) error {
 	start := time.Now()
-	d, err := e.enrichWithMappings(ctx, patientID)
+	d, raw, err := e.enrichWithMappings(ctx, patientID)
 	elapsed := time.Since(start)
 
 	if err != nil {
 		slog.Warn("hl7: query failed", "patient_id", patientID, "error", err)
-		e.recordFailedAttempt(ecgID, patientID, err, elapsed)
+		e.recordFailedAttempt(ecgID, patientID, raw, err, elapsed)
 		return nil
 	}
 
@@ -131,7 +131,10 @@ func (e *Enricher) Enrich(ctx context.Context, ecgID string, patientID string) e
 }
 
 // recordFailedAttempt inserts a failed or rejected attempt when the enricher query fails.
-func (e *Enricher) recordFailedAttempt(ecgID, patientID string, err error, elapsed time.Duration) {
+// raw is the raw HL7 response when available (empty on transport errors). For MSA
+// rejections it is used to extract the error code/message via the active mappings,
+// falling back to the MSA.1/MSA.3 details embedded in the error.
+func (e *Enricher) recordFailedAttempt(ecgID, patientID, raw string, err error, elapsed time.Duration) {
 	if e.attemptRepo == nil {
 		return
 	}
@@ -145,6 +148,20 @@ func (e *Enricher) recordFailedAttempt(ecgID, patientID string, err error, elaps
 	if errors.Is(err, ErrMSARejected) {
 		attempt.Status = "rejected"
 		code, msg := parseMSAFromError(err)
+		// Prefer the mapping-driven extraction when we have the raw response and a
+		// configured mapping (e.g. a HIS reporting the message outside MSA.3).
+		if raw != "" {
+			if mappings, mErr := e.LoadMappings(); mErr == nil && len(mappings) > 0 {
+				if c, m := ApplyErrorMapping(raw, mappings); c != "" || m != "" {
+					if c != "" {
+						code = c
+					}
+					if m != "" {
+						msg = m
+					}
+				}
+			}
+		}
 		attempt.MSACode = code
 		attempt.MSAMessage = msg
 		attempt.Error = err.Error()
@@ -161,7 +178,10 @@ func (e *Enricher) recordFailedAttempt(ecgID, patientID string, err error, elaps
 //   - no mapping repository is configured
 //   - no active mappings exist in the database
 //   - the client does not implement FullQuerier
-func (e *Enricher) enrichWithMappings(ctx context.Context, patientID string) (*PatientDemographics, error) {
+//
+// It also returns the raw HL7 response when available (even on error, so the caller can
+// extract a mapped error message). The fallback path returns an empty raw string.
+func (e *Enricher) enrichWithMappings(ctx context.Context, patientID string) (*PatientDemographics, string, error) {
 	// If we have both a mapping repo and a full-query client, try dynamic extraction.
 	if e.mappingRepo != nil && e.fullClient != nil {
 		mappings, err := e.mappingRepo.GetActiveMappings()
@@ -173,15 +193,22 @@ func (e *Enricher) enrichWithMappings(ctx context.Context, patientID string) (*P
 		}
 	}
 
-	// Fallback: use the legacy QueryPatient which relies on parsePID.
-	return e.client.QueryPatient(ctx, patientID)
+	// Fallback: use the legacy QueryPatient which relies on parsePID (no raw exposed).
+	d, err := e.client.QueryPatient(ctx, patientID)
+	return d, "", err
 }
 
 // queryWithMappings sends a full query and applies dynamic mappings to extract demographics.
-func (e *Enricher) queryWithMappings(ctx context.Context, patientID string, mappings []models.HL7Mapping) (*PatientDemographics, error) {
+// The raw response is returned in all cases (including errors such as an MSA rejection),
+// so the caller can map an error message out of it.
+func (e *Enricher) queryWithMappings(ctx context.Context, patientID string, mappings []models.HL7Mapping) (*PatientDemographics, string, error) {
 	result, err := e.fullClient.QueryPatientFull(ctx, patientID)
 	if err != nil {
-		return nil, err
+		raw := ""
+		if result != nil {
+			raw = result.Raw
+		}
+		return nil, raw, err
 	}
 
 	d := ApplyMappings(result.Raw, mappings)
@@ -189,5 +216,5 @@ func (e *Enricher) queryWithMappings(ctx context.Context, patientID string, mapp
 	if result.Demographics != nil {
 		d.Source = result.Demographics.Source
 	}
-	return d, nil
+	return d, result.Raw, nil
 }
