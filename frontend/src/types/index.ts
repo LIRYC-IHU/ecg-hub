@@ -21,7 +21,7 @@ export interface ECG {
   original_filename: string
   recorded_at: string | null  // acquisition timestamp from device; null for legacy records
   ingested_at: string
-  hl7_status: 'pending' | 'success' | 'hl7_exhausted'
+  hl7_status: 'pending' | 'success' | 'hl7_exhausted' | 'hl7_rejected'
   immutable: boolean
   extra: Record<string, unknown>  // editable metadata (JSONB)
 }
