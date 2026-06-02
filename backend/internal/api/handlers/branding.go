@@ -33,13 +33,13 @@ func GetBrandingHandler(repo *repository.ModuleSettingsRepository) echo.HandlerF
 }
 
 // SaveBrandingHandler handles PUT /api/v1/admin/settings/branding.
-// Body: { "center_name": "IHU Liryc — Bordeaux", "logo_base64": "data:image/png;base64,..." }
+// Body: { "center_name": "CHU name", "logo_base64": "data:image/png;base64,..." }
 // logo_base64 may be empty to keep the existing logo.
 func SaveBrandingHandler(repo *repository.ModuleSettingsRepository) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		var body struct {
-			CenterName  string `json:"center_name"`
-			LogoBase64  string `json:"logo_base64"`
+			CenterName string `json:"center_name"`
+			LogoBase64 string `json:"logo_base64"`
 		}
 		if err := c.Bind(&body); err != nil {
 			return c.JSON(http.StatusBadRequest, mw.APIError("BAD_REQUEST", "invalid body"))
