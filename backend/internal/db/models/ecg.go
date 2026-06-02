@@ -16,7 +16,7 @@ type ECG struct {
 	ContentHash      string         `gorm:"type:varchar(64);uniqueIndex"` // SHA-256 hex digest for deduplication
 	IngestedAt       time.Time      `gorm:"not null;autoCreateTime;index:idx_ecg_patient_date,sort:desc"`
 	RecordedAt       *time.Time     `gorm:"index"`                            // acquisition timestamp from device file; nil for legacy records
-	HL7Status        string         `gorm:"not null;default:'pending';index"` // "pending"|"success"|"hl7_exhausted"
+	HL7Status        string         `gorm:"not null;default:'pending';index"` // "pending"|"success"|"hl7_exhausted"|"hl7_rejected"
 	HL7RetryCount    int            `gorm:"not null;default:0"`               // incremented by retry job (Story 4.2)
 	Extra            map[string]any `gorm:"type:jsonb;serializer:json"`       // editable vendor metadata
 
