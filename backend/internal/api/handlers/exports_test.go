@@ -8,6 +8,7 @@ import (
 	"os"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/labstack/echo/v4"
 
@@ -345,4 +346,88 @@ func TestDownloadExportHandler_OtherUserJob_Returns404(t *testing.T) {
 	}
 	assertCode(t, rec, http.StatusNotFound)
 	assertErrorCode(t, rec, "NOT_FOUND")
+}
+
+// --- tests: ExportFormatsHandler ---
+
+// testBridge returns an ECGBridge wired with the standard converter binaries so
+// SupportedFormats reflects real capability (dicom→xmlfda, nk→xmlfda+dicom).
+func testBridge() *export.ECGBridge {
+	return export.NewECGBridge(map[string]string{
+		"nihon-kohden:xmlfda": "nk-to-fda",
+		"nihon-kohden:dicom":  "nk-to-dicom",
+		"dicom:xmlfda":        "dicom-to-fda",
+	}, time.Second)
+}
+
+func formatIDs(t *testing.T, rec *httptest.ResponseRecorder) []string {
+	t.Helper()
+	var resp struct {
+		Formats []export.FormatMeta `json:"formats"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	ids := make([]string, len(resp.Formats))
+	for i, f := range resp.Formats {
+		ids[i] = f.ID
+	}
+	return ids
+}
+
+func TestExportFormatsHandler_MixedVendors_UnionInOrder(t *testing.T) {
+	e := echo.New()
+	body, _ := json.Marshal(map[string]any{"ecg_ids": []string{"nk", "dcm"}})
+	c, rec := newExportContext(e, http.MethodPost, "/api/v1/exports/formats", body)
+
+	ecgRepo := &stubECGByIDsFinder{ecgs: []models.ECG{
+		{ID: "nk", Vendor: "nihon-kohden"},
+		{ID: "dcm", Vendor: "dicom"},
+	}}
+
+	if err := exportFormatsHandler(ecgRepo, testBridge())(c); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	assertCode(t, rec, http.StatusOK)
+
+	got := formatIDs(t, rec)
+	want := []string{"original", "xmlfda", "dicom"}
+	if len(got) != len(want) {
+		t.Fatalf("formats = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("formats[%d] = %q, want %q (got %v)", i, got[i], want[i], got)
+		}
+	}
+}
+
+func TestExportFormatsHandler_DicomOnly_NoDicomConversion(t *testing.T) {
+	e := echo.New()
+	body, _ := json.Marshal(map[string]any{"ecg_ids": []string{"dcm"}})
+	c, rec := newExportContext(e, http.MethodPost, "/api/v1/exports/formats", body)
+
+	ecgRepo := &stubECGByIDsFinder{ecgs: []models.ECG{{ID: "dcm", Vendor: "dicom"}}}
+
+	if err := exportFormatsHandler(ecgRepo, testBridge())(c); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	assertCode(t, rec, http.StatusOK)
+
+	got := formatIDs(t, rec)
+	want := []string{"original", "xmlfda"} // dicom→dicom has no binary, so not offered
+	if len(got) != len(want) || got[0] != want[0] || got[1] != want[1] {
+		t.Errorf("formats = %v, want %v", got, want)
+	}
+}
+
+func TestExportFormatsHandler_EmptyIDs_Returns400(t *testing.T) {
+	e := echo.New()
+	body, _ := json.Marshal(map[string]any{"ecg_ids": []string{}})
+	c, rec := newExportContext(e, http.MethodPost, "/api/v1/exports/formats", body)
+
+	if err := exportFormatsHandler(&stubECGByIDsFinder{}, testBridge())(c); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	assertCode(t, rec, http.StatusBadRequest)
 }

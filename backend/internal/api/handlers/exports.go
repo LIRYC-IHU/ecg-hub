@@ -167,6 +167,79 @@ func createExportHandler(db *gorm.DB, exportRepo exportJobCreator, ecgRepo ecgBy
 	}
 }
 
+// vendorFormatSupporter is the minimal Converter interface needed to enumerate
+// the export formats available for a vendor.
+type vendorFormatSupporter interface {
+	SupportedFormats(vendor string) []string
+}
+
+// exportFormatsRequest is the JSON body for POST /api/v1/exports/formats.
+type exportFormatsRequest struct {
+	ECGIDs []string `json:"ecg_ids"`
+}
+
+// ExportFormatsHandler handles POST /api/v1/exports/formats.
+// Given a set of ECG IDs, it returns the union of export formats that the converter
+// can actually produce for those ECGs' vendors (always including "original"). This is
+// the single source of truth used by the download dialog so it never offers a
+// vendor/format combination the backend would reject.
+//
+//	POST /api/v1/exports/formats
+//	Body: { "ecg_ids": ["..."] }
+//	200 OK: { "formats": [ { "id": "...", "label": "...", "extension": "..." } ] }
+//
+// @Summary List available export formats for a set of ECGs
+// @Tags Exports
+// @Accept json
+// @Produce json
+// @Param body body map[string]interface{} true "ecg_ids (string[])"
+// @Success 200 {object} map[string]interface{}
+// @Security BearerAuth
+// @Router /api/v1/exports/formats [post]
+func ExportFormatsHandler(db *gorm.DB, bridge vendorFormatSupporter) echo.HandlerFunc {
+	return exportFormatsHandler(repository.NewECGRepository(db), bridge)
+}
+
+func exportFormatsHandler(ecgRepo ecgByIDsFinder, bridge vendorFormatSupporter) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		var req exportFormatsRequest
+		if err := c.Bind(&req); err != nil {
+			return c.JSON(http.StatusBadRequest, mw.APIError("INVALID_REQUEST", "invalid JSON body"))
+		}
+		if len(req.ECGIDs) == 0 {
+			return c.JSON(http.StatusBadRequest, mw.APIError("MISSING_ECG_IDS", "ecg_ids must not be empty"))
+		}
+
+		ecgs, err := ecgRepo.FindByIDs(req.ECGIDs)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, mw.APIError("DB_ERROR", "failed to load ECGs"))
+		}
+
+		// Union of supported format IDs across every selected ECG's vendor.
+		supported := make(map[string]bool)
+		for _, e := range ecgs {
+			for _, f := range bridge.SupportedFormats(e.Vendor) {
+				supported[f] = true
+			}
+		}
+		// Always offer the original even if no ECG matched (defensive).
+		supported["original"] = true
+
+		// Emit in canonical order with UI metadata.
+		formats := make([]export.FormatMeta, 0, len(export.ExportFormatOrder))
+		for _, id := range export.ExportFormatOrder {
+			if !supported[id] {
+				continue
+			}
+			if meta, ok := export.FormatMetaFor(id); ok {
+				formats = append(formats, meta)
+			}
+		}
+
+		return c.JSON(http.StatusOK, map[string]any{"formats": formats})
+	}
+}
+
 // dedupeFormats trims whitespace, drops empties, and removes duplicates while preserving order.
 // Returns nil when no valid format remains.
 func dedupeFormats(in []string) []string {
