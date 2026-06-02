@@ -70,7 +70,7 @@ func (r *ECGRepository) Insert(ecg *models.ECG) error {
 // UpdateHL7Status updates the hl7_status column of an ECG record.
 // This is the ONLY single-column update on hl7_status — use UpdateHL7Lifecycle when
 // also updating hl7_retry_count. Both are NFR-R4 exceptions (lifecycle metadata).
-// Valid status values: "pending", "success", "hl7_exhausted".
+// Valid status values: "pending", "success", "hl7_exhausted", "hl7_rejected".
 func (r *ECGRepository) UpdateHL7Status(ecgID string, status string) error {
 	result := r.db.Model(&models.ECG{}).Where("id = ?", ecgID).Update("hl7_status", status)
 	if result.Error != nil {
