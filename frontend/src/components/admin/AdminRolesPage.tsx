@@ -1,11 +1,19 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
-import { Plus, Trash2, Shield } from 'lucide-react'
+import { Plus, Trash2, Shield, Download, Upload } from 'lucide-react'
 import { fetchRoles, createRole, updateRole, deleteRole } from '../../lib/api'
 import type { AppRole } from '../../lib/api'
 import { Spinner } from '../ui/Spinner'
 import { useNotification } from '../../context/NotificationContext'
+
+// Shape of a role entry in an exported/imported JSON file. The id is intentionally
+// omitted — roles are matched by their (unique) name on import.
+interface ImportedRole {
+  name: string
+  description?: string
+  permissions: string[]
+}
 
 const PERMISSION_GROUPS = [
   { key: 'patient',     labelKey: 'admin.roles.group.patient',     permissions: ['patient.read'] },
@@ -86,14 +94,123 @@ export function AdminRolesPage() {
     },
   })
 
+  // ─── Export / Import (JSON) ────────────────────────────────────────────────
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  function handleExport() {
+    const payload: ImportedRole[] = roles.map((r) => ({
+      name: r.name,
+      description: r.description,
+      permissions: r.permissions,
+    }))
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `roles-${new Date().toISOString().slice(0, 10)}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+    notify('success', t('admin.roles.exported', { count: payload.length }))
+  }
+
+  // Imports roles sequentially: existing roles (matched by name) are updated,
+  // unknown names are created. Per-role failures (e.g. invalid permissions, the
+  // last-admin-role guard) are counted rather than aborting the whole import.
+  const importMutation = useMutation({
+    mutationFn: async (incoming: ImportedRole[]) => {
+      let created = 0, updated = 0, failed = 0
+      for (const r of incoming) {
+        try {
+          const existing = roles.find((x) => x.name === r.name)
+          if (existing) {
+            await updateRole(existing.id, r.description ?? '', r.permissions)
+            updated++
+          } else {
+            await createRole(r.name, r.description ?? '', r.permissions)
+            created++
+          }
+        } catch {
+          failed++
+        }
+      }
+      return { created, updated, failed }
+    },
+    onSuccess: ({ created, updated, failed }) => {
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'roles'] })
+      notify(failed > 0 ? 'error' : 'success', t('admin.roles.importDone', { created, updated, failed }))
+    },
+    onError: () => notify('error', t('admin.roles.importInvalid')),
+  })
+
+  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = '' // reset so re-selecting the same file fires onChange again
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(reader.result as string) as unknown
+        // Accept both a raw array and a { roles: [...] } wrapper.
+        const arr = Array.isArray(parsed)
+          ? parsed
+          : Array.isArray((parsed as { roles?: unknown[] })?.roles)
+            ? (parsed as { roles: unknown[] }).roles
+            : null
+        if (!arr) { notify('error', t('admin.roles.importInvalid')); return }
+        const valid = arr.filter(
+          (r): r is ImportedRole =>
+            !!r &&
+            typeof (r as ImportedRole).name === 'string' &&
+            (r as ImportedRole).name.trim() !== '' &&
+            Array.isArray((r as ImportedRole).permissions),
+        )
+        if (valid.length === 0) { notify('error', t('admin.roles.importEmpty')); return }
+        importMutation.mutate(valid)
+      } catch {
+        notify('error', t('admin.roles.importInvalid'))
+      }
+    }
+    reader.readAsText(file)
+  }
+
   const isDirty = selectedRole ? pendingPerms[selectedRole.id] !== undefined : false
 
   return (
     <div className="p-6">
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-lg font-semibold text-foreground">{t('admin.roles.title')}</h1>
-        <p className="text-sm text-muted-foreground mt-1">{t('admin.roles.subtitle')}</p>
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-lg font-semibold text-foreground">{t('admin.roles.title')}</h1>
+          <p className="text-sm text-muted-foreground mt-1">{t('admin.roles.subtitle')}</p>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={handleExport}
+            disabled={roles.length === 0}
+            className="flex items-center gap-1.5 text-xs border border-border px-3 py-1.5 rounded-lg hover:bg-muted/50 disabled:opacity-50 transition-colors"
+          >
+            <Download className="w-3.5 h-3.5" />
+            {t('admin.roles.export')}
+          </button>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={importMutation.isPending}
+            className="flex items-center gap-1.5 text-xs border border-border px-3 py-1.5 rounded-lg hover:bg-muted/50 disabled:opacity-50 transition-colors"
+          >
+            {importMutation.isPending
+              ? <Spinner size={12} className="text-muted-foreground" />
+              : <Upload className="w-3.5 h-3.5" />
+            }
+            {t('admin.roles.import')}
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="application/json,.json"
+            onChange={handleFile}
+            className="hidden"
+          />
+        </div>
       </div>
 
       <div className="flex gap-6">
