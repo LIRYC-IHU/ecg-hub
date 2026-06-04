@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"gorm.io/gorm"
 
@@ -542,9 +543,7 @@ func handleConvertDownload(
 	outExt := map[string]string{"xmlfda": ".xml", "dicom": ".dcm"}[format]
 	contentType := map[string]string{"xmlfda": "application/xml", "dicom": "application/dicom"}[format]
 
-	// Output filename: strip original extension, append new one; fallback for empty original name.
-	ext := filepath.Ext(ecg.OriginalFilename)
-	base := ecg.OriginalFilename[:len(ecg.OriginalFilename)-len(ext)]
+	base := ecg.PatientID
 	if base == "" {
 		base = "ecg"
 	}
@@ -697,11 +696,7 @@ func handleZipDownload(
 			})
 	}
 
-	ext := filepath.Ext(ecg.OriginalFilename)
-	base := strings.TrimSuffix(ecg.OriginalFilename, ext)
-	if base == "" {
-		base = "ecg"
-	}
+	base := uuid.New().String() // use a random name to avoid issues with special chars and duplicates
 	zipName := base + ".zip"
 	disp := mime.FormatMediaType("attachment", map[string]string{"filename": zipName})
 	c.Response().Header().Set("Content-Disposition", disp)
