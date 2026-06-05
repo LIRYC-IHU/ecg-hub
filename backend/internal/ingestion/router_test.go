@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -144,6 +145,42 @@ func TestRouter_ParseError_ReturnsFalse(t *testing.T) {
 
 	if ok {
 		t.Error("Route should return false when module.Parse returns an error")
+	}
+}
+
+// tolerantModule accepts files with no patient ID (module.MissingPatientIDTolerant).
+type tolerantModule struct{ stubModule }
+
+func (t *tolerantModule) AllowMissingPatientID() bool { return true }
+
+func TestRouter_MissingPatientID_Quarantined(t *testing.T) {
+	meta := &module.ECGMetadata{PatientID: "", VendorName: "strict-vendor"}
+	m := &stubModule{name: "strict-vendor", extensions: []string{".xml"}, meta: meta}
+	r := NewRouter([]module.Module{m})
+
+	_, reason, ok := r.Route(context.Background(), IngestItem{Filename: "ecg.xml", Data: []byte("d")})
+
+	if ok {
+		t.Fatal("Route should quarantine a file with no patient ID for a strict module")
+	}
+	if !strings.HasPrefix(reason, "missing_patient_id") {
+		t.Errorf("reason = %q, want prefix missing_patient_id", reason)
+	}
+}
+
+func TestRouter_MissingPatientID_TolerantModule_RoutesWithFilenameFallback(t *testing.T) {
+	meta := &module.ECGMetadata{PatientID: "", VendorName: "nihon-kohden"}
+	m := &tolerantModule{stubModule{name: "nihon-kohden", extensions: []string{".dat"}, meta: meta}}
+	r := NewRouter([]module.Module{m})
+
+	item := IngestItem{Filename: "0004266041631332.DAT", Data: []byte("d")}
+	ri, _, ok := r.Route(context.Background(), item)
+
+	if !ok {
+		t.Fatal("Route should store a tolerant module's file even with no patient ID")
+	}
+	if ri.Meta.PatientID != "0004266041631332" {
+		t.Errorf("fallback PatientID = %q, want %q", ri.Meta.PatientID, "0004266041631332")
 	}
 }
 
