@@ -326,6 +326,13 @@ func (r *RouterConfig) RegisterRoutes() {
 	apiV1.POST("/pins", handlers.PinPatientHandler(pinRepo), mw.RequirePermission(r.checker, auth.PermPatientRead))
 	apiV1.DELETE("/pins/:patient_id", handlers.UnpinPatientHandler(pinRepo), mw.RequirePermission(r.checker, auth.PermPatientRead))
 
+	// Per-user API keys — any authenticated user manages their own keys
+	// (no extra permission). Useful later for Swagger / external clients.
+	apiKeyRepo := repository.NewAPIKeyRepository(r.gormDB)
+	apiV1.GET("/api-keys", handlers.ListAPIKeysHandler(apiKeyRepo))
+	apiV1.POST("/api-keys", handlers.CreateAPIKeyHandler(apiKeyRepo))
+	apiV1.DELETE("/api-keys/:id", handlers.DeleteAPIKeyHandler(apiKeyRepo))
+
 	// Tags — list visible to all readers, create/delete/apply require specific permissions
 	tagRepo := repository.NewTagRepository(r.gormDB)
 	apiV1.GET("/tags", handlers.ListTagsHandler(tagRepo), mw.RequirePermission(r.checker, auth.PermPatientRead))
