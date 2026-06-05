@@ -42,6 +42,7 @@ import (
 	"github.com/LIRYC-IHU/ecg-hub/internal/module"
 	_ "github.com/LIRYC-IHU/ecg-hub/internal/module/dicom"
 	_ "github.com/LIRYC-IHU/ecg-hub/internal/module/mindray"
+	_ "github.com/LIRYC-IHU/ecg-hub/internal/module/muse"
 	_ "github.com/LIRYC-IHU/ecg-hub/internal/module/nihon-kohden"
 	_ "github.com/LIRYC-IHU/ecg-hub/internal/module/philips"
 	"github.com/LIRYC-IHU/ecg-hub/internal/storage"
@@ -159,6 +160,8 @@ func main() {
 		"nihon-kohden:dicom":  bridgeBin("BRIDGE_NK_TO_DICOM", "nk-to-dicom"),
 		"mindray:xmlfda":      bridgeBin("BRIDGE_MINDRAY_TO_FDA", "mindray-to-fda"),
 		"mindray:dicom":       bridgeBin("BRIDGE_MINDRAY_TO_DICOM", "mindray-to-dicom"),
+		"muse:xmlfda":         bridgeBin("BRIDGE_MUSE_TO_FDA", "muse-to-fda"),
+		"muse:dicom":          bridgeBin("BRIDGE_MUSE_TO_DICOM", "muse-to-dicom"),
 	}
 
 	bridge := export.NewECGBridge(binaries, 5*time.Second)
