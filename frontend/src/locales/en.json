@@ -445,7 +445,29 @@
     "branding": "Branding",
     "hl7": "HL7",
     "authConfig": "Auth",
-    "quarantine": "Quarantine"
+    "quarantine": "Quarantine",
+    "apiKeys": "API Keys"
+  },
+  "apiKeys": {
+    "title": "API Keys",
+    "subtitle": "Generate personal keys to access the API (e.g. Swagger).",
+    "nameLabel": "Key name",
+    "namePlaceholder": "e.g. My integration",
+    "generate": "Generate key",
+    "created": "Key \"{{name}}\" created",
+    "createError": "Failed to create key",
+    "deleted": "Key deleted",
+    "deleteError": "Failed to delete key",
+    "confirmDelete": "Delete this API key? This cannot be undone.",
+    "delete": "Delete",
+    "empty": "No API keys yet. Generate one above.",
+    "copyWarning": "Copy this key now — it will not be shown again.",
+    "copy": "Copy",
+    "copied": "Copied",
+    "dismiss": "Dismiss",
+    "createdOn": "Created on",
+    "lastUsed": "Used on {{date}}",
+    "neverUsed": "Never used"
   },
   "modules": {
     "title": "Module Control",

@@ -445,7 +445,29 @@
     "branding": "Identité",
     "hl7": "HL7",
     "authConfig": "Auth",
-    "quarantine": "Quarantaine"
+    "quarantine": "Quarantaine",
+    "apiKeys": "Clés API"
+  },
+  "apiKeys": {
+    "title": "Clés API",
+    "subtitle": "Générez des clés personnelles pour accéder à l'API (ex. Swagger).",
+    "nameLabel": "Nom de la clé",
+    "namePlaceholder": "ex. Mon intégration",
+    "generate": "Générer la clé",
+    "created": "Clé « {{name}} » créée",
+    "createError": "Échec de la création de la clé",
+    "deleted": "Clé supprimée",
+    "deleteError": "Échec de la suppression",
+    "confirmDelete": "Supprimer cette clé API ? Cette action est irréversible.",
+    "delete": "Supprimer",
+    "empty": "Aucune clé API. Générez-en une ci-dessus.",
+    "copyWarning": "Copiez cette clé maintenant : elle ne sera plus affichée par la suite.",
+    "copy": "Copier",
+    "copied": "Copié",
+    "dismiss": "Fermer",
+    "createdOn": "Créée le",
+    "lastUsed": "Utilisée le {{date}}",
+    "neverUsed": "Jamais utilisée"
   },
   "modules": {
     "title": "Contrôle des modules",
