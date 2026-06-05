@@ -33,6 +33,7 @@ import { AdminAuthPage } from "./components/admin/AdminAuthPage";
 import { AdminModulesPage } from "./components/admin/AdminModulesPage";
 import { AdminHL7Page } from "./components/admin/AdminHL7Page";
 import { AdminBrandingPage } from "./components/admin/AdminBrandingPage";
+import { ApiKeysPage } from "./components/settings/ApiKeysPage";
 import {
   fetchAdminStats,
   fetchECGFilterFacets,
@@ -445,6 +446,14 @@ function App() {
                 }
               />
             )}
+            <Route
+              path="/api-keys"
+              element={
+                <div className="overflow-auto flex-1">
+                  <ApiKeysPage />
+                </div>
+              }
+            />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </div>
