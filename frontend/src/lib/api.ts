@@ -1456,3 +1456,50 @@ export async function saveModuleSettings(active: string[]): Promise<void> {
     throw err;
   }
 }
+
+// ─── API keys (per-user) ─────────────────────────────────────────────────────
+
+export interface ApiKey {
+  id: string;
+  name: string;
+  prefix: string;
+  last_used_at?: string | null;
+  created_at: string;
+}
+
+// CreatedApiKey extends ApiKey with the plaintext `key`, returned only once at
+// creation time and never retrievable again.
+export interface CreatedApiKey extends ApiKey {
+  key: string;
+}
+
+export async function fetchApiKeys(): Promise<ApiKey[]> {
+  const res = await fetch(`${BASE_URL}/api/v1/api-keys`);
+  if (!res.ok) return [];
+  const json = await res.json();
+  return json.data ?? [];
+}
+
+export async function createApiKey(name: string): Promise<CreatedApiKey> {
+  const res = await fetch(`${BASE_URL}/api/v1/api-keys`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  if (!res.ok) {
+    const err: ErrorResponse = await res.json();
+    throw err;
+  }
+  const json = await res.json();
+  return json.data;
+}
+
+export async function deleteApiKey(id: string): Promise<void> {
+  const res = await fetch(`${BASE_URL}/api/v1/api-keys/${id}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    const err: ErrorResponse = await res.json();
+    throw err;
+  }
+}
