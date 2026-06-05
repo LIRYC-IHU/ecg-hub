@@ -81,6 +81,7 @@ export function EcgListPanel({
           <option value="">Toutes sources</option>
           <option value="dicom">DICOM</option>
           <option value="philips">Philips</option>
+          <option value="muse">GE MUSE</option>
         </select>
         <select
           value={filters.hl7_status ?? ""}
