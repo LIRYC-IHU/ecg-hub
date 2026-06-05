@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   ChevronDown,
   LogOut,
@@ -7,6 +7,7 @@ import {
   Sun,
   Monitor,
   Moon,
+  KeyRound,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
@@ -30,6 +31,7 @@ const BREADCRUMBS: Record<string, string> = {
   "/hl7": "nav.hl7",
   "/auth-config": "nav.authConfig",
   "/quarantine": "nav.quarantine",
+  "/api-keys": "nav.apiKeys",
 };
 
 function initials(userId: string): string {
@@ -46,6 +48,7 @@ export function Header({
 }: HeaderProps) {
   const { t } = useTranslation();
   const location = useLocation();
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const { theme, setTheme } = useTheme();
   const { logoBase64, hasLogo } = useBranding();
@@ -153,6 +156,16 @@ export function Header({
                     {userId}
                   </p>
                 </div>
+                <button
+                  onClick={() => {
+                    setOpen(false);
+                    navigate("/api-keys");
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-xs text-foreground hover:bg-muted transition-colors"
+                >
+                  <KeyRound className="w-3.5 h-3.5" />
+                  {t("nav.apiKeys")}
+                </button>
                 <button
                   onClick={() => {
                     setOpen(false);
