@@ -33,6 +33,7 @@ func RunMigrations(db *gorm.DB) error {
 		&appmodels.ConnectorJob{},
 		&appmodels.ECGBuffer{},
 		&appmodels.UserPin{},
+		&appmodels.APIKey{},
 		&appmodels.Tag{},
 		&appmodels.PatientTag{},
 		&appmodels.ECGTag{},
