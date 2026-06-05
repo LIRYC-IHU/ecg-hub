@@ -106,6 +106,8 @@ function VendorBadge({ vendor }: { vendor: string }) {
     mortara: "text-violet-400 bg-violet-500/10",
     "nihon-kohden": "text-pink-400 bg-pink-500/10",
     ge: "text-emerald-400 bg-emerald-500/10",
+    muse: "text-teal-400 bg-teal-500/10",
+    mindray: "text-cyan-400 bg-cyan-500/10",
     dicom: "text-amber-400 bg-amber-500/10",
   };
   return (
