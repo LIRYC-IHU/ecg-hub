@@ -37,6 +37,7 @@ import (
 	dicomsrv "github.com/LIRYC-IHU/ecg-hub/internal/dicom"
 	"github.com/LIRYC-IHU/ecg-hub/internal/export"
 	"github.com/LIRYC-IHU/ecg-hub/internal/hl7"
+	"github.com/LIRYC-IHU/ecg-hub/internal/events"
 	"github.com/LIRYC-IHU/ecg-hub/internal/ingestion"
 	appmetrics "github.com/LIRYC-IHU/ecg-hub/internal/metrics"
 	"github.com/LIRYC-IHU/ecg-hub/internal/module"
@@ -447,12 +448,18 @@ func main() {
 		hl7SchedulerStatus, hl7SettingsRepo, cfg, authEncKey,
 		moduleConfigRepo, moduleSettingsRepo, ftpQueue, ingestRouter)
 
+	// Realtime ingestion event hub — pushes notifications (valid / unidentified /
+	// quarantined) to connected WebSocket clients.
+	eventHub := events.NewHub()
+	router.WithEventHub(eventHub)
+
 	// Ingestion persistence worker — created before RegisterRoutes so the quarantine
 	// "assign" route can re-ingest unidentified ECGs through the same pipeline.
 	routedQueue := ingestion.NewRoutedQueue(100)
 	vol := storage.NewVolume(cfg.Storage.VolumePath)
 	persister := ingestion.NewPersister(routedQueue, vol, ecgRepo, patRepo).
-		WithAuditWriter(repository.NewAuditRepository(gormDB))
+		WithAuditWriter(repository.NewAuditRepository(gormDB)).
+		WithEventPublisher(eventHub)
 	router.WithPersister(persister)
 
 	router.RegisterRoutes()
@@ -536,7 +543,8 @@ func main() {
 
 	// Wire quarantine recorder — stores failed files to disk + DB.
 	quarantineRepo := repository.NewQuarantineRepository(gormDB)
-	quarantineStore := ingestion.NewQuarantineStore(cfg.Storage.QuarantinePath, quarantineRepo)
+	quarantineStore := ingestion.NewQuarantineStore(cfg.Storage.QuarantinePath, quarantineRepo).
+		WithPublisher(eventHub)
 	dispatcher.WithQuarantineRecorder(quarantineStore)
 
 	// Story 4.1 + 4.2: Wire HL7 enricher if HL7 client is available.
