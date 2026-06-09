@@ -447,6 +447,14 @@ func main() {
 		hl7SchedulerStatus, hl7SettingsRepo, cfg, authEncKey,
 		moduleConfigRepo, moduleSettingsRepo, ftpQueue, ingestRouter)
 
+	// Ingestion persistence worker — created before RegisterRoutes so the quarantine
+	// "assign" route can re-ingest unidentified ECGs through the same pipeline.
+	routedQueue := ingestion.NewRoutedQueue(100)
+	vol := storage.NewVolume(cfg.Storage.VolumePath)
+	persister := ingestion.NewPersister(routedQueue, vol, ecgRepo, patRepo).
+		WithAuditWriter(repository.NewAuditRepository(gormDB))
+	router.WithPersister(persister)
+
 	router.RegisterRoutes()
 
 	// Auto-start FTP from DB configuration if enabled (survives container restart).
@@ -519,16 +527,12 @@ func main() {
 
 	// Step 6: Start ingestion dispatcher — routes FTP uploads to vendor modules (Story 2.3).
 	// Modules are used in the order defined in cfg.Modules.Active for deterministic routing.
-	routedQueue := ingestion.NewRoutedQueue(100)
 	dispatcher := ingestion.NewDispatcher(ftpQueue, routedQueue, ingestRouter)
 	dispatcher.Start()
 	defer dispatcher.Stop()
 
-	// Step 7: Start persistence worker — writes files to volume and inserts ECG records (Story 2.4).
-	vol := storage.NewVolume(cfg.Storage.VolumePath)
-	auditRepo := repository.NewAuditRepository(gormDB)
-	persister := ingestion.NewPersister(routedQueue, vol, ecgRepo, patRepo).
-		WithAuditWriter(auditRepo)
+	// Step 7: persistence worker `persister` was created before RegisterRoutes (above),
+	// so it can be shared with the quarantine "assign" route. It is started below.
 
 	// Wire quarantine recorder — stores failed files to disk + DB.
 	quarantineRepo := repository.NewQuarantineRepository(gormDB)
