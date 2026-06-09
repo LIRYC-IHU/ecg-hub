@@ -129,16 +129,26 @@ func (d *Dispatcher) run() {
 			if !ok {
 				// Extract a bounded reason category for the label (no filename, no cardinality explosion).
 				category := "unknown"
+				unidentified := false
 				if strings.HasPrefix(reason, "no_module") {
 					category = "no_module"
 				} else if strings.HasPrefix(reason, "parse_error") {
 					category = "parse_error"
-				} else if strings.HasPrefix(reason, "missing_patient_id") {
-					category = "missing_patient_id"
+				} else if strings.HasPrefix(reason, "unidentified") {
+					category = "unidentified"
+					unidentified = true
 				}
 				appmetrics.IngestQuarantine.WithLabelValues(category).Inc()
 				if d.quarantine != nil {
-					if err := d.quarantine.Record(d.ctx, item.Filename, item.Data, reason); err != nil {
+					var err error
+					if unidentified && ri.Meta != nil {
+						// Parsed OK but no patient ID: keep the file with its demographics
+						// for manual identification and later re-ingestion.
+						err = d.quarantine.RecordUnidentified(d.ctx, item, ri.Meta, reason)
+					} else {
+						err = d.quarantine.Record(d.ctx, item.Filename, item.Data, reason)
+					}
+					if err != nil {
 						slog.Error("ingestion: quarantine record failed",
 							"filename", item.Filename, "error", err)
 					}
