@@ -10,6 +10,7 @@ export interface Patient {
   gender: string
   nip?: string
   ecg_count: number
+  unviewed_count: number // ECGs not yet opened — drives the "new" indicator
   last_activity: string | null // ISO 8601 UTC
 }
 
@@ -22,6 +23,7 @@ export interface ECG {
   recorded_at: string | null  // acquisition timestamp from device; null for legacy records
   ingested_at: string
   hl7_status: 'pending' | 'success' | 'hl7_exhausted' | 'hl7_rejected'
+  viewed: boolean  // true once opened; false = "new"
   immutable: boolean
   extra: Record<string, unknown>  // editable metadata (JSONB)
 }
