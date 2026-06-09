@@ -76,11 +76,6 @@ func (m *Module) AcceptedExtensions() []string { return []string{".dat", ".DAT"}
 
 func (m *Module) Health() error { return nil }
 
-// AllowMissingPatientID implements module.MissingPatientIDTolerant.
-// Nihon Kohden files may arrive without a patient ID; the ingestion router
-// derives a fallback ID from the filename and stores the file anyway.
-func (m *Module) AllowMissingPatientID() bool { return true }
-
 // ECTPListenPort implements module.ECTPProvider.
 // Returns the TCP port on which the ECTP server listens.
 func (m *Module) ECTPListenPort() int { return ECTPPort }
