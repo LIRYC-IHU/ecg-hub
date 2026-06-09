@@ -152,10 +152,15 @@ func TestModule_Parse_EmptyData(t *testing.T) {
 }
 
 func TestModule_Parse_MissingPatientID(t *testing.T) {
-	// Build DICOM without PatientID.
+	// A missing PatientID is NOT a parse error — Parse succeeds with an empty
+	// PatientID so the ingestion router routes it to the "unidentified" queue.
 	data := buildMinimalDICOM(t, "", "20240312")
-	if _, err := m.Parse(context.Background(), data); err == nil {
-		t.Error("Parse(no PatientID) = nil error; want error")
+	meta, err := m.Parse(context.Background(), data)
+	if err != nil {
+		t.Fatalf("Parse(no PatientID) should succeed, got error: %v", err)
+	}
+	if meta.PatientID != "" {
+		t.Errorf("PatientID = %q, want empty", meta.PatientID)
 	}
 }
 
