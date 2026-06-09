@@ -94,6 +94,8 @@ function App() {
     status === "authenticated" && hasPermission("quarantine.read");
   const canDeleteQuarantine =
     status === "authenticated" && hasPermission("quarantine.delete");
+  const canAssignQuarantine =
+    status === "authenticated" && hasPermission("quarantine.assign");
   const canViewAuthConfig =
     status === "authenticated" && hasPermission("admin.auth_config");
   const canViewHL7 =
@@ -441,7 +443,10 @@ function App() {
                 path="/quarantine"
                 element={
                   <div className="overflow-auto">
-                    <AdminQuarantinePage canDelete={canDeleteQuarantine} />
+                    <AdminQuarantinePage
+                      canDelete={canDeleteQuarantine}
+                      canAssign={canAssignQuarantine}
+                    />
                   </div>
                 }
               />
