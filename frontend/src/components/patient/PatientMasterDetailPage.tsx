@@ -15,6 +15,7 @@ import {
   Copy,
   RefreshCw,
 } from "lucide-react";
+import { useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePatients } from "../../hooks/usePatients";
 import { useECGs } from "../../hooks/useECGs";
@@ -1161,6 +1162,23 @@ export function PatientMasterDetailPage({
   });
 
   const totalPages = Math.max(1, Math.ceil(total / perPage));
+
+  // Deep-link selection: when arriving via ?patient=<patient_id> (e.g. from a
+  // realtime ingestion notification), select that patient once it is in the loaded
+  // list, then strip the params so later refetches don't re-trigger selection.
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    const pid = searchParams.get("patient");
+    if (!pid) return;
+    const match = patients.find((p) => p.patient_id === pid);
+    if (match) {
+      setSelectedPatient(match);
+      const next = new URLSearchParams(searchParams);
+      next.delete("patient");
+      next.delete("ecg");
+      setSearchParams(next, { replace: true });
+    }
+  }, [searchParams, patients, setSearchParams]);
 
   // Sync selectedPatient with refetched data
   useEffect(() => {
