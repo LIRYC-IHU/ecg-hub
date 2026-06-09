@@ -233,6 +233,9 @@ func (r *RouterConfig) RegisterRoutes() {
 	apiV1.GET("/patients", handlers.SearchPatientsHandler(r.gormDB), mw.RequirePermission(r.checker, auth.PermPatientRead))
 	apiV1.GET("/patients/:id/ecgs", handlers.ListPatientECGsHandler(r.gormDB), mw.RequirePermission(r.checker, auth.PermPatientRead))
 
+	// Mark all of a patient's ECGs as viewed ("mark all as seen") — clears the new indicator.
+	apiV1.POST("/patients/:id/ecgs/view", handlers.MarkPatientECGsViewedHandler(r.gormDB), mw.RequirePermission(r.checker, auth.PermECGRead))
+
 	// Cross-patient ECG timeline (Direction A) — requires patient.read
 	apiV1.GET("/ecgs", handlers.ListAllECGsHandler(r.gormDB), mw.RequirePermission(r.checker, auth.PermPatientRead))
 
@@ -247,6 +250,9 @@ func (r *RouterConfig) RegisterRoutes() {
 
 	// ECG metadata read — requires ecg.read (future graphical viewer + metadata panel)
 	apiV1.GET("/ecgs/:id/metadata", handlers.ECGMetadataHandler(r.gormDB), mw.RequirePermission(r.checker, auth.PermECGRead))
+
+	// Mark a single ECG as viewed (first view) — clears its "new" indicator.
+	apiV1.POST("/ecgs/:id/view", handlers.MarkECGViewedHandler(r.gormDB), mw.RequirePermission(r.checker, auth.PermECGRead))
 
 	// ECG metadata write — requires ecg.write
 	apiV1.PATCH("/ecgs/:id/metadata", handlers.PatchECGMetadataHandler(r.gormDB), mw.RequirePermission(r.checker, auth.PermECGWrite))

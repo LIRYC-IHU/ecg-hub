@@ -98,7 +98,7 @@ func SearchPatientsHandler(db *gorm.DB) echo.HandlerFunc {
 		var rows []dto.PatientWithStats
 		offset := (params.Page - 1) * params.PerPage
 		if err := query.
-			Select("patients.*, COUNT(ecgs.id) AS ecg_count, MAX(COALESCE(ecgs.recorded_at, ecgs.ingested_at)) AS last_activity").
+			Select("patients.*, COUNT(ecgs.id) AS ecg_count, COUNT(ecgs.id) FILTER (WHERE ecgs.viewed_at IS NULL) AS unviewed_count, MAX(COALESCE(ecgs.recorded_at, ecgs.ingested_at)) AS last_activity").
 			Joins("LEFT JOIN ecgs ON ecgs.patient_id = patients.patient_id").
 			Group("patients.id").
 			Order(orderClause).Offset(offset).Limit(params.PerPage).
