@@ -198,6 +198,14 @@ func buildExtra(meta *module.ECGMetadata) map[string]any {
 	return extra
 }
 
+// PersistRouted runs the full persistence lifecycle for a single RoutedItem,
+// exactly as the background worker does (dedup, file write, patient upsert, ECG
+// insert, audit, HL7 enrichment, connector dispatch). It is used to re-ingest a
+// quarantined "unidentified" file once an operator has assigned a patient ID.
+func (p *Persister) PersistRouted(ri RoutedItem) error {
+	return p.persist(ri)
+}
+
 // persist handles the full lifecycle for a single RoutedItem:
 //  1. Build a unique filename on the volume
 //  2. Write the file
