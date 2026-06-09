@@ -592,6 +592,29 @@ export async function assignQuarantineEntry(
   }
 }
 
+// markEcgViewed stamps a single ECG as viewed (clears its "new" indicator).
+export async function markEcgViewed(ecgId: string): Promise<void> {
+  const res = await fetch(`${BASE_URL}/api/v1/ecgs/${ecgId}/view`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    const err: ErrorResponse = await res.json();
+    throw err;
+  }
+}
+
+// markPatientEcgsViewed marks all of a patient's ECGs as viewed ("mark all as seen").
+export async function markPatientEcgsViewed(patientId: string): Promise<void> {
+  const res = await fetch(
+    `${BASE_URL}/api/v1/patients/${encodeURIComponent(patientId)}/ecgs/view`,
+    { method: "POST" },
+  );
+  if (!res.ok) {
+    const err: ErrorResponse = await res.json();
+    throw err;
+  }
+}
+
 export async function fetchECGMeta(ecgId: number): Promise<ECGMetaResponse> {
   const res = await fetch(`${BASE_URL}/api/v1/ecgs/${ecgId}/metadata`);
   if (!res.ok) {

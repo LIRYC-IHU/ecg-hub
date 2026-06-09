@@ -24,6 +24,7 @@ import {
   downloadECGFormats,
   createExportJob,
   deleteECG,
+  markEcgViewed,
   fetchPins,
   pinPatient,
   unpinPatient,
@@ -340,8 +341,18 @@ function PatientRow({
     >
       <PatientAvatar patient={patient} size={34} />
       <div className="flex-1 min-w-0">
-        <div className="text-sm font-medium text-foreground truncate">
-          {patient.last_name}, {patient.first_name}
+        <div className="text-sm font-medium text-foreground truncate flex items-center gap-1.5">
+          <span className="truncate">
+            {patient.last_name}, {patient.first_name}
+          </span>
+          {(patient.unviewed_count ?? 0) > 0 && (
+            <span
+              title={t("patient.newEcgs", { count: patient.unviewed_count })}
+              className="shrink-0 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-semibold"
+            >
+              {patient.unviewed_count}
+            </span>
+          )}
         </div>
         <div className="text-[11px] text-muted-foreground flex gap-1.5 mt-0.5">
           <span className="font-mono">{patient.patient_id}</span>
@@ -620,6 +631,21 @@ function PatientDetail({
       setConfirmDeleteId(null);
     },
   });
+  // Mark an ECG as viewed (first open) so its "new" indicator and the patient's
+  // unviewed badge clear. Fire-and-forget; refresh the ECG list and patient list.
+  const markViewedMutation = useMutation({
+    mutationFn: (id: string) => markEcgViewed(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["ecgs", patient.id] });
+      void queryClient.invalidateQueries({ queryKey: ["patients"] });
+    },
+  });
+
+  const openViewer = (ecg: ECG) => {
+    setViewerEcgId(String(ecg.id));
+    if (!ecg.viewed) markViewedMutation.mutate(String(ecg.id));
+  };
+
   const { ecgs, total, isLoading } = useECGs(patient.id as unknown as number, {
     per_page: 50,
   });
@@ -820,7 +846,9 @@ function PatientDetail({
                 className={`flex items-center gap-3 p-3.5 rounded-lg border cursor-pointer transition-colors ${
                   isSelected
                     ? "border-primary/40 bg-primary/5"
-                    : "border-border bg-muted/10 hover:bg-muted/30"
+                    : ecg.viewed
+                      ? "border-border bg-muted/10 hover:bg-muted/30"
+                      : "border-primary/30 bg-primary/[0.04] hover:bg-primary/10"
                 }`}
               >
                 <div onClick={(e) => e.stopPropagation()}>
@@ -839,6 +867,12 @@ function PatientDetail({
                     </span>
                     <VendorBadge vendor={ecg.vendor} />
                     <HL7Badge status={ecg.hl7_status} />
+                    {!ecg.viewed && (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-primary/15 text-primary">
+                        <span className="w-1.5 h-1.5 rounded-full bg-primary" />
+                        {t("ecg.new")}
+                      </span>
+                    )}
                   </div>
                   <div
                     className="text-[11px] text-muted-foreground font-mono mt-1 truncate"
@@ -854,7 +888,7 @@ function PatientDetail({
                   onClick={(e) => e.stopPropagation()}
                 >
                   <button
-                    onClick={() => setViewerEcgId(String(ecg.id))}
+                    onClick={() => openViewer(ecg)}
                     className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-colors"
                   >
                     <Eye className="w-3 h-3" />
