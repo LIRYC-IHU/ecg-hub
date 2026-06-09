@@ -73,11 +73,10 @@ func (m *Module) Parse(_ context.Context, data []byte) (*module.ECGMetadata, err
 		return nil, fmt.Errorf("dicom: parse: %w", err)
 	}
 
-	// PatientID (0010,0020) — mandatory.
-	patientID, err := extractString(dataset, tag.PatientID)
-	if err != nil || strings.TrimSpace(patientID) == "" {
-		return nil, fmt.Errorf("dicom: parse: missing PatientID (tag 0010,0020)")
-	}
+	// PatientID (0010,0020). A missing patient ID is not a parse failure: the parsed
+	// metadata (PatientID == "") is routed to the "unidentified" review queue.
+	patientID, _ := extractString(dataset, tag.PatientID)
+	patientID = strings.TrimSpace(patientID)
 
 	// RecordedAt from StudyDate (0008,0020) + StudyTime (0008,0030).
 	recordedAt := parseStudyDateTime(dataset)
