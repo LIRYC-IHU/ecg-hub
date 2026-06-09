@@ -17,6 +17,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { Spinner } from "./components/ui/Spinner";
 import { useAuth } from "./hooks/useAuth";
+import { useIngestionEvents } from "./hooks/useIngestionEvents";
 import { PatientMasterDetailPage } from "./components/patient/PatientMasterDetailPage";
 import { LoginPage } from "./components/LoginPage";
 import { SetupPage } from "./components/SetupPage";
@@ -64,6 +65,9 @@ function App() {
 
   const canPatientRead =
     status === "authenticated" && hasPermission("patient.read");
+
+  // Realtime ingestion notifications + cache refresh (no polling) while signed in.
+  useIngestionEvents(canPatientRead);
   const { data: facets } = useQuery({
     queryKey: ["ecg-filter-facets"],
     queryFn: fetchECGFilterFacets,
