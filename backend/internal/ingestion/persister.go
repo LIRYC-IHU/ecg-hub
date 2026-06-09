@@ -15,6 +15,7 @@ import (
 	"gorm.io/datatypes"
 
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
+	"github.com/LIRYC-IHU/ecg-hub/internal/events"
 	appmetrics "github.com/LIRYC-IHU/ecg-hub/internal/metrics"
 	"github.com/LIRYC-IHU/ecg-hub/internal/module"
 )
@@ -74,6 +75,7 @@ type Persister struct {
 	enricherMu   sync.RWMutex           // guards concurrent read (persist) / write (WithEnricher)
 	dispatcher   ecgConnectorDispatcher // nil when connector forwarding is disabled; guarded by dispatcherMu
 	dispatcherMu sync.RWMutex           // guards concurrent read (persist) / write (WithConnectorDispatcher)
+	publisher    events.Publisher       // nil when realtime events are disabled
 	ctx          context.Context
 	cancel       context.CancelFunc
 	startOnce    sync.Once
@@ -125,6 +127,14 @@ func (p *Persister) WithAuditWriter(a auditWriter) *Persister {
 	p.auditMu.Lock()
 	p.audit = a
 	p.auditMu.Unlock()
+	return p
+}
+
+// WithEventPublisher attaches an optional realtime event publisher. When set, a
+// TypeECGIngested event is broadcast after each successful ECG insert.
+// Returns p for chaining.
+func (p *Persister) WithEventPublisher(pub events.Publisher) *Persister {
+	p.publisher = pub
 	return p
 }
 
@@ -269,6 +279,22 @@ func (p *Persister) persist(ri RoutedItem) error {
 	}
 	if err := p.ecgRepo.Insert(ecg); err != nil {
 		return fmt.Errorf("persister: insert ecg: %w", err)
+	}
+
+	// Broadcast a realtime "valid ECG ingested" event (best-effort, non-blocking).
+	if p.publisher != nil {
+		recordedAt := ""
+		if ecg.RecordedAt != nil {
+			recordedAt = ecg.RecordedAt.UTC().Format(time.RFC3339)
+		}
+		p.publisher.Publish(events.Event{
+			Type:      events.TypeECGIngested,
+			ECGID:     ecg.ID,
+			PatientID: ecg.PatientID,
+			Vendor:    ecg.Vendor,
+			Filename:  ri.IngestItem.Filename,
+			At:        recordedAt,
+		})
 	}
 
 	// Audit log — system action, user_id = "system".

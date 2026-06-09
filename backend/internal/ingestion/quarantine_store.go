@@ -13,6 +13,7 @@ import (
 	"gorm.io/datatypes"
 
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
+	"github.com/LIRYC-IHU/ecg-hub/internal/events"
 	"github.com/LIRYC-IHU/ecg-hub/internal/module"
 )
 
@@ -33,14 +34,23 @@ type quarantineInserter interface {
 // under dir and inserts a DB record via repo.
 // When dir is empty, file writing is skipped and only the DB record is created.
 type QuarantineStore struct {
-	dir  string
-	repo quarantineInserter
+	dir       string
+	repo      quarantineInserter
+	publisher events.Publisher // nil when realtime events are disabled
 }
 
 // NewQuarantineStore constructs a QuarantineStore.
 // dir is config.StorageConfig.QuarantinePath — may be empty (file storage disabled).
 func NewQuarantineStore(dir string, repo quarantineInserter) *QuarantineStore {
 	return &QuarantineStore{dir: dir, repo: repo}
+}
+
+// WithPublisher attaches an optional realtime event publisher. When set, a
+// TypeECGUnidentified / TypeECGQuarantined event is broadcast after each insert.
+// Returns s for chaining.
+func (s *QuarantineStore) WithPublisher(pub events.Publisher) *QuarantineStore {
+	s.publisher = pub
+	return s
 }
 
 // Record copies the raw file bytes to the quarantine directory (if configured) and
@@ -57,6 +67,14 @@ func (s *QuarantineStore) Record(ctx context.Context, filename string, data []by
 	}
 	if err := s.repo.Insert(entry); err != nil {
 		return fmt.Errorf("quarantine_store: db insert: %w", err)
+	}
+	if s.publisher != nil {
+		s.publisher.Publish(events.Event{
+			Type:         events.TypeECGQuarantined,
+			QuarantineID: entry.ID,
+			Filename:     entry.Filename,
+			Reason:       reason,
+		})
 	}
 	return nil
 }
@@ -88,6 +106,15 @@ func (s *QuarantineStore) RecordUnidentified(ctx context.Context, item IngestIte
 	}
 	if err := s.repo.Insert(entry); err != nil {
 		return fmt.Errorf("quarantine_store: db insert: %w", err)
+	}
+	if s.publisher != nil {
+		s.publisher.Publish(events.Event{
+			Type:         events.TypeECGUnidentified,
+			QuarantineID: entry.ID,
+			Vendor:       entry.Vendor,
+			Filename:     entry.Filename,
+			Reason:       reason,
+		})
 	}
 	return nil
 }
