@@ -24,6 +24,7 @@ const (
 	PermTagApply         = "tag.apply"
 	PermQuarantineRead   = "quarantine.read"   // list quarantine entries
 	PermQuarantineDelete = "quarantine.delete" // delete quarantine entries + physical files
+	PermQuarantineAssign = "quarantine.assign" // assign a patient to an unidentified entry (re-ingests it)
 	PermAdminUsers       = "admin.users"
 	PermAdminRoles       = "admin.roles"
 	PermAdminBranding    = "admin.branding"
@@ -48,6 +49,7 @@ var AllPermissions = []string{
 	PermTagApply,
 	PermQuarantineRead,
 	PermQuarantineDelete,
+	PermQuarantineAssign,
 	PermAdminUsers,
 	PermAdminRoles,
 	PermAdminBranding,
