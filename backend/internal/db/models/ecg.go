@@ -5,7 +5,8 @@ import "time"
 // ECG is an immutable record of an ECG file ingested from a medical device.
 // CRITICAL: Never UPDATE this table after insertion (FR12, NFR-R4).
 // HL7 enrichment updates the patients table — never ecgs.
-// Permitted exceptions: HL7Status, HL7RetryCount (lifecycle) and Extra (editable metadata).
+// Permitted exceptions: HL7Status, HL7RetryCount (lifecycle), Extra (editable
+// metadata) and ViewedAt (read/seen state for the "new ECG" indicator).
 type ECG struct {
 	// No CreatedAt/UpdatedAt — ECGs use IngestedAt as their canonical timestamp.
 	ID               string         `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
@@ -18,6 +19,7 @@ type ECG struct {
 	RecordedAt       *time.Time     `gorm:"index"`                            // acquisition timestamp from device file; nil for legacy records
 	HL7Status        string         `gorm:"not null;default:'pending';index"` // "pending"|"success"|"hl7_exhausted"|"hl7_rejected"
 	HL7RetryCount    int            `gorm:"not null;default:0"`               // incremented by retry job (Story 4.2)
+	ViewedAt         *time.Time     `gorm:"index"`                            // when a user first opened this ECG; nil = unseen ("new")
 	Extra            map[string]any `gorm:"type:jsonb;serializer:json"`       // editable vendor metadata
 
 	ConnectorJob []ConnectorJob `gorm:"foreignKey:ECGID;constraint:OnDelete:CASCADE"`

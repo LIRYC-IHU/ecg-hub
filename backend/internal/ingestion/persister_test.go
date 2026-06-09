@@ -100,6 +100,15 @@ func (m *mockPatRepo) upserted() []string {
 	return ids
 }
 
+type mockAuditWriter struct {
+	entries []*models.AuditLog
+}
+
+func (m *mockAuditWriter) Insert(e *models.AuditLog) error {
+	m.entries = append(m.entries, e)
+	return nil
+}
+
 // ─── Helper to build a RoutedItem ─────────────────────────────────────────────
 
 func makeRoutedItem(patientID, vendor, filename string, recordedAt time.Time) RoutedItem {
@@ -173,6 +182,49 @@ func TestPersister_Persist_Success(t *testing.T) {
 	}
 	if ecg.HL7Status != "pending" {
 		t.Errorf("ECG.HL7Status = %q, want %q", ecg.HL7Status, "pending")
+	}
+}
+
+func TestPersister_Persist_Duplicate_AuditsAndSkips(t *testing.T) {
+	vol := &mockVolume{}
+	ecgRepo := &mockECGRepo{}
+	patRepo := &mockPatRepo{}
+	audit := &mockAuditWriter{}
+
+	ts := time.Date(2024, 3, 12, 14, 30, 0, 0, time.UTC)
+	ri := makeRoutedItem("P001", "philips", "ecg.xml", ts)
+
+	p := NewPersister(make(RoutedQueue, 1), vol, ecgRepo, patRepo).WithAuditWriter(audit)
+
+	// First ingest succeeds and records the content hash.
+	if err := p.persist(ri); err != nil {
+		t.Fatalf("first persist returned error: %v", err)
+	}
+	// Re-sending the identical file is detected as a duplicate.
+	if err := p.persist(ri); err != nil {
+		t.Fatalf("second persist returned error: %v", err)
+	}
+
+	// Only one ECG is inserted — the duplicate is skipped.
+	if len(ecgRepo.inserted) != 1 {
+		t.Errorf("ECG inserts = %d, want 1 (duplicate must be skipped)", len(ecgRepo.inserted))
+	}
+
+	// A duplicate audit entry must be written so the re-send leaves a trace.
+	var dup *models.AuditLog
+	for _, e := range audit.entries {
+		if e.Action == "ecg_duplicate_skipped" {
+			dup = e
+		}
+	}
+	if dup == nil {
+		t.Fatalf("no ecg_duplicate_skipped audit entry; got %d entries", len(audit.entries))
+	}
+	if dup.UserID != "system" {
+		t.Errorf("audit UserID = %q, want system", dup.UserID)
+	}
+	if dup.ResourceID == "" {
+		t.Error("audit ResourceID (content hash) is empty")
 	}
 }
 

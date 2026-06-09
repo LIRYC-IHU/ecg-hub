@@ -143,9 +143,26 @@ func RunMigrations(db *gorm.DB) error {
 		}
 	}
 
+	// Detect (before AutoMigrate creates it) whether ecgs.viewed_at is a brand-new
+	// column on an existing table. If so, we backfill it once below so pre-existing
+	// ECGs are treated as already seen — only genuinely new arrivals show as "new".
+	backfillViewedAt := db.Migrator().HasTable("ecgs") &&
+		!db.Migrator().HasColumn(&appmodels.ECG{}, "viewed_at")
+
 	for _, m := range models {
 		if err := db.AutoMigrate(m); err != nil {
 			slog.Warn("db: auto migrate", "model", fmt.Sprintf("%T", m), "error", err)
+		}
+	}
+
+	// One-time backfill: mark all pre-existing ECGs as viewed so the "new ECG"
+	// indicator doesn't light up every patient on first deploy. Runs only on the
+	// migration that introduces the column (guarded above), never on later restarts.
+	if backfillViewedAt {
+		if err := db.Exec(`UPDATE ecgs SET viewed_at = ingested_at WHERE viewed_at IS NULL`).Error; err != nil {
+			slog.Warn("db: backfill ecgs.viewed_at", "error", err)
+		} else {
+			slog.Info("db: backfilled ecgs.viewed_at for pre-existing ECGs")
 		}
 	}
 

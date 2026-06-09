@@ -79,6 +79,31 @@ func (r *ECGRepository) UpdateHL7Status(ecgID string, status string) error {
 	return nil
 }
 
+// MarkViewed stamps viewed_at = now() for the given ECG, but only if it was not
+// already viewed (so the timestamp records the FIRST view). Returns the number of
+// rows updated (0 when the ECG was already viewed or does not exist).
+func (r *ECGRepository) MarkViewed(ecgID string) (int64, error) {
+	result := r.db.Model(&models.ECG{}).
+		Where("id = ? AND viewed_at IS NULL", ecgID).
+		Update("viewed_at", time.Now())
+	if result.Error != nil {
+		return 0, fmt.Errorf("ecg_repo: mark_viewed: %w", result.Error)
+	}
+	return result.RowsAffected, nil
+}
+
+// MarkViewedByPatient stamps viewed_at = now() for all unviewed ECGs of a patient.
+// Returns the number of ECGs marked. Used by the "mark all as seen" action.
+func (r *ECGRepository) MarkViewedByPatient(patientID string) (int64, error) {
+	result := r.db.Model(&models.ECG{}).
+		Where("patient_id = ? AND viewed_at IS NULL", patientID).
+		Update("viewed_at", time.Now())
+	if result.Error != nil {
+		return 0, fmt.Errorf("ecg_repo: mark_viewed_by_patient: %w", result.Error)
+	}
+	return result.RowsAffected, nil
+}
+
 // FindPendingHL7 returns ECGs with hl7_status = 'pending', ordered oldest-first.
 // limit caps the batch size to prevent unbounded memory use on large backlogs.
 func (r *ECGRepository) FindPendingHL7(limit int) ([]models.ECG, error) {

@@ -232,6 +232,30 @@ func (p *Persister) persist(ri RoutedItem) error {
 	} else if exists {
 		slog.Info("ingestion: duplicate file skipped",
 			"filename", ri.IngestItem.Filename, "content_hash", contentHash)
+
+		// Audit the skipped duplicate so re-sent files leave a trace.
+		p.auditMu.RLock()
+		a := p.audit
+		p.auditMu.RUnlock()
+		if a != nil {
+			details, _ := marshalJSON(map[string]any{
+				"filename":     ri.IngestItem.Filename,
+				"content_hash": contentHash,
+				"vendor":       ri.Meta.VendorName,
+				"module":       ri.ModuleName,
+				"source":       ri.IngestItem.Source,
+			})
+			entry := &models.AuditLog{
+				UserID:     "system",
+				Action:     "ecg_duplicate_skipped",
+				ResourceID: contentHash,
+				Details:    details,
+			}
+			if err := a.Insert(entry); err != nil {
+				slog.Warn("ingestion: duplicate audit log failed",
+					"filename", ri.IngestItem.Filename, "error", err)
+			}
+		}
 		return nil
 	}
 
