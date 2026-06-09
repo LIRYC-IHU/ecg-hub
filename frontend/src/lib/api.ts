@@ -452,6 +452,7 @@ export const ALL_PERMISSIONS = [
   "ecg.force_hl7",
   "quarantine.read",
   "quarantine.delete",
+  "quarantine.assign",
   "admin.users",
   "admin.roles",
   "admin.branding",
@@ -534,21 +535,27 @@ export async function fetchAppUsers(): Promise<AppUser[]> {
 }
 
 export interface QuarantineEntry {
-  id: number;
+  id: string;
   filename: string;
   file_path: string;
   received_at: string;
   error_reason: string;
+  category: "error" | "unidentified";
+  vendor?: string;
+  recorded_at?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export async function fetchQuarantine(
   page = 1,
   perPage = 50,
+  category?: string,
 ): Promise<ListResponse<QuarantineEntry>> {
   const params = new URLSearchParams({
     page: String(page),
     per_page: String(perPage),
   });
+  if (category) params.set("category", category);
   const res = await fetch(`${BASE_URL}/api/v1/admin/quarantine?${params}`);
   if (!res.ok) {
     const err: ErrorResponse = await res.json();
@@ -557,11 +564,29 @@ export async function fetchQuarantine(
   return res.json();
 }
 
-export async function deleteQuarantineEntry(id: number): Promise<void> {
+export async function deleteQuarantineEntry(id: string): Promise<void> {
   const res = await fetch(`${BASE_URL}/api/v1/admin/quarantine/${id}`, {
     method: "DELETE",
   });
   if (!res.ok && res.status !== 404) {
+    const err: ErrorResponse = await res.json();
+    throw err;
+  }
+}
+
+// assignQuarantineEntry assigns a patient ID to an unidentified quarantine entry.
+// The backend re-ingests the file through the normal pipeline (patient upsert +
+// ECG insert + HL7 enrichment) and removes the quarantine entry on success.
+export async function assignQuarantineEntry(
+  id: string,
+  patientId: string,
+): Promise<void> {
+  const res = await fetch(`${BASE_URL}/api/v1/admin/quarantine/${id}/assign`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ patient_id: patientId }),
+  });
+  if (!res.ok) {
     const err: ErrorResponse = await res.json();
     throw err;
   }
