@@ -106,6 +106,15 @@ func RunMigrations(db *gorm.DB) error {
 			slog.Warn("db: widen ecgs.patient_id", "error", err)
 		}
 	}
+
+	// Backfill quarantine_entries.category for rows created before the "unidentified"
+	// review workflow existed. AutoMigrate adds the column with DEFAULT 'error', but
+	// this guards rows that predate the column (NULL/empty) on any edge case.
+	if db.Migrator().HasColumn(&appmodels.QuarantineEntry{}, "category") {
+		if err := db.Exec(`UPDATE quarantine_entries SET category = 'error' WHERE category IS NULL OR category = ''`).Error; err != nil {
+			slog.Warn("db: backfill quarantine_entries.category", "error", err)
+		}
+	}
 	if db.Migrator().HasTable("connector_jobs") {
 		if err := db.Exec(`ALTER TABLE connector_jobs ALTER COLUMN ecg_id TYPE uuid USING ecg_id::uuid`).Error; err != nil {
 			slog.Warn("db: widen connector_jobs.ecg_id", "error", err)
@@ -166,7 +175,7 @@ func iniRole(db *gorm.DB) error {
 				"ecg.read", "ecg.write", "ecg.download", "ecg.delete", "ecg.force_hl7",
 				"hl7.config", "hl7.bulk_retry",
 				"tag.create", "tag.delete", "tag.apply",
-				"quarantine.read", "quarantine.delete",
+				"quarantine.read", "quarantine.delete", "quarantine.assign",
 				"admin.audit", "admin.system", "admin.users", "admin.roles", "admin.branding", "admin.auth_config",
 				"swagger.read",
 			},
@@ -183,7 +192,7 @@ func iniRole(db *gorm.DB) error {
 				"patient.read", "ecg.read", "ecg.download",
 				"ecg.delete", "ecg.force_hl7", "ecg.write",
 				"tag.create", "tag.apply",
-				"quarantine.read", "quarantine.delete",
+				"quarantine.read", "quarantine.delete", "quarantine.assign",
 			},
 		},
 	}
