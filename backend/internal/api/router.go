@@ -20,6 +20,7 @@ import (
 	mw "github.com/LIRYC-IHU/ecg-hub/internal/api/middleware"
 	"github.com/LIRYC-IHU/ecg-hub/internal/auth"
 	"github.com/LIRYC-IHU/ecg-hub/internal/config"
+	"github.com/LIRYC-IHU/ecg-hub/internal/events"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
 	"github.com/LIRYC-IHU/ecg-hub/internal/export"
 	"github.com/LIRYC-IHU/ecg-hub/internal/hl7"
@@ -75,6 +76,7 @@ type RouterConfig struct {
 	ftpQueue           ingestion.IngestQueue
 	ingestRouter       *ingestion.Router   // for hot module reload
 	persister          *ingestion.Persister // for re-ingesting assigned unidentified ECGs; nil disables the assign route
+	eventHub           *events.Hub          // realtime ingestion event hub; nil disables the events WS route
 }
 
 // WithPersister attaches the ingestion persister so the quarantine "assign"
@@ -82,6 +84,14 @@ type RouterConfig struct {
 // Must be called before RegisterRoutes. Returns r for chaining.
 func (r *RouterConfig) WithPersister(p *ingestion.Persister) *RouterConfig {
 	r.persister = p
+	return r
+}
+
+// WithEventHub attaches the realtime ingestion event hub so the events WebSocket
+// route can stream notifications. Must be called before RegisterRoutes.
+// Returns r for chaining.
+func (r *RouterConfig) WithEventHub(h *events.Hub) *RouterConfig {
+	r.eventHub = h
 	return r
 }
 
@@ -277,6 +287,12 @@ func (r *RouterConfig) RegisterRoutes() {
 	apiV1.DELETE("/admin/quarantine/:id", handlers.DeleteQuarantineHandler(r.gormDB), mw.RequirePermission(r.checker, auth.PermQuarantineDelete))
 	if r.persister != nil {
 		apiV1.POST("/admin/quarantine/:id/assign", handlers.AssignQuarantineHandler(r.persister, r.gormDB), mw.RequirePermission(r.checker, auth.PermQuarantineAssign))
+	}
+
+	// Realtime ingestion events WebSocket — streams valid/unidentified/quarantined
+	// notifications. Available to anyone who can read patients.
+	if r.eventHub != nil {
+		apiV1.GET("/events/ws", handlers.EventsWSHandler(r.eventHub), mw.RequirePermission(r.checker, auth.PermPatientRead))
 	}
 
 	// Volume metrics — requires admin.system
