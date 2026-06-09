@@ -81,8 +81,14 @@ type museProbe struct {
 	} `xml:"PatientDemographics"`
 }
 
-// Validate checks that data is a non-empty MUSE RestingECG XML file with a patient ID.
-// It is a fast, native check (no subprocess) so the router can probe .xml candidates cheaply.
+// Validate confirms the file is a MUSE RestingECG document — format identity only.
+// It is a fast, native check (no subprocess) so the router can probe .xml candidates
+// cheaply. xml.Unmarshal errors when the root element is not <RestingECG>, which
+// cleanly rejects Philips (root <restingecgdata>) and any other XML.
+//
+// The patient ID is intentionally NOT checked here: a MUSE file without a patient ID
+// is still a MUSE file and must route to this module so the ingestion pipeline can
+// send it to the "unidentified" review queue rather than mis-routing it.
 func (m *Module) Validate(data []byte) error {
 	if len(data) == 0 {
 		return fmt.Errorf("muse: validate: empty data")
@@ -90,9 +96,6 @@ func (m *Module) Validate(data []byte) error {
 	var p museProbe
 	if err := xml.Unmarshal(data, &p); err != nil {
 		return fmt.Errorf("muse: validate: not a valid MUSE RestingECG XML: %w", err)
-	}
-	if strings.TrimSpace(p.Patient.PatientID) == "" {
-		return fmt.Errorf("muse: validate: missing PatientID")
 	}
 	return nil
 }
@@ -164,9 +167,8 @@ func (m *Module) Parse(ctx context.Context, data []byte) (*module.ECGMetadata, e
 	if err := json.Unmarshal(stdout.Bytes(), &md); err != nil {
 		return nil, fmt.Errorf("muse: parse: json decode: %w", err)
 	}
-	if strings.TrimSpace(md.Patient.ID) == "" {
-		return nil, fmt.Errorf("muse: parse: missing patientID")
-	}
+	// A missing patient ID is not a parse failure: the ingestion router sends the
+	// parsed metadata (PatientID == "") to the "unidentified" review queue.
 
 	recordedAt := parseStudyDateTime(md.Study.Date, md.Study.Time)
 

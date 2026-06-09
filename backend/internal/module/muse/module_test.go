@@ -44,10 +44,12 @@ func TestValidate(t *testing.T) {
 	if err := m.Validate(nil); err == nil {
 		t.Error("Validate(nil) = nil, want rejection")
 	}
-	// MUSE document missing the patient ID must be rejected.
+	// A MUSE document missing the patient ID is still a MUSE document: Validate
+	// answers format identity only. Routing/ingestion sends it to the "unidentified"
+	// review queue downstream — Validate must NOT reject it here.
 	noID := strings.Replace(sampleMuseXML, "<PatientID>000012611</PatientID>", "<PatientID></PatientID>", 1)
-	if err := m.Validate([]byte(noID)); err == nil {
-		t.Error("Validate(no patientID) = nil, want rejection")
+	if err := m.Validate([]byte(noID)); err != nil {
+		t.Errorf("Validate(muse without patientID) = %v, want nil (handled as unidentified downstream)", err)
 	}
 }
 
