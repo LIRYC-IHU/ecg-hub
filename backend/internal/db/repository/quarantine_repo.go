@@ -31,19 +31,24 @@ func (r *QuarantineRepository) Insert(entry *models.QuarantineEntry) error {
 }
 
 // List returns quarantine entries ordered newest-first with pagination.
-func (r *QuarantineRepository) List(page, perPage int) ([]models.QuarantineEntry, int64, error) {
+// When category is non-empty, only entries of that category are returned.
+func (r *QuarantineRepository) List(page, perPage int, category string) ([]models.QuarantineEntry, int64, error) {
 	if page < 1 {
 		page = 1
 	}
 	if perPage < 1 || perPage > 200 {
 		perPage = 50
 	}
+	q := r.db.Model(&models.QuarantineEntry{})
+	if category != "" {
+		q = q.Where("category = ?", category)
+	}
 	var total int64
-	if err := r.db.Model(&models.QuarantineEntry{}).Count(&total).Error; err != nil {
+	if err := q.Count(&total).Error; err != nil {
 		return nil, 0, fmt.Errorf("quarantine_repo: count: %w", err)
 	}
 	var entries []models.QuarantineEntry
-	if err := r.db.
+	if err := q.
 		Order("received_at DESC").
 		Offset((page - 1) * perPage).
 		Limit(perPage).
