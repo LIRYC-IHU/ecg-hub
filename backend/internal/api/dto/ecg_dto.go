@@ -51,6 +51,7 @@ type EcgDTO struct {
 	RecordedAt       *string        `json:"recorded_at"` // ISO 8601 UTC; nil for legacy records without acquisition timestamp
 	IngestedAt       string         `json:"ingested_at"` // ISO 8601 UTC
 	HL7Status        string         `json:"hl7_status"`  // "pending"|"success"|"hl7_exhausted"|"hl7_rejected"
+	Viewed           bool           `json:"viewed"`      // true once a user has opened this ECG (ViewedAt != nil)
 	Extra            map[string]any `json:"extra"`       // editable vendor metadata
 }
 
@@ -63,6 +64,7 @@ func EcgToDTO(e *models.ECG) EcgDTO {
 		OriginalFilename: e.OriginalFilename,
 		IngestedAt:       e.IngestedAt.UTC().Format(time.RFC3339),
 		HL7Status:        e.HL7Status,
+		Viewed:           e.ViewedAt != nil,
 	}
 	if e.RecordedAt != nil {
 		s := e.RecordedAt.UTC().Format(time.RFC3339)

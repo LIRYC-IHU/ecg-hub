@@ -9,22 +9,24 @@ import (
 // PatientDTO is the JSON representation of a patient returned by the search API.
 // All fields use snake_case to match Go/PostgreSQL conventions (consumed by the frontend as-is).
 type PatientDTO struct {
-	ID           string  `json:"id"`
-	PatientID    string  `json:"patient_id"`
-	FirstName    string  `json:"first_name"`
-	LastName     string  `json:"last_name"`
-	DateOfBirth  *string `json:"date_of_birth"` // ISO 8601 UTC string, or null
-	Gender       string  `json:"gender"`
-	NDA          string  `json:"nda,omitempty"`
-	ECGCount     int     `json:"ecg_count"`
-	LastActivity *string `json:"last_activity"` // ISO 8601 UTC; MAX(COALESCE(recorded_at, ingested_at))
+	ID            string  `json:"id"`
+	PatientID     string  `json:"patient_id"`
+	FirstName     string  `json:"first_name"`
+	LastName      string  `json:"last_name"`
+	DateOfBirth   *string `json:"date_of_birth"` // ISO 8601 UTC string, or null
+	Gender        string  `json:"gender"`
+	NDA           string  `json:"nda,omitempty"`
+	ECGCount      int     `json:"ecg_count"`
+	UnviewedCount int     `json:"unviewed_count"` // ECGs not yet opened — drives the "new" indicator
+	LastActivity  *string `json:"last_activity"`  // ISO 8601 UTC; MAX(COALESCE(recorded_at, ingested_at))
 }
 
 // PatientWithStats is used internally to scan patient rows enriched with ECG aggregates.
 type PatientWithStats struct {
 	models.Patient
-	ECGCount     int        `gorm:"column:ecg_count"`
-	LastActivity *time.Time `gorm:"column:last_activity"`
+	ECGCount      int        `gorm:"column:ecg_count"`
+	UnviewedCount int        `gorm:"column:unviewed_count"`
+	LastActivity  *time.Time `gorm:"column:last_activity"`
 }
 
 // PatientWithStatsToDTO converts a PatientWithStats scan result to its API representation.
@@ -40,15 +42,16 @@ func PatientWithStatsToDTO(p *PatientWithStats) PatientDTO {
 		lastActivity = &s
 	}
 	return PatientDTO{
-		ID:           p.ID,
-		PatientID:    p.PatientID,
-		FirstName:    p.FirstName,
-		LastName:     p.LastName,
-		DateOfBirth:  dob,
-		Gender:       p.Gender,
-		NDA:          p.NDA,
-		ECGCount:     p.ECGCount,
-		LastActivity: lastActivity,
+		ID:            p.ID,
+		PatientID:     p.PatientID,
+		FirstName:     p.FirstName,
+		LastName:      p.LastName,
+		DateOfBirth:   dob,
+		Gender:        p.Gender,
+		NDA:           p.NDA,
+		ECGCount:      p.ECGCount,
+		UnviewedCount: p.UnviewedCount,
+		LastActivity:  lastActivity,
 	}
 }
 
