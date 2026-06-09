@@ -66,18 +66,18 @@ func (r *Router) Route(ctx context.Context, item IngestItem) (RoutedItem, string
 	}
 
 	if strings.TrimSpace(meta.PatientID) == "" {
-		// Modules that tolerate a missing patient ID are stored anyway, using a
-		// fallback ID derived from the filename instead of being quarantined.
-		if t, ok := matched.(module.MissingPatientIDTolerant); ok && t.AllowMissingPatientID() {
-			meta.PatientID = patientIDFromFilename(item.Filename)
-			slog.Warn("ingestion: missing patient ID, using filename fallback",
-				"filename", item.Filename, "module", matched.Name(), "fallback_patient_id", meta.PatientID)
-		} else {
-			reason := "missing_patient_id: file parsed successfully by module " + matched.Name() + " but no patient ID found (filename: " + item.Filename + ")"
-			slog.Warn("ingestion: missing patient ID, file queued for quarantine",
-				"filename", item.Filename, "module", matched.Name())
-			return RoutedItem{}, reason, false
-		}
+		// File parsed successfully but carries no patient ID. Instead of fabricating
+		// a fake patient, route it to the "unidentified" review queue, carrying the
+		// parsed metadata (demographics) so an operator can assign the right patient
+		// ID later and trigger re-ingestion. This applies uniformly to every module.
+		reason := "unidentified: file parsed successfully by module " + matched.Name() + " but no patient ID found (filename: " + item.Filename + ")"
+		slog.Warn("ingestion: missing patient ID, file queued for identification review",
+			"filename", item.Filename, "module", matched.Name())
+		return RoutedItem{
+			IngestItem: item,
+			Meta:       meta,
+			ModuleName: matched.Name(),
+		}, reason, false
 	}
 
 	source := item.Source
@@ -134,16 +134,6 @@ func (r *Router) probeModule(ext string, data []byte) (module.Module, bool) {
 	slog.Warn("ingestion: no candidate validated content, falling back to first",
 		"ext", ext, "first", candidates[0].Name())
 	return candidates[0], true
-}
-
-// patientIDFromFilename derives a fallback patient ID from a filename by
-// stripping its extension (e.g. "0004266041631332.DAT" → "0004266041631332").
-func patientIDFromFilename(filename string) string {
-	stem := filepath.Base(filename)
-	if e := filepath.Ext(stem); e != "" {
-		stem = stem[:len(stem)-len(e)]
-	}
-	return stem
 }
 
 func moduleNames(modules []module.Module) []string {
