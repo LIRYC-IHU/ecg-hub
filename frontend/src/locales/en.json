@@ -143,7 +143,15 @@
       "deleteError": "Error deleting file",
       "colFilename": "Filename",
       "colReceivedAt": "Received at",
-      "colReason": "Reason"
+      "colReason": "Reason",
+      "categoryUnidentified": "Unidentified",
+      "categoryError": "Error",
+      "assign": "Assign",
+      "assignHint": "Enter the patient ID (Patient ID) from the HIS. The file will be re-ingested, the patient added to the list and HL7 enrichment triggered.",
+      "patientIdPlaceholder": "Patient ID",
+      "assignConfirm": "Assign",
+      "assigned": "ECG assigned and re-ingested",
+      "assignError": "Error assigning patient"
     },
     "system": {
       "title": "System state",
@@ -355,6 +363,7 @@
         "tag_apply": "Apply tags to patients",
         "quarantine_read": "View quarantine",
         "quarantine_delete": "Delete quarantine files",
+        "quarantine_assign": "Assign a patient (unidentified ECGs)",
         "admin_users": "Manage users",
         "admin_roles": "Manage roles",
         "admin_branding": "Manage branding",

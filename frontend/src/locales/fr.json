@@ -143,7 +143,15 @@
       "deleteError": "Erreur lors de la suppression",
       "colFilename": "Nom de fichier",
       "colReceivedAt": "Reçu le",
-      "colReason": "Raison"
+      "colReason": "Raison",
+      "categoryUnidentified": "Non identifié",
+      "categoryError": "Erreur",
+      "assign": "Assigner",
+      "assignHint": "Saisissez l'identifiant patient (Patient ID) du HIS. Le fichier sera réingéré, le patient ajouté à la liste et l'enrichissement HL7 déclenché.",
+      "patientIdPlaceholder": "Identifiant patient (Patient ID)",
+      "assignConfirm": "Assigner",
+      "assigned": "ECG assigné et réingéré",
+      "assignError": "Erreur lors de l'assignation"
     },
     "system": {
       "title": "État du système",
@@ -355,6 +363,7 @@
         "tag_apply": "Appliquer des tags aux patients",
         "quarantine_read": "Voir la quarantaine",
         "quarantine_delete": "Supprimer des fichiers en quarantaine",
+        "quarantine_assign": "Assigner un patient (ECG non identifiés)",
         "admin_users": "Gérer les utilisateurs",
         "admin_roles": "Gérer les rôles",
         "admin_branding": "Gérer l'identité visuelle",
