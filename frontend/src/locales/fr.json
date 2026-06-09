@@ -433,6 +433,13 @@
     "file": "Fichier",
     "files": "Fichiers"
   },
+  "events": {
+    "ingested": "Nouvel ECG reçu ({{vendor}}) : {{label}}",
+    "unidentified": "ECG sans patient ({{vendor}}) : {{label}} — à identifier",
+    "quarantined": "Fichier rejeté : {{label}}",
+    "view": "Voir",
+    "review": "Examiner"
+  },
   "filters": {
     "label": "Filtres",
     "clear": "Effacer",
