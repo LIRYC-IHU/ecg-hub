@@ -163,14 +163,6 @@ type ECTPProvider interface {
 	ECTPListenPort() int
 }
 
-// MissingPatientIDTolerant is an optional interface. Modules implementing it and
-// returning true are NOT quarantined when parsing yields no patient ID — instead
-// the ingestion router derives a fallback ID from the filename and stores the file.
-// Used by devices that may legitimately omit the patient ID (e.g. Nihon Kohden).
-type MissingPatientIDTolerant interface {
-	AllowMissingPatientID() bool
-}
-
 // MetricsProvider is an optional interface for modules that expose domain-specific
 // Prometheus collectors (layer B opt-in metrics). main.go registers these collectors
 // via metrics.Registry.MustRegister after resolving active modules.
