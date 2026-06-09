@@ -8,6 +8,7 @@ import {
   RefreshCw,
   Trash2,
   Shield,
+  Copy,
 } from "lucide-react";
 import { useAuditLogs } from "../../hooks/useAuditLogs";
 import type { AuditLogFilters } from "../../lib/api";
@@ -20,7 +21,8 @@ type ActionKey =
   | "download"
   | "hl7_force"
   | "delete"
-  | "quarantine_decision";
+  | "quarantine_decision"
+  | "ecg_duplicate_skipped";
 
 const actionConfig: Record<
   ActionKey,
@@ -46,6 +48,11 @@ const actionConfig: Record<
     icon: Shield,
     label: "quarantine_decision",
     cls: "bg-quarantine/10 text-quarantine",
+  },
+  ecg_duplicate_skipped: {
+    icon: Copy,
+    label: "ecg_duplicate_skipped",
+    cls: "bg-warning/10 text-warning",
   },
 };
 
