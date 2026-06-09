@@ -110,9 +110,8 @@ func (m *Module) Validate(data []byte) error {
 	if err := json.Unmarshal(stdout.Bytes(), &md); err != nil {
 		return fmt.Errorf("mindray: validate: json decode: %w", err)
 	}
-	if md.PatientID == "" {
-		return fmt.Errorf("mindray: validate: missing patientID")
-	}
+	// Format identity only — a Mindray file without a patient ID is still a Mindray
+	// file and is handled by the "unidentified" review queue downstream.
 	return nil
 }
 
@@ -146,9 +145,8 @@ func (m *Module) Parse(ctx context.Context, data []byte) (*module.ECGMetadata, e
 	if err := json.Unmarshal(stdout.Bytes(), &md); err != nil {
 		return nil, fmt.Errorf("mindray: parse: json decode: %w", err)
 	}
-	if md.PatientID == "" {
-		return nil, fmt.Errorf("mindray: parse: missing patientID")
-	}
+	// A missing patient ID is not a parse failure: the ingestion router sends the
+	// parsed metadata (PatientID == "") to the "unidentified" review queue.
 
 	// Parse startTime: "2025-10-08 13:21:47"
 	var recordedAt time.Time
