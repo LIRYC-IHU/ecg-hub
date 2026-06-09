@@ -148,39 +148,34 @@ func TestRouter_ParseError_ReturnsFalse(t *testing.T) {
 	}
 }
 
-// tolerantModule accepts files with no patient ID (module.MissingPatientIDTolerant).
-type tolerantModule struct{ stubModule }
-
-func (t *tolerantModule) AllowMissingPatientID() bool { return true }
-
-func TestRouter_MissingPatientID_Quarantined(t *testing.T) {
-	meta := &module.ECGMetadata{PatientID: "", VendorName: "strict-vendor"}
-	m := &stubModule{name: "strict-vendor", extensions: []string{".xml"}, meta: meta}
+func TestRouter_MissingPatientID_RoutedToUnidentified(t *testing.T) {
+	// A file that parses successfully but has no patient ID must NOT be routed for
+	// normal persistence (ok=false) and must NOT get a fabricated patient ID.
+	// Instead it goes to the "unidentified" review queue, carrying its demographics.
+	meta := &module.ECGMetadata{
+		PatientID:  "",
+		VendorName: "any-vendor",
+		Extra:      map[string]any{"last_name": "Doe", "first_name": "Jane"},
+	}
+	m := &stubModule{name: "any-vendor", extensions: []string{".xml"}, meta: meta}
 	r := NewRouter([]module.Module{m})
 
-	_, reason, ok := r.Route(context.Background(), IngestItem{Filename: "ecg.xml", Data: []byte("d")})
+	ri, reason, ok := r.Route(context.Background(), IngestItem{Filename: "ecg.xml", Data: []byte("d")})
 
 	if ok {
-		t.Fatal("Route should quarantine a file with no patient ID for a strict module")
+		t.Fatal("Route should not forward a file with no patient ID to normal persistence")
 	}
-	if !strings.HasPrefix(reason, "missing_patient_id") {
-		t.Errorf("reason = %q, want prefix missing_patient_id", reason)
+	if !strings.HasPrefix(reason, "unidentified") {
+		t.Errorf("reason = %q, want prefix unidentified", reason)
 	}
-}
-
-func TestRouter_MissingPatientID_TolerantModule_RoutesWithFilenameFallback(t *testing.T) {
-	meta := &module.ECGMetadata{PatientID: "", VendorName: "nihon-kohden"}
-	m := &tolerantModule{stubModule{name: "nihon-kohden", extensions: []string{".dat"}, meta: meta}}
-	r := NewRouter([]module.Module{m})
-
-	item := IngestItem{Filename: "0004266041631332.DAT", Data: []byte("d")}
-	ri, _, ok := r.Route(context.Background(), item)
-
-	if !ok {
-		t.Fatal("Route should store a tolerant module's file even with no patient ID")
+	if ri.Meta == nil {
+		t.Fatal("unidentified route must carry the parsed metadata for review/re-ingestion")
 	}
-	if ri.Meta.PatientID != "0004266041631332" {
-		t.Errorf("fallback PatientID = %q, want %q", ri.Meta.PatientID, "0004266041631332")
+	if ri.Meta.PatientID != "" {
+		t.Errorf("PatientID = %q, want empty (no fabricated ID)", ri.Meta.PatientID)
+	}
+	if ri.ModuleName != "any-vendor" {
+		t.Errorf("ModuleName = %q, want %q", ri.ModuleName, "any-vendor")
 	}
 }
 
