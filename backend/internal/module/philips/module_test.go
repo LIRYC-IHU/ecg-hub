@@ -81,6 +81,28 @@ func TestModule_Validate_Empty(t *testing.T) {
 	}
 }
 
+// TestModule_Validate_Routing locks in deterministic .xml routing: Validate answers
+// "is this a Philips file?" by format identity only (root <restingecgdata>), NOT by
+// the presence of a patient ID. A Philips file without a patient ID must still pass
+// (it is routed to the "unidentified" review queue downstream), and a MUSE file
+// (root <RestingECG>) must be rejected so it routes to the MUSE module instead.
+func TestModule_Validate_Routing(t *testing.T) {
+	m := newModule()
+
+	noID := strings.Replace(minimalXML, "<patientid>07071980</patientid>", "<patientid></patientid>", 1)
+	if err := m.Validate([]byte(noID)); err != nil {
+		t.Errorf("Validate(philips without patientID) = %v, want nil", err)
+	}
+
+	const museXML = `<?xml version="1.0"?>
+<RestingECG>
+  <PatientDemographics><PatientID>000012611</PatientID></PatientDemographics>
+</RestingECG>`
+	if err := m.Validate([]byte(museXML)); err == nil {
+		t.Error("Validate(muse RestingECG) = nil, want rejection")
+	}
+}
+
 func TestModule_Parse_ValidXML(t *testing.T) {
 	meta, err := newModule().Parse(context.Background(), []byte(minimalXML))
 	if err != nil {
@@ -127,10 +149,19 @@ func TestModule_Parse_EmptyData(t *testing.T) {
 }
 
 func TestModule_Parse_MissingPatientID(t *testing.T) {
+	// A missing patient ID is NOT a parse error — Parse succeeds with an empty
+	// PatientID and the ingestion router routes it to the "unidentified" queue.
 	xml := strings.ReplaceAll(minimalXML, "<patientid>07071980</patientid>", "<patientid></patientid>")
-	_, err := newModule().Parse(context.Background(), []byte(xml))
-	if err == nil {
-		t.Error("Parse() with missing patientid should return an error")
+	meta, err := newModule().Parse(context.Background(), []byte(xml))
+	if err != nil {
+		t.Fatalf("Parse() with missing patientid should succeed, got error: %v", err)
+	}
+	if meta.PatientID != "" {
+		t.Errorf("PatientID = %q, want empty", meta.PatientID)
+	}
+	// Demographics must still be extracted for the review queue.
+	if meta.Extra["last_name"] != "MANSFIELD" {
+		t.Errorf("Extra[last_name] = %v, want MANSFIELD", meta.Extra["last_name"])
 	}
 }
 

@@ -15,7 +15,6 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
-	"log/slog"
 	"os"
 	"strings"
 	"time"
@@ -48,29 +47,46 @@ func (m *Module) SupportedFormats() []module.ExportFormat {
 	}
 }
 
-// Validate checks that data is a non-empty Philips SierraECG XML file with a patient ID.
-// Lighter than Parse — used for quick format rejection before persisting.
+// Validate confirms the file is a Philips SierraECG document — format identity only.
+// Lighter than Parse: it sniffs the XML root element (<restingecgdata> in the Philips
+// namespace) without a full unmarshal, so the router can deterministically pick this
+// module over MUSE (root <RestingECG>) for .xml files.
+//
+// The patient ID is intentionally NOT checked here: a Philips file without a patient
+// ID is still a Philips file and must route to this module so the ingestion pipeline
+// can send it to the "unidentified" review queue rather than mis-routing it to MUSE.
 func (m *Module) Validate(data []byte) error {
 	if len(data) == 0 {
 		return fmt.Errorf("philips: validate: empty data")
 	}
-	var doc philipsDoc
-	if err := xml.Unmarshal(data, &doc); err != nil {
-		slog.Debug("philips: validate: xml unmarshal failed", "error", err)
-		return fmt.Errorf("philips: validate: not a valid Philips XML: %w", err)
+	root, err := xmlRootElement(data)
+	if err != nil {
+		return fmt.Errorf("philips: validate: not valid XML: %w", err)
 	}
-	slog.Debug("philips: validate: xml parsed",
-		"xml_name_space", doc.XMLName.Space,
-		"xml_name_local", doc.XMLName.Local,
-		"patient_id", doc.Patient.General.PatientID,
-		"doc_type", doc.DocInfo.DocType,
-		"doc_version", doc.DocInfo.DocVersion,
-	)
-	if doc.Patient.General.PatientID == "" {
-		recordMissingPatientID()
-		return fmt.Errorf("philips: validate: missing patientid (namespace mismatch or missing field)")
+	if !strings.EqualFold(root.Local, "restingecgdata") {
+		return fmt.Errorf("philips: validate: not a Philips SierraECG file (root <%s>)", root.Local)
+	}
+	// Philips SierraECG declares the http://www3.medical.philips.com namespace.
+	// Tolerate an empty namespace (some exports omit it) but reject a foreign one.
+	if root.Space != "" && !strings.Contains(root.Space, "philips.com") {
+		return fmt.Errorf("philips: validate: unexpected XML namespace %q", root.Space)
 	}
 	return nil
+}
+
+// xmlRootElement returns the name (namespace + local) of the first XML start element,
+// without decoding the whole document.
+func xmlRootElement(data []byte) (xml.Name, error) {
+	dec := xml.NewDecoder(bytes.NewReader(data))
+	for {
+		tok, err := dec.Token()
+		if err != nil {
+			return xml.Name{}, err
+		}
+		if se, ok := tok.(xml.StartElement); ok {
+			return se.Name, nil
+		}
+	}
 }
 
 // Parse extracts ECGMetadata from a Philips SierraECG 1.03 XML file.
@@ -84,9 +100,12 @@ func (m *Module) Parse(_ context.Context, data []byte) (*module.ECGMetadata, err
 		return nil, fmt.Errorf("philips: parse: xml unmarshal: %w", err)
 	}
 
+	// A missing patient ID is not a parse failure: the ingestion router sends the
+	// parsed metadata (PatientID == "") to the "unidentified" review queue. We still
+	// record the metric so these files remain observable.
 	patientID := doc.Patient.General.PatientID
 	if patientID == "" {
-		return nil, fmt.Errorf("philips: parse: missing patientid")
+		recordMissingPatientID()
 	}
 
 	recordedAt, err := parseDateTime(doc.DataAcq.Date, doc.DataAcq.Time)
