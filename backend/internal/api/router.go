@@ -73,7 +73,16 @@ type RouterConfig struct {
 	moduleConfigRepo   *repository.ModuleConfigRepository
 	moduleSettingsRepo *repository.ModuleSettingsRepository
 	ftpQueue           ingestion.IngestQueue
-	ingestRouter       *ingestion.Router // for hot module reload
+	ingestRouter       *ingestion.Router   // for hot module reload
+	persister          *ingestion.Persister // for re-ingesting assigned unidentified ECGs; nil disables the assign route
+}
+
+// WithPersister attaches the ingestion persister so the quarantine "assign"
+// route can re-ingest an unidentified ECG once a patient ID is provided.
+// Must be called before RegisterRoutes. Returns r for chaining.
+func (r *RouterConfig) WithPersister(p *ingestion.Persister) *RouterConfig {
+	r.persister = p
+	return r
 }
 
 func NewRouterConfig(e *echo.Echo, gormDB *gorm.DB, authProvider auth.Provider, bridge export.Converter,
@@ -262,9 +271,13 @@ func (r *RouterConfig) RegisterRoutes() {
 	apiV1.GET("/admin/app-users", handlers.ListAppUsersHandler(r.userRepo), mw.RequirePermission(r.checker, auth.PermAdminUsers))
 	apiV1.PUT("/admin/app-users/:id/role", handlers.SetAppUserRoleHandler(r.userRepo), mw.RequirePermission(r.checker, auth.PermAdminUsers))
 
-	// Quarantine — list requires quarantine.read, delete requires quarantine.delete
+	// Quarantine — list requires quarantine.read, delete requires quarantine.delete,
+	// assign (re-ingest an unidentified ECG under a patient) requires quarantine.assign.
 	apiV1.GET("/admin/quarantine", handlers.ListQuarantineHandler(r.gormDB), mw.RequirePermission(r.checker, auth.PermQuarantineRead))
 	apiV1.DELETE("/admin/quarantine/:id", handlers.DeleteQuarantineHandler(r.gormDB), mw.RequirePermission(r.checker, auth.PermQuarantineDelete))
+	if r.persister != nil {
+		apiV1.POST("/admin/quarantine/:id/assign", handlers.AssignQuarantineHandler(r.persister, r.gormDB), mw.RequirePermission(r.checker, auth.PermQuarantineAssign))
+	}
 
 	// Volume metrics — requires admin.system
 	apiV1.GET("/admin/storage-metrics", handlers.VolumeMetricsHandler(r.cfg, r.gormDB), mw.RequirePermission(r.checker, auth.PermAdminSystem))
