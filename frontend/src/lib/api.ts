@@ -1551,3 +1551,115 @@ export async function deleteApiKey(id: string): Promise<void> {
     throw err;
   }
 }
+
+// ───────────────────────── User webhooks ─────────────────────────
+
+// UserWebhook mirrors the backend webhookResponse. Secrets are never returned;
+// has_secret / has_auth_header indicate whether values are configured.
+export interface UserWebhook {
+  id: string;
+  name: string;
+  url: string;
+  enabled: boolean;
+  insecure_skip_verify: boolean;
+  events: string[];
+  vendors: string[];
+  has_secret: boolean;
+  has_auth_header: boolean;
+  last_status_code: number;
+  last_error: string;
+  last_delivered_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+// WebhookInput is the create/update body. secret and auth_header use
+// tri-state semantics on update: undefined = keep, "" = clear, value = replace.
+export interface WebhookInput {
+  name: string;
+  url: string;
+  enabled: boolean;
+  insecure_skip_verify: boolean;
+  secret?: string;
+  auth_header?: string;
+  events: string[];
+  vendors: string[];
+}
+
+export interface WebhookVendorOption {
+  name: string;
+  extensions: string[];
+}
+
+export interface WebhookOptions {
+  events: string[];
+  vendors: WebhookVendorOption[];
+}
+
+export interface WebhookTestResult {
+  ok: boolean;
+  status_code: number;
+  error: string;
+}
+
+export async function fetchWebhooks(): Promise<UserWebhook[]> {
+  const res = await fetch(`${BASE_URL}/api/v1/webhooks`);
+  if (!res.ok) return [];
+  return res.json();
+}
+
+export async function fetchWebhookOptions(): Promise<WebhookOptions> {
+  const res = await fetch(`${BASE_URL}/api/v1/webhooks/options`);
+  if (!res.ok) return { events: [], vendors: [] };
+  return res.json();
+}
+
+export async function createWebhook(input: WebhookInput): Promise<UserWebhook> {
+  const res = await fetch(`${BASE_URL}/api/v1/webhooks`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    const err: ErrorResponse = await res.json();
+    throw err;
+  }
+  return res.json();
+}
+
+export async function updateWebhook(
+  id: string,
+  input: WebhookInput,
+): Promise<UserWebhook> {
+  const res = await fetch(`${BASE_URL}/api/v1/webhooks/${id}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) {
+    const err: ErrorResponse = await res.json();
+    throw err;
+  }
+  return res.json();
+}
+
+export async function deleteWebhook(id: string): Promise<void> {
+  const res = await fetch(`${BASE_URL}/api/v1/webhooks/${id}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    const err: ErrorResponse = await res.json();
+    throw err;
+  }
+}
+
+export async function testUserWebhook(id: string): Promise<WebhookTestResult> {
+  const res = await fetch(`${BASE_URL}/api/v1/webhooks/${id}/test`, {
+    method: "POST",
+  });
+  if (!res.ok) {
+    const err: ErrorResponse = await res.json();
+    throw err;
+  }
+  return res.json();
+}
