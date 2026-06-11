@@ -32,6 +32,7 @@ const (
 	PermAdminSystem      = "admin.system"
 	PermAdminAuthConfig  = "admin.auth_config"
 	PermSwaggerRead      = "swagger.read"
+	PermWebhookManage    = "webhook.manage" // configure personal outbound webhooks
 )
 
 // AllPermissions is the ordered list of every permission string in the application.
@@ -57,6 +58,7 @@ var AllPermissions = []string{
 	PermAdminSystem,
 	PermAdminAuthConfig,
 	PermSwaggerRead,
+	PermWebhookManage,
 }
 
 // PermissionChecker resolves a role name → set of permissions.
