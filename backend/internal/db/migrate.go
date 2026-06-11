@@ -45,6 +45,7 @@ func RunMigrations(db *gorm.DB) error {
 		&appmodels.AuthProviderConfig{},
 		&appmodels.ModuleConfig{},
 		&appmodels.ModuleSettings{},
+		&appmodels.UserWebhook{},
 	}
 	// for _, m := range models {
 	// 	err := db.Migrator().DropTable(m)
@@ -236,6 +237,7 @@ func iniRole(db *gorm.DB) error {
 				"quarantine.read", "quarantine.delete", "quarantine.assign",
 				"admin.audit", "admin.system", "admin.users", "admin.roles", "admin.branding", "admin.auth_config",
 				"swagger.read",
+				"webhook.manage",
 			},
 		},
 		{
