@@ -8,6 +8,7 @@ import {
   Monitor,
   Moon,
   KeyRound,
+  Webhook,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useTheme } from "../../hooks/useTheme";
@@ -18,6 +19,7 @@ interface HeaderProps {
   onLogout: () => void;
   language: string;
   onToggleLang: (lang: "fr" | "en") => void;
+  canManageWebhooks?: boolean;
 }
 
 const BREADCRUMBS: Record<string, string> = {
@@ -32,6 +34,7 @@ const BREADCRUMBS: Record<string, string> = {
   "/auth-config": "nav.authConfig",
   "/quarantine": "nav.quarantine",
   "/api-keys": "nav.apiKeys",
+  "/webhooks": "nav.webhooks",
 };
 
 function initials(userId: string): string {
@@ -45,6 +48,7 @@ export function Header({
   onLogout,
   language,
   onToggleLang,
+  canManageWebhooks = false,
 }: HeaderProps) {
   const { t } = useTranslation();
   const location = useLocation();
@@ -166,6 +170,18 @@ export function Header({
                   <KeyRound className="w-3.5 h-3.5" />
                   {t("nav.apiKeys")}
                 </button>
+                {canManageWebhooks && (
+                  <button
+                    onClick={() => {
+                      setOpen(false);
+                      navigate("/webhooks");
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-foreground hover:bg-muted transition-colors"
+                  >
+                    <Webhook className="w-3.5 h-3.5" />
+                    {t("nav.webhooks")}
+                  </button>
+                )}
                 <button
                   onClick={() => {
                     setOpen(false);
