@@ -34,18 +34,10 @@ func isSecureRequest(c echo.Context) bool {
 }
 
 // setJWTCookie writes the HttpOnly "jwt" cookie on the response.
-// MaxAge 3600 = 1 h, matching the JWT expiry in the auth package.
-// Secure is set when the request is HTTPS so the cookie is never transmitted in clear.
+// Delegates to mw.SetJWTCookie — the single definition shared with the
+// sliding-session refresh in AuthMiddleware (MaxAge matches auth.TokenTTL).
 func setJWTCookie(c echo.Context, token string) {
-	c.SetCookie(&http.Cookie{
-		Name:     "jwt",
-		Value:    token,
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   isSecureRequest(c),
-		SameSite: http.SameSiteLaxMode,
-		MaxAge:   3600,
-	})
+	mw.SetJWTCookie(c, token)
 }
 
 // clearJWTCookie removes the "jwt" cookie from the browser.
