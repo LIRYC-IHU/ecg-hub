@@ -166,6 +166,47 @@ func RunMigrations(db *gorm.DB) error {
 		}
 	}
 
+	// Foreign keys that AutoMigrate cannot generate: GORM inverts the
+	// UserPin→Patient relation (see models/user_pin.go), and PatientTag declares
+	// no Patient navigation field. Both reference the business key
+	// patients.patient_id. Idempotent: skipped when the constraint exists.
+	// Fails (warn only) if orphan rows exist — clean those manually first.
+	type fkFix struct{ table, name, ddl string }
+	for _, fk := range []fkFix{
+		{"user_pins", "fk_user_pins_patient",
+			`ALTER TABLE user_pins ADD CONSTRAINT fk_user_pins_patient FOREIGN KEY (patient_id) REFERENCES patients(patient_id) ON UPDATE CASCADE ON DELETE CASCADE`},
+		{"patient_tags", "fk_patient_tags_patient",
+			`ALTER TABLE patient_tags ADD CONSTRAINT fk_patient_tags_patient FOREIGN KEY (patient_id) REFERENCES patients(patient_id) ON UPDATE CASCADE ON DELETE CASCADE`},
+	} {
+		if db.Migrator().HasTable(fk.table) && !db.Migrator().HasConstraint(fk.table, fk.name) {
+			if err := db.Exec(fk.ddl).Error; err != nil {
+				slog.Warn("db: add foreign key", "constraint", fk.name, "error", err)
+			} else {
+				slog.Info("db: added foreign key", "constraint", fk.name)
+			}
+		}
+	}
+
+	// ecg_hub_users.external_id must be unique: role resolution (GetCurrentRole)
+	// and login upsert look up by external_id alone — duplicate rows would make
+	// the effective role non-deterministic. The index was originally created
+	// non-unique; rebuild it as unique when needed (fails with a warn if
+	// duplicate external_ids already exist — deduplicate manually first).
+	var extIDUnique bool
+	db.Raw(`SELECT COALESCE((SELECT x.indisunique FROM pg_class c
+		JOIN pg_index x ON x.indexrelid = c.oid
+		WHERE c.relname = 'idx_ecg_hub_users_external_id'), false)`).Scan(&extIDUnique)
+	if !extIDUnique {
+		if err := db.Exec(`DROP INDEX IF EXISTS idx_ecg_hub_users_external_id`).Error; err != nil {
+			slog.Warn("db: drop non-unique external_id index", "error", err)
+		}
+		if err := db.Exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_ecg_hub_users_external_id ON ecg_hub_users(external_id)`).Error; err != nil {
+			slog.Warn("db: create unique external_id index", "error", err)
+		} else {
+			slog.Info("db: rebuilt idx_ecg_hub_users_external_id as unique")
+		}
+	}
+
 	// init default role
 	if err := iniRole(db); err != nil {
 		return err
