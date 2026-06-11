@@ -134,7 +134,7 @@
       "logoRemoved": "Logo removed"
     },
     "hl7": {
-      "subtitle": "Configure HL7 connection, scheduler, and field mapping."
+      "forceRetry": "Force HL7 retry"
     },
     "quarantine": {
       "title": "Quarantine",
@@ -269,9 +269,6 @@
         }
       }
     },
-    "hl7": {
-      "forceRetry": "Force HL7 retry"
-    },
     "users": {
       "colUser": "User",
       "colEmail": "Email",
@@ -349,7 +346,8 @@
         "tag": "Tags",
         "quarantine": "Quarantine",
         "admin": "Administration",
-        "swagger": "API"
+        "swagger": "API",
+        "webhook": "Webhooks"
       },
       "perm": {
         "patient_read": "View patients",
@@ -372,7 +370,8 @@
         "admin_audit": "View audit logs",
         "admin_system": "System status & module control",
         "admin_auth_config": "Configure auth providers",
-        "swagger_read": "Access API documentation"
+        "swagger_read": "Access API documentation",
+        "webhook_manage": "Configure personal webhooks"
       }
     },
     "authProviders": {
@@ -432,7 +431,6 @@
     "colFilename": "Filename",
     "colReceivedAt": "Received at",
     "colReason": "Reason",
-    "files": "File",
     "files": "Files"
   },
   "events": {
@@ -464,7 +462,8 @@
     "hl7": "HL7",
     "authConfig": "Auth",
     "quarantine": "Quarantine",
-    "apiKeys": "API Keys"
+    "apiKeys": "API Keys",
+    "webhooks": "Webhooks"
   },
   "apiKeys": {
     "title": "API Keys",
@@ -607,5 +606,57 @@
     "selected_other": "{{count}} selected",
     "exportStarted": "Export started ({{count}} ECGs)",
     "exportError": "Export error"
+  },
+  "webhooks": {
+    "title": "Webhooks",
+    "subtitle": "Notify external systems when ECGs arrive — they call the API back to fetch the data.",
+    "add": "Add webhook",
+    "createTitle": "New webhook",
+    "editTitle": "Edit webhook",
+    "nameLabel": "Name",
+    "namePlaceholder": "e.g. Research platform",
+    "urlLabel": "Receiver URL",
+    "secretLabel": "Signing secret (HMAC)",
+    "secretPlaceholder": "Optional — signs payloads (X-ECG-Hub-Signature)",
+    "secretUnchanged": "(unchanged — leave blank to keep)",
+    "secretHint": "Payloads are signed with HMAC-SHA256 so the receiver can verify origin.",
+    "clearSecret": "Remove stored secret",
+    "authHeaderLabel": "Authorization header",
+    "authHeaderHint": "Sent as-is in the Authorization header (e.g. Bearer token).",
+    "clearAuthHeader": "Remove stored header",
+    "eventsLabel": "Events",
+    "vendorsLabel": "Vendors (modules)",
+    "emptyMeansAll": "Leave empty to receive all.",
+    "enabledLabel": "Enabled",
+    "disabled": "Disabled",
+    "skipVerifyLabel": "Accept self-signed TLS certificate",
+    "cancel": "Cancel",
+    "create": "Create",
+    "save": "Save",
+    "created": "Webhook created",
+    "updated": "Webhook updated",
+    "saveError": "Failed to save webhook",
+    "deleted": "Webhook deleted",
+    "deleteError": "Failed to delete webhook",
+    "confirmDelete": "Delete this webhook?",
+    "delete": "Delete",
+    "edit": "Edit",
+    "test": "Send test event",
+    "testOk": "Test delivered (HTTP {{status}})",
+    "testFailed": "Test failed: {{error}}",
+    "testError": "Failed to send test",
+    "empty": "No webhooks yet. Add one to notify an external system on new ECGs.",
+    "eventsBadge": "events",
+    "lastDelivery": "Last delivery {{date}}",
+    "docTitle": "Payload format",
+    "docBody": "Each event is an HTTP POST. The links object contains the API endpoints the receiver can call to fetch the ECG file and metadata.",
+    "docAuth": "The receiving server authenticates its callback API calls with an API key or its own session — see API Keys.",
+    "eventTypes": {
+      "ecg.ingested": "ECG ingested",
+      "ecg.unidentified": "ECG unidentified",
+      "ecg.quarantined": "ECG quarantined",
+      "hl7.exhausted": "HL7 retries exhausted",
+      "hl7.rejected": "HL7 rejected"
+    }
   }
 }

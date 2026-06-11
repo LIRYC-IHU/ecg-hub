@@ -134,7 +134,7 @@
       "logoRemoved": "Logo supprimé"
     },
     "hl7": {
-      "subtitle": "Configurer la connexion HL7, le planificateur et le mapping des champs."
+      "forceRetry": "Forcer la tentative HL7"
     },
     "quarantine": {
       "title": "Quarantaine",
@@ -269,9 +269,6 @@
         }
       }
     },
-    "hl7": {
-      "forceRetry": "Forcer la tentative HL7"
-    },
     "users": {
       "colUser": "Utilisateur",
       "colEmail": "Email",
@@ -349,7 +346,8 @@
         "tag": "Tags",
         "quarantine": "Quarantaine",
         "admin": "Administration",
-        "swagger": "API"
+        "swagger": "API",
+        "webhook": "Webhooks"
       },
       "perm": {
         "patient_read": "Consulter les patients",
@@ -372,7 +370,8 @@
         "admin_audit": "Voir les audits",
         "admin_system": "État système & contrôle des modules",
         "admin_auth_config": "Configurer les fournisseurs d'auth",
-        "swagger_read": "Accéder à la documentation API"
+        "swagger_read": "Accéder à la documentation API",
+        "webhook_manage": "Configurer ses webhooks"
       }
     },
     "authProviders": {
@@ -464,7 +463,8 @@
     "hl7": "HL7",
     "authConfig": "Auth",
     "quarantine": "Quarantaine",
-    "apiKeys": "Clés API"
+    "apiKeys": "Clés API",
+    "webhooks": "Webhooks"
   },
   "apiKeys": {
     "title": "Clés API",
@@ -607,5 +607,57 @@
     "selected_other": "{{count}} sélectionnés",
     "exportStarted": "Export lancé ({{count}} ECGs)",
     "exportError": "Erreur lors de l'export"
+  },
+  "webhooks": {
+    "title": "Webhooks",
+    "subtitle": "Notifiez des systèmes externes à l'arrivée d'un ECG — ils rappellent l'API pour récupérer les données.",
+    "add": "Ajouter un webhook",
+    "createTitle": "Nouveau webhook",
+    "editTitle": "Modifier le webhook",
+    "nameLabel": "Nom",
+    "namePlaceholder": "ex. Plateforme recherche",
+    "urlLabel": "URL du récepteur",
+    "secretLabel": "Secret de signature (HMAC)",
+    "secretPlaceholder": "Optionnel — signe les payloads (X-ECG-Hub-Signature)",
+    "secretUnchanged": "(inchangé — laisser vide pour conserver)",
+    "secretHint": "Les payloads sont signés en HMAC-SHA256 pour que le récepteur vérifie l'origine.",
+    "clearSecret": "Supprimer le secret enregistré",
+    "authHeaderLabel": "En-tête Authorization",
+    "authHeaderHint": "Envoyé tel quel dans l'en-tête Authorization (ex. Bearer token).",
+    "clearAuthHeader": "Supprimer l'en-tête enregistré",
+    "eventsLabel": "Événements",
+    "vendorsLabel": "Constructeurs (modules)",
+    "emptyMeansAll": "Laisser vide pour tout recevoir.",
+    "enabledLabel": "Activé",
+    "disabled": "Désactivé",
+    "skipVerifyLabel": "Accepter un certificat TLS auto-signé",
+    "cancel": "Annuler",
+    "create": "Créer",
+    "save": "Enregistrer",
+    "created": "Webhook créé",
+    "updated": "Webhook mis à jour",
+    "saveError": "Échec de l'enregistrement du webhook",
+    "deleted": "Webhook supprimé",
+    "deleteError": "Échec de la suppression",
+    "confirmDelete": "Supprimer ce webhook ?",
+    "delete": "Supprimer",
+    "edit": "Modifier",
+    "test": "Envoyer un événement test",
+    "testOk": "Test délivré (HTTP {{status}})",
+    "testFailed": "Échec du test : {{error}}",
+    "testError": "Échec de l'envoi du test",
+    "empty": "Aucun webhook. Ajoutez-en un pour notifier un système externe à chaque nouvel ECG.",
+    "eventsBadge": "événements",
+    "lastDelivery": "Dernière livraison {{date}}",
+    "docTitle": "Format du payload",
+    "docBody": "Chaque événement est un POST HTTP. L'objet links contient les endpoints API que le récepteur peut appeler pour récupérer le fichier ECG et ses métadonnées.",
+    "docAuth": "Le serveur récepteur authentifie ses appels API retour avec une clé API ou sa propre session — voir Clés API.",
+    "eventTypes": {
+      "ecg.ingested": "ECG ingéré",
+      "ecg.unidentified": "ECG non identifié",
+      "ecg.quarantined": "ECG en quarantaine",
+      "hl7.exhausted": "HL7 épuisé (retries)",
+      "hl7.rejected": "HL7 rejeté"
+    }
   }
 }
