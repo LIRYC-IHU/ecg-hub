@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/labstack/echo/v4"
 
@@ -86,11 +87,43 @@ func AuthMiddleware(provider auth.Provider, roleResolver RoleResolver) echo.Midd
 				role = dbRole
 			}
 
+			// Sliding session: when less than SessionRefreshThreshold of the
+			// token's lifetime remains, transparently re-issue a fresh token
+			// (with the live DB role) and reset the cookie. Active users stay
+			// logged in across a full clinical shift; a session left idle
+			// beyond auth.TokenTTL still expires and requires a new login.
+			// Runs after the ShouldRefreshToken check above, so sessions
+			// invalidated by an admin are never silently renewed.
+			if issuer, ok := provider.(auth.TokenIssuer); ok &&
+				!claims.ExpiresAt.IsZero() &&
+				time.Until(claims.ExpiresAt) < auth.SessionRefreshThreshold {
+				if fresh, err := issuer.IssueToken(claims.Sub, role); err == nil {
+					SetJWTCookie(c, fresh)
+				}
+			}
+
 			c.Set(CtxKeyUserID, claims.Sub)
 			c.Set(CtxKeyRole, role)
 			return next(c)
 		}
 	}
+}
+
+// SetJWTCookie writes the HttpOnly "jwt" cookie on the response.
+// MaxAge matches auth.TokenTTL, the JWT expiry. Secure is set when the request
+// arrived over HTTPS (honours X-Forwarded-Proto behind nginx) so the cookie is
+// never transmitted in clear. Shared by the login handlers and the
+// sliding-session refresh above.
+func SetJWTCookie(c echo.Context, token string) {
+	c.SetCookie(&http.Cookie{
+		Name:     "jwt",
+		Value:    token,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   c.Scheme() == "https",
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   int(auth.TokenTTL.Seconds()),
+	})
 }
 
 // extractToken returns the raw JWT from the request.
