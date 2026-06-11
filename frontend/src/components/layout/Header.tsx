@@ -99,7 +99,7 @@ export function Header({
               onClick={() => {
                 if (language !== l) onToggleLang(l);
               }}
-              className={`text-xs font-medium px-3 py-1 rounded-full transition-all ${
+              className={`text-xs font-medium px-3 py-1 rounded-full transition-all cursor-pointer ${
                 language === l
                   ? "bg-card text-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground"
@@ -120,7 +120,7 @@ export function Header({
             <button
               key={value}
               onClick={() => setTheme(value)}
-              className={`p-1.5 rounded-full transition-all ${
+              className={`p-1.5 rounded-full transition-all cursor-pointer ${
                 theme === value
                   ? "bg-card text-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground"
@@ -138,7 +138,7 @@ export function Header({
         <div className="relative">
           <button
             onClick={() => setOpen((o) => !o)}
-            className="flex items-center gap-2 hover:bg-muted rounded-lg px-2 py-1.5 transition-colors"
+            className="flex items-center gap-2 hover:bg-muted rounded-lg px-2 py-1.5 cursor-pointer transition-colors"
           >
             <div className="w-7 h-7 rounded-full bg-primary/15 flex items-center justify-center">
               <span className="text-xs font-semibold text-primary">
@@ -165,7 +165,7 @@ export function Header({
                     setOpen(false);
                     navigate("/api-keys");
                   }}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-xs text-foreground hover:bg-muted transition-colors"
+                  className="w-full flex items-center gap-2 px-3 py-2 text-xs text-foreground hover:bg-muted transition-colors cursor-pointer"
                 >
                   <KeyRound className="w-3.5 h-3.5" />
                   {t("nav.apiKeys")}
@@ -176,7 +176,7 @@ export function Header({
                       setOpen(false);
                       navigate("/webhooks");
                     }}
-                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-foreground hover:bg-muted transition-colors"
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-foreground hover:bg-muted transition-colors cursor-pointer"
                   >
                     <Webhook className="w-3.5 h-3.5" />
                     {t("nav.webhooks")}
