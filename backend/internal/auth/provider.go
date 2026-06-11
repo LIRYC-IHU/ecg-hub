@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/LIRYC-IHU/ecg-hub/internal/config"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
@@ -43,8 +44,9 @@ type OIDCFlow interface {
 
 // Claims holds the validated identity and role extracted from a token.
 type Claims struct {
-	Sub  string // user identifier (subject)
-	Role string // "reader" or "admin"
+	Sub       string    // user identifier (subject)
+	Role      string    // "reader" or "admin"
+	ExpiresAt time.Time // token expiry — drives the sliding-session refresh; zero when absent
 }
 
 // Provider validates Bearer tokens and returns authenticated claims.
@@ -78,6 +80,18 @@ func (m *MultiProvider) ValidateToken(ctx context.Context, rawToken string) (*Cl
 		}
 	}
 	return nil, fmt.Errorf("auth: all providers rejected token: %w", lastErr)
+}
+
+// IssueToken signs a fresh hub JWT via the first capable provider.
+// All hub providers share the same JWT secret, so any of them can re-issue
+// a token that the others will validate (sliding-session refresh).
+func (m *MultiProvider) IssueToken(sub, role string) (string, error) {
+	for _, p := range m.providers {
+		if issuer, ok := p.(TokenIssuer); ok {
+			return issuer.IssueToken(sub, role)
+		}
+	}
+	return "", fmt.Errorf("auth: no token-issuing provider available")
 }
 
 func (m *MultiProvider) Login(ctx context.Context, username, password string) (string, error) {

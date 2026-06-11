@@ -13,7 +13,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/golang-jwt/jwt/v5"
@@ -317,7 +316,7 @@ func (p *OIDCProvider) ExchangeAndIssue(ctx context.Context, code string) (strin
 		return "", fmt.Errorf("auth: oidc: no role could be determined for user %q", sub)
 	}
 
-	return p.issueToken(sub, role)
+	return p.IssueToken(sub, role)
 }
 
 // ValidateToken verifies an ECG Hub JWT (HMAC-SHA256 signed with JWTSecret).
@@ -347,25 +346,13 @@ func (p *OIDCProvider) ValidateToken(_ context.Context, rawToken string) (*Claim
 		return nil, fmt.Errorf("auth: oidc: missing role claim in token")
 	}
 
-	return &Claims{Sub: sub, Role: claims.Role}, nil
+	return &Claims{Sub: sub, Role: claims.Role, ExpiresAt: tokenExpiry(claims)}, nil
 }
 
-// issueToken creates and signs a JWT for the given user and role.
-func (p *OIDCProvider) issueToken(username, role string) (string, error) {
-	claims := &jwtClaims{
-		Role: role,
-		RegisteredClaims: jwt.RegisteredClaims{
-			Subject:   username,
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(1 * time.Hour)),
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
-		},
-	}
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	signed, err := token.SignedString(p.jwtSecret)
-	if err != nil {
-		return "", fmt.Errorf("auth: oidc: sign token: %w", err)
-	}
-	return signed, nil
+// IssueToken creates and signs a hub JWT for the given user and role.
+// Implements TokenIssuer (sliding-session refresh).
+func (p *OIDCProvider) IssueToken(sub, role string) (string, error) {
+	return IssueAppToken(sub, role, p.jwtSecret)
 }
 
 // extractRoleFromAccessToken decodes the access token JWT payload (without re-verifying the

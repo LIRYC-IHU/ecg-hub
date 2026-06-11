@@ -3,7 +3,6 @@ package auth
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
@@ -54,7 +53,7 @@ func (p *LocalProvider) Login(_ context.Context, username, password string) (str
 		return "", fmt.Errorf("auth: local: invalid credentials")
 	}
 
-	return p.issueToken(user.Username, user.Role)
+	return p.IssueToken(user.Username, user.Role)
 }
 
 // ValidateToken verifies an ECG Hub-issued JWT (HMAC-SHA256 signed with JWTSecret).
@@ -83,25 +82,13 @@ func (p *LocalProvider) ValidateToken(_ context.Context, rawToken string) (*Clai
 		return nil, fmt.Errorf("auth: local: missing role claim in token")
 	}
 
-	return &Claims{Sub: sub, Role: claims.Role}, nil
+	return &Claims{Sub: sub, Role: claims.Role, ExpiresAt: tokenExpiry(claims)}, nil
 }
 
-// issueToken creates and signs a JWT for the given user and role.
-func (p *LocalProvider) issueToken(username, role string) (string, error) {
-	claims := &jwtClaims{
-		Role: role,
-		RegisteredClaims: jwt.RegisteredClaims{
-			Subject:   username,
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(1 * time.Hour)),
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
-		},
-	}
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	signed, err := token.SignedString(p.jwtSecret)
-	if err != nil {
-		return "", fmt.Errorf("auth: local: sign token: %w", err)
-	}
-	return signed, nil
+// IssueToken creates and signs a hub JWT for the given user and role.
+// Implements TokenIssuer (sliding-session refresh).
+func (p *LocalProvider) IssueToken(sub, role string) (string, error) {
+	return IssueAppToken(sub, role, p.jwtSecret)
 }
 
 // HashPassword hashes a plaintext password using bcrypt with the configured cost.
