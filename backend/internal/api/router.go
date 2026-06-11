@@ -77,6 +77,17 @@ type RouterConfig struct {
 	ingestRouter       *ingestion.Router   // for hot module reload
 	persister          *ingestion.Persister // for re-ingesting assigned unidentified ECGs; nil disables the assign route
 	eventHub           *events.Hub          // realtime ingestion event hub; nil disables the events WS route
+	userWebhookRepo    *repository.UserWebhookRepository // per-user webhooks; nil disables the /webhooks routes
+	webhookDispatcher  *webhook.Dispatcher               // delivers user webhooks; required by the test route
+}
+
+// WithUserWebhooks attaches the per-user webhook repository and dispatcher so
+// the /api/v1/webhooks routes can be registered. Must be called before
+// RegisterRoutes. Returns r for chaining.
+func (r *RouterConfig) WithUserWebhooks(repo *repository.UserWebhookRepository, d *webhook.Dispatcher) *RouterConfig {
+	r.userWebhookRepo = repo
+	r.webhookDispatcher = d
+	return r
 }
 
 // WithPersister attaches the ingestion persister so the quarantine "assign"
@@ -360,6 +371,17 @@ func (r *RouterConfig) RegisterRoutes() {
 	apiV1.GET("/pins", handlers.ListPinsHandler(pinRepo), mw.RequirePermission(r.checker, auth.PermPatientRead))
 	apiV1.POST("/pins", handlers.PinPatientHandler(pinRepo), mw.RequirePermission(r.checker, auth.PermPatientRead))
 	apiV1.DELETE("/pins/:patient_id", handlers.UnpinPatientHandler(pinRepo), mw.RequirePermission(r.checker, auth.PermPatientRead))
+
+	// Per-user outbound webhooks — requires webhook.manage. Each user manages
+	// only their own webhooks (repo scoping); secrets are stored encrypted.
+	if r.userWebhookRepo != nil && r.webhookDispatcher != nil {
+		apiV1.GET("/webhooks/options", handlers.WebhookOptionsHandler(r.ingestRouter), mw.RequirePermission(r.checker, auth.PermWebhookManage))
+		apiV1.GET("/webhooks", handlers.ListUserWebhooksHandler(r.userWebhookRepo), mw.RequirePermission(r.checker, auth.PermWebhookManage))
+		apiV1.POST("/webhooks", handlers.CreateUserWebhookHandler(r.userWebhookRepo, r.authEncKey), mw.RequirePermission(r.checker, auth.PermWebhookManage))
+		apiV1.PUT("/webhooks/:id", handlers.UpdateUserWebhookHandler(r.userWebhookRepo, r.authEncKey), mw.RequirePermission(r.checker, auth.PermWebhookManage))
+		apiV1.DELETE("/webhooks/:id", handlers.DeleteUserWebhookHandler(r.userWebhookRepo), mw.RequirePermission(r.checker, auth.PermWebhookManage))
+		apiV1.POST("/webhooks/:id/test", handlers.TestUserWebhookHandler(r.userWebhookRepo, r.webhookDispatcher), mw.RequirePermission(r.checker, auth.PermWebhookManage))
+	}
 
 	// Per-user API keys — any authenticated user manages their own keys
 	// (no extra permission). Useful later for Swagger / external clients.
