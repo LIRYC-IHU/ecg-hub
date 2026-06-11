@@ -406,6 +406,22 @@ func main() {
 		hl7Enricher = hl7EnricherForPersister
 	}
 
+	// Auth encryption key for storing provider configs encrypted in DB
+	// (OIDC/LDAP secrets, FTP/HL7/connector credentials, webhook secrets).
+	// This key is the only thing protecting those secrets at rest, so in
+	// production it MUST be a strong, operator-supplied value — never the
+	// public dev default. Resolved here because the webhook dispatcher below
+	// needs it to decrypt per-webhook secrets.
+	authEncKey := resolveAuthEncKey(cfg)
+
+	// Per-user webhook dispatcher (user_webhooks table): fans ingestion and
+	// HL7 events out to user-configured endpoints. Subscribed to the event
+	// hub further down; HL7 jobs reach it through the MultiNotifier so the
+	// legacy config.yaml webhook keeps working unchanged.
+	userWebhookRepo := repository.NewUserWebhookRepository(gormDB)
+	webhookDispatcher := webhook.NewDispatcher(userWebhookRepo, gormDB, authEncKey, publicBaseURL())
+	hl7Notifier := webhook.NewMultiNotifier(webhookNotifier, webhookDispatcher)
+
 	// HL7 Scheduler: always created so it can be started from the UI via Reload().
 	// Starts immediately if HL7 client is available (host/port configured in DB).
 	auditRepoForScheduler := repository.NewAuditRepository(gormDB)
@@ -414,7 +430,7 @@ func main() {
 		ecgRepo,
 		patRepo,
 		auditRepoForScheduler,
-		webhookNotifier,
+		hl7Notifier,
 		hl7Client,
 		hl7EnricherForPersister,
 		hl7AttemptRepo,
@@ -431,12 +447,6 @@ func main() {
 
 	// Wrap scheduler as the handler interface — always non-nil since we create it unconditionally.
 	var hl7SchedulerStatus apihandlers.HL7SchedulerStatus = hl7Scheduler
-
-	// Auth encryption key for storing provider configs encrypted in DB
-	// (OIDC/LDAP secrets, FTP/HL7/connector credentials). This key is the only
-	// thing protecting those secrets at rest, so in production it MUST be a
-	// strong, operator-supplied value — never the public dev default.
-	authEncKey := resolveAuthEncKey(cfg)
 
 	// Step 5: Start FTP ingestion server (Story 2.2).
 	// ftpQueue and ingestRouter are created before RegisterRoutes so handlers can reference them.
@@ -460,6 +470,12 @@ func main() {
 	// quarantined) to connected WebSocket clients.
 	eventHub := events.NewHub()
 	router.WithEventHub(eventHub)
+
+	// User webhooks: subscribe the dispatcher to ingestion events and expose
+	// the /api/v1/webhooks management routes.
+	go webhookDispatcher.Run(eventHub)
+	defer webhookDispatcher.Stop()
+	router.WithUserWebhooks(userWebhookRepo, webhookDispatcher)
 
 	// Ingestion persistence worker — created before RegisterRoutes so the quarantine
 	// "assign" route can re-ingest unidentified ECGs through the same pipeline.
@@ -833,6 +849,16 @@ func isProduction(cfg *config.Config) bool {
 		return true
 	}
 	return cfg.Server.TLS
+}
+
+// publicBaseURL returns the public origin of this server used to build
+// absolute callback links in webhook payloads. Mirrors the HOST_URL logic
+// used for CORS in the router.
+func publicBaseURL() string {
+	if host := os.Getenv("HOST_URL"); host != "" {
+		return "http://" + host
+	}
+	return "http://localhost"
 }
 
 // resolveAuthEncKey returns the auth-config encryption key, enforcing a strong
