@@ -35,6 +35,7 @@ import { AdminModulesPage } from "./components/admin/AdminModulesPage";
 import { AdminHL7Page } from "./components/admin/AdminHL7Page";
 import { AdminBrandingPage } from "./components/admin/AdminBrandingPage";
 import { ApiKeysPage } from "./components/settings/ApiKeysPage";
+import { WebhooksPage } from "./components/settings/WebhooksPage";
 import {
   fetchAdminStats,
   fetchECGFilterFacets,
@@ -102,6 +103,8 @@ function App() {
     status === "authenticated" && hasPermission("quarantine.assign");
   const canViewAuthConfig =
     status === "authenticated" && hasPermission("admin.auth_config");
+  const canManageWebhooks =
+    status === "authenticated" && hasPermission("webhook.manage");
   const canViewHL7 =
     status === "authenticated" &&
     (hasPermission("hl7.config") || canViewSystem);
@@ -190,6 +193,7 @@ function App() {
         onLogout={logout}
         language={i18next.language}
         onToggleLang={toggleLang}
+        canManageWebhooks={canManageWebhooks}
       />
 
       <div className="flex-1 min-h-0 flex overflow-hidden">
@@ -463,6 +467,16 @@ function App() {
                 </div>
               }
             />
+            {canManageWebhooks && (
+              <Route
+                path="/webhooks"
+                element={
+                  <div className="overflow-auto flex-1">
+                    <WebhooksPage />
+                  </div>
+                }
+              />
+            )}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </div>
