@@ -111,6 +111,14 @@ func main() {
 	e := echo.New()
 	e.HideBanner = true
 
+	// Resolve the real client IP from X-Forwarded-For set by the nginx reverse
+	// proxy — login rate limiting and brute-force lockout are keyed per IP, so
+	// without this every request would appear to come from the nginx container
+	// and one user's failures would lock out everyone. The default trust options
+	// only accept forwarding headers from loopback/link-local/private ranges
+	// (the Docker network); headers forged by external clients are ignored.
+	e.IPExtractor = echo.ExtractIPFromXFFHeader()
+
 	// Middleware: recover from panics, structured logging.
 	e.Use(middleware.Recover())
 
