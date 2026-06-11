@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/labstack/echo/v4"
 
@@ -106,6 +107,76 @@ func TestAuthMiddleware_ValidToken(t *testing.T) {
 	}
 	if role := c.Get(CtxKeyRole); role != "reader" {
 		t.Errorf("role: want reader, got %v", role)
+	}
+}
+
+// mockIssuerProvider is a mockProvider that also implements auth.TokenIssuer.
+type mockIssuerProvider struct {
+	mockProvider
+	issued string
+}
+
+func (m *mockIssuerProvider) IssueToken(sub, role string) (string, error) {
+	m.issued = "fresh-token-" + sub + "-" + role
+	return m.issued, nil
+}
+
+// jwtCookie returns the value of the "jwt" Set-Cookie header in rec, or "".
+func jwtCookie(rec *httptest.ResponseRecorder) string {
+	for _, ck := range rec.Result().Cookies() {
+		if ck.Name == "jwt" {
+			return ck.Value
+		}
+	}
+	return ""
+}
+
+func TestAuthMiddleware_SlidingRefresh_NearExpiry(t *testing.T) {
+	// Token expires in 10 min (< SessionRefreshThreshold) → a fresh token
+	// must be re-issued and set as the jwt cookie.
+	provider := &mockIssuerProvider{mockProvider: mockProvider{
+		claims: &auth.Claims{Sub: "user1", Role: "reader", ExpiresAt: time.Now().Add(10 * time.Minute)},
+	}}
+	c, rec := newTestContext(http.MethodGet, "/", "Bearer valid-token")
+
+	mw := AuthMiddleware(provider, noopResolver{})
+	if err := mw(func(c echo.Context) error { return nil })(c); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := jwtCookie(rec); got != provider.issued || got == "" {
+		t.Errorf("jwt cookie: want re-issued token %q, got %q", provider.issued, got)
+	}
+}
+
+func TestAuthMiddleware_SlidingRefresh_FreshToken(t *testing.T) {
+	// Token still has 50 min left (> SessionRefreshThreshold) → no refresh.
+	provider := &mockIssuerProvider{mockProvider: mockProvider{
+		claims: &auth.Claims{Sub: "user1", Role: "reader", ExpiresAt: time.Now().Add(50 * time.Minute)},
+	}}
+	c, rec := newTestContext(http.MethodGet, "/", "Bearer valid-token")
+
+	mw := AuthMiddleware(provider, noopResolver{})
+	if err := mw(func(c echo.Context) error { return nil })(c); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := jwtCookie(rec); got != "" {
+		t.Errorf("jwt cookie: want none for a fresh token, got %q", got)
+	}
+}
+
+func TestAuthMiddleware_SlidingRefresh_NoExpiryClaim(t *testing.T) {
+	// Zero ExpiresAt (e.g. legacy token without exp) → no refresh, no panic.
+	provider := &mockIssuerProvider{mockProvider: mockProvider{
+		claims: &auth.Claims{Sub: "user1", Role: "reader"},
+	}}
+	c, rec := newTestContext(http.MethodGet, "/", "Bearer valid-token")
+
+	mw := AuthMiddleware(provider, noopResolver{})
+	if err := mw(func(c echo.Context) error { return nil })(c); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got := jwtCookie(rec); got != "" {
+		t.Errorf("jwt cookie: want none without expiry claim, got %q", got)
 	}
 }
 
