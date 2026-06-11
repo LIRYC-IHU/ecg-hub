@@ -11,7 +11,7 @@ import (
 // UserRecord is the GORM model for ecg_hub_users.
 type UserRecord struct {
 	ID         string    `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
-	ExternalID string    `gorm:"type:text;not null;index"`
+	ExternalID string    `gorm:"type:text;not null;uniqueIndex"`
 	Provider   string    `gorm:"not null;default:'oidc'"`
 	RoleID     string    `gorm:"type:uuid;not null;index"`
 	CreatedAt  time.Time `gorm:"autoCreateTime"`
