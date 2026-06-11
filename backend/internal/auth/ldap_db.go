@@ -4,10 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"time"
 
 	ldap "github.com/go-ldap/ldap/v3"
-	"github.com/golang-jwt/jwt/v5"
 
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
 )
@@ -140,14 +138,5 @@ func LoginWithLDAPFromDB(ctx context.Context, username, password, jwtSecret stri
 	}
 
 	// Issue JWT using the provided application secret.
-	claims := jwtClaims{
-		Role: role,
-		RegisteredClaims: jwt.RegisteredClaims{
-			Subject:   username,
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(1 * time.Hour)),
-		},
-	}
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString([]byte(jwtSecret))
+	return IssueAppToken(username, role, []byte(jwtSecret))
 }

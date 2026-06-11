@@ -71,7 +71,7 @@ func TestLDAPProvider_ValidateToken_Valid(t *testing.T) {
 	}
 
 	// Issue a token using the internal helper.
-	rawToken, err := provider.issueToken("testuser", "reader")
+	rawToken, err := provider.IssueToken("testuser", "reader")
 	if err != nil {
 		t.Fatalf("issueToken: %v", err)
 	}
@@ -95,7 +95,7 @@ func TestLDAPProvider_ValidateToken_AdminRole(t *testing.T) {
 		t.Fatalf("NewLDAPProvider: %v", err)
 	}
 
-	rawToken, err := provider.issueToken("adminuser", "admin")
+	rawToken, err := provider.IssueToken("adminuser", "admin")
 	if err != nil {
 		t.Fatalf("issueToken: %v", err)
 	}
@@ -116,7 +116,7 @@ func TestLDAPProvider_ValidateToken_InvalidSignature(t *testing.T) {
 		t.Fatalf("NewLDAPProvider: %v", err)
 	}
 
-	rawToken, err := provider.issueToken("testuser", "reader")
+	rawToken, err := provider.IssueToken("testuser", "reader")
 	if err != nil {
 		t.Fatalf("issueToken: %v", err)
 	}
@@ -141,7 +141,7 @@ func TestLDAPProvider_ValidateToken_WrongSecret(t *testing.T) {
 		t.Fatalf("NewLDAPProvider: %v", err)
 	}
 
-	rawToken, err := provider.issueToken("testuser", "reader")
+	rawToken, err := provider.IssueToken("testuser", "reader")
 	if err != nil {
 		t.Fatalf("issueToken: %v", err)
 	}
@@ -178,7 +178,7 @@ func TestLDAPProvider_ValidateToken_EmptyRole(t *testing.T) {
 	}
 
 	// issueToken with an empty role should produce a JWT that ValidateToken rejects.
-	rawToken, err := provider.issueToken("testuser", "")
+	rawToken, err := provider.IssueToken("testuser", "")
 	if err != nil {
 		t.Fatalf("issueToken: %v", err)
 	}
@@ -200,7 +200,7 @@ func TestLDAPProvider_ValidateToken_CustomRole(t *testing.T) {
 	}
 
 	// Custom role names (e.g. from DB) should now be accepted.
-	rawToken, err := provider.issueToken("testuser", "nurse")
+	rawToken, err := provider.IssueToken("testuser", "nurse")
 	if err != nil {
 		t.Fatalf("issueToken: %v", err)
 	}

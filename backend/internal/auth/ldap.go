@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	ldap "github.com/go-ldap/ldap/v3"
 	"github.com/golang-jwt/jwt/v5"
@@ -154,7 +153,7 @@ func (p *LDAPProvider) Login(ctx context.Context, username, password string) (st
 	}
 
 	// Issue ECG Hub-signed JWT.
-	return p.issueToken(username, role)
+	return p.IssueToken(username, role)
 }
 
 // ValidateToken verifies an ECG Hub-issued JWT (HMAC-SHA256 signed with JWTSecret).
@@ -183,23 +182,11 @@ func (p *LDAPProvider) ValidateToken(_ context.Context, rawToken string) (*Claim
 		return nil, fmt.Errorf("auth: ldap: missing role claim in token")
 	}
 
-	return &Claims{Sub: sub, Role: claims.Role}, nil
+	return &Claims{Sub: sub, Role: claims.Role, ExpiresAt: tokenExpiry(claims)}, nil
 }
 
-// issueToken creates and signs a JWT for the given user and role.
-func (p *LDAPProvider) issueToken(username, role string) (string, error) {
-	claims := &jwtClaims{
-		Role: role,
-		RegisteredClaims: jwt.RegisteredClaims{
-			Subject:   username,
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(1 * time.Hour)),
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
-		},
-	}
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	signed, err := token.SignedString(p.jwtSecret)
-	if err != nil {
-		return "", fmt.Errorf("auth: ldap: sign token: %w", err)
-	}
-	return signed, nil
+// IssueToken creates and signs a hub JWT for the given user and role.
+// Implements TokenIssuer (sliding-session refresh).
+func (p *LDAPProvider) IssueToken(sub, role string) (string, error) {
+	return IssueAppToken(sub, role, p.jwtSecret)
 }
