@@ -14,7 +14,6 @@ import (
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
 	appmetrics "github.com/LIRYC-IHU/ecg-hub/internal/metrics"
 	"github.com/LIRYC-IHU/ecg-hub/internal/module"
-	"github.com/LIRYC-IHU/ecg-hub/internal/webhook"
 )
 
 // AdminStatsHandler handles GET /api/v1/admin/stats.
@@ -179,51 +178,6 @@ func ModulesHandler(provider ModuleListProvider) echo.HandlerFunc {
 func ConnectorsHandler(checkers []ConnectorHealthChecker) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		return c.JSON(http.StatusOK, buildConnectorEntries(checkers))
-	}
-}
-
-// WebhookStatusHandler handles GET /api/v1/admin/webhook.
-// Returns webhook configuration state (enabled, url, secret_configured).
-// Never exposes the actual secret.
-//
-// Requires: RequireRole("admin")
-//
-// @Summary Webhook configuration status
-// @Tags Admin
-// @Produce json
-// @Success 200 {object} map[string]interface{}
-// @Security BearerAuth
-// @Router /api/v1/admin/webhook [get]
-func WebhookStatusHandler(n *webhook.Notifier) echo.HandlerFunc {
-	return func(c echo.Context) error {
-		return c.JSON(http.StatusOK, n.GetStatus())
-	}
-}
-
-// WebhookTestHandler handles POST /api/v1/admin/webhook/test.
-// Fires a test webhook event and returns the HTTP status from the receiver.
-//
-// Requires: RequireRole("admin")
-//
-// @Summary Test webhook
-// @Tags Admin
-// @Produce json
-// @Success 200 {object} map[string]interface{}
-// @Security BearerAuth
-// @Router /api/v1/admin/webhook/test [post]
-func WebhookTestHandler(n *webhook.Notifier) echo.HandlerFunc {
-	return func(c echo.Context) error {
-		statusCode, err := n.Test()
-		if err != nil {
-			return c.JSON(http.StatusOK, map[string]any{
-				"success": false,
-				"error":   err.Error(),
-			})
-		}
-		return c.JSON(http.StatusOK, map[string]any{
-			"success":     statusCode >= 200 && statusCode < 300,
-			"status_code": statusCode,
-		})
 	}
 }
 
