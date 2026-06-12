@@ -2,7 +2,10 @@ package webhook
 
 import (
 	"bytes"
+	"crypto/hmac"
+	"crypto/sha256"
 	"crypto/tls"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -269,6 +272,14 @@ func (d *Dispatcher) Deliver(hook models.UserWebhook, p Payload) (int, error) {
 		return resp.StatusCode, fmt.Errorf("receiver returned HTTP %d", resp.StatusCode)
 	}
 	return resp.StatusCode, nil
+}
+
+// sign returns the HMAC-SHA256 hex signature of body using secret.
+// Delivered in the X-ECG-Hub-Signature header as "sha256=<hex>".
+func sign(body []byte, secret string) string {
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write(body)
+	return hex.EncodeToString(mac.Sum(nil))
 }
 
 // matches reports whether value passes the filter list (empty list = match all).
