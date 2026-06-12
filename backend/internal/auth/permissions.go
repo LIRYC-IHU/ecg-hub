@@ -33,6 +33,7 @@ const (
 	PermAdminAuthConfig  = "admin.auth_config"
 	PermSwaggerRead      = "swagger.read"
 	PermWebhookManage    = "webhook.manage" // configure personal outbound webhooks
+	PermAPIKeyManage     = "apikey.manage"  // create and manage personal API keys
 )
 
 // AllPermissions is the ordered list of every permission string in the application.
@@ -59,6 +60,7 @@ var AllPermissions = []string{
 	PermAdminAuthConfig,
 	PermSwaggerRead,
 	PermWebhookManage,
+	PermAPIKeyManage,
 }
 
 // PermissionChecker resolves a role name → set of permissions.

@@ -29,7 +29,9 @@ type ldapDBConfig struct {
 
 // LoginWithLDAPFromDB reads the LDAP config from DB, authenticates the user, and issues a JWT.
 // jwtSecret is the application JWT signing key (from JWT_SECRET env var).
-func LoginWithLDAPFromDB(ctx context.Context, username, password, jwtSecret string, repo *repository.AuthConfigRepository, encKey string) (string, error) {
+// userStore (may be nil) registers the login in ecg_hub_users so LDAP users get
+// the same stable internal identity as local/OIDC users.
+func LoginWithLDAPFromDB(ctx context.Context, username, password, jwtSecret string, repo *repository.AuthConfigRepository, encKey string, userStore UserStore) (string, error) {
 	dbCfg, err := repo.Get("ldap")
 	if err != nil || dbCfg == nil {
 		return "", fmt.Errorf("auth: ldap: no DB config found")
@@ -134,6 +136,14 @@ func LoginWithLDAPFromDB(ctx context.Context, username, password, jwtSecret stri
 				role = "writer"
 				break
 			}
+		}
+	}
+
+	// Register the login in ecg_hub_users (unified identity). A role assigned
+	// from the admin UI takes priority over the LDAP-group-derived role.
+	if userStore != nil {
+		if dbRole, err := userStore.UpsertLogin(ctx, username, "ldap", role); err == nil && dbRole != "" {
+			role = dbRole
 		}
 	}
 

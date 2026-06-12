@@ -23,23 +23,27 @@ var dummyPasswordHash, _ = bcrypt.GenerateFromPassword([]byte("timing-equalizer-
 // ECG Hub-signed JWTs. This provider is additive — it does not replace OIDC or LDAP.
 type LocalProvider struct {
 	repo      *repository.LocalUserRepository
+	userStore UserStore // registers logins in ecg_hub_users (unified identity); may be nil in tests
 	jwtSecret []byte
 }
 
 // NewLocalProvider creates a LocalProvider. jwtSecret is the HMAC signing key for JWTs.
-func NewLocalProvider(repo *repository.LocalUserRepository, jwtSecret string) (*LocalProvider, error) {
+// userStore registers each successful login in ecg_hub_users so local users get
+// the same stable internal identity as OIDC/LDAP users.
+func NewLocalProvider(repo *repository.LocalUserRepository, userStore UserStore, jwtSecret string) (*LocalProvider, error) {
 	if jwtSecret == "" {
 		return nil, fmt.Errorf("auth: local: JWT_SECRET is required")
 	}
 	return &LocalProvider{
 		repo:      repo,
+		userStore: userStore,
 		jwtSecret: []byte(jwtSecret),
 	}, nil
 }
 
 // Login verifies the username/password against the local user database.
 // On success it returns a signed JWT containing the user's sub and role.
-func (p *LocalProvider) Login(_ context.Context, username, password string) (string, error) {
+func (p *LocalProvider) Login(ctx context.Context, username, password string) (string, error) {
 	user, err := p.repo.FindByUsername(username)
 	if err != nil {
 		// User not found: still run a bcrypt comparison against a dummy hash so the
@@ -53,7 +57,16 @@ func (p *LocalProvider) Login(_ context.Context, username, password string) (str
 		return "", fmt.Errorf("auth: local: invalid credentials")
 	}
 
-	return p.IssueToken(user.Username, user.Role)
+	// Register the login in ecg_hub_users (unified identity): per-user resources
+	// are keyed on the internal uuid, and a DB-assigned role takes priority.
+	role := user.Role
+	if p.userStore != nil {
+		if dbRole, err := p.userStore.UpsertLogin(ctx, user.Username, "local", user.Role); err == nil && dbRole != "" {
+			role = dbRole
+		}
+	}
+
+	return p.IssueToken(user.Username, role)
 }
 
 // ValidateToken verifies an ECG Hub-issued JWT (HMAC-SHA256 signed with JWTSecret).

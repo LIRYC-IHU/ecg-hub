@@ -155,11 +155,11 @@ func GetProviderNames(p Provider) []string {
 // (always active). OIDC and LDAP are configured from the admin UI, stored
 // encrypted in the database, and used at request time by the dynamic handlers
 // (oidcFlowFromDB, LoginWithLDAPFromDB) — they are never built from config.yaml.
-func NewWithLocalRepo(_ context.Context, cfg *config.Config, _ UserStore, localRepo *repository.LocalUserRepository) (Provider, error) {
+func NewWithLocalRepo(_ context.Context, cfg *config.Config, userStore UserStore, localRepo *repository.LocalUserRepository) (Provider, error) {
 	if localRepo == nil {
 		return nil, fmt.Errorf("auth: local provider requires a LocalUserRepository")
 	}
-	lp, err := NewLocalProvider(localRepo, cfg.JWTSecret)
+	lp, err := NewLocalProvider(localRepo, userStore, cfg.JWTSecret)
 	if err != nil {
 		return nil, err
 	}
