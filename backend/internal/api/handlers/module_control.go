@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
@@ -109,9 +110,10 @@ func StartModuleHandler(
 	}
 }
 
-// StartFTPFromDB reads FTP configuration from the DB, builds a config.Config with those
-// values applied (falling back to config.yaml values when no DB record exists), creates
-// a new ingestion.Server, starts it, and registers it in registry.
+// StartFTPFromDB reads the FTP configuration from the DB (admin UI > Modules),
+// builds the server settings, creates a new ingestion.Server, starts it, and
+// registers it in registry. Credentials fall back to FTP_USERNAME /
+// FTP_PASSWORD env vars; the advertised PASV host falls back to FTP_PUBLIC_HOST.
 func StartFTPFromDB(
 	repo *repository.ModuleConfigRepository,
 	encKey string,
@@ -119,6 +121,8 @@ func StartFTPFromDB(
 	queue ingestion.IngestQueue,
 	registry *module.Registry,
 ) error {
+	_ = cfg // retained in the signature for call-site stability; FTP no longer reads config.yaml
+
 	// Stop any running instance first.
 	if existing, ok := registry.Get("ftp"); ok {
 		if err := existing.Stop(); err != nil {
@@ -126,8 +130,13 @@ func StartFTPFromDB(
 		}
 	}
 
-	// Shallow-copy the whole config so we don't mutate the global one.
-	newCfg := *cfg
+	// Sensible defaults when no DB record exists yet (first run before the
+	// admin configures the module from the UI).
+	settings := ingestion.FTPSettings{
+		Enabled:                  false,
+		Port:                     2121,
+		PassiveTransferPortRange: "30000-30010",
+	}
 
 	record, err := repo.Get(ftpModuleType)
 	if err != nil {
@@ -137,28 +146,35 @@ func StartFTPFromDB(
 	if record != nil {
 		decrypted, err := auth.DecryptString(record.ConfigEncrypted, encKey)
 		if err != nil {
-			slog.Warn("module_control: failed to decrypt FTP config, using config.yaml fallback", "error", err)
+			slog.Warn("module_control: failed to decrypt FTP config", "error", err)
 		} else {
 			var stored FTPStoredConfig
 			if err := json.Unmarshal([]byte(decrypted), &stored); err != nil {
-				slog.Warn("module_control: failed to parse FTP config, using config.yaml fallback", "error", err)
+				slog.Warn("module_control: failed to parse FTP config", "error", err)
 			} else {
-				newCfg.FTP.Enabled = record.Enabled
-				newCfg.FTP.Port = stored.Port
-				newCfg.FTP.PassiveTransferPortRange = stored.PassivePortRange
-				newCfg.FTP.PublicHost = stored.PublicHost
-				newCfg.FTP.TLS = stored.TLS
-				if stored.Username != "" {
-					newCfg.FTPUsername = stored.Username
-				}
-				if stored.Password != "" {
-					newCfg.FTPPassword = stored.Password
-				}
+				settings.Enabled = record.Enabled
+				settings.Port = stored.Port
+				settings.PassiveTransferPortRange = stored.PassivePortRange
+				settings.PublicHost = stored.PublicHost
+				settings.TLS = stored.TLS
+				settings.Username = stored.Username
+				settings.Password = stored.Password
 			}
 		}
 	}
 
-	server := ingestion.New(&newCfg, queue)
+	// Env fallbacks (NFR-S2): secrets may come from the environment instead of the DB.
+	if settings.Username == "" {
+		settings.Username = os.Getenv("FTP_USERNAME")
+	}
+	if settings.Password == "" {
+		settings.Password = os.Getenv("FTP_PASSWORD")
+	}
+	if settings.PublicHost == "" {
+		settings.PublicHost = os.Getenv("FTP_PUBLIC_HOST")
+	}
+
+	server := ingestion.New(settings, queue)
 	if err := server.Start(); err != nil {
 		return err
 	}
@@ -166,7 +182,7 @@ func StartFTPFromDB(
 	wrapper := &restartableFTPWrapper{server: server, status: module.StatusRunning}
 	registry.Register("ftp", wrapper)
 
-	slog.Info("module_control: FTP server started", "port", newCfg.FTP.Port)
+	slog.Info("module_control: FTP server started", "port", settings.Port)
 	return nil
 }
 
@@ -224,8 +240,13 @@ func StartDICOMFromDB(
 		time.Sleep(500 * time.Millisecond)
 	}
 
-	// Shallow-copy the whole config so we don't mutate the global one.
-	newCfg := *cfg
+	// Sensible defaults when no DB record exists yet (first run before the
+	// admin configures the module from the UI).
+	settings := dicomsrv.Settings{
+		Port:        4242,
+		AETitle:     "ECG-HUB",
+		EchoEnabled: true,
+	}
 
 	record, err := repo.Get(dicomModuleType)
 	if err != nil {
@@ -235,25 +256,24 @@ func StartDICOMFromDB(
 	if record != nil {
 		decrypted, err := auth.DecryptString(record.ConfigEncrypted, encKey)
 		if err != nil {
-			slog.Warn("module_control: failed to decrypt DICOM config, using config.yaml fallback", "error", err)
+			slog.Warn("module_control: failed to decrypt DICOM config", "error", err)
 		} else {
 			var stored DICOMStoredConfig
 			if err := json.Unmarshal([]byte(decrypted), &stored); err != nil {
-				slog.Warn("module_control: failed to parse DICOM config, using config.yaml fallback", "error", err)
+				slog.Warn("module_control: failed to parse DICOM config", "error", err)
 			} else {
-				newCfg.DICOM.Enabled = record.Enabled
-				newCfg.DICOM.Port = stored.Port
-				newCfg.DICOM.AETitle = stored.AETitle
-				newCfg.DICOM.EchoEnabled = stored.EchoEnabled
-				newCfg.DICOM.TLS = stored.TLS
+				settings.Port = stored.Port
+				settings.AETitle = stored.AETitle
+				settings.EchoEnabled = stored.EchoEnabled
+				settings.TLS = stored.TLS
 			}
 		}
 	}
 
 	// Force enabled so the server actually starts.
-	newCfg.DICOM.Enabled = true
+	settings.Enabled = true
 
-	server := dicomsrv.New(&newCfg, queue)
+	server := dicomsrv.New(settings, queue)
 	if err := server.Start(); err != nil {
 		return err
 	}
@@ -261,7 +281,7 @@ func StartDICOMFromDB(
 	wrapper := &restartableDICOMWrapper{server: server, status: module.StatusRunning}
 	registry.Register("dicom", wrapper)
 
-	slog.Info("module_control: DICOM server started", "port", newCfg.DICOM.Port)
+	slog.Info("module_control: DICOM server started", "port", settings.Port)
 	return nil
 }
 
