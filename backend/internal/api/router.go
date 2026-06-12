@@ -54,7 +54,6 @@ type RouterConfig struct {
 	gormDB             *gorm.DB
 	authProvider       auth.Provider
 	bridge             export.Converter
-	notifier           *webhook.Notifier
 	keycloakAdmin      *auth.KeycloakAdminClient
 	checker            *auth.PermissionChecker
 	userRepo           *repository.UserRepo
@@ -79,6 +78,16 @@ type RouterConfig struct {
 	eventHub           *events.Hub          // realtime ingestion event hub; nil disables the events WS route
 	userWebhookRepo    *repository.UserWebhookRepository // per-user webhooks; nil disables the /webhooks routes
 	webhookDispatcher  *webhook.Dispatcher               // delivers user webhooks; required by the test route
+	connectorReload    func()                            // rebuilds the outbound connector runtime from DB after a config change
+}
+
+// WithConnectorReload attaches the callback that rebuilds the outbound PACS
+// connector runtime from the DB. Called by the connector save/delete handlers
+// so config changes from the UI take effect without a restart.
+// Must be called before RegisterRoutes. Returns r for chaining.
+func (r *RouterConfig) WithConnectorReload(reload func()) *RouterConfig {
+	r.connectorReload = reload
+	return r
 }
 
 // WithUserWebhooks attaches the per-user webhook repository and dispatcher so
@@ -107,7 +116,7 @@ func (r *RouterConfig) WithEventHub(h *events.Hub) *RouterConfig {
 }
 
 func NewRouterConfig(e *echo.Echo, gormDB *gorm.DB, authProvider auth.Provider, bridge export.Converter,
-	notifier *webhook.Notifier, keycloakAdmin *auth.KeycloakAdminClient, checker *auth.PermissionChecker, userRepo *repository.UserRepo,
+	keycloakAdmin *auth.KeycloakAdminClient, checker *auth.PermissionChecker, userRepo *repository.UserRepo,
 	activeModules []module.Module, dicomStatus handlers.DICOMStatus, ftpStatus handlers.FTPStatus,
 	ectpStatus handlers.ECTPStatus, exportRepo *repository.ExportJobRepository, exportPool *export.WorkerPool,
 	connCheckers []handlers.ConnectorHealthChecker, hl7Client *hl7.Client, hl7Enricher handlers.HL7Enricher,
@@ -120,7 +129,6 @@ func NewRouterConfig(e *echo.Echo, gormDB *gorm.DB, authProvider auth.Provider, 
 		gormDB:             gormDB,
 		authProvider:       authProvider,
 		bridge:             bridge,
-		notifier:           notifier,
 		keycloakAdmin:      keycloakAdmin,
 		checker:            checker,
 		userRepo:           userRepo,
@@ -176,18 +184,10 @@ func (r *RouterConfig) RegisterRoutes() {
 		},
 	}))
 
-	// === Metrics middleware — active when enabled, regardless of port mode ===
-	if r.cfg.Metrics.Enabled {
-		r.e.Use(appmetrics.Middleware())
-		// Dedicated port: metrics are served by a separate server started in main.go.
-		// No port set: expose /metrics on the main API server.
-		if r.cfg.Metrics.Port == 0 {
-			r.e.GET("/metrics", echo.WrapHandler(appmetrics.Handler()))
-			slog.Info("metrics: endpoint on main server", "path", "/metrics")
-		} else {
-			slog.Info("metrics: endpoint on dedicated server", "port", r.cfg.Metrics.Port)
-		}
-	}
+	// === Metrics middleware — always active. /metrics is served by the
+	// dedicated metrics server started in main.go (Prometheus scrapes it on
+	// the internal Docker network), never on the public API port. ===
+	r.e.Use(appmetrics.Middleware())
 
 	// === Public routes ===
 	api := r.e.Group("", mw.HealthzMiddleware(r.authProvider, r.userRepo))
@@ -280,10 +280,6 @@ func (r *RouterConfig) RegisterRoutes() {
 	// System stats — requires admin.system
 	apiV1.GET("/admin/stats", handlers.AdminStatsHandler(r.gormDB), mw.RequirePermission(r.checker, auth.PermAdminSystem))
 
-	// Webhook — requires admin.system
-	apiV1.GET("/admin/webhook", handlers.WebhookStatusHandler(r.notifier), mw.RequirePermission(r.checker, auth.PermAdminSystem))
-	apiV1.POST("/admin/webhook/test", handlers.WebhookTestHandler(r.notifier), mw.RequirePermission(r.checker, auth.PermAdminSystem))
-
 	// User management (Keycloak) — requires admin.users
 	apiV1.GET("/admin/users", handlers.ListUsersHandler(r.keycloakAdmin), mw.RequirePermission(r.checker, auth.PermAdminUsers))
 	apiV1.PUT("/admin/users/:id/role", handlers.SetUserRoleHandler(r.keycloakAdmin), mw.RequirePermission(r.checker, auth.PermAdminUsers))
@@ -345,8 +341,8 @@ func (r *RouterConfig) RegisterRoutes() {
 
 	// Proxy connector configuration (Story 7.6) — requires admin.system
 	apiV1.GET("/admin/connectors/config", handlers.ListConnectorConfigsHandler(r.moduleConfigRepo, r.authEncKey), mw.RequirePermission(r.checker, auth.PermAdminSystem))
-	apiV1.PUT("/admin/connectors/:name/config", handlers.SaveConnectorConfigHandler(r.moduleConfigRepo, r.authEncKey, module.GlobalRegistry), mw.RequirePermission(r.checker, auth.PermAdminSystem))
-	apiV1.DELETE("/admin/connectors/:name", handlers.DeleteConnectorConfigHandler(r.moduleConfigRepo), mw.RequirePermission(r.checker, auth.PermAdminSystem))
+	apiV1.PUT("/admin/connectors/:name/config", handlers.SaveConnectorConfigHandler(r.moduleConfigRepo, r.authEncKey, module.GlobalRegistry, r.connectorReload), mw.RequirePermission(r.checker, auth.PermAdminSystem))
+	apiV1.DELETE("/admin/connectors/:name", handlers.DeleteConnectorConfigHandler(r.moduleConfigRepo, r.connectorReload), mw.RequirePermission(r.checker, auth.PermAdminSystem))
 	apiV1.POST("/admin/connectors/:name/test", handlers.TestConnectorHandler(r.moduleConfigRepo, r.authEncKey), mw.RequirePermission(r.checker, auth.PermAdminSystem))
 
 	// Outbound PACS connectors — requires admin.system
