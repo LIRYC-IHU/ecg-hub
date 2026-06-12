@@ -15,11 +15,11 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -32,7 +32,6 @@ import (
 	dicomconn "github.com/LIRYC-IHU/ecg-hub/internal/connector/dicom"
 	"github.com/LIRYC-IHU/ecg-hub/internal/connector/polaris"
 	dbpkg "github.com/LIRYC-IHU/ecg-hub/internal/db"
-	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
 	dicomsrv "github.com/LIRYC-IHU/ecg-hub/internal/dicom"
 	"github.com/LIRYC-IHU/ecg-hub/internal/export"
@@ -82,13 +81,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Step 2a-bis: Start DB metrics if enabled.
-	if cfg.Metrics.Enabled {
-		if sqlDB, err := gormDB.DB(); err == nil {
-			appmetrics.RegisterGORMCallbacks(gormDB)
-			appmetrics.StartPoolExporter(context.Background(), sqlDB, 10*time.Second)
-			slog.Info("metrics: DB instrumentation enabled")
-		}
+	// Step 2a-bis: DB metrics instrumentation (always on — Prometheus scrapes
+	// the dedicated metrics port on the internal Docker network).
+	if sqlDB, err := gormDB.DB(); err == nil {
+		appmetrics.RegisterGORMCallbacks(gormDB)
+		appmetrics.StartPoolExporter(context.Background(), sqlDB, 10*time.Second)
+		slog.Info("metrics: DB instrumentation enabled")
 	}
 
 	// Step 2b: Run database migrations — idempotent, safe on restart (AC#1, AC#2).
@@ -174,18 +172,18 @@ func main() {
 	}
 
 	bridge := export.NewECGBridge(binaries, 5*time.Second)
-	webhookNotifier := webhook.NewNotifier(cfg.Webhook, cfg.WebhookSecret)
 
-	// Keycloak Admin client — nil when OIDC is not configured or admin secret is absent.
-	// Handlers receiving nil return 503 with a clear message.
+	// Keycloak Admin client — optional, enabled via env vars only (OIDC itself
+	// is configured from the admin UI and stored in DB). Handlers receiving nil
+	// return 503 with a clear message.
 	var keycloakAdmin *auth.KeycloakAdminClient
-	if cfg.Auth.OIDC.IssuerURL != "" && cfg.OIDCAdminClientSecret != "" {
+	if issuer := os.Getenv("OIDC_ISSUER_URL"); issuer != "" && os.Getenv("OIDC_ADMIN_CLIENT_SECRET") != "" {
 		var err error
 		keycloakAdmin, err = auth.NewKeycloakAdminClient(
-			cfg.Auth.OIDC.IssuerURL,
-			cfg.OIDCClientID,
-			cfg.OIDCAdminClientSecret,
-			!cfg.Auth.OIDC.TLS,
+			issuer,
+			os.Getenv("OIDC_CLIENT_ID"),
+			os.Getenv("OIDC_ADMIN_CLIENT_SECRET"),
+			os.Getenv("OIDC_INSECURE_TLS") == "true",
 		)
 		if err != nil {
 			slog.Warn("keycloak admin client disabled", "error", err)
@@ -193,11 +191,7 @@ func main() {
 		}
 	}
 
-	adminRoleName := cfg.Auth.OIDC.AdminRoleName
-	if adminRoleName == "" {
-		adminRoleName = "admin"
-	}
-	permChecker := auth.NewPermissionChecker(gormDB, adminRoleName)
+	permChecker := auth.NewPermissionChecker(gormDB, "admin")
 
 	// Step 5b: Resolve active modules — DB takes priority over config.yaml.
 	// module.Active returns modules in the order listed, or all registered modules when empty.
@@ -208,16 +202,8 @@ func main() {
 		effectiveModuleNames = dbActiveModules
 		slog.Info("modules: using active list from database", "modules", effectiveModuleNames)
 	} else {
-		effectiveModuleNames = cfg.Modules.Active // fallback to YAML (may be empty = all)
-		slog.Info("modules: using active list from config.yaml", "modules", effectiveModuleNames)
-	}
-	// Seed: on first run, if DB has empty active_modules and config.yaml has a non-empty list, seed it.
-	if (dbErr != nil || len(dbActiveModules) == 0) && len(cfg.Modules.Active) > 0 {
-		if seedErr := moduleSettingsRepoEarly.SetActiveModules(cfg.Modules.Active); seedErr != nil {
-			slog.Warn("modules: failed to seed active modules from config.yaml", "error", seedErr)
-		} else {
-			slog.Info("modules: seeded active modules from config.yaml", "modules", cfg.Modules.Active)
-		}
+		// Empty DB list = all compiled-in modules active (manage from Admin > Modules).
+		slog.Info("modules: no active list in database — all compiled-in modules active")
 	}
 	activeModules := module.Active(effectiveModuleNames)
 	for _, m := range activeModules {
@@ -234,8 +220,8 @@ func main() {
 		}
 	}
 
-	// Step 5c: Wire module-level metrics when enabled.
-	if cfg.Metrics.Enabled {
+	// Step 5c: Wire module-level metrics (always on).
+	{
 		for _, m := range activeModules {
 			vendor := m.Name()
 			appmetrics.ModuleActive.WithLabelValues(vendor).Set(1)
@@ -289,90 +275,13 @@ func main() {
 		}
 	}
 
-	// Story 3.4: Build outbound connector instances from cfg.PACS.
-	// connSettings is used later to wire the Dispatcher + RetryJob after ecgRepo is available.
-	// connCheckers is passed to RegisterRoutes now so /healthz can probe each connector's ECTP port.
-	var connCheckers []apihandlers.ConnectorHealthChecker
-	var connSettings []connector.ConnectorSettings
-	if cfg.Proxy.Enabled {
-		for _, connCfg := range cfg.Proxy.Connectors {
-			if !connCfg.Enabled {
-				continue
-			}
-			var c connector.Connector
-			switch connCfg.Protocol {
-			case "ectp_ftp":
-				c = polaris.New(connCfg)
-			case "dicom_cstore":
-				dc, err := dicomconn.New(connCfg)
-				if err != nil {
-					slog.Error("FATAL: " + err.Error())
-					os.Exit(1)
-				}
-				c = dc
-			default:
-				slog.Warn("connector: unknown protocol, skipping",
-					"name", connCfg.Name, "protocol", connCfg.Protocol)
-				continue
-			}
-
-			interval, err := time.ParseDuration(connCfg.Retry.Interval)
-			if err != nil {
-				slog.Error("FATAL: connector: invalid retry interval",
-					"connector", connCfg.Name,
-					"value", connCfg.Retry.Interval,
-					"error", err)
-				os.Exit(1)
-			}
-
-			maxAttempts := connCfg.Retry.MaxAttempts
-			if maxAttempts <= 0 {
-				maxAttempts = 3
-			}
-
-			connSettings = append(connSettings, connector.ConnectorSettings{
-				Connector:   c,
-				Interval:    interval,
-				MaxAttempts: maxAttempts,
-			})
-			connCheckers = append(connCheckers, c)
-			slog.Info("connector: loaded", "name", connCfg.Name, "protocol", connCfg.Protocol)
-		}
-	}
+	// Story 3.4: outbound connectors are built from the DB configs (see
+	// buildConnectorsFromDB below) after seedConnectorsIfMissing has imported
+	// any config.yaml definitions on first run. The DB — editable from the
+	// admin UI — is the single runtime source of truth.
 
 	// Create HL7 client early so it can be injected into the router for the test endpoint.
 	hl7SettingsRepo := repository.NewHL7SettingsRepository(gormDB)
-
-	// Seed HL7 connection settings from config.yaml on first run (when DB host is still empty).
-	if cfg.HL7.Host != "" {
-		if s, err := hl7SettingsRepo.Get(); err == nil && s.Host == "" {
-			s.Host = cfg.HL7.Host
-			s.Port = cfg.HL7.Port
-			if cfg.HL7.SendingApplication != "" {
-				s.SendingApplication = cfg.HL7.SendingApplication
-			}
-			if cfg.HL7.SendingFacility != "" {
-				s.SendingFacility = cfg.HL7.SendingFacility
-			}
-			if cfg.HL7.ReceivingApplication != "" {
-				s.ReceivingApplication = cfg.HL7.ReceivingApplication
-			}
-			if cfg.HL7.ReceivingFacility != "" {
-				s.ReceivingFacility = cfg.HL7.ReceivingFacility
-			}
-			if cfg.HL7.Version != "" {
-				s.Version = cfg.HL7.Version
-			}
-			if cfg.HL7.ProcessingID != "" {
-				s.ProcessingID = cfg.HL7.ProcessingID
-			}
-			if err := hl7SettingsRepo.Update(s); err != nil {
-				slog.Warn("hl7: failed to seed connection settings from config.yaml", "error", err)
-			} else {
-				slog.Info("hl7: seeded connection settings from config.yaml", "host", s.Host, "port", s.Port)
-			}
-		}
-	}
 
 	// HL7 client: created from DB settings if host/port are configured (regardless of config.yaml).
 	var hl7Client *hl7.Client
@@ -414,13 +323,12 @@ func main() {
 	// needs it to decrypt per-webhook secrets.
 	authEncKey := resolveAuthEncKey(cfg)
 
-	// Per-user webhook dispatcher (user_webhooks table): fans ingestion and
-	// HL7 events out to user-configured endpoints. Subscribed to the event
-	// hub further down; HL7 jobs reach it through the MultiNotifier so the
-	// legacy config.yaml webhook keeps working unchanged.
+	// User-webhook dispatcher (user_webhooks table): fans ingestion and HL7
+	// events out to the endpoints each user configures from the frontend
+	// (research servers etc.). Subscribed to the event hub further down.
 	userWebhookRepo := repository.NewUserWebhookRepository(gormDB)
 	webhookDispatcher := webhook.NewDispatcher(userWebhookRepo, gormDB, authEncKey, publicBaseURL())
-	hl7Notifier := webhook.NewMultiNotifier(webhookNotifier, webhookDispatcher)
+	hl7Notifier := webhook.NewMultiNotifier(webhookDispatcher)
 
 	// HL7 Scheduler: always created so it can be started from the UI via Reload().
 	// Starts immediately if HL7 client is available (host/port configured in DB).
@@ -455,12 +363,36 @@ func main() {
 	moduleConfigRepo := repository.NewModuleConfigRepository(gormDB)
 	moduleSettingsRepo := repository.NewModuleSettingsRepository(gormDB)
 
-	// Seed connectors defined in config.yaml into DB at startup (idempotent).
-	seedConnectorsIfMissing(moduleConfigRepo, cfg, authEncKey)
+	// Build outbound PACS connectors from the DB (single source of truth — the
+	// admin UI edits these configs). Hot reload: saving or deleting a connector
+	// in the UI rebuilds the dispatcher/retry-job settings without a restart.
+	connSettings, connCheckers := buildConnectorsFromDB(moduleConfigRepo, authEncKey)
+	connJobRepo := repository.NewConnectorJobRepository(gormDB)
+	connAuditRepo := repository.NewAuditRepository(gormDB)
+	connDispatcher := connector.NewDispatcher(connSettings, connJobRepo).
+		WithAuditWriter(connAuditRepo)
+	connRetryJob := connector.NewRetryJob(connSettings, connJobRepo, ecgRepo, time.Minute).
+		WithQuarantineRepo(repository.NewQuarantineRepository(gormDB)).
+		WithAuditWriter(connAuditRepo)
+	reloadConnectors := func() {
+		s, _ := buildConnectorsFromDB(moduleConfigRepo, authEncKey)
+		connDispatcher.UpdateSettings(s)
+		connRetryJob.UpdateSettings(s)
+	}
 
-	router := api.NewRouterConfig(e, gormDB, authProvider, bridge, webhookNotifier, keycloakAdmin, permChecker, userRepo, activeModules,
-		apihandlers.DICOMStatus{Enabled: cfg.DICOM.Enabled, Port: cfg.DICOM.Port},
-		apihandlers.FTPStatus{Enabled: cfg.FTP.Enabled, Port: cfg.FTP.Port},
+	// Module statuses for /healthz reflect the DB module configs (UI-managed).
+	ftpStatus := apihandlers.FTPStatus{}
+	if rec, err := moduleConfigRepo.Get("ftp"); err == nil && rec != nil {
+		ftpStatus.Enabled = rec.Enabled
+	}
+	dicomStatus := apihandlers.DICOMStatus{}
+	if rec, err := moduleConfigRepo.Get("dicom"); err == nil && rec != nil {
+		dicomStatus.Enabled = rec.Enabled
+	}
+
+	router := api.NewRouterConfig(e, gormDB, authProvider, bridge, keycloakAdmin, permChecker, userRepo, activeModules,
+		dicomStatus,
+		ftpStatus,
 		ectpStatus,
 		exportRepo, exportPool, connCheckers, hl7Client, hl7Enricher,
 		hl7SchedulerStatus, hl7SettingsRepo, cfg, authEncKey,
@@ -476,6 +408,7 @@ func main() {
 	go webhookDispatcher.Run(eventHub)
 	defer webhookDispatcher.Stop()
 	router.WithUserWebhooks(userWebhookRepo, webhookDispatcher)
+	router.WithConnectorReload(reloadConnectors)
 
 	// Ingestion persistence worker — created before RegisterRoutes so the quarantine
 	// "assign" route can re-ingest unidentified ECGs through the same pipeline.
@@ -489,28 +422,21 @@ func main() {
 	router.RegisterRoutes()
 
 	// Auto-start FTP from DB configuration if enabled (survives container restart).
-	ftpEnabledFromCfg := cfg.FTP.Enabled
+	// FTP is configured exclusively from the admin UI (Modules > FTP).
+	ftpEnabledFromDB := false
 	if dbFTPCfg, err := moduleConfigRepo.Get("ftp"); err == nil && dbFTPCfg != nil {
-		ftpEnabledFromCfg = dbFTPCfg.Enabled
+		ftpEnabledFromDB = dbFTPCfg.Enabled
 	}
 
-	if ftpEnabledFromCfg {
+	if ftpEnabledFromDB {
 		if err := apihandlers.StartFTPFromDB(moduleConfigRepo, authEncKey, cfg, ftpQueue, module.GlobalRegistry); err != nil {
-			slog.Error("startup: FTP auto-start failed — falling back to config.yaml", "error", err)
-			// Fallback: start with config.yaml values.
-			ftpServer := ingestion.New(cfg, ftpQueue)
-			if err := ftpServer.Start(); err != nil {
-				slog.Error("FATAL: " + err.Error())
-				os.Exit(1)
-			}
-			defer ftpServer.Stop()
-			module.GlobalRegistry.Register("ftp", &ftpModuleWrapper{server: ftpServer, status: module.StatusRunning})
+			slog.Error("startup: FTP auto-start failed — start it from the UI once fixed", "error", err)
 		} else {
 			slog.Info("startup: FTP auto-started from DB config")
 		}
 	} else {
-		// Register a stopped entry so hot-control can start it later.
-		ftpServer := ingestion.New(cfg, ftpQueue)
+		// Register a stopped placeholder so hot-control can start it later.
+		ftpServer := ingestion.New(ingestion.FTPSettings{}, ftpQueue)
 		module.GlobalRegistry.Register("ftp", &ftpModuleWrapper{server: ftpServer, status: module.StatusStopped})
 	}
 
@@ -533,26 +459,20 @@ func main() {
 	}
 
 	// Auto-start DICOM from DB configuration if enabled (survives container restart).
-	dicomEnabledFromCfg := cfg.DICOM.Enabled
+	// DICOM is configured exclusively from the admin UI (Modules > DICOM).
+	dicomEnabledFromDB := false
 	if dbDICOMCfg, err := moduleConfigRepo.Get("dicom"); err == nil && dbDICOMCfg != nil {
-		dicomEnabledFromCfg = dbDICOMCfg.Enabled
+		dicomEnabledFromDB = dbDICOMCfg.Enabled
 	}
 
-	if dicomEnabledFromCfg {
+	if dicomEnabledFromDB {
 		if err := apihandlers.StartDICOMFromDB(moduleConfigRepo, authEncKey, cfg, ftpQueue, module.GlobalRegistry); err != nil {
-			slog.Error("startup: DICOM auto-start failed — falling back to config.yaml", "error", err)
-			dicomServer := dicomsrv.New(cfg, ftpQueue)
-			if err := dicomServer.Start(); err != nil {
-				slog.Error("FATAL: " + err.Error())
-				os.Exit(1)
-			}
-			defer dicomServer.Stop()
-			module.GlobalRegistry.Register("dicom", &dicomModuleWrapper{server: dicomServer, status: module.StatusRunning})
+			slog.Error("startup: DICOM auto-start failed — start it from the UI once fixed", "error", err)
 		} else {
 			slog.Info("startup: DICOM auto-started from DB config")
 		}
 	} else {
-		dicomServer := dicomsrv.New(cfg, ftpQueue)
+		dicomServer := dicomsrv.New(dicomsrv.Settings{}, ftpQueue)
 		module.GlobalRegistry.Register("dicom", &dicomModuleWrapper{server: dicomServer, status: module.StatusStopped})
 	}
 
@@ -570,6 +490,9 @@ func main() {
 	quarantineStore := ingestion.NewQuarantineStore(cfg.Storage.QuarantinePath, quarantineRepo).
 		WithPublisher(eventHub)
 	dispatcher.WithQuarantineRecorder(quarantineStore)
+	// Proxy role: files that fail ingestion are still forwarded to the
+	// configured PACS connectors from the quarantine volume.
+	dispatcher.WithConnectorForwarder(connDispatcher)
 
 	// Story 4.1 + 4.2: Wire HL7 enricher if HL7 client is available.
 	// The new Scheduler (started above) replaces the RetryJob for retry processing.
@@ -594,7 +517,7 @@ func main() {
 		if hl7Scheduler == nil {
 			auditRepo := repository.NewAuditRepository(gormDB)
 			retryJob := hl7.NewRetryJob(
-				hl7Client, ecgRepo, patRepo, auditRepo, webhookNotifier,
+				hl7Client, ecgRepo, patRepo, auditRepo, hl7Notifier,
 				3, 5*time.Minute,
 			)
 			retryJob.Start()
@@ -615,22 +538,17 @@ func main() {
 		<-hl7Scheduler.Done()
 	}()
 
-	// Story 3.4: Wire the connector Dispatcher into the Persister and start the RetryJob.
-	// connSettings was populated above (before RegisterRoutes) from cfg.PACS.
-	if len(connSettings) > 0 {
-		connJobRepo := repository.NewConnectorJobRepository(gormDB)
-		connDispatcher := connector.NewDispatcher(connSettings, connJobRepo)
-		persister.WithConnectorDispatcher(connDispatcher)
-
-		// Poll for retriable jobs every minute.
-		connRetryJob := connector.NewRetryJob(connSettings, connJobRepo, ecgRepo, time.Minute)
-		connRetryJob.Start()
-		slog.Info("connector: retry job started", "connectors", len(connSettings))
-		defer func() {
-			connRetryJob.Stop()
-			<-connRetryJob.Done()
-		}()
-	}
+	// Story 3.4: Wire the connector Dispatcher (built from DB above) into the
+	// Persister and start the RetryJob. Always wired — even with zero
+	// connectors configured — so connectors added later from the UI become
+	// active immediately via the hot-reload callback.
+	persister.WithConnectorDispatcher(connDispatcher)
+	connRetryJob.Start()
+	slog.Info("connector: retry job started", "connectors", len(connSettings))
+	defer func() {
+		connRetryJob.Stop()
+		<-connRetryJob.Done()
+	}()
 
 	persister.Start()
 	defer persister.Stop()
@@ -640,11 +558,10 @@ func main() {
 	janitor.Start(time.Minute)
 	defer janitor.Stop()
 
-	// Dedicated metrics server — started only when metrics.enabled and metrics.port > 0.
-	// Runs on its own goroutine so it never blocks the main API server.
-	// Useful for Prometheus scraping without exposing /metrics on the public API port.
-	if cfg.Metrics.Enabled && cfg.Metrics.Port > 0 {
-		metricsAddr := fmt.Sprintf(":%d", cfg.Metrics.Port)
+	// Dedicated metrics server — always on, scraped by Prometheus on the
+	// internal Docker network (never exposed via nginx).
+	{
+		metricsAddr := fmt.Sprintf(":%d", metricsPort)
 		mux := http.NewServeMux()
 		mux.Handle("/metrics", appmetrics.Handler())
 		srv := &http.Server{Addr: metricsAddr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
@@ -757,82 +674,9 @@ func (w *dicomModuleWrapper) Status() module.ModuleStatus {
 	return w.status
 }
 
-// seedConnectorsIfMissing writes each connector defined in cfg.Proxy.Connectors into the
-// DB (as a connector.<name> module config) when it does not already exist.
-// This is idempotent: calling it multiple times is safe and will not overwrite
-// a connector that an operator has already edited via the UI.
-func seedConnectorsIfMissing(repo *repository.ModuleConfigRepository, cfg *config.Config, encKey string) {
-	if !cfg.Proxy.Enabled {
-		return
-	}
-	for _, connCfg := range cfg.Proxy.Connectors {
-		moduleType := "connector." + connCfg.Name
-		existing, err := repo.Get(moduleType)
-		if err != nil {
-			slog.Warn("seed_connectors: failed to check existing config", "name", connCfg.Name, "error", err)
-			continue
-		}
-		if existing != nil {
-			// Already seeded — do not overwrite user edits.
-			continue
-		}
-
-		// Build the stored config from the YAML connector definition.
-		stored := apihandlers.ConnectorStoredConfig{
-			Name:        connCfg.Name,
-			Protocol:    connCfg.Protocol,
-			Extensions:  connCfg.Filters.Extensions,
-			Vendors:     connCfg.Filters.Vendors,
-			MaxAttempts: connCfg.Retry.MaxAttempts,
-			Interval:    connCfg.Retry.Interval,
-			// ECTP / FTP fields (ectp_ftp protocol)
-			ECTPHost:    connCfg.ECTP.Host,
-			ECTPPort:    connCfg.ECTP.Port,
-			FTPHost:     connCfg.FTP.Host,
-			FTPPort:     connCfg.FTP.Port,
-			FTPUsername: connCfg.FTPUsername,
-			FTPPassword: connCfg.FTPPassword,
-			// DICOM fields (dicom_cstore protocol)
-			DICOMHost:    connCfg.DICOM.Host,
-			DICOMPort:    connCfg.DICOM.Port,
-			CallingAE:    connCfg.DICOM.CallingAE,
-			CalledAE:     connCfg.DICOM.CalledAE,
-			DICOMTimeout: connCfg.DICOM.Timeout,
-		}
-
-		if stored.Extensions == nil {
-			stored.Extensions = []string{}
-		}
-		if stored.Vendors == nil {
-			stored.Vendors = []string{}
-		}
-
-		configJSON, err := json.Marshal(stored)
-		if err != nil {
-			slog.Warn("seed_connectors: failed to marshal config", "name", connCfg.Name, "error", err)
-			continue
-		}
-
-		encrypted, err := auth.EncryptString(string(configJSON), encKey)
-		if err != nil {
-			slog.Warn("seed_connectors: failed to encrypt config", "name", connCfg.Name, "error", err)
-			continue
-		}
-
-		record := &models.ModuleConfig{
-			ModuleType:      moduleType,
-			ConfigEncrypted: encrypted,
-			Enabled:         connCfg.Enabled,
-		}
-
-		if err := repo.Upsert(record); err != nil {
-			slog.Warn("seed_connectors: failed to upsert config", "name", connCfg.Name, "error", err)
-			continue
-		}
-
-		slog.Info("seed_connectors: seeded connector from config.yaml", "name", connCfg.Name, "protocol", connCfg.Protocol)
-	}
-}
+// metricsPort is the dedicated Prometheus scrape port (internal Docker
+// network only — see prometheus.yml and docker-compose).
+const metricsPort = 9091
 
 // insecureDefaultAuthEncKey is the well-known dev fallback for AUTH_ENCRYPTION_KEY.
 // It is public, so it provides NO protection — the server refuses to start with it
@@ -849,6 +693,93 @@ func isProduction(cfg *config.Config) bool {
 		return true
 	}
 	return cfg.Server.TLS
+}
+
+// buildConnectorsFromDB builds the outbound PACS connector runtime from the
+// connector configs stored in module_configs ("connector.*"). The DB is the
+// single source of truth — config.yaml definitions are seeded into it on first
+// run by seedConnectorsIfMissing. Invalid entries are skipped with a warning
+// (never fatal: this also runs on hot reload from the admin UI).
+func buildConnectorsFromDB(repo *repository.ModuleConfigRepository, encKey string) ([]connector.ConnectorSettings, []apihandlers.ConnectorHealthChecker) {
+	stored, err := apihandlers.ListDecryptedConnectorConfigs(repo, encKey)
+	if err != nil {
+		slog.Error("connector: failed to load configs from DB", "error", err)
+		return nil, nil
+	}
+
+	var settings []connector.ConnectorSettings
+	var checkers []apihandlers.ConnectorHealthChecker
+	for _, sc := range stored {
+		if !sc.Enabled {
+			continue
+		}
+		cc := connector.Config{
+			Name:     sc.Config.Name,
+			Protocol: sc.Config.Protocol,
+			Filters: connector.Filters{
+				Extensions: sc.Config.Extensions,
+				Vendors:    sc.Config.Vendors,
+			},
+			ECTP: connector.Endpoint{Host: sc.Config.ECTPHost, Port: sc.Config.ECTPPort},
+			FTP: connector.FTPEndpoint{
+				Host:     sc.Config.FTPHost,
+				Port:     sc.Config.FTPPort,
+				Username: sc.Config.FTPUsername,
+				Password: sc.Config.FTPPassword,
+			},
+			DICOM: connector.DICOMEndpoint{
+				Host:      sc.Config.DICOMHost,
+				Port:      sc.Config.DICOMPort,
+				CallingAE: sc.Config.CallingAE,
+				CalledAE:  sc.Config.CalledAE,
+				Timeout:   sc.Config.DICOMTimeout,
+			},
+		}
+		// Env vars remain the credential fallback (NFR-S2 convention).
+		nameUpper := strings.ToUpper(strings.ReplaceAll(cc.Name, "-", "_"))
+		if cc.FTP.Username == "" {
+			cc.FTP.Username = os.Getenv(nameUpper + "_FTP_USERNAME")
+		}
+		if cc.FTP.Password == "" {
+			cc.FTP.Password = os.Getenv(nameUpper + "_FTP_PASSWORD")
+		}
+
+		var c connector.Connector
+		switch cc.Protocol {
+		case "ectp_ftp":
+			c = polaris.New(cc)
+		case "dicom_cstore":
+			dc, err := dicomconn.New(cc)
+			if err != nil {
+				slog.Error("connector: build failed, skipping", "name", cc.Name, "error", err)
+				continue
+			}
+			c = dc
+		default:
+			slog.Warn("connector: unknown protocol, skipping", "name", cc.Name, "protocol", cc.Protocol)
+			continue
+		}
+
+		interval, err := time.ParseDuration(sc.Config.Interval)
+		if err != nil || interval <= 0 {
+			slog.Warn("connector: invalid retry interval, defaulting to 5m",
+				"connector", cc.Name, "value", sc.Config.Interval)
+			interval = 5 * time.Minute
+		}
+		maxAttempts := sc.Config.MaxAttempts
+		if maxAttempts <= 0 {
+			maxAttempts = 3
+		}
+
+		settings = append(settings, connector.ConnectorSettings{
+			Connector:   c,
+			Interval:    interval,
+			MaxAttempts: maxAttempts,
+		})
+		checkers = append(checkers, c)
+		slog.Info("connector: loaded", "name", cc.Name, "protocol", cc.Protocol, "enabled", true)
+	}
+	return settings, checkers
 }
 
 // publicBaseURL returns the public origin of this server used to build
