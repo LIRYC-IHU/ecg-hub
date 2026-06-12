@@ -22,7 +22,7 @@ const PERMISSION_GROUPS = [
   { key: 'tag',         labelKey: 'admin.roles.group.tag',         permissions: ['tag.create', 'tag.delete', 'tag.apply'] },
   { key: 'quarantine',  labelKey: 'admin.roles.group.quarantine',  permissions: ['quarantine.read', 'quarantine.delete', 'quarantine.assign'] },
   { key: 'admin',       labelKey: 'admin.roles.group.admin',       permissions: ['admin.users', 'admin.roles', 'admin.branding', 'admin.audit', 'admin.system', 'admin.auth_config'] },
-  { key: 'swagger',     labelKey: 'admin.roles.group.swagger',     permissions: ['swagger.read'] },
+  { key: 'swagger',     labelKey: 'admin.roles.group.swagger',     permissions: ['swagger.read', 'apikey.manage'] },
   { key: 'webhook',     labelKey: 'admin.roles.group.webhook',     permissions: ['webhook.manage'] },
 ]
 

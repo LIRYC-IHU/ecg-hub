@@ -1,8 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { useState, useMemo } from 'react'
-import { Search, Check } from 'lucide-react'
-import { fetchAppUsers, setAppUserRole, fetchRoles, fetchUserDefaults, saveUserDefaults } from '../../lib/api'
+import { Search, Check, Trash2 } from 'lucide-react'
+import { fetchAppUsers, setAppUserRole, deleteAppUser, fetchRoles, fetchUserDefaults, saveUserDefaults } from '../../lib/api'
 import { Spinner } from '../ui/Spinner'
 import { useNotification } from '../../context/NotificationContext'
 
@@ -23,8 +23,8 @@ export function AdminAppUsersPage() {
   const queryClient = useQueryClient()
   const { notify } = useNotification()
   const [search, setSearch] = useState('')
-  const [pendingRole, setPendingRole] = useState<Record<number, string>>({})
-  const [feedback, setFeedback] = useState<Record<number, 'success' | 'error'>>({})
+  const [pendingRole, setPendingRole] = useState<Record<string, string>>({})
+  const [feedback, setFeedback] = useState<Record<string, 'success' | 'error'>>({})
   const [pendingDefault, setPendingDefault] = useState<string | undefined>(undefined)
 
   const { data: users = [], isLoading, isError } = useQuery({
@@ -67,7 +67,7 @@ export function AdminAppUsersPage() {
   }, [users, search])
 
   const mutation = useMutation({
-    mutationFn: ({ id, role }: { id: number; role: string }) => setAppUserRole(id, role),
+    mutationFn: ({ id, role }: { id: string; role: string }) => setAppUserRole(id, role),
     onSuccess: (_, { id, role }) => {
       void queryClient.invalidateQueries({ queryKey: ['admin', 'app-users'] })
       const user = users.find((u) => u.id === id)
@@ -83,7 +83,27 @@ export function AdminAppUsersPage() {
     },
   })
 
-  function handleSave(userId: number) {
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deleteAppUser(id),
+    onSuccess: (_, id) => {
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'app-users'] })
+      const user = users.find((u) => u.id === id)
+      notify('success', t('admin.appUsers.deleted', { user: user?.external_id ?? id }))
+    },
+    onError: (err: unknown) => {
+      const code = (err as { code?: string })?.code
+      if (code === 'SELF_DELETE') notify('error', t('admin.appUsers.selfDelete'))
+      else if (code === 'LAST_USER') notify('error', t('admin.appUsers.lastUser'))
+      else notify('error', t('common.error'))
+    },
+  })
+
+  function handleDelete(user: { id: string; external_id: string }) {
+    if (!window.confirm(t('admin.appUsers.confirmDelete', { user: user.external_id }))) return
+    deleteMutation.mutate(user.id)
+  }
+
+  function handleSave(userId: string) {
     const role = pendingRole[userId]
     if (!role && role !== '') return
     mutation.mutate({ id: userId, role })
@@ -240,6 +260,15 @@ export function AdminAppUsersPage() {
                 {feedback[user.id] === 'success' && (
                   <Check className="w-4 h-4 text-success" />
                 )}
+                <button
+                  onClick={() => handleDelete(user)}
+                  disabled={deleteMutation.isPending}
+                  className="p-1.5 rounded-md text-destructive hover:bg-destructive/5 transition-colors"
+                  title={t('admin.appUsers.delete')}
+                  aria-label={t('admin.appUsers.delete')}
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
               </div>
             </div>
           )

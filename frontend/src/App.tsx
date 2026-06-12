@@ -105,6 +105,8 @@ function App() {
     status === "authenticated" && hasPermission("admin.auth_config");
   const canManageWebhooks =
     status === "authenticated" && hasPermission("webhook.manage");
+  const canManageApiKeys =
+    status === "authenticated" && hasPermission("apikey.manage");
   const canViewHL7 =
     status === "authenticated" &&
     (hasPermission("hl7.config") || canViewSystem);
@@ -189,11 +191,12 @@ function App() {
   return (
     <div className="h-screen overflow-hidden bg-background flex flex-col">
       <Header
-        userId={user?.user_id ?? ""}
+        userId={user?.username ?? user?.user_id ?? ""}
         onLogout={logout}
         language={i18next.language}
         onToggleLang={toggleLang}
         canManageWebhooks={canManageWebhooks}
+        canManageApiKeys={canManageApiKeys}
       />
 
       <div className="flex-1 min-h-0 flex overflow-hidden">
@@ -459,14 +462,16 @@ function App() {
                 }
               />
             )}
-            <Route
-              path="/api-keys"
-              element={
-                <div className="overflow-auto flex-1">
-                  <ApiKeysPage />
-                </div>
-              }
-            />
+            {canManageApiKeys && (
+              <Route
+                path="/api-keys"
+                element={
+                  <div className="overflow-auto flex-1">
+                    <ApiKeysPage />
+                  </div>
+                }
+              />
+            )}
             {canManageWebhooks && (
               <Route
                 path="/webhooks"

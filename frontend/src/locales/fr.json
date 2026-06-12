@@ -299,7 +299,12 @@
       "oidcNote": "Pour les utilisateurs OIDC avec un rôle Keycloak, ce rôle a la priorité sur le réglage ci-dessus.",
       "defaultRole": "Rôle par défaut pour les nouveaux utilisateurs",
       "defaultRoleHint": "Rôle attribué automatiquement lors de la première connexion d'un utilisateur.",
-      "defaultRoleSaved": "Rôle par défaut défini sur « {{role}} »"
+      "defaultRoleSaved": "Rôle par défaut défini sur « {{role}} »",
+      "delete": "Supprimer l'utilisateur",
+      "confirmDelete": "Supprimer {{user}} ? Ses webhooks, clés API, épingles et exports seront définitivement supprimés.",
+      "deleted": "{{user}} supprimé (ressources nettoyées)",
+      "selfDelete": "Impossible de supprimer votre propre compte",
+      "lastUser": "Impossible de supprimer le dernier utilisateur local"
     },
     "audit": {
       "title": "Journal d'audit",
@@ -373,7 +378,8 @@
         "admin_system": "État système & contrôle des modules",
         "admin_auth_config": "Configurer les fournisseurs d'auth",
         "swagger_read": "Accéder à la documentation API",
-        "webhook_manage": "Configurer ses webhooks"
+        "webhook_manage": "Configurer ses webhooks",
+        "apikey_manage": "Créer et gérer ses clés API"
       }
     },
     "authProviders": {

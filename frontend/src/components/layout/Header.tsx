@@ -20,6 +20,7 @@ interface HeaderProps {
   language: string;
   onToggleLang: (lang: "fr" | "en") => void;
   canManageWebhooks?: boolean;
+  canManageApiKeys?: boolean;
 }
 
 const BREADCRUMBS: Record<string, string> = {
@@ -49,6 +50,7 @@ export function Header({
   language,
   onToggleLang,
   canManageWebhooks = false,
+  canManageApiKeys = false,
 }: HeaderProps) {
   const { t } = useTranslation();
   const location = useLocation();

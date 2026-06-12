@@ -9,7 +9,8 @@ import type {
 const BASE_URL = (import.meta.env as Record<string, string>).VITE_API_URL ?? "";
 
 export interface MeResponse {
-  user_id: string;
+  user_id: string; // stable internal uuid
+  username?: string; // human-readable login (display)
   role: string;
   permissions: string[];
 }
@@ -517,7 +518,7 @@ export async function deleteRole(id: number): Promise<void> {
 }
 
 export interface AppUser {
-  id: number;
+  id: string; // internal uuid (ecg_hub_users.id)
   external_id: string;
   provider: string;
   role_name: string;
@@ -698,6 +699,16 @@ export async function setAppUserRole(
 }
 
 // ─── User defaults ──────────────────────────────────────────────────────────
+
+export async function deleteAppUser(id: string): Promise<void> {
+  const res = await fetch(`${BASE_URL}/api/v1/admin/app-users/${id}`, {
+    method: "DELETE",
+  });
+  if (!res.ok) {
+    const err: ErrorResponse = await res.json();
+    throw err;
+  }
+}
 
 export async function fetchUserDefaults(): Promise<{ default_role: string }> {
   const res = await fetch(`${BASE_URL}/api/v1/admin/settings/user-defaults`);
