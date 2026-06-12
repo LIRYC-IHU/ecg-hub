@@ -18,6 +18,14 @@ const TokenTTL = time.Hour
 // auth middleware transparently re-issues a fresh token (sliding session).
 const SessionRefreshThreshold = 30 * time.Minute
 
+// jwtClaims is the payload structure for ECG Hub-issued JWTs — shared by
+// every provider (local, LDAP-from-DB, OIDC) since they all sign with the
+// same JWT_SECRET.
+type jwtClaims struct {
+	Role string `json:"role"` // "reader" | "writer" | "admin" | custom role name
+	jwt.RegisteredClaims
+}
+
 // TokenIssuer is implemented by providers able to sign ECG Hub JWTs.
 // The auth middleware uses it to re-issue tokens for sliding sessions.
 // All providers (local, LDAP, OIDC) sign with the same JWT_SECRET, so a token
