@@ -8,6 +8,11 @@
 // @host localhost
 // @BasePath /api/v1
 //
+// @securityDefinitions.apikey ApiKeyAuth
+// @in header
+// @name X-API-Key
+// @description Per-user API key ("ecghub_…") created from the API Keys page. Inherits the owning user's role and permissions — intended for machine clients such as webhook receivers fetching ECG files.
+
 // @securityDefinitions.apikey BearerAuth
 // @in header
 // @name Authorization
