@@ -120,6 +120,11 @@ func RunMigrations(db *gorm.DB) error {
 		if err := db.Exec(`ALTER TABLE connector_jobs ALTER COLUMN ecg_id TYPE uuid USING ecg_id::uuid`).Error; err != nil {
 			slog.Warn("db: widen connector_jobs.ecg_id", "error", err)
 		}
+		// Files that failed ingestion are now proxied too: such jobs reference a
+		// quarantine entry instead of an ECG, so ecg_id must accept NULL.
+		if err := db.Exec(`ALTER TABLE connector_jobs ALTER COLUMN ecg_id DROP NOT NULL`).Error; err != nil {
+			slog.Warn("db: drop NOT NULL on connector_jobs.ecg_id", "error", err)
+		}
 	}
 	if db.Migrator().HasTable("export_job_ecgs") {
 		for _, stmt := range []string{
@@ -178,6 +183,8 @@ func RunMigrations(db *gorm.DB) error {
 			`ALTER TABLE user_pins ADD CONSTRAINT fk_user_pins_patient FOREIGN KEY (patient_id) REFERENCES patients(patient_id) ON UPDATE CASCADE ON DELETE CASCADE`},
 		{"patient_tags", "fk_patient_tags_patient",
 			`ALTER TABLE patient_tags ADD CONSTRAINT fk_patient_tags_patient FOREIGN KEY (patient_id) REFERENCES patients(patient_id) ON UPDATE CASCADE ON DELETE CASCADE`},
+		{"connector_jobs", "fk_connector_jobs_quarantine",
+			`ALTER TABLE connector_jobs ADD CONSTRAINT fk_connector_jobs_quarantine FOREIGN KEY (quarantine_id) REFERENCES quarantine_entries(id) ON DELETE CASCADE`},
 	} {
 		if db.Migrator().HasTable(fk.table) && !db.Migrator().HasConstraint(fk.table, fk.name) {
 			if err := db.Exec(fk.ddl).Error; err != nil {

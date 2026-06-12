@@ -12,6 +12,7 @@ const (
 	WebhookEventECGIngested     = "ecg.ingested"
 	WebhookEventECGUnidentified = "ecg.unidentified"
 	WebhookEventECGQuarantined  = "ecg.quarantined"
+	WebhookEventECGDuplicate    = "ecg.duplicate"
 	WebhookEventHL7Exhausted    = "hl7.exhausted"
 	WebhookEventHL7Rejected     = "hl7.rejected"
 )
@@ -21,6 +22,7 @@ var AllWebhookEvents = []string{
 	WebhookEventECGIngested,
 	WebhookEventECGUnidentified,
 	WebhookEventECGQuarantined,
+	WebhookEventECGDuplicate,
 	WebhookEventHL7Exhausted,
 	WebhookEventHL7Rejected,
 }

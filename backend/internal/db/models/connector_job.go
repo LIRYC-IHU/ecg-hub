@@ -2,15 +2,21 @@ package models
 
 import "time"
 
-// ConnectorJob tracks a single outbound forwarding attempt for an ECG to a PACS connector.
+// ConnectorJob tracks a single outbound forwarding attempt to a PACS connector.
 // Lifecycle: pending → sent | failed → exhausted
 //
-// A job is created for each (ecg, connector) pair when the ConnectorDispatcher
-// fires after a successful persist. The RetryJob polls failed jobs and re-attempts
-// until max_attempts is reached, at which point the job is exhausted.
+// A job is created for each (file, connector) pair when the ConnectorDispatcher
+// fires. Two kinds of source exist (exactly one of ECGID / QuarantineID is set):
+//   - ECGID: the file was successfully ingested — forwarded from the main volume.
+//   - QuarantineID: ingestion failed (parse error / no module / unidentified) but
+//     the raw file is still proxied to the PACS from the quarantine volume.
+//
+// The RetryJob polls failed jobs and re-attempts until max_attempts is reached,
+// at which point the job is exhausted.
 type ConnectorJob struct {
 	ID            string     `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
-	ECGID         string     `gorm:"type:uuid;not null;index:idx_connector_status_retry"`
+	ECGID         *string    `gorm:"type:uuid;index:idx_connector_status_retry"`
+	QuarantineID  *string    `gorm:"type:uuid;index"` // set for files forwarded despite failed ingestion
 	ConnectorName string     `gorm:"not null;size:64"`
 	Status        string     `gorm:"not null;default:'pending';index:idx_connector_status_retry"`
 	Attempts      int        `gorm:"not null;default:0"`

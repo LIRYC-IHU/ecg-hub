@@ -33,6 +33,11 @@ type QuarantineEntry struct {
 	// "no_adapter" | "parse_error: <details>" | "unidentified: <details>"
 	ErrorReason string `gorm:"not null"`
 
+	// ContentHash is the SHA-256 hex digest of the raw file — used to deduplicate
+	// re-sent files: instead of stacking a new entry per send, the existing entry
+	// is refreshed (ReceivedAt/ErrorReason). Empty on rows that predate the column.
+	ContentHash string `gorm:"type:varchar(64);index"`
+
 	// Category classifies the entry — see QuarantineCategory* constants.
 	// Existing rows default to "error" (they predate the unidentified workflow).
 	Category string `gorm:"not null;default:'error';index"`
