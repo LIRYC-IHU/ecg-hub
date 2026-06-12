@@ -221,7 +221,7 @@ func (r *RouterConfig) RegisterRoutes() {
 	authConfigRepoForProvider := repository.NewAuthConfigRepository(r.gormDB)
 	publicV1.GET("/auth/provider", handlers.AuthProviderHandler(r.authProvider, authConfigRepoForProvider))
 	loginAuthConfigRepo := repository.NewAuthConfigRepository(r.gormDB)
-	publicV1.POST("/auth/login", handlers.LoginHandlerWithDB(r.authProvider, loginAuthConfigRepo, r.authEncKey, r.cfg.JWTSecret), loginRateLimiter)
+	publicV1.POST("/auth/login", handlers.LoginHandlerWithDB(r.authProvider, loginAuthConfigRepo, r.authEncKey, r.cfg.JWTSecret, r.userRepo), loginRateLimiter)
 
 	// OIDC Authorization Code Flow
 	{
@@ -293,6 +293,7 @@ func (r *RouterConfig) RegisterRoutes() {
 	// DB user registry — users who have logged in + their roles
 	apiV1.GET("/admin/app-users", handlers.ListAppUsersHandler(r.userRepo), mw.RequirePermission(r.checker, auth.PermAdminUsers))
 	apiV1.PUT("/admin/app-users/:id/role", handlers.SetAppUserRoleHandler(r.userRepo), mw.RequirePermission(r.checker, auth.PermAdminUsers))
+	apiV1.DELETE("/admin/app-users/:id", handlers.DeleteAppUserHandler(r.userRepo, localUserRepo, r.gormDB), mw.RequirePermission(r.checker, auth.PermAdminUsers))
 
 	// Quarantine — list requires quarantine.read, delete requires quarantine.delete,
 	// assign (re-ingest an unidentified ECG under a patient) requires quarantine.assign.
@@ -379,12 +380,12 @@ func (r *RouterConfig) RegisterRoutes() {
 		apiV1.POST("/webhooks/:id/test", handlers.TestUserWebhookHandler(r.userWebhookRepo, r.webhookDispatcher), mw.RequirePermission(r.checker, auth.PermWebhookManage))
 	}
 
-	// Per-user API keys — any authenticated user manages their own keys
-	// (no extra permission). Useful later for Swagger / external clients.
+	// Per-user API keys — requires apikey.manage: keys grant durable
+	// programmatic access, so handing them out is an explicit role decision.
 	apiKeyRepo := repository.NewAPIKeyRepository(r.gormDB)
-	apiV1.GET("/api-keys", handlers.ListAPIKeysHandler(apiKeyRepo))
-	apiV1.POST("/api-keys", handlers.CreateAPIKeyHandler(apiKeyRepo))
-	apiV1.DELETE("/api-keys/:id", handlers.DeleteAPIKeyHandler(apiKeyRepo))
+	apiV1.GET("/api-keys", handlers.ListAPIKeysHandler(apiKeyRepo), mw.RequirePermission(r.checker, auth.PermAPIKeyManage))
+	apiV1.POST("/api-keys", handlers.CreateAPIKeyHandler(apiKeyRepo), mw.RequirePermission(r.checker, auth.PermAPIKeyManage))
+	apiV1.DELETE("/api-keys/:id", handlers.DeleteAPIKeyHandler(apiKeyRepo), mw.RequirePermission(r.checker, auth.PermAPIKeyManage))
 
 	// Tags — list visible to all readers, create/delete/apply require specific permissions
 	tagRepo := repository.NewTagRepository(r.gormDB)

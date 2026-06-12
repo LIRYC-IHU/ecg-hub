@@ -24,7 +24,9 @@ func (m *mockProvider) ValidateToken(_ context.Context, _ string) (*auth.Claims,
 // noopResolver always returns ("", nil) — role falls back to JWT claim.
 type noopResolver struct{}
 
-func (noopResolver) GetCurrentRole(_ context.Context, _ string) (string, error) { return "", nil }
+func (noopResolver) ResolveIdentity(_ context.Context, _ string) (string, string, error) {
+	return "", "", nil
+}
 func (noopResolver) ShouldRefreshToken(_ context.Context, _ string) bool        { return false }
 
 func TestProtectedGroup_RequiresJWT(t *testing.T) {

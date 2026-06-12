@@ -15,14 +15,24 @@ import (
 // Echo context keys for authenticated user data.
 // Downstream handlers must use these constants — never raw strings.
 const (
+	// CtxKeyUserID holds the stable internal user ID (ecg_hub_users.id, uuid).
+	// Per-user resources (webhooks, API keys, pins, exports) are keyed on it so
+	// a reused username can never inherit a previous account's resources.
+	// Falls back to the JWT subject for tokens predating the identity row.
 	CtxKeyUserID = "user_id"
-	CtxKeyRole   = "role"
+	// CtxKeyUsername holds the human-readable identifier (JWT subject:
+	// local/LDAP username or OIDC preferred_username) — for display and audit context.
+	CtxKeyUsername = "username"
+	CtxKeyRole     = "role"
 )
 
-// RoleResolver resolves the current role for a user from persistent storage.
-// Implemented by repository.UserRepo — injected to avoid import cycles.
+// RoleResolver resolves the current identity and role for a user from
+// persistent storage. Implemented by repository.UserRepo — injected to avoid
+// import cycles.
 type RoleResolver interface {
-	GetCurrentRole(ctx context.Context, externalID string) (string, error)
+	// ResolveIdentity maps the JWT subject to the internal user ID and current
+	// role name. Returns ("", "", nil) when the user has no identity row yet.
+	ResolveIdentity(ctx context.Context, externalID string) (string, string, error)
 	ShouldRefreshToken(ctx context.Context, externalID string) bool
 }
 
@@ -40,14 +50,19 @@ func HealthzMiddleware(provider auth.Provider, roleResolver RoleResolver) echo.M
 				return next(c)
 			}
 
-			// Resolve role from DB so admin changes take effect immediately,
-			// without requiring the user to log out and back in.
+			// Resolve identity + role from DB so admin changes take effect
+			// immediately, without requiring the user to log out and back in.
 			role := claims.Role
-			if dbRole, err := roleResolver.GetCurrentRole(c.Request().Context(), claims.Sub); err == nil && dbRole != "" {
-				role = dbRole
+			userID := claims.Sub
+			if id, dbRole, err := roleResolver.ResolveIdentity(c.Request().Context(), claims.Sub); err == nil && id != "" {
+				userID = id
+				if dbRole != "" {
+					role = dbRole
+				}
 			}
 
-			c.Set(CtxKeyUserID, claims.Sub)
+			c.Set(CtxKeyUserID, userID)
+			c.Set(CtxKeyUsername, claims.Sub)
 			c.Set(CtxKeyRole, role)
 			return next(c)
 		}
@@ -80,11 +95,17 @@ func AuthMiddleware(provider auth.Provider, roleResolver RoleResolver) echo.Midd
 				return c.JSON(http.StatusUnauthorized, APIError("TOKEN_REFRESH_REQUIRED", "session invalidated — please login again"))
 			}
 
-			// Resolve role from DB so admin changes take effect immediately,
-			// without requiring the user to log out and back in.
+			// Resolve identity + role from DB so admin changes take effect
+			// immediately, without requiring the user to log out and back in.
+			// CtxKeyUserID carries the internal uuid (stable across username
+			// reuse); the JWT subject stays available as CtxKeyUsername.
 			role := claims.Role
-			if dbRole, err := roleResolver.GetCurrentRole(c.Request().Context(), claims.Sub); err == nil && dbRole != "" {
-				role = dbRole
+			userID := claims.Sub
+			if id, dbRole, err := roleResolver.ResolveIdentity(c.Request().Context(), claims.Sub); err == nil && id != "" {
+				userID = id
+				if dbRole != "" {
+					role = dbRole
+				}
 			}
 
 			// Sliding session: when less than SessionRefreshThreshold of the
@@ -102,7 +123,8 @@ func AuthMiddleware(provider auth.Provider, roleResolver RoleResolver) echo.Midd
 				}
 			}
 
-			c.Set(CtxKeyUserID, claims.Sub)
+			c.Set(CtxKeyUserID, userID)
+			c.Set(CtxKeyUsername, claims.Sub)
 			c.Set(CtxKeyRole, role)
 			return next(c)
 		}
