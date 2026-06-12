@@ -95,7 +95,7 @@ func TestRetryJob_Success_MarksSent(t *testing.T) {
 	conn := &forwardConnector{name: "rj-ok"}
 	jobRepo := &stubRetryJobRepo{
 		jobs: []models.ConnectorJob{
-			{ID: "1", ECGID: "10", ConnectorName: "rj-ok", Attempts: 1, MaxAttempts: 3},
+			{ID: "1", ECGID: strptr("10"), ConnectorName: "rj-ok", Attempts: 1, MaxAttempts: 3},
 		},
 	}
 	ecgRepo := &stubRetryECGRepo{ecg: &models.ECG{ID: "10", FilePath: "/vol/f.dat"}}
@@ -116,7 +116,7 @@ func TestRetryJob_Failure_BelowMax_MarksFailedWithRetry(t *testing.T) {
 	jobRepo := &stubRetryJobRepo{
 		jobs: []models.ConnectorJob{
 			// attempts=1, max=3 → next will be 2 < 3 → MarkFailed
-			{ID: "2", ECGID: "20", ConnectorName: "rj-fail", Attempts: 1, MaxAttempts: 3},
+			{ID: "2", ECGID: strptr("20"), ConnectorName: "rj-fail", Attempts: 1, MaxAttempts: 3},
 		},
 	}
 	ecgRepo := &stubRetryECGRepo{ecg: &models.ECG{ID: "20", FilePath: "/vol/f.dat"}}
@@ -137,7 +137,7 @@ func TestRetryJob_Failure_AtMax_Exhausts(t *testing.T) {
 	jobRepo := &stubRetryJobRepo{
 		jobs: []models.ConnectorJob{
 			// attempts=2, max=3 → next will be 3 >= 3 → Exhaust
-			{ID: "3", ECGID: "30", ConnectorName: "rj-exhaust", Attempts: 2, MaxAttempts: 3},
+			{ID: "3", ECGID: strptr("30"), ConnectorName: "rj-exhaust", Attempts: 2, MaxAttempts: 3},
 		},
 	}
 	ecgRepo := &stubRetryECGRepo{ecg: &models.ECG{ID: "30", FilePath: "/vol/f.dat"}}
@@ -157,7 +157,7 @@ func TestRetryJob_ConnectorNotFound_Exhausts(t *testing.T) {
 	// No connector registered for "ghost-connector".
 	jobRepo := &stubRetryJobRepo{
 		jobs: []models.ConnectorJob{
-			{ID: "4", ECGID: "40", ConnectorName: "ghost-connector", Attempts: 0, MaxAttempts: 3},
+			{ID: "4", ECGID: strptr("40"), ConnectorName: "ghost-connector", Attempts: 0, MaxAttempts: 3},
 		},
 	}
 	ecgRepo := &stubRetryECGRepo{ecg: &models.ECG{ID: "40"}}
@@ -174,7 +174,7 @@ func TestRetryJob_ECGNotFound_Exhausts(t *testing.T) {
 	conn := &forwardConnector{name: "rj-no-ecg"}
 	jobRepo := &stubRetryJobRepo{
 		jobs: []models.ConnectorJob{
-			{ID: "5", ECGID: "999", ConnectorName: "rj-no-ecg", Attempts: 0, MaxAttempts: 3},
+			{ID: "5", ECGID: strptr("999"), ConnectorName: "rj-no-ecg", Attempts: 0, MaxAttempts: 3},
 		},
 	}
 	ecgRepo := &stubRetryECGRepo{findErr: errors.New("not found")}
@@ -233,3 +233,6 @@ func TestRetryJob_Stop_Graceful(t *testing.T) {
 		t.Fatal("RetryJob.Done() did not close within 2s after Stop()")
 	}
 }
+
+// strptr returns a pointer to s — test helper for nullable ID columns.
+func strptr(s string) *string { return &s }
