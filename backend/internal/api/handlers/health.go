@@ -111,6 +111,26 @@ func HealthHandler(pinger DBPinger, dicom DICOMStatus, ftp FTPStatus, ectp ECTPS
 		ctx, cancel := context.WithTimeout(c.Request().Context(), 3*time.Second)
 		defer cancel()
 
+		// Ping the database FIRST — connector health checks below dial remote
+		// PACS endpoints with multi-second timeouts; running them first used to
+		// consume the ping's context budget and report a false "database
+		// unreachable" whenever a connector target was down.
+		dbErr := pinger.PingContext(ctx)
+		if dbErr != nil {
+			slog.Warn("health check: database unreachable", "error", dbErr)
+		}
+
+		role, _ := c.Get(mw.CtxKeyRole).(string)
+
+		// Public (unauthenticated) callers only get the DB-backed status —
+		// skip the slow connector dials entirely.
+		if role == "" {
+			if dbErr != nil {
+				return c.JSON(http.StatusServiceUnavailable, HealthResp{Status: "degraded"})
+			}
+			return c.JSON(http.StatusOK, HealthResp{Status: "ok"})
+		}
+
 		connEntries := buildConnectorEntries(connCheckers)
 
 		// Override DICOM status from registry — reflects actual runtime state.
@@ -125,28 +145,10 @@ func HealthHandler(pinger DBPinger, dicom DICOMStatus, ftp FTPStatus, ectp ECTPS
 			liveFTP.Enabled = ftpMod.Status() == module.StatusRunning
 		}
 
-		role, _ := c.Get(mw.CtxKeyRole).(string)
-		// Show full health details to any authenticated user with a role.
-		// The healthz endpoint is public but details are only shown when logged in.
-		if role != "" {
-			if err := pinger.PingContext(ctx); err != nil {
-				slog.Warn("health check: database unreachable", "error", err)
-				return c.JSON(http.StatusServiceUnavailable, HealthResponse{
-					Status:       "degraded",
-					Database:     "error",
-					DicomEnabled: liveDICOM.Enabled,
-					DicomPort:    liveDICOM.Port,
-					FTPEnabled:   liveFTP.Enabled,
-					FTPPort:      liveFTP.Port,
-					ECTPEnabled:  ectp.Enabled,
-					ECTPPort:     ectp.Port,
-					Connectors:   connEntries,
-				})
-			}
-
-			return c.JSON(http.StatusOK, HealthResponse{
-				Status:       "ok",
-				Database:     "ok",
+		if dbErr != nil {
+			return c.JSON(http.StatusServiceUnavailable, HealthResponse{
+				Status:       "degraded",
+				Database:     "error",
 				DicomEnabled: liveDICOM.Enabled,
 				DicomPort:    liveDICOM.Port,
 				FTPEnabled:   liveFTP.Enabled,
@@ -156,15 +158,17 @@ func HealthHandler(pinger DBPinger, dicom DICOMStatus, ftp FTPStatus, ectp ECTPS
 				Connectors:   connEntries,
 			})
 		}
-		if err := pinger.PingContext(ctx); err != nil {
-			slog.Warn("health check: database unreachable", "error", err)
-			return c.JSON(http.StatusServiceUnavailable, HealthResp{
-				Status: "degraded",
-			})
-		}
 
-		return c.JSON(http.StatusOK, HealthResp{
-			Status: "ok",
+		return c.JSON(http.StatusOK, HealthResponse{
+			Status:       "ok",
+			Database:     "ok",
+			DicomEnabled: liveDICOM.Enabled,
+			DicomPort:    liveDICOM.Port,
+			FTPEnabled:   liveFTP.Enabled,
+			FTPPort:      liveFTP.Port,
+			ECTPEnabled:  ectp.Enabled,
+			ECTPPort:     ectp.Port,
+			Connectors:   connEntries,
 		})
 	}
 }

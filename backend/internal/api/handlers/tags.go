@@ -26,7 +26,12 @@ type createTagBody struct {
 
 func CreateTagHandler(repo *repository.TagRepository) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		userID := c.Get(mw.CtxKeyUserID).(string)
+		// created_by is display-only (shown in the tags UI) — store the
+		// human-readable username, not the internal uuid.
+		userID, _ := c.Get(mw.CtxKeyUsername).(string)
+		if userID == "" {
+			userID, _ = c.Get(mw.CtxKeyUserID).(string)
+		}
 		var body createTagBody
 		if err := c.Bind(&body); err != nil || body.Name == "" {
 			return c.JSON(http.StatusBadRequest, map[string]string{"error": "name required"})

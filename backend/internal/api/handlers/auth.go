@@ -104,11 +104,11 @@ func AuthProviderHandler(provider auth.Provider, authConfigRepo *repository.Auth
 //	@Failure		401		{object}	map[string]string	"UNAUTHENTICATED"
 //	@Router			/api/v1/auth/login [post]
 func LoginHandler(provider auth.Provider) echo.HandlerFunc {
-	return LoginHandlerWithDB(provider, nil, "", "")
+	return LoginHandlerWithDB(provider, nil, "", "", nil)
 }
 
 // LoginHandlerWithDB is like LoginHandler but also tries LDAP config from DB when ldapAuth is nil.
-func LoginHandlerWithDB(provider auth.Provider, authConfigRepo *repository.AuthConfigRepository, encKey, jwtSecret string) echo.HandlerFunc {
+func LoginHandlerWithDB(provider auth.Provider, authConfigRepo *repository.AuthConfigRepository, encKey, jwtSecret string, userStore auth.UserStore) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		var req LoginRequest
 		if err := c.Bind(&req); err != nil {
@@ -140,7 +140,7 @@ func LoginHandlerWithDB(provider auth.Provider, authConfigRepo *repository.AuthC
 
 		// Fallback: try LDAP from DB config if available.
 		if authConfigRepo != nil {
-			token, err := auth.LoginWithLDAPFromDB(c.Request().Context(), req.Username, req.Password, jwtSecret, authConfigRepo, encKey)
+			token, err := auth.LoginWithLDAPFromDB(c.Request().Context(), req.Username, req.Password, jwtSecret, authConfigRepo, encKey, userStore)
 			if err == nil {
 				loginThrottle.Reset(throttleKey)
 				setJWTCookie(c, token)
@@ -173,13 +173,15 @@ type permissionResolver interface {
 func MeHandler(checker permissionResolver) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		userID, _ := c.Get(mw.CtxKeyUserID).(string)
+		username, _ := c.Get(mw.CtxKeyUsername).(string)
 		role, _ := c.Get(mw.CtxKeyRole).(string)
 		permissions := checker.GetPermissions(c.Request().Context(), role)
 		if permissions == nil {
 			permissions = []string{}
 		}
 		return c.JSON(http.StatusOK, map[string]any{
-			"user_id":     userID,
+			"user_id":     userID,   // stable internal uuid — keys per-user resources
+			"username":    username, // human-readable identifier for display
 			"role":        role,
 			"permissions": permissions,
 		})
