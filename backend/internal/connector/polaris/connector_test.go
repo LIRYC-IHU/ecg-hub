@@ -10,23 +10,21 @@ import (
 	"testing"
 	"time"
 
-	"github.com/LIRYC-IHU/ecg-hub/internal/config"
+	"github.com/LIRYC-IHU/ecg-hub/internal/connector"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 )
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
-func makeConfig(extensions, vendors []string, ectpPort, ftpPort int) config.ConnectorConfig {
-	return config.ConnectorConfig{
-		Name:        "polaris",
-		FTPUsername: "CEX",
-		FTPPassword: "CEX",
-		Filters: config.ConnectorFilters{
+func makeConfig(extensions, vendors []string, ectpPort, ftpPort int) connector.Config {
+	return connector.Config{
+		Name: "polaris",
+		Filters: connector.Filters{
 			Extensions: extensions,
 			Vendors:    vendors,
 		},
-		ECTP: config.ECTPClientConfig{Host: "127.0.0.1", Port: ectpPort},
-		FTP:  config.FTPConnectorConfig{Host: "127.0.0.1", Port: ftpPort},
+		ECTP: connector.Endpoint{Host: "127.0.0.1", Port: ectpPort},
+		FTP:  connector.FTPEndpoint{Host: "127.0.0.1", Port: ftpPort, Username: "CEX", Password: "CEX"},
 	}
 }
 

@@ -10,7 +10,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/LIRYC-IHU/ecg-hub/internal/config"
 	"github.com/LIRYC-IHU/ecg-hub/internal/connector"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 )
@@ -28,7 +27,7 @@ const (
 //
 // Implements connector.Connector.
 type PolarisConnector struct {
-	cfg     config.ConnectorConfig
+	cfg     connector.Config
 	timeout time.Duration
 }
 
@@ -38,7 +37,7 @@ var _ connector.Connector = (*PolarisConnector)(nil)
 // New constructs a PolarisConnector from a loaded ConnectorConfig.
 // Credentials (FTPUsername, FTPPassword) must already be populated from env vars
 // by config.Load — they are never read here.
-func New(cfg config.ConnectorConfig) *PolarisConnector {
+func New(cfg connector.Config) *PolarisConnector {
 	return &PolarisConnector{cfg: cfg, timeout: defaultTimeout}
 }
 
@@ -100,7 +99,7 @@ func (c *PolarisConnector) Forward(_ context.Context, ecg *models.ECG, filePath 
 
 	written, err := Upload(
 		c.cfg.FTP.Host, c.cfg.FTP.Port,
-		c.cfg.FTPUsername, c.cfg.FTPPassword,
+		c.cfg.FTP.Username, c.cfg.FTP.Password,
 		filename, f, c.timeout,
 	)
 	if err != nil {
