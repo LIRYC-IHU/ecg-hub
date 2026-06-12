@@ -148,6 +148,38 @@ func (r *UserRepo) List(ctx context.Context) ([]AppUser, error) {
 	return users, nil
 }
 
+// ResolveIdentity returns the internal user ID (ecg_hub_users.id) and current
+// role name for the given external identifier (JWT subject), in a single query.
+// Returns ("", "", nil) when the user is unknown — e.g. a token issued before
+// the identity row existed; callers fall back to the JWT claims.
+//
+// The internal uuid is what per-user tables (webhooks, API keys, pins, exports)
+// reference with ON DELETE CASCADE — never the reusable username.
+func (r *UserRepo) ResolveIdentity(ctx context.Context, externalID string) (string, string, error) {
+	type row struct {
+		ID       string
+		RoleName *string
+	}
+	var rec row
+	err := r.db.WithContext(ctx).
+		Table("ecg_hub_users u").
+		Select("u.id, r.name as role_name").
+		Joins("LEFT JOIN roles r ON r.id = u.role_id").
+		Where("u.external_id = ?", externalID).
+		Take(&rec).Error
+	if err == gorm.ErrRecordNotFound {
+		return "", "", nil
+	}
+	if err != nil {
+		return "", "", fmt.Errorf("user_repo: resolve identity: %w", err)
+	}
+	role := ""
+	if rec.RoleName != nil {
+		role = *rec.RoleName
+	}
+	return rec.ID, role, nil
+}
+
 // GetCurrentRole returns the current role name for externalID from the DB.
 // Returns ("", nil) if the user is not found or has no role assigned.
 func (r *UserRepo) GetCurrentRole(ctx context.Context, externalID string) (string, error) {
@@ -211,6 +243,30 @@ func (r *UserRepo) roleNameByID(ctx context.Context, roleID string) (string, err
 		return "", err
 	}
 	return rec.Name, nil
+}
+
+// GetByID returns the user record for the given internal ID.
+func (r *UserRepo) GetByID(ctx context.Context, id string) (*UserRecord, error) {
+	var rec UserRecord
+	if err := r.db.WithContext(ctx).First(&rec, "id = ?", id).Error; err != nil {
+		return nil, fmt.Errorf("user_repo: get by id: %w", err)
+	}
+	return &rec, nil
+}
+
+// Delete removes a user from ecg_hub_users. The CASCADE foreign keys wipe the
+// user's webhooks, API keys, pins and export jobs in the same statement — the
+// whole point of the unified identity: a future account reusing the same
+// username starts from a clean slate.
+func (r *UserRepo) Delete(ctx context.Context, id string) error {
+	res := r.db.WithContext(ctx).Delete(&UserRecord{}, "id = ?", id)
+	if res.Error != nil {
+		return fmt.Errorf("user_repo: delete: %w", res.Error)
+	}
+	if res.RowsAffected == 0 {
+		return fmt.Errorf("user_repo: delete: user not found")
+	}
+	return nil
 }
 
 // SetUpdateJWT sets the update_jwt flag for a user, which signals that their JWT should be refreshed on next login.

@@ -106,3 +106,13 @@ func (r *LocalUserRepository) Delete(id string) error {
 	}
 	return nil
 }
+
+// DeleteByUsername hard-deletes a local user by username. Used when an account
+// is deleted from the unified app-users view (ecg_hub_users.external_id holds
+// the username for provider "local"). Missing rows are not an error.
+func (r *LocalUserRepository) DeleteByUsername(username string) error {
+	if err := r.db.Where("username = ?", username).Delete(&models.LocalUser{}).Error; err != nil {
+		return fmt.Errorf("local_user_repo: delete by username: %w", err)
+	}
+	return nil
+}
