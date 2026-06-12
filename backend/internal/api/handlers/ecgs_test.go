@@ -43,7 +43,7 @@ type stubConverter struct {
 	err  error
 }
 
-func (s *stubConverter) Convert(_ context.Context, _, _, _ string, _ *models.Patient) ([]byte, error) {
+func (s *stubConverter) Convert(_ context.Context, _, _, _ string, _ *models.Patient, _ export.ConvertOptions) ([]byte, error) {
 	return s.data, s.err
 }
 

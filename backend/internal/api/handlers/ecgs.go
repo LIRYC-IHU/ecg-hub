@@ -61,13 +61,17 @@ type patientByIDFinder interface {
 // @Summary Download ECG file
 // @Tags ECG
 // @Param id path string true "ECG UUID"
-// @Param format query string false "Export format" Enums(original, xmlfda, dicom)
+// @Param format query string false "Export format — repeat the parameter to receive a ZIP bundle (e.g. ?format=original&format=xmlfda)" Enums(original, xmlfda, dicom)
+// @Param anonymize query boolean false "Strip patient-identifying fields from converted outputs (research use). Mutually exclusive with inject; converted formats only."
+// @Param inject query boolean false "Overwrite patient fields in converted outputs with the HL7-enriched demographics from the HIS. Mutually exclusive with anonymize; converted formats only."
 // @Produce octet-stream
 // @Success 200 {file} binary
+// @Failure 400 {object} map[string]string "BAD_OPTIONS — invalid anonymize/inject combination"
 // @Failure 404 {object} map[string]string
 // @Failure 422 {object} map[string]string
 // @Failure 502 {object} map[string]string
 // @Security BearerAuth
+// @Security ApiKeyAuth
 // @Router /api/v1/ecgs/{id}/download [get]
 func DownloadECGHandler(db *gorm.DB, bridge export.Converter) echo.HandlerFunc {
 	return downloadECGHandler(repository.NewECGRepository(db), repository.NewPatientRepository(db), bridge, db)
@@ -101,11 +105,19 @@ func downloadECGHandler(repo ecgByIDFinder, patRepo patientByIDFinder, bridge ex
 
 		userID, _ := c.Get(mw.CtxKeyUserID).(string)
 
+		// Patient-data options (converted formats only):
+		//   ?anonymize=1 → strip identifying fields from the output
+		//   ?inject=1    → overwrite patient fields with HL7-enriched demographics
+		opts, optErr := parseConvertOptions(c)
+		if optErr != "" {
+			return c.JSON(http.StatusBadRequest, mw.APIError("BAD_OPTIONS", optErr))
+		}
+
 		// Multiple formats requested (e.g. ?format=original,xmlfda) → bundle into a ZIP
 		// rather than forcing the browser to fire one download per format.
 		formats := parseDownloadFormats(c)
 		if len(formats) > 1 {
-			return handleZipDownload(c, ecg, id, userID, patRepo, bridge, formats, db)
+			return handleZipDownload(c, ecg, id, userID, patRepo, bridge, formats, opts, db)
 		}
 
 		format := ""
@@ -113,7 +125,13 @@ func downloadECGHandler(repo ecgByIDFinder, patRepo patientByIDFinder, bridge ex
 			format = formats[0]
 		}
 		if format == "xmlfda" || format == "dicom" {
-			return handleConvertDownload(c, ecg, id, userID, patRepo, bridge, format, db)
+			return handleConvertDownload(c, ecg, id, userID, patRepo, bridge, format, opts, db)
+		}
+		if opts.Anonymize || opts.InjectPatient {
+			// The original file is streamed verbatim — the converters never run,
+			// so the options cannot be honoured. Refuse rather than mislead.
+			return c.JSON(http.StatusBadRequest, mw.APIError("BAD_OPTIONS",
+				"anonymize/inject require a converted format (xmlfda or dicom)"))
 		}
 
 		// Original format path.
@@ -130,6 +148,22 @@ func downloadECGHandler(repo ecgByIDFinder, patRepo patientByIDFinder, bridge ex
 		c.Response().Header().Set("Cache-Control", "no-store")
 		return c.Attachment(ecg.FilePath, ecg.OriginalFilename)
 	}
+}
+
+// parseConvertOptions reads the patient-data options from the query string.
+// ?anonymize=1 strips identifying fields; ?inject=1 overwrites patient fields
+// with the HL7-enriched demographics. They are mutually exclusive (one removes
+// identity, the other adds it) — combining them returns an error message.
+func parseConvertOptions(c echo.Context) (export.ConvertOptions, string) {
+	truthy := func(v string) bool { return v == "1" || v == "true" }
+	opts := export.ConvertOptions{
+		Anonymize:     truthy(c.QueryParam("anonymize")),
+		InjectPatient: truthy(c.QueryParam("inject")),
+	}
+	if opts.Anonymize && opts.InjectPatient {
+		return export.ConvertOptions{}, "anonymize and inject are mutually exclusive"
+	}
+	return opts, ""
 }
 
 // AllECGsParams holds query parameters for GET /api/v1/ecgs.
@@ -165,6 +199,7 @@ type AllECGsParams struct {
 // @Produce json
 // @Success 200 {object} map[string]interface{}
 // @Security BearerAuth
+// @Security ApiKeyAuth
 // @Router /api/v1/ecgs [get]
 func ListAllECGsHandler(db *gorm.DB) echo.HandlerFunc {
 	return func(c echo.Context) error {
@@ -347,6 +382,7 @@ func DeleteECGHandler(db *gorm.DB) echo.HandlerFunc {
 // @Success 200 {object} map[string]interface{}
 // @Failure 404 {object} map[string]string
 // @Security BearerAuth
+// @Security ApiKeyAuth
 // @Router /api/v1/ecgs/{id}/metadata [get]
 func ECGMetadataHandler(db *gorm.DB) echo.HandlerFunc {
 	repo := repository.NewECGRepository(db)
@@ -512,6 +548,7 @@ func handleConvertDownload(
 	patRepo patientByIDFinder,
 	bridge export.Converter,
 	format string,
+	opts export.ConvertOptions,
 	db *gorm.DB,
 ) error {
 	// Load patient demographics (nil is acceptable — conversion continues without enrichment, NFR-R2).
@@ -521,7 +558,7 @@ func handleConvertDownload(
 			"patient_id", ecg.PatientID, "error", patErr)
 	}
 
-	outData, convErr := bridge.Convert(c.Request().Context(), ecg.FilePath, ecg.Vendor, format, patient)
+	outData, convErr := bridge.Convert(c.Request().Context(), ecg.FilePath, ecg.Vendor, format, patient, opts)
 	if convErr != nil {
 		if errors.Is(convErr, export.ErrFormatNotSupported) {
 			return c.JSON(http.StatusUnprocessableEntity,
@@ -619,6 +656,7 @@ func handleZipDownload(
 	patRepo patientByIDFinder,
 	bridge export.Converter,
 	formats []string,
+	opts export.ConvertOptions,
 	db *gorm.DB,
 ) error {
 	// Load patient demographics once if any converted format is requested
@@ -654,7 +692,7 @@ func handleZipDownload(
 			}
 			data, name = b, ecg.OriginalFilename
 		case "xmlfda", "dicom":
-			out, cerr := bridge.Convert(c.Request().Context(), ecg.FilePath, ecg.Vendor, f, patient)
+			out, cerr := bridge.Convert(c.Request().Context(), ecg.FilePath, ecg.Vendor, f, patient, opts)
 			if cerr != nil {
 				slog.Warn("ecg-download: zip convert failed", "ecg_id", id, "format", f, "error", cerr)
 				continue

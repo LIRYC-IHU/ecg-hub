@@ -46,6 +46,9 @@ type exportJobEnqueuer interface {
 type createExportRequest struct {
 	ECGIDs  []string `json:"ecg_ids"`
 	Formats []string `json:"formats"`
+	// Anonymize / Inject control patient data in converted outputs (mutually exclusive).
+	Anonymize bool `json:"anonymize"`
+	Inject    bool `json:"inject"`
 }
 
 // createExportResponse is the JSON body returned on successful export job creation.
@@ -122,12 +125,18 @@ func createExportHandler(db *gorm.DB, exportRepo exportJobCreator, ecgRepo ecgBy
 
 		userID, _ := c.Get(mw.CtxKeyUserID).(string)
 
+		if req.Anonymize && req.Inject {
+			return c.JSON(http.StatusBadRequest, mw.APIError("BAD_OPTIONS", "anonymize and inject are mutually exclusive"))
+		}
+
 		job := &models.ExportJob{
-			ID:       uuid.New().String(),
-			UserID:   userID,
-			Status:   "queued",
-			ECGCount: len(req.ECGIDs),
-			Formats:  formats,
+			ID:        uuid.New().String(),
+			UserID:    userID,
+			Status:    "queued",
+			ECGCount:  len(req.ECGIDs),
+			Formats:   formats,
+			Anonymize: req.Anonymize,
+			Inject:    req.Inject,
 		}
 
 		if err := exportRepo.Create(job); err != nil {
@@ -139,10 +148,12 @@ func createExportHandler(db *gorm.DB, exportRepo exportJobCreator, ecgRepo ecgBy
 		}
 
 		if !pool.EnqueueJob(export.Job{
-			ID:      job.ID,
-			UserID:  userID,
-			ECGIDs:  req.ECGIDs,
-			Formats: formats,
+			ID:        job.ID,
+			UserID:    userID,
+			ECGIDs:    req.ECGIDs,
+			Formats:   formats,
+			Anonymize: job.Anonymize,
+			Inject:    job.Inject,
 		}) {
 			// Queue full or pool stopped — mark the job failed immediately so the
 			// DB record is consistent, then tell the caller to retry later.

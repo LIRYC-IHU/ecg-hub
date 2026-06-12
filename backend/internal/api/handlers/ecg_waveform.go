@@ -80,7 +80,7 @@ func ECGWaveformHandler(db *gorm.DB, volumePath string, bridge export.Converter)
 				patient = p
 			}
 
-			dicomData, err = bridge.Convert(ctx, filePath, ecg.Vendor, "dicom", patient)
+			dicomData, err = bridge.Convert(ctx, filePath, ecg.Vendor, "dicom", patient, export.ConvertOptions{})
 			if err != nil {
 				// Log the underlying error server-side; return a generic message so
 				// internal paths / converter details are not exposed to the client.

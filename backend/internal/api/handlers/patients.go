@@ -47,6 +47,7 @@ var allowedPatientSortBy = map[string]string{
 // @Produce json
 // @Success 200 {object} map[string]interface{}
 // @Security BearerAuth
+// @Security ApiKeyAuth
 // @Router /api/v1/patients [get]
 func SearchPatientsHandler(db *gorm.DB) echo.HandlerFunc {
 	return func(c echo.Context) error {
@@ -153,6 +154,7 @@ type ECGListParams struct {
 // @Produce json
 // @Success 200 {object} map[string]interface{}
 // @Security BearerAuth
+// @Security ApiKeyAuth
 // @Router /api/v1/patients/{id}/ecgs [get]
 func ListPatientECGsHandler(db *gorm.DB) echo.HandlerFunc {
 	return func(c echo.Context) error {
