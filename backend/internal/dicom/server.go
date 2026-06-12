@@ -23,35 +23,46 @@ import (
 	netdicom "github.com/apaladiychuk/go-netdicom"
 	"github.com/apaladiychuk/go-netdicom/dimse"
 
-	"github.com/LIRYC-IHU/ecg-hub/internal/config"
 	"github.com/LIRYC-IHU/ecg-hub/internal/ingestion"
 	appmetrics "github.com/LIRYC-IHU/ecg-hub/internal/metrics"
 )
 
+// Settings holds the DICOM SCP runtime configuration. Built from the module
+// config stored in the DB (admin UI > Modules > DICOM) — never from config.yaml.
+type Settings struct {
+	Enabled     bool
+	Port        int
+	AETitle     string
+	EchoEnabled bool
+	TLS         bool
+	CertFile    string
+	KeyFile     string
+}
+
 // Server wraps a DICOM C-STORE SCP and pushes received files onto an IngestQueue.
 type Server struct {
-	cfg      *config.Config
+	cfg      Settings
 	queue    ingestion.IngestQueue
 	listener net.Listener // our own listener — closed in Stop() to break accept loop
 	done     chan struct{} // closed when accept loop exits
 }
 
 // New creates a Server. Call Start() to begin accepting DICOM associations.
-func New(cfg *config.Config, queue ingestion.IngestQueue) *Server {
+func New(cfg Settings, queue ingestion.IngestQueue) *Server {
 	return &Server{cfg: cfg, queue: queue}
 }
 
 // Start launches the DICOM SCP server in a background goroutine.
 // Returns nil immediately if dicom.enabled is false.
 func (s *Server) Start() error {
-	if !s.cfg.DICOM.Enabled {
+	if !s.cfg.Enabled {
 		slog.Info("dicom: server disabled — not starting")
 		return nil
 	}
 
 	var tlsCfg *tls.Config
-	if s.cfg.DICOM.TLS {
-		cert, err := tls.LoadX509KeyPair(s.cfg.DICOM.CertFile, s.cfg.DICOM.KeyFile)
+	if s.cfg.TLS {
+		cert, err := tls.LoadX509KeyPair(s.cfg.CertFile, s.cfg.KeyFile)
 		if err != nil {
 			return fmt.Errorf("dicom: load TLS cert: %w", err)
 		}
@@ -62,11 +73,11 @@ func (s *Server) Start() error {
 	}
 
 	params := netdicom.ServiceProviderParams{
-		AETitle:   s.cfg.DICOM.AETitle,
+		AETitle:   s.cfg.AETitle,
 		TLSConfig: tlsCfg,
 		CStore:    s.onCStore,
 	}
-	if s.cfg.DICOM.EchoEnabled {
+	if s.cfg.EchoEnabled {
 		params.CEcho = func(_ netdicom.ConnectionState) dimse.Status {
 			appmetrics.DICOMSCPCEchoReceived.Inc()
 			slog.Debug("dicom: C-ECHO received")
@@ -74,7 +85,7 @@ func (s *Server) Start() error {
 		}
 	}
 
-	addr := fmt.Sprintf(":%d", s.cfg.DICOM.Port)
+	addr := fmt.Sprintf(":%d", s.cfg.Port)
 
 	// Open our own listener so we can close it cleanly in Stop().
 	// go-netdicom's Run() has a broken accept loop that never exits on close.
@@ -94,10 +105,10 @@ func (s *Server) Start() error {
 	go func() {
 		defer close(s.done)
 		slog.Info("dicom: SCP server started",
-			"port", s.cfg.DICOM.Port,
-			"ae_title", s.cfg.DICOM.AETitle,
-			"tls", s.cfg.DICOM.TLS,
-			"echo", s.cfg.DICOM.EchoEnabled,
+			"port", s.cfg.Port,
+			"ae_title", s.cfg.AETitle,
+			"tls", s.cfg.TLS,
+			"echo", s.cfg.EchoEnabled,
 		)
 		for {
 			conn, err := ln.Accept()
