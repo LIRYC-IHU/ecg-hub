@@ -168,6 +168,9 @@ func (r *RouterConfig) RegisterRoutes() {
 	}
 
 	roleRepo := repository.NewRoleRepo(r.gormDB)
+	// API keys authenticate machine clients (webhook receivers) on every
+	// protected route — resolved by the auth middleware via the ecghub_ prefix.
+	apiKeyRepo := repository.NewAPIKeyRepository(r.gormDB)
 
 	host := os.Getenv("HOST_URL")
 
@@ -196,12 +199,12 @@ func (r *RouterConfig) RegisterRoutes() {
 	// Swagger UI — requires authentication + ecg.read permission.
 	// Only Patients, ECG and Exports tags are shown (clinical workflows).
 	allowedTags := map[string]bool{"Patients": true, "ECG": true, "Exports": true}
-	r.e.GET("/swagger/doc.json", handlers.SwaggerFilterHandler(allowedTags), mw.AuthMiddleware(r.authProvider, r.userRepo), mw.RequirePermission(r.checker, auth.PermSwaggerRead))
+	r.e.GET("/swagger/doc.json", handlers.SwaggerFilterHandler(allowedTags), mw.AuthMiddleware(r.authProvider, r.userRepo, apiKeyRepo), mw.RequirePermission(r.checker, auth.PermSwaggerRead))
 	swaggerHandler := echoSwagger.EchoWrapHandler(
 		echoSwagger.URL("/swagger/doc.json"),
 		echoSwagger.DocExpansion("list"),
 	)
-	r.e.GET("/swagger/*", swaggerHandler, mw.AuthMiddleware(r.authProvider, r.userRepo), mw.RequirePermission(r.checker, auth.PermSwaggerRead))
+	r.e.GET("/swagger/*", swaggerHandler, mw.AuthMiddleware(r.authProvider, r.userRepo, apiKeyRepo), mw.RequirePermission(r.checker, auth.PermSwaggerRead))
 
 	// === Public API group (no auth required) ===
 	publicV1 := r.e.Group("/api/v1")
@@ -235,7 +238,7 @@ func (r *RouterConfig) RegisterRoutes() {
 	publicV1.GET("/auth/logout", handlers.LogoutHandler(r.authProvider))
 
 	// === Protected API group ===
-	apiV1 := r.e.Group("/api/v1", mw.AuthMiddleware(r.authProvider, r.userRepo))
+	apiV1 := r.e.Group("/api/v1", mw.AuthMiddleware(r.authProvider, r.userRepo, apiKeyRepo))
 
 	// Returns current user identity + permissions — used by the frontend on page load.
 	apiV1.GET("/auth/me", handlers.MeHandler(r.checker))
@@ -382,7 +385,6 @@ func (r *RouterConfig) RegisterRoutes() {
 
 	// Per-user API keys — requires apikey.manage: keys grant durable
 	// programmatic access, so handing them out is an explicit role decision.
-	apiKeyRepo := repository.NewAPIKeyRepository(r.gormDB)
 	apiV1.GET("/api-keys", handlers.ListAPIKeysHandler(apiKeyRepo), mw.RequirePermission(r.checker, auth.PermAPIKeyManage))
 	apiV1.POST("/api-keys", handlers.CreateAPIKeyHandler(apiKeyRepo), mw.RequirePermission(r.checker, auth.PermAPIKeyManage))
 	apiV1.DELETE("/api-keys/:id", handlers.DeleteAPIKeyHandler(apiKeyRepo), mw.RequirePermission(r.checker, auth.PermAPIKeyManage))

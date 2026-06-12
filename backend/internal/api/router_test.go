@@ -27,6 +27,9 @@ type noopResolver struct{}
 func (noopResolver) ResolveIdentity(_ context.Context, _ string) (string, string, error) {
 	return "", "", nil
 }
+func (noopResolver) IdentityByID(_ context.Context, _ string) (string, string, error) {
+	return "", "", nil
+}
 func (noopResolver) ShouldRefreshToken(_ context.Context, _ string) bool        { return false }
 
 func TestProtectedGroup_RequiresJWT(t *testing.T) {
@@ -34,7 +37,7 @@ func TestProtectedGroup_RequiresJWT(t *testing.T) {
 
 	// Register a test-only protected handler directly onto the group with AuthMiddleware.
 	// This proves the middleware is wired without needing a real production route.
-	protected := e.Group("/api/v1", mw.AuthMiddleware(&mockProvider{}, noopResolver{}))
+	protected := e.Group("/api/v1", mw.AuthMiddleware(&mockProvider{}, noopResolver{}, nil))
 	protected.GET("/test", func(c echo.Context) error {
 		return c.String(http.StatusOK, "ok")
 	})
@@ -73,7 +76,7 @@ func TestHealthzRoute_Public(t *testing.T) {
 func TestPatientsRoute_RequiresJWT(t *testing.T) {
 	e := echo.New()
 	// Register only the patients route with JWT middleware (no real DB needed for 401 path).
-	protected := e.Group("/api/v1", mw.AuthMiddleware(&mockProvider{}, noopResolver{}))
+	protected := e.Group("/api/v1", mw.AuthMiddleware(&mockProvider{}, noopResolver{}, nil))
 	protected.GET("/patients", func(c echo.Context) error {
 		return c.String(http.StatusOK, "ok")
 	})

@@ -29,6 +29,9 @@ type noopResolver struct{}
 func (noopResolver) ResolveIdentity(_ context.Context, _ string) (string, string, error) {
 	return "", "", nil
 }
+func (noopResolver) IdentityByID(_ context.Context, _ string) (string, string, error) {
+	return "", "", nil
+}
 func (noopResolver) ShouldRefreshToken(_ context.Context, _ string) bool { return false }
 
 // newTestContext creates an Echo context and recorder for testing.
@@ -46,7 +49,7 @@ func TestAuthMiddleware_MissingHeader(t *testing.T) {
 	provider := &mockProvider{claims: &auth.Claims{Sub: "user1", Role: "reader"}}
 	c, rec := newTestContext(http.MethodGet, "/", "")
 
-	mw := AuthMiddleware(provider, noopResolver{})
+	mw := AuthMiddleware(provider, noopResolver{}, nil)
 	err := mw(func(c echo.Context) error { return nil })(c)
 
 	if err != nil {
@@ -64,7 +67,7 @@ func TestAuthMiddleware_NonBearerHeader(t *testing.T) {
 	provider := &mockProvider{claims: &auth.Claims{Sub: "user1", Role: "reader"}}
 	c, rec := newTestContext(http.MethodGet, "/", "Basic dXNlcjpwYXNz")
 
-	mw := AuthMiddleware(provider, noopResolver{})
+	mw := AuthMiddleware(provider, noopResolver{}, nil)
 	_ = mw(func(c echo.Context) error { return nil })(c)
 
 	if rec.Code != http.StatusUnauthorized {
@@ -76,7 +79,7 @@ func TestAuthMiddleware_InvalidToken(t *testing.T) {
 	provider := &mockProvider{err: fmt.Errorf("token expired")}
 	c, rec := newTestContext(http.MethodGet, "/", "Bearer invalid-token")
 
-	mw := AuthMiddleware(provider, noopResolver{})
+	mw := AuthMiddleware(provider, noopResolver{}, nil)
 	_ = mw(func(c echo.Context) error { return nil })(c)
 
 	if rec.Code != http.StatusUnauthorized {
@@ -92,7 +95,7 @@ func TestAuthMiddleware_ValidToken(t *testing.T) {
 	c, _ := newTestContext(http.MethodGet, "/", "Bearer valid-token")
 
 	called := false
-	mw := AuthMiddleware(provider, noopResolver{})
+	mw := AuthMiddleware(provider, noopResolver{}, nil)
 	err := mw(func(c echo.Context) error {
 		called = true
 		return nil
@@ -141,7 +144,7 @@ func TestAuthMiddleware_SlidingRefresh_NearExpiry(t *testing.T) {
 	}}
 	c, rec := newTestContext(http.MethodGet, "/", "Bearer valid-token")
 
-	mw := AuthMiddleware(provider, noopResolver{})
+	mw := AuthMiddleware(provider, noopResolver{}, nil)
 	if err := mw(func(c echo.Context) error { return nil })(c); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -157,7 +160,7 @@ func TestAuthMiddleware_SlidingRefresh_FreshToken(t *testing.T) {
 	}}
 	c, rec := newTestContext(http.MethodGet, "/", "Bearer valid-token")
 
-	mw := AuthMiddleware(provider, noopResolver{})
+	mw := AuthMiddleware(provider, noopResolver{}, nil)
 	if err := mw(func(c echo.Context) error { return nil })(c); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -173,7 +176,7 @@ func TestAuthMiddleware_SlidingRefresh_NoExpiryClaim(t *testing.T) {
 	}}
 	c, rec := newTestContext(http.MethodGet, "/", "Bearer valid-token")
 
-	mw := AuthMiddleware(provider, noopResolver{})
+	mw := AuthMiddleware(provider, noopResolver{}, nil)
 	if err := mw(func(c echo.Context) error { return nil })(c); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -278,4 +281,77 @@ func findSub(s, sub string) bool {
 		}
 	}
 	return false
+}
+
+// ─── API key authentication ──────────────────────────────────────────────────
+
+// stubAPIKeys resolves a single known key to a fixed user ID.
+type stubAPIKeys struct{ key, userID string }
+
+func (s stubAPIKeys) ResolveAPIKey(_ context.Context, plaintext string) (string, error) {
+	if plaintext == s.key {
+		return s.userID, nil
+	}
+	return "", fmt.Errorf("unknown key")
+}
+
+// idResolver returns a fixed identity for IdentityByID.
+type idResolver struct {
+	noopResolver
+	username, role string
+}
+
+func (r idResolver) IdentityByID(_ context.Context, _ string) (string, string, error) {
+	return r.username, r.role, nil
+}
+
+func TestAuthMiddleware_APIKey_Valid(t *testing.T) {
+	provider := &mockProvider{err: fmt.Errorf("not a jwt")} // JWT path must not be reached
+	keys := stubAPIKeys{key: "ecghub_secret123", userID: "uuid-42"}
+	resolver := idResolver{username: "research-bot", role: "reader"}
+
+	c, _ := newTestContext(http.MethodGet, "/", "")
+	c.Request().Header.Set("X-API-Key", "ecghub_secret123")
+
+	called := false
+	mw := AuthMiddleware(provider, resolver, keys)
+	if err := mw(func(c echo.Context) error { called = true; return nil })(c); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !called {
+		t.Fatal("expected next handler to be called")
+	}
+	if got := c.Get(CtxKeyUserID); got != "uuid-42" {
+		t.Errorf("user_id = %v, want uuid-42", got)
+	}
+	if got := c.Get(CtxKeyRole); got != "reader" {
+		t.Errorf("role = %v, want reader", got)
+	}
+	if got := c.Get(CtxKeyUsername); got != "research-bot" {
+		t.Errorf("username = %v, want research-bot", got)
+	}
+}
+
+func TestAuthMiddleware_APIKey_BearerForm(t *testing.T) {
+	keys := stubAPIKeys{key: "ecghub_viabearer", userID: "uuid-7"}
+	c, _ := newTestContext(http.MethodGet, "/", "Bearer ecghub_viabearer")
+
+	called := false
+	mw := AuthMiddleware(&mockProvider{err: fmt.Errorf("nope")}, idResolver{username: "u", role: "reader"}, keys)
+	_ = mw(func(c echo.Context) error { called = true; return nil })(c)
+	if !called {
+		t.Fatal("Bearer-form API key should authenticate")
+	}
+}
+
+func TestAuthMiddleware_APIKey_Invalid(t *testing.T) {
+	keys := stubAPIKeys{key: "ecghub_right", userID: "u"}
+	c, rec := newTestContext(http.MethodGet, "/", "")
+	c.Request().Header.Set("X-API-Key", "ecghub_wrong")
+
+	mw := AuthMiddleware(&mockProvider{}, idResolver{}, keys)
+	_ = mw(func(c echo.Context) error { return nil })(c)
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("status = %d, want 401", rec.Code)
+	}
 }

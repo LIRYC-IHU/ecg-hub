@@ -33,7 +33,52 @@ type RoleResolver interface {
 	// ResolveIdentity maps the JWT subject to the internal user ID and current
 	// role name. Returns ("", "", nil) when the user has no identity row yet.
 	ResolveIdentity(ctx context.Context, externalID string) (string, string, error)
+	// IdentityByID is the reverse mapping (internal uuid → username + role),
+	// used by the API-key flow where the key stores the internal user ID.
+	IdentityByID(ctx context.Context, id string) (string, string, error)
 	ShouldRefreshToken(ctx context.Context, externalID string) bool
+}
+
+// APIKeyAuthenticator resolves a plaintext API key to its owning internal
+// user ID. Implemented by repository.APIKeyRepository.
+type APIKeyAuthenticator interface {
+	ResolveAPIKey(ctx context.Context, plaintext string) (string, error)
+}
+
+// apiKeyTokenPrefix namespaces every generated API key ("ecghub_…") — used to
+// fast-reject JWTs from the key path and keys from the JWT path.
+const apiKeyTokenPrefix = "ecghub_"
+
+// authenticateAPIKey validates an API key and injects identity into the
+// context. The key inherits its owner's role, so RequirePermission applies
+// exactly as for an interactive session. Returns false when the key is unknown.
+func authenticateAPIKey(c echo.Context, apiKeys APIKeyAuthenticator, roleResolver RoleResolver, key string) bool {
+	userID, err := apiKeys.ResolveAPIKey(c.Request().Context(), key)
+	if err != nil {
+		return false
+	}
+	username, role, err := roleResolver.IdentityByID(c.Request().Context(), userID)
+	if err != nil {
+		return false
+	}
+	c.Set(CtxKeyUserID, userID)
+	c.Set(CtxKeyUsername, username)
+	c.Set(CtxKeyRole, role)
+	return true
+}
+
+// extractAPIKey returns the plaintext API key from the request, or "".
+// Accepted forms: "X-API-Key: ecghub_…" header (preferred for machine clients)
+// or "Authorization: Bearer ecghub_…" (recognised by the key prefix).
+func extractAPIKey(c echo.Context) string {
+	if k := c.Request().Header.Get("X-API-Key"); strings.HasPrefix(k, apiKeyTokenPrefix) {
+		return k
+	}
+	header := c.Request().Header.Get("Authorization")
+	if strings.HasPrefix(header, "Bearer "+apiKeyTokenPrefix) {
+		return strings.TrimPrefix(header, "Bearer ")
+	}
+	return ""
 }
 
 // Healthz Midleware validates the JWT on the /healthz endpoint
@@ -69,16 +114,31 @@ func HealthzMiddleware(provider auth.Provider, roleResolver RoleResolver) echo.M
 	}
 }
 
-// AuthMiddleware validates the JWT on every request.
-// Token resolution order: HttpOnly cookie "jwt" → Authorization: Bearer header.
+// AuthMiddleware validates the caller's credentials on every request.
+// Two authentication paths:
+//   - API key ("ecghub_…" via X-API-Key or Authorization: Bearer): machine
+//     clients (e.g. webhook receivers fetching ECGs). The key inherits its
+//     owner's role and permissions. No session, no sliding refresh.
+//   - JWT (HttpOnly cookie "jwt" → Authorization: Bearer): interactive users.
+//
 // Role resolution: DB (live, reflects admin changes immediately) → JWT fallback.
-// On success it injects CtxKeyUserID and CtxKeyRole into the Echo context.
+// On success it injects CtxKeyUserID, CtxKeyUsername and CtxKeyRole.
 // On failure it returns 401 {"code":"UNAUTHENTICATED","message":"..."}.
 //
 // Apply to protected route groups only — /healthz and /swagger must remain public.
-func AuthMiddleware(provider auth.Provider, roleResolver RoleResolver) echo.MiddlewareFunc {
+func AuthMiddleware(provider auth.Provider, roleResolver RoleResolver, apiKeys APIKeyAuthenticator) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
+			// API key path — recognised by the ecghub_ prefix.
+			if apiKeys != nil {
+				if key := extractAPIKey(c); key != "" {
+					if authenticateAPIKey(c, apiKeys, roleResolver, key) {
+						return next(c)
+					}
+					return c.JSON(http.StatusUnauthorized, APIError("UNAUTHENTICATED", "invalid API key"))
+				}
+			}
+
 			rawToken := extractToken(c)
 			if rawToken == "" {
 				return c.JSON(http.StatusUnauthorized, APIError("UNAUTHENTICATED", "missing or invalid token"))
