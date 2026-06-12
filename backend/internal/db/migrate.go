@@ -70,11 +70,8 @@ func RunMigrations(db *gorm.DB) error {
 			slog.Warn("db: migrate user_id column type", "table", "audit_logs", "error", err)
 		}
 	}
-	if db.Migrator().HasTable("export_jobs") {
-		if err := db.Exec(`ALTER TABLE export_jobs ALTER COLUMN user_id TYPE text`).Error; err != nil {
-			slog.Warn("db: migrate user_id column type", "table", "export_jobs", "error", err)
-		}
-	}
+	// (export_jobs.user_id is migrated to uuid by migrateUserIdentity below —
+	// the historical widen-to-text statement was removed so it cannot undo it.)
 
 	// Rename patients.nip → patients.nda (NIP was incorrect, NDA = Numéro de Dossier Administratif).
 	if db.Migrator().HasColumn(&appmodels.Patient{}, "nip") && !db.Migrator().HasColumn(&appmodels.Patient{}, "nda") {
@@ -220,7 +217,92 @@ func RunMigrations(db *gorm.DB) error {
 		return err
 	}
 
+	// Unified identity: per-user resources keyed on ecg_hub_users.id (uuid)
+	// with ON DELETE CASCADE. Runs after iniRole so role names resolve on
+	// fresh installs. Idempotent.
+	migrateUserIdentity(db)
+
 	return nil
+}
+
+// migrateUserIdentity converts the per-user resource tables from a free-text
+// user_id (the reusable JWT subject — username) to the stable internal
+// ecg_hub_users.id uuid, with ON DELETE CASCADE foreign keys.
+//
+// Why: with a text user_id, deleting an account left orphan webhooks / API
+// keys / pins, and a future account reusing the same username inherited them
+// (including live API keys). Keying on the immutable uuid closes both holes.
+//
+// Steps (idempotent — guarded by the current column type):
+//  1. Seed ecg_hub_users rows for local users (their logins now upsert too,
+//     but existing sessions need the row immediately).
+//  2. Map user_id values from external_id → uuid.
+//  3. Delete rows whose owner is unknown (orphans — unreachable anyway, and
+//     exactly what a reused username must never inherit).
+//  4. Convert the column to uuid and add the CASCADE foreign key.
+func migrateUserIdentity(db *gorm.DB) {
+	// 1. Local users → ecg_hub_users (provider 'local').
+	if err := db.Exec(`
+		INSERT INTO ecg_hub_users (external_id, provider, role_id, last_login)
+		SELECT lu.username, 'local', r.id, now()
+		FROM local_users lu
+		JOIN roles r ON r.name = lu.role
+		WHERE NOT EXISTS (SELECT 1 FROM ecg_hub_users e WHERE e.external_id = lu.username)
+	`).Error; err != nil {
+		slog.Warn("db: identity: seed local users", "error", err)
+	}
+
+	const uuidPattern = `^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$`
+	tables := []struct{ table, fk string }{
+		{"user_webhooks", "fk_user_webhooks_user"},
+		{"api_keys", "fk_api_keys_user"},
+		{"user_pins", "fk_user_pins_user"},
+		{"export_jobs", "fk_export_jobs_user"},
+	}
+	for _, t := range tables {
+		if !db.Migrator().HasTable(t.table) {
+			continue
+		}
+
+		// Idempotence guard: skip mapping/conversion when user_id is already uuid.
+		var colType string
+		db.Raw(`SELECT data_type FROM information_schema.columns
+			WHERE table_name = ? AND column_name = 'user_id'`, t.table).Scan(&colType)
+		if colType != "uuid" {
+			// 2. Map username → internal uuid.
+			if err := db.Exec(`UPDATE `+t.table+` t SET user_id = e.id::text
+				FROM ecg_hub_users e WHERE t.user_id = e.external_id`).Error; err != nil {
+				slog.Warn("db: identity: map user_id", "table", t.table, "error", err)
+				continue
+			}
+			// 3. Remove orphans (owner unknown — must not survive a username reuse).
+			res := db.Exec(`DELETE FROM `+t.table+` WHERE user_id !~ ?`, uuidPattern)
+			if res.Error != nil {
+				slog.Warn("db: identity: delete orphans", "table", t.table, "error", res.Error)
+				continue
+			}
+			if res.RowsAffected > 0 {
+				slog.Info("db: identity: removed orphan rows", "table", t.table, "rows", res.RowsAffected)
+			}
+			// 4a. Convert the column type.
+			if err := db.Exec(`ALTER TABLE ` + t.table + ` ALTER COLUMN user_id TYPE uuid USING user_id::uuid`).Error; err != nil {
+				slog.Warn("db: identity: convert user_id to uuid", "table", t.table, "error", err)
+				continue
+			}
+			slog.Info("db: identity: user_id migrated to uuid", "table", t.table)
+		}
+
+		// 4b. CASCADE foreign key (also covers fresh installs where the column
+		// is created as uuid directly by AutoMigrate).
+		if !db.Migrator().HasConstraint(t.table, t.fk) {
+			if err := db.Exec(`ALTER TABLE ` + t.table + ` ADD CONSTRAINT ` + t.fk +
+				` FOREIGN KEY (user_id) REFERENCES ecg_hub_users(id) ON DELETE CASCADE`).Error; err != nil {
+				slog.Warn("db: identity: add foreign key", "constraint", t.fk, "error", err)
+			} else {
+				slog.Info("db: identity: added foreign key", "constraint", t.fk)
+			}
+		}
+	}
 }
 
 // Create Role admin | reader | writer
@@ -244,7 +326,7 @@ func iniRole(db *gorm.DB) error {
 				"quarantine.read", "quarantine.delete", "quarantine.assign",
 				"admin.audit", "admin.system", "admin.users", "admin.roles", "admin.branding", "admin.auth_config",
 				"swagger.read",
-				"webhook.manage",
+				"webhook.manage", "apikey.manage",
 			},
 		},
 		{
