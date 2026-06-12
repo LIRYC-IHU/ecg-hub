@@ -13,9 +13,22 @@ import (
 
 	ftpserver "github.com/fclairamb/ftpserverlib"
 	"github.com/spf13/afero"
-
-	"github.com/LIRYC-IHU/ecg-hub/internal/config"
 )
+
+// FTPSettings holds the FTP server runtime configuration. Built from the
+// module config stored in the DB (admin UI > Modules > FTP) — never from
+// config.yaml. Credentials fall back to FTP_USERNAME / FTP_PASSWORD env vars.
+type FTPSettings struct {
+	Enabled                  bool
+	Port                     int
+	TLS                      bool
+	CertFile                 string
+	KeyFile                  string
+	PassiveTransferPortRange string
+	PublicHost               string
+	Username                 string
+	Password                 string
+}
 
 // tlsRequirementExplicit aliases ftpserver.MandatoryEncryption for use in package-internal tests.
 const tlsRequirementExplicit = ftpserver.MandatoryEncryption
@@ -23,7 +36,7 @@ const tlsRequirementExplicit = ftpserver.MandatoryEncryption
 // Server wraps ftpserverlib and pushes received files onto an IngestQueue.
 // It implements ftpserver.MainDriver — one instance per running server.
 type Server struct {
-	cfg            *config.Config
+	cfg            FTPSettings
 	queue          IngestQueue
 	srv            *ftpserver.FtpServer
 	onFileReceived func(filename string) // optional hook, called after each successful upload
@@ -36,7 +49,7 @@ func (s *Server) SetFileReceivedHook(fn func(filename string)) {
 }
 
 // New creates a Server. Call Start() to begin accepting connections.
-func New(cfg *config.Config, queue IngestQueue) *Server {
+func New(cfg FTPSettings, queue IngestQueue) *Server {
 	s := &Server{cfg: cfg, queue: queue}
 	s.srv = ftpserver.NewFtpServer(s)
 	return s
@@ -45,11 +58,11 @@ func New(cfg *config.Config, queue IngestQueue) *Server {
 // Start launches the FTP server in a background goroutine.
 // Returns nil immediately if ftp.enabled is false.
 func (s *Server) Start() error {
-	if !s.cfg.FTP.Enabled {
+	if !s.cfg.Enabled {
 		slog.Info("ftp: server disabled — not starting")
 		return nil
 	}
-	if s.cfg.FTP.TLS {
+	if s.cfg.TLS {
 		slog.Info("ftp: TLS enforcement active (MandatoryEncryption)")
 	} else {
 		slog.Warn("ftp: tls disabled — non-production mode")
@@ -59,7 +72,7 @@ func (s *Server) Start() error {
 			slog.Error("ftp: server stopped", "error", err)
 		}
 	}()
-	slog.Info("ftp: server started", "port", s.cfg.FTP.Port, "tls", s.cfg.FTP.TLS)
+	slog.Info("ftp: server started", "port", s.cfg.Port, "tls", s.cfg.TLS)
 	return nil
 }
 
@@ -71,16 +84,16 @@ func (s *Server) Stop() { _ = s.srv.Stop() }
 // GetSettings returns server configuration derived from config.yaml.
 func (s *Server) GetSettings() (*ftpserver.Settings, error) {
 	tlsMode := ftpserver.ClearOrEncrypted
-	if s.cfg.FTP.TLS {
+	if s.cfg.TLS {
 		tlsMode = ftpserver.MandatoryEncryption
 	}
 
 	settings := &ftpserver.Settings{
-		ListenAddr:  fmt.Sprintf(":%d", s.cfg.FTP.Port),
+		ListenAddr:  fmt.Sprintf(":%d", s.cfg.Port),
 		TLSRequired: tlsMode,
 	}
 
-	if r := s.cfg.FTP.PassiveTransferPortRange; r != "" {
+	if r := s.cfg.PassiveTransferPortRange; r != "" {
 		pr, err := parsePortRange(r)
 		if err != nil {
 			return nil, fmt.Errorf("ftp: config: passive_transfer_port_range: %w", err)
@@ -92,8 +105,8 @@ func (s *Server) GetSettings() (*ftpserver.Settings, error) {
 	// Required when the server runs inside Docker and clients connect from the host:
 	// without this, ftpserverlib returns the container's internal IP (e.g. 172.x.x.x)
 	// which is unreachable from outside Docker.
-	if s.cfg.FTP.PublicHost != "" {
-		settings.PublicHost = s.cfg.FTP.PublicHost
+	if s.cfg.PublicHost != "" {
+		settings.PublicHost = s.cfg.PublicHost
 	}
 
 	return settings, nil
@@ -113,11 +126,11 @@ func (s *Server) ClientDisconnected(cc ftpserver.ClientContext) {
 // AuthUser validates FTP credentials against the injected config secrets.
 // Returns a per-session clientDriver on success; error + nil on failure.
 func (s *Server) AuthUser(_ ftpserver.ClientContext, user, pass string) (ftpserver.ClientDriver, error) {
-	if s.cfg.FTPUsername == "" || s.cfg.FTPPassword == "" {
+	if s.cfg.Username == "" || s.cfg.Password == "" {
 		return nil, fmt.Errorf("ftp: server credentials not configured (set FTP_USERNAME and FTP_PASSWORD)")
 	}
-	userOK := subtle.ConstantTimeCompare([]byte(user), []byte(s.cfg.FTPUsername)) == 1
-	passOK := subtle.ConstantTimeCompare([]byte(pass), []byte(s.cfg.FTPPassword)) == 1
+	userOK := subtle.ConstantTimeCompare([]byte(user), []byte(s.cfg.Username)) == 1
+	passOK := subtle.ConstantTimeCompare([]byte(pass), []byte(s.cfg.Password)) == 1
 	if !(userOK && passOK) {
 		slog.Warn("ftp: authentication failed", "user", user)
 		return nil, fmt.Errorf("ftp: invalid credentials")
@@ -129,10 +142,10 @@ func (s *Server) AuthUser(_ ftpserver.ClientContext, user, pass string) (ftpserv
 // GetTLSConfig loads the TLS certificate when ftp.tls is enabled.
 // Returns nil, nil when TLS is disabled (dev mode).
 func (s *Server) GetTLSConfig() (*tls.Config, error) {
-	if !s.cfg.FTP.TLS {
+	if !s.cfg.TLS {
 		return nil, nil
 	}
-	cert, err := tls.LoadX509KeyPair(s.cfg.FTP.CertFile, s.cfg.FTP.KeyFile)
+	cert, err := tls.LoadX509KeyPair(s.cfg.CertFile, s.cfg.KeyFile)
 	if err != nil {
 		return nil, fmt.Errorf("ftp: load tls cert: %w", err)
 	}

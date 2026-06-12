@@ -8,20 +8,17 @@ import (
 
 	"github.com/spf13/afero"
 
-	"github.com/LIRYC-IHU/ecg-hub/internal/config"
 )
 
 // ---- helpers ----------------------------------------------------------------
 
-func testConfig(username, password string, tls bool) *config.Config {
-	return &config.Config{
-		FTPUsername: username,
-		FTPPassword: password,
-		FTP: config.FTPConfig{
-			Enabled: true,
-			Port:    2121,
-			TLS:     tls,
-		},
+func testConfig(username, password string, tls bool) FTPSettings {
+	return FTPSettings{
+		Enabled:  true,
+		Port:     2121,
+		TLS:      tls,
+		Username: username,
+		Password: password,
 	}
 }
 
@@ -169,10 +166,7 @@ func TestServer_Disabled_DoesNotStart(t *testing.T) {
 	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
 	t.Cleanup(func() { slog.SetDefault(prev) })
 
-	cfg := &config.Config{
-		FTP: config.FTPConfig{Enabled: false},
-	}
-	s := New(cfg, NewIngestQueue(1))
+	s := New(FTPSettings{Enabled: false}, NewIngestQueue(1))
 	err := s.Start()
 	if err != nil {
 		t.Errorf("Start() on disabled server should return nil, got: %v", err)
