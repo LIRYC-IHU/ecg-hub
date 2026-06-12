@@ -126,7 +126,9 @@ func GetOIDCFlow(p Provider) OIDCFlow {
 }
 
 // GetProviderNames returns the list of active provider names ("oidc", "ldap", "local") for p.
-// Used by the frontend to render the appropriate login UI.
+// Used by the frontend to render the appropriate login UI. Providers configured
+// from the UI (DB) are appended by AuthProviderHandler — this only reports the
+// statically constructed ones (local).
 func GetProviderNames(p Provider) []string {
 	if mp, ok := p.(*MultiProvider); ok {
 		var names []string
@@ -134,8 +136,6 @@ func GetProviderNames(p Provider) []string {
 			switch sub.(type) {
 			case *OIDCProvider:
 				names = append(names, "oidc")
-			case *LDAPProvider:
-				names = append(names, "ldap")
 			case *LocalProvider:
 				names = append(names, "local")
 			}
@@ -148,82 +148,20 @@ func GetProviderNames(p Provider) []string {
 	if _, ok := p.(OIDCFlow); ok {
 		return []string{"oidc"}
 	}
-	return []string{"ldap"}
+	return nil
 }
 
-// New creates the auth provider(s) from cfg.Auth.Providers.
-// Returns a single typed provider when only one is configured (preserves interface compatibility),
-// or a *MultiProvider when multiple providers are configured.
-func New(ctx context.Context, cfg *config.Config, userStore UserStore) (Provider, error) {
-	return NewWithLocalRepo(ctx, cfg, userStore, nil)
-}
-
-// NewWithLocalRepo creates auth providers. Local provider is always active when localRepo is non-nil.
-// Additional providers (OIDC, LDAP) are added from cfg.Auth.Providers.
-func NewWithLocalRepo(ctx context.Context, cfg *config.Config, userStore UserStore, localRepo *repository.LocalUserRepository) (Provider, error) {
-	var providers []Provider
-	var oidcFlow OIDCFlow
-	var ldapAuth Authenticator
-	var localAuth Authenticator
-
-	// Local provider is always active.
-	if localRepo != nil {
-		lp, err := NewLocalProvider(localRepo, cfg.JWTSecret)
-		if err != nil {
-			return nil, err
-		}
-		providers = append(providers, lp)
-		localAuth = lp
+// NewWithLocalRepo creates the startup auth provider: the local provider
+// (always active). OIDC and LDAP are configured from the admin UI, stored
+// encrypted in the database, and used at request time by the dynamic handlers
+// (oidcFlowFromDB, LoginWithLDAPFromDB) — they are never built from config.yaml.
+func NewWithLocalRepo(_ context.Context, cfg *config.Config, _ UserStore, localRepo *repository.LocalUserRepository) (Provider, error) {
+	if localRepo == nil {
+		return nil, fmt.Errorf("auth: local provider requires a LocalUserRepository")
 	}
-
-	// Add configured external providers (OIDC, LDAP).
-	for _, name := range cfg.Auth.Providers {
-		if name == "local" {
-			continue
-		}
-		p, err := newSingle(ctx, cfg, name, userStore, localRepo)
-		if err != nil {
-			return nil, err
-		}
-		providers = append(providers, p)
-		if f, ok := p.(OIDCFlow); ok && oidcFlow == nil {
-			oidcFlow = f
-		}
-		if a, ok := p.(Authenticator); ok && ldapAuth == nil {
-			ldapAuth = a
-		}
+	lp, err := NewLocalProvider(localRepo, cfg.JWTSecret)
+	if err != nil {
+		return nil, err
 	}
-
-	if len(providers) == 1 {
-		return providers[0], nil
-	}
-	return &MultiProvider{providers: providers, oidcFlow: oidcFlow, ldapAuth: ldapAuth, localAuth: localAuth}, nil
-}
-
-func newSingle(ctx context.Context, cfg *config.Config, name string, userStore UserStore, localRepo *repository.LocalUserRepository) (Provider, error) {
-	switch name {
-	case "oidc":
-		p, err := NewOIDCProvider(ctx, cfg, userStore)
-		if err != nil {
-			return nil, fmt.Errorf("auth: new oidc provider: %w", err)
-		}
-		return p, nil
-	case "ldap":
-		p, err := NewLDAPProvider(cfg, userStore)
-		if err != nil {
-			return nil, fmt.Errorf("auth: new ldap provider: %w", err)
-		}
-		return p, nil
-	case "local":
-		if localRepo == nil {
-			return nil, fmt.Errorf("auth: local provider requires a LocalUserRepository")
-		}
-		p, err := NewLocalProvider(localRepo, cfg.JWTSecret)
-		if err != nil {
-			return nil, fmt.Errorf("auth: new local provider: %w", err)
-		}
-		return p, nil
-	default:
-		return nil, fmt.Errorf("auth: unknown provider %q (must be oidc, ldap, or local)", name)
-	}
+	return &MultiProvider{providers: []Provider{lp}, localAuth: lp}, nil
 }

@@ -18,7 +18,6 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/oauth2"
 
-	"github.com/LIRYC-IHU/ecg-hub/internal/config"
 )
 
 // OIDCProvider implements the OIDC Authorization Code Flow against Keycloak.
@@ -33,105 +32,9 @@ type OIDCProvider struct {
 	userStore     UserStore
 }
 
-// NewOIDCProvider fetches the OIDC discovery document and builds an OIDCProvider.
-// Fails fast if required configuration is absent — server must not start without it.
-func NewOIDCProvider(ctx context.Context, cfg *config.Config, userStore UserStore) (*OIDCProvider, error) {
-	if cfg.Auth.OIDC.IssuerURL == "" {
-		return nil, fmt.Errorf("auth: oidc: auth.oidc.issuer_url is required")
-	}
-	if cfg.Auth.OIDC.RedirectURL == "" {
-		return nil, fmt.Errorf("auth: oidc: auth.oidc.redirect_url is required")
-	}
-	if cfg.OIDCClientID == "" {
-		return nil, fmt.Errorf("auth: oidc: OIDC_CLIENT_ID environment variable is required")
-	}
-	if cfg.OIDCClientSecret == "" {
-		return nil, fmt.Errorf("auth: oidc: OIDC_CLIENT_SECRET environment variable is required")
-	}
-	if cfg.JWTSecret == "" {
-		return nil, fmt.Errorf("auth: oidc: JWT_SECRET environment variable is required")
-	}
-
-	// When the backend runs inside Docker and Keycloak is on the host, the discovery
-	// document must be fetched via internal_url (host.docker.internal) while the iss
-	// claim in tokens still uses the public issuer_url. InsecureIssuerURLContext allows
-	// this mismatch during discovery. The token endpoint is then rewritten to use the
-	// internal URL so that the code exchange also goes through the reachable address.
-	discoveryURL := cfg.Auth.OIDC.IssuerURL
-	discoveryCtx := ctx
-
-	// When tls: false, skip certificate verification (self-signed certs in dev/internal deployments).
-	// This injects a custom HTTP client into the context; go-oidc and oauth2 both respect it.
-	if !cfg.Auth.OIDC.TLS {
-		insecureClient := &http.Client{
-			Transport: &http.Transport{
-				TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // intentional: dev/self-signed only
-			},
-		}
-		discoveryCtx = context.WithValue(discoveryCtx, oauth2.HTTPClient, insecureClient)
-	}
-
-	if cfg.Auth.OIDC.InternalURL != "" {
-		discoveryURL = cfg.Auth.OIDC.InternalURL
-		discoveryCtx = oidc.InsecureIssuerURLContext(discoveryCtx, cfg.Auth.OIDC.IssuerURL)
-	}
-	if !cfg.Auth.OIDC.TLS {
-		discoveryCtx = oidc.InsecureIssuerURLContext(discoveryCtx, cfg.Auth.OIDC.IssuerURL)
-	}
-
-	provider, err := oidc.NewProvider(discoveryCtx, discoveryURL)
-	if err != nil {
-		return nil, fmt.Errorf("auth: oidc: fetch discovery document: %w", err)
-	}
-
-	verifier := provider.Verifier(&oidc.Config{ClientID: cfg.OIDCClientID})
-
-	// provider.Endpoint() returns URLs from the discovery doc.
-	// Two rewrites are needed:
-	//
-	// 1. AuthURL → normalize scheme+host to issuer_url so the browser is always
-	//    redirected to the public HTTPS endpoint. Keycloak may advertise its HTTP
-	//    listener URL (e.g. http://localhost:8888) in the discovery document when
-	//    KC_HOSTNAME is not explicitly configured.
-	//
-	// 2. TokenURL → replace issuer_url with internal_url so the backend's code
-	//    exchange goes through the Docker-internal address (not the public hostname).
-	endpoint := provider.Endpoint()
-	if issuerParsed, err := url.Parse(cfg.Auth.OIDC.IssuerURL); err == nil {
-		if authParsed, err := url.Parse(endpoint.AuthURL); err == nil {
-			authParsed.Scheme = issuerParsed.Scheme
-			authParsed.Host = issuerParsed.Host
-			endpoint.AuthURL = authParsed.String()
-		}
-	}
-	if cfg.Auth.OIDC.InternalURL != "" {
-		endpoint.TokenURL = strings.ReplaceAll(endpoint.TokenURL, cfg.Auth.OIDC.IssuerURL, cfg.Auth.OIDC.InternalURL)
-	}
-
-	oauth2Cfg := oauth2.Config{
-		ClientID:     cfg.OIDCClientID,
-		ClientSecret: cfg.OIDCClientSecret,
-		RedirectURL:  cfg.Auth.OIDC.RedirectURL,
-		Endpoint:     endpoint,
-		Scopes:       []string{oidc.ScopeOpenID, "profile", "email"},
-	}
-
-	adminRoleName := cfg.Auth.OIDC.AdminRoleName
-	if adminRoleName == "" {
-		adminRoleName = "admin"
-	}
-
-	return &OIDCProvider{
-		verifier:      verifier,
-		oauth2Cfg:     oauth2Cfg,
-		jwtSecret:     []byte(cfg.JWTSecret),
-		issuerURL:     cfg.Auth.OIDC.IssuerURL,
-		adminRoleName: adminRoleName,
-		userStore:     userStore,
-	}, nil
-}
-
 // OIDCParams holds the parameters needed to create an OIDC provider from DB config.
+// OIDC is configured exclusively from the admin UI (Admin > Auth) — there is no
+// static config.yaml path anymore.
 type OIDCParams struct {
 	IssuerURL     string
 	InternalURL   string
