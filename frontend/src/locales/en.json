@@ -197,7 +197,9 @@
         "urlCopied": "URL copied",
         "testOk": "Webhook OK — HTTP {{code}}",
         "testWarn": "Webhook — HTTP response {{code}}",
-        "testError": "Webhook — unable to reach remote server"
+        "testError": "Webhook — unable to reach remote server",
+        "moved": "Webhooks are now configured per user (events, filters, HMAC secret) — research servers receive ECG events and call the API back to fetch data.",
+        "open": "Open webhook configuration"
       },
       "hl7": {
         "connectionTitle": "HL7 Connection",
@@ -438,7 +440,8 @@
     "unidentified": "ECG without patient ({{vendor}}): {{label}} — needs identification",
     "quarantined": "File rejected: {{label}}",
     "view": "View",
-    "review": "Review"
+    "review": "Review",
+    "duplicate": "{{label}} already ingested (patient {{patient}}) — duplicate skipped"
   },
   "filters": {
     "label": "Filters",
@@ -656,7 +659,8 @@
       "ecg.unidentified": "ECG unidentified",
       "ecg.quarantined": "ECG quarantined",
       "hl7.exhausted": "HL7 retries exhausted",
-      "hl7.rejected": "HL7 rejected"
+      "hl7.rejected": "HL7 rejected",
+      "ecg.duplicate": "ECG duplicate (skipped)"
     }
   }
 }

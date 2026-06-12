@@ -52,7 +52,7 @@ function ProgressNotificationItem({
         : n.message;
 
   return (
-    <div className="flex flex-col gap-2 px-3.5 py-2.5 rounded-lg border shadow-md text-sm bg-card border-border text-foreground pointer-events-auto animate-in slide-in-from-right-4">
+    <div className="flex flex-col gap-2 px-3.5 py-2.5 rounded-lg border shadow-md text-sm bg-card border-border text-foreground pointer-events-auto animate-in slide-in-from-right-4 overflow-hidden">
       <div className="flex items-center justify-between gap-2">
         <span className="font-medium leading-snug">{title}</span>
         <button

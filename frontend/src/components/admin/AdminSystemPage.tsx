@@ -19,12 +19,10 @@ import {
 } from "lucide-react";
 import { useAdminStats } from "../../hooks/useAdminStats";
 import {
-  fetchWebhookStatus,
   fetchModules,
   fetchConnectors,
   fetchConnectorConfigs,
   testConnector,
-  testWebhook,
 } from "../../lib/api";
 import { Spinner } from "../ui/Spinner";
 import { useNotification } from "../../context/NotificationContext";
@@ -112,12 +110,6 @@ export function AdminSystemPage() {
   const { stats, health } = useAdminStats();
   const { notify } = useNotification();
 
-  const webhookQuery = useQuery({
-    queryKey: ["admin", "webhook"],
-    queryFn: fetchWebhookStatus,
-    staleTime: 60_000,
-  });
-
   const modulesQuery = useQuery({
     queryKey: ["admin", "modules"],
     queryFn: fetchModules,
@@ -137,23 +129,6 @@ export function AdminSystemPage() {
     queryKey: ["admin", "connectors", "config"],
     queryFn: fetchConnectorConfigs,
     staleTime: 30_000,
-  });
-
-  const testMutation = useMutation({
-    mutationFn: testWebhook,
-    onSuccess: (data) => {
-      if (data.success)
-        notify(
-          "success",
-          t("admin.system.webhook.testOk", { code: data.status_code }),
-        );
-      else
-        notify(
-          "warn",
-          t("admin.system.webhook.testWarn", { code: data.status_code ?? "?" }),
-        );
-    },
-    onError: () => notify("error", t("admin.system.webhook.testError")),
   });
 
   const isOperational =
@@ -416,101 +391,26 @@ export function AdminSystemPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <MetricCard />
 
-        {/* Webhook HL7 */}
+        {/* Webhooks — now per-user, configured from the user menu */}
         <div className="bg-card rounded-lg border border-border p-5">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <Webhook className="w-5 h-5 text-muted-foreground" />
-              <h2 className="text-sm font-semibold text-foreground">
-                {t("admin.system.webhook.title")}
-              </h2>
-              {webhookQuery.data && (
-                <span
-                  className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${
-                    webhookQuery.data.enabled
-                      ? "bg-success/10 text-success"
-                      : "bg-muted text-muted-foreground"
-                  }`}
-                >
-                  {webhookQuery.data.enabled
-                    ? t("admin.system.webhook.enabled")
-                    : t("admin.system.webhook.disabled")}
-                </span>
-              )}
-            </div>
-            {webhookQuery.data?.enabled && (
-              <button
-                onClick={() => testMutation.mutate()}
-                disabled={testMutation.isPending}
-                className="text-xs border border-border px-3 py-1.5 rounded-lg hover:bg-muted transition-colors disabled:opacity-50 flex items-center gap-1.5"
-              >
-                {testMutation.isPending && <Spinner size={11} />}
-                {testMutation.isPending
-                  ? t("admin.system.webhook.testing")
-                  : t("admin.system.webhook.test")}
-              </button>
-            )}
+          <div className="flex items-center gap-3 mb-3">
+            <Webhook className="w-5 h-5 text-muted-foreground" />
+            <h2 className="text-sm font-semibold text-foreground">
+              {t("admin.system.webhook.title")}
+            </h2>
           </div>
-
-          {webhookQuery.isLoading && (
-            <p className="text-sm text-muted-foreground">
-              {t("common.loading")}
-            </p>
-          )}
-
-          {webhookQuery.data && (
-            <div className="space-y-3">
-              {webhookQuery.data.url && (
-                <div className="flex items-center gap-2">
-                  <span className="text-[11px] text-muted-foreground w-12">
-                    URL
-                  </span>
-                  <code className="text-xs font-mono bg-muted px-2 py-1 rounded flex-1 truncate">
-                    {webhookQuery.data.url}
-                  </code>
-                  <button
-                    onClick={() => copyToClipboard(webhookQuery.data!.url)}
-                    className="p-1 hover:bg-muted rounded transition-colors"
-                  >
-                    <Copy className="w-3.5 h-3.5 text-muted-foreground" />
-                  </button>
-                </div>
-              )}
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] text-muted-foreground w-12">
-                  {t("admin.system.webhook.secret")}
-                </span>
-                <div className="flex items-center gap-1.5">
-                  <Lock
-                    className={`w-3 h-3 ${webhookQuery.data.secret_configured ? "text-success" : "text-warning"}`}
-                  />
-                  <span
-                    className={`text-xs ${webhookQuery.data.secret_configured ? "text-success" : "text-warning"}`}
-                  >
-                    {webhookQuery.data.secret_configured
-                      ? t("admin.system.webhook.secretConfigured")
-                      : t("admin.system.webhook.secretMissing")}
-                  </span>
-                </div>
-              </div>
-              {testMutation.data && (
-                <div className="flex items-center gap-2 mt-2">
-                  <span className="text-[11px] text-muted-foreground">
-                    {t("admin.system.webhook.lastTest")}
-                  </span>
-                  <span
-                    className={`text-xs font-mono font-medium ${testMutation.data.success ? "text-success" : "text-destructive"}`}
-                  >
-                    {testMutation.data.success
-                      ? `HTTP ${testMutation.data.status_code}`
-                      : `✗ ${testMutation.data.error ?? `HTTP ${testMutation.data.status_code}`}`}
-                  </span>
-                </div>
-              )}
-            </div>
-          )}
+          <p className="text-xs text-muted-foreground mb-3">
+            {t("admin.system.webhook.moved")}
+          </p>
+          <a
+            href="/webhooks"
+            className="inline-flex items-center gap-1.5 text-xs border border-border px-3 py-1.5 rounded-lg hover:bg-muted transition-colors"
+          >
+            {t("admin.system.webhook.open")}
+          </a>
         </div>
       </div>
     </div>
   );
 }
+

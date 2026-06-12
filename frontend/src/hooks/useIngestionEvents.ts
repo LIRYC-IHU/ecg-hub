@@ -5,7 +5,7 @@ import { useNotification } from "../context/NotificationContext";
 
 // IngestionEvent mirrors the backend events.Event JSON payload.
 interface IngestionEvent {
-  type: "ecg.ingested" | "ecg.unidentified" | "ecg.quarantined";
+  type: "ecg.ingested" | "ecg.unidentified" | "ecg.quarantined" | "ecg.duplicate";
   ecg_id?: string;
   patient_id?: string;
   quarantine_id?: string;
@@ -50,6 +50,21 @@ export function useIngestionEvents(enabled: boolean): void {
       void queryClient.invalidateQueries({ queryKey: ["admin", "stats"] });
 
       const label = ev.filename ?? ev.vendor ?? "ECG";
+      if (ev.type === "ecg.duplicate") {
+        // Re-sent file already ingested — nothing changed, but stay visible:
+        // a silent skip looks like a lost file to the operator.
+        notify(
+          "warn",
+          t("events.duplicate", { label, patient: ev.patient_id ?? "?" }),
+          ev.patient_id
+            ? {
+                label: t("events.view"),
+                href: `/?patient=${encodeURIComponent(ev.patient_id)}`,
+              }
+            : undefined,
+        );
+        return;
+      }
       if (ev.type === "ecg.ingested") {
         if (ev.patient_id) {
           void queryClient.invalidateQueries({
