@@ -84,7 +84,7 @@ var _ repository.ConnectorJobRepo = (*mockConnectorJobRepo)(nil)
 
 func TestMockConnectorJobRepo_Insert(t *testing.T) {
 	m := &mockConnectorJobRepo{}
-	job := &models.ConnectorJob{ECGID: "1", ConnectorName: "polaris", Status: "pending"}
+	job := &models.ConnectorJob{ECGID: strptr("1"), ConnectorName: "polaris", Status: "pending"}
 
 	if err := m.Insert(job); err != nil {
 		t.Fatalf("Insert: unexpected error: %v", err)
@@ -173,3 +173,6 @@ func TestMockConnectorJobRepo_FindPendingRetry_Error(t *testing.T) {
 		t.Errorf("FindPendingRetry: expected %v, got %v", want, err)
 	}
 }
+
+// strptr returns a pointer to s — test helper for nullable ID columns.
+func strptr(s string) *string { return &s }

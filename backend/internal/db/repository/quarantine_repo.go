@@ -30,6 +30,29 @@ func (r *QuarantineRepository) Insert(entry *models.QuarantineEntry) error {
 	return nil
 }
 
+// FindByContentHash returns the quarantine entry holding the given SHA-256
+// digest, or ErrQuarantineNotFound. Used to deduplicate re-sent files.
+func (r *QuarantineRepository) FindByContentHash(hash string) (*models.QuarantineEntry, error) {
+	var e models.QuarantineEntry
+	if err := r.db.First(&e, "content_hash = ?", hash).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrQuarantineNotFound
+		}
+		return nil, fmt.Errorf("quarantine_repo: find by hash: %w", err)
+	}
+	return &e, nil
+}
+
+// TouchReceived refreshes ReceivedAt (now) and ErrorReason on an existing
+// entry — called when the same file is re-sent instead of inserting a duplicate.
+func (r *QuarantineRepository) TouchReceived(id, reason string) error {
+	if err := r.db.Model(&models.QuarantineEntry{}).Where("id = ?", id).
+		Updates(map[string]any{"received_at": gorm.Expr("now()"), "error_reason": reason}).Error; err != nil {
+		return fmt.Errorf("quarantine_repo: touch: %w", err)
+	}
+	return nil
+}
+
 // List returns quarantine entries ordered newest-first with pagination.
 // When category is non-empty, only entries of that category are returned.
 func (r *QuarantineRepository) List(page, perPage int, category string) ([]models.QuarantineEntry, int64, error) {
