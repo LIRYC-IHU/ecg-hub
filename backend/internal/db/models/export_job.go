@@ -6,7 +6,7 @@ import "time"
 // Status lifecycle: queued → processing → complete | failed
 type ExportJob struct {
 	ID             string     `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
-	UserID         string     `gorm:"not null;index"`
+	UserID         string     `gorm:"type:uuid;not null;index"` // ecg_hub_users.id — FK CASCADE added in migrate.go
 	Status         string     `gorm:"not null;default:'queued';index"`
 	ECGCount       int        `gorm:"not null"`
 	ProcessedCount int        `gorm:"default:0"`

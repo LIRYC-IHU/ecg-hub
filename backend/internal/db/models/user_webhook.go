@@ -36,7 +36,7 @@ var AllWebhookEvents = []string{
 // never returned by the API after creation.
 type UserWebhook struct {
 	ID      string `gorm:"type:uuid;default:gen_random_uuid();primaryKey" json:"id"`
-	UserID  string `gorm:"type:text;not null;index" json:"-"`
+	UserID  string `gorm:"type:uuid;not null;index" json:"-"` // ecg_hub_users.id — FK CASCADE added in migrate.go
 	Name    string `gorm:"type:text;not null" json:"name"`
 	URL     string `gorm:"type:text;not null" json:"url"`
 	Enabled bool   `gorm:"not null;default:true" json:"enabled"`

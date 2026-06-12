@@ -11,7 +11,7 @@ import "time"
 // so the owner can recognise a key in the list.
 type APIKey struct {
 	ID         string     `gorm:"type:uuid;default:gen_random_uuid();primaryKey" json:"id"`
-	UserID     string     `gorm:"type:text;not null;index" json:"-"`
+	UserID     string     `gorm:"type:uuid;not null;index" json:"-"` // ecg_hub_users.id — FK CASCADE added in migrate.go
 	Name       string     `gorm:"type:text;not null" json:"name"`
 	Prefix     string     `gorm:"type:text;not null" json:"prefix"`
 	KeyHash    string     `gorm:"type:text;not null;uniqueIndex" json:"-"`
