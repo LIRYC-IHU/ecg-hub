@@ -49,6 +49,42 @@ type ConnectorStoredConfig struct {
 	DICOMTimeout string `json:"dicom_timeout,omitempty"`
 }
 
+// StoredConnector pairs a decrypted connector config with its enabled flag.
+type StoredConnector struct {
+	Config  ConnectorStoredConfig
+	Enabled bool
+}
+
+// ListDecryptedConnectorConfigs returns every connector config stored in the
+// DB, decrypted. This is the runtime source of truth for outbound connectors:
+// main.go builds the dispatcher from it at startup, and the save/delete
+// handlers trigger a rebuild through their reload callback. config.yaml is
+// only seeded into the DB on first run (seedConnectorsIfMissing).
+func ListDecryptedConnectorConfigs(repo *repository.ModuleConfigRepository, encKey string) ([]StoredConnector, error) {
+	all, err := repo.ListAll()
+	if err != nil {
+		return nil, err
+	}
+	var out []StoredConnector
+	for _, rec := range all {
+		if !strings.HasPrefix(rec.ModuleType, connectorModuleTypePrefix) {
+			continue
+		}
+		decrypted, err := auth.DecryptString(rec.ConfigEncrypted, encKey)
+		if err != nil {
+			slog.Warn("connector_config: failed to decrypt config", "module_type", rec.ModuleType, "error", err)
+			continue
+		}
+		var cfg ConnectorStoredConfig
+		if err := json.Unmarshal([]byte(decrypted), &cfg); err != nil {
+			slog.Warn("connector_config: failed to unmarshal config", "module_type", rec.ModuleType, "error", err)
+			continue
+		}
+		out = append(out, StoredConnector{Config: cfg, Enabled: rec.Enabled})
+	}
+	return out, nil
+}
+
 // connectorResponse is the masked view returned in list/get responses.
 type connectorResponse struct {
 	ModuleType string                `json:"module_type"`
@@ -113,7 +149,9 @@ func ListConnectorConfigsHandler(repo *repository.ModuleConfigRepository, encKey
 // SaveConnectorConfigHandler handles PUT /admin/connectors/:name/config.
 // Creates or updates a connector configuration in the DB.
 // Preserves any masked or empty password fields using the existing stored value.
-func SaveConnectorConfigHandler(repo *repository.ModuleConfigRepository, encKey string, registry *module.Registry) echo.HandlerFunc {
+// reload, when non-nil, rebuilds the runtime connector dispatcher from the DB
+// so changes take effect immediately (no restart).
+func SaveConnectorConfigHandler(repo *repository.ModuleConfigRepository, encKey string, registry *module.Registry, reload func()) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		name := c.Param("name")
 		if name == "" {
@@ -205,20 +243,23 @@ func SaveConnectorConfigHandler(repo *repository.ModuleConfigRepository, encKey 
 		}
 
 		slog.Info("connector_config: connector config saved", "name", name, "protocol", req.Protocol, "enabled", req.Enabled)
-
-		// Connectors are not hot-controllable via the module registry yet;
-		// a restart is required to pick up changes.
 		_ = registry
+
+		// Rebuild the runtime connectors from the DB so the change is live now.
+		if reload != nil {
+			reload()
+		}
 
 		return c.JSON(http.StatusOK, map[string]any{
 			"message":          "Connector configuration saved",
-			"restart_required": true,
+			"restart_required": false,
 		})
 	}
 }
 
 // DeleteConnectorConfigHandler handles DELETE /admin/connectors/:name.
-func DeleteConnectorConfigHandler(repo *repository.ModuleConfigRepository) echo.HandlerFunc {
+// reload, when non-nil, rebuilds the runtime connector dispatcher from the DB.
+func DeleteConnectorConfigHandler(repo *repository.ModuleConfigRepository, reload func()) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		name := c.Param("name")
 		if name == "" {
@@ -252,6 +293,9 @@ func DeleteConnectorConfigHandler(repo *repository.ModuleConfigRepository) echo.
 		}
 
 		slog.Info("connector_config: connector deleted", "name", name)
+		if reload != nil {
+			reload()
+		}
 		return c.JSON(http.StatusOK, map[string]any{"message": "Connector deleted"})
 	}
 }
