@@ -20,6 +20,10 @@ const (
 	TypeECGUnidentified = "ecg.unidentified"
 	// TypeECGQuarantined is emitted when a file fails ingestion (parse error / no module).
 	TypeECGQuarantined = "ecg.quarantined"
+	// TypeECGDuplicate is emitted when an incoming file is skipped because an ECG
+	// with the same content hash already exists. Without this event a re-sent
+	// file would disappear silently — the UI shows a notification instead.
+	TypeECGDuplicate = "ecg.duplicate"
 )
 
 // Event is a single notification broadcast to all subscribers and serialized to
