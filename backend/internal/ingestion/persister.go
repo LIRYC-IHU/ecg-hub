@@ -233,6 +233,17 @@ func (p *Persister) persist(ri RoutedItem) error {
 		slog.Info("ingestion: duplicate file skipped",
 			"filename", ri.IngestItem.Filename, "content_hash", contentHash)
 
+		// Notify connected clients — a silently skipped re-send looks like a bug
+		// to the operator; the UI shows "file already ingested" instead.
+		if p.publisher != nil {
+			p.publisher.Publish(events.Event{
+				Type:      events.TypeECGDuplicate,
+				PatientID: ri.Meta.PatientID,
+				Vendor:    ri.Meta.VendorName,
+				Filename:  ri.IngestItem.Filename,
+			})
+		}
+
 		// Audit the skipped duplicate so re-sent files leave a trace.
 		p.auditMu.RLock()
 		a := p.audit
@@ -358,12 +369,14 @@ func (p *Persister) persist(ri RoutedItem) error {
 	}
 
 	// Fire-and-forget connector forwarding. Read dispatcher under RLock to prevent
-	// data race with WithConnectorDispatcher.
+	// data race with WithConnectorDispatcher. The connector reads the file from
+	// disk, so it needs the absolute path (ecg.FilePath) — fullPath is relative
+	// to the volume root.
 	p.dispatcherMu.RLock()
 	d := p.dispatcher
 	p.dispatcherMu.RUnlock()
 	if d != nil {
-		go d.Dispatch(ecg, fullPath)
+		go d.Dispatch(ecg, ecg.FilePath)
 	}
 
 	slog.Info("ingestion: ECG persisted",

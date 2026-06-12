@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 	appmetrics "github.com/LIRYC-IHU/ecg-hub/internal/metrics"
 	"github.com/LIRYC-IHU/ecg-hub/internal/module"
 )
@@ -67,11 +68,19 @@ type Dispatcher struct {
 	ingest     IngestQueue
 	routed     RoutedQueue
 	router     *Router
-	quarantine QuarantineRecorder // optional; nil disables quarantine recording
+	quarantine QuarantineRecorder  // optional; nil disables quarantine recording
+	connectors quarantineForwarder // optional; nil disables proxying of quarantined files
 	ctx        context.Context
 	cancel     context.CancelFunc
 	startOnce  sync.Once
 	done       chan struct{}
+}
+
+// quarantineForwarder proxies a quarantined file to outbound PACS connectors.
+// Implemented by connector.Dispatcher — the proxy forwards every received file
+// to the configured PACS regardless of local ingestion outcome.
+type quarantineForwarder interface {
+	DispatchQuarantined(quarantineID, vendor, filename, filePath string)
 }
 
 // NewDispatcher creates a Dispatcher. Call Start() exactly once to begin consuming
@@ -93,6 +102,14 @@ func NewDispatcher(ingest IngestQueue, routed RoutedQueue, router *Router) *Disp
 // Returns d for chaining.
 func (d *Dispatcher) WithQuarantineRecorder(q QuarantineRecorder) *Dispatcher {
 	d.quarantine = q
+	return d
+}
+
+// WithConnectorForwarder attaches the outbound connector dispatcher so files
+// whose ingestion failed are still proxied to the configured PACS.
+// Returns d for chaining.
+func (d *Dispatcher) WithConnectorForwarder(f quarantineForwarder) *Dispatcher {
+	d.connectors = f
 	return d
 }
 
@@ -140,17 +157,24 @@ func (d *Dispatcher) run() {
 				}
 				appmetrics.IngestQuarantine.WithLabelValues(category).Inc()
 				if d.quarantine != nil {
+					var entry *models.QuarantineEntry
 					var err error
 					if unidentified && ri.Meta != nil {
 						// Parsed OK but no patient ID: keep the file with its demographics
 						// for manual identification and later re-ingestion.
-						err = d.quarantine.RecordUnidentified(d.ctx, item, ri.Meta, reason)
+						entry, err = d.quarantine.RecordUnidentified(d.ctx, item, ri.Meta, reason)
 					} else {
-						err = d.quarantine.Record(d.ctx, item.Filename, item.Data, reason)
+						entry, err = d.quarantine.Record(d.ctx, item.Filename, item.Data, reason)
 					}
 					if err != nil {
 						slog.Error("ingestion: quarantine record failed",
 							"filename", item.Filename, "error", err)
+					} else if d.connectors != nil && entry != nil && entry.FilePath != "" {
+						// Proxy role: forward the raw file to the PACS even though
+						// local ingestion failed. Vendor is known only when a module
+						// parsed the file (unidentified) — vendor-filtered connectors
+						// skip files no module recognised.
+						go d.connectors.DispatchQuarantined(entry.ID, entry.Vendor, entry.Filename, entry.FilePath)
 					}
 				}
 				continue

@@ -20,11 +20,18 @@ func (c *captureInserter) Insert(e *models.QuarantineEntry) error {
 	return nil
 }
 
+// FindByContentHash always misses — dedup behaviour is exercised separately.
+func (c *captureInserter) FindByContentHash(_ string) (*models.QuarantineEntry, error) {
+	return nil, nil
+}
+
+func (c *captureInserter) TouchReceived(_, _ string) error { return nil }
+
 func TestQuarantineStore_Record_SetsErrorCategory(t *testing.T) {
 	cap := &captureInserter{}
 	s := NewQuarantineStore("", cap)
 
-	if err := s.Record(context.Background(), "bad.xml", []byte("garbage"), "parse_error: boom"); err != nil {
+	if _, err := s.Record(context.Background(), "bad.xml", []byte("garbage"), "parse_error: boom"); err != nil {
 		t.Fatalf("Record returned error: %v", err)
 	}
 	if cap.last == nil {
@@ -58,7 +65,7 @@ func TestQuarantineStore_RecordUnidentified_PersistsMetadata(t *testing.T) {
 	}
 	item := IngestItem{Filename: "0004266041631332.DAT", Data: []byte("rawbytes"), Source: "ftp"}
 
-	if err := s.RecordUnidentified(context.Background(), item, meta, "unidentified: no patient ID"); err != nil {
+	if _, err := s.RecordUnidentified(context.Background(), item, meta, "unidentified: no patient ID"); err != nil {
 		t.Fatalf("RecordUnidentified returned error: %v", err)
 	}
 	e := cap.last

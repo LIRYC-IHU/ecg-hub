@@ -2,6 +2,8 @@ package ingestion
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -20,14 +22,21 @@ import (
 // QuarantineRecorder records a file that was not ingested to persistent storage (disk + DB).
 // The Dispatcher calls Record for genuine failures (parse error / no module) and
 // RecordUnidentified for files that parsed successfully but lacked a patient ID.
+// Both return the created entry so the caller can proxy the quarantined file to
+// outbound PACS connectors (the proxy forwards regardless of ingestion outcome).
 type QuarantineRecorder interface {
-	Record(ctx context.Context, filename string, data []byte, reason string) error
-	RecordUnidentified(ctx context.Context, item IngestItem, meta *module.ECGMetadata, reason string) error
+	Record(ctx context.Context, filename string, data []byte, reason string) (*models.QuarantineEntry, error)
+	RecordUnidentified(ctx context.Context, item IngestItem, meta *module.ECGMetadata, reason string) (*models.QuarantineEntry, error)
 }
 
 // quarantineInserter is the minimal DB interface needed by QuarantineStore.
+// FindByContentHash/TouchReceived power the re-send deduplication: the same
+// failing file sent twice refreshes the existing entry instead of stacking
+// duplicates in the review queue.
 type quarantineInserter interface {
 	Insert(entry *models.QuarantineEntry) error
+	FindByContentHash(hash string) (*models.QuarantineEntry, error)
+	TouchReceived(id, reason string) error
 }
 
 // QuarantineStore implements QuarantineRecorder: writes the raw file to disk
@@ -55,7 +64,12 @@ func (s *QuarantineStore) WithPublisher(pub events.Publisher) *QuarantineStore {
 
 // Record copies the raw file bytes to the quarantine directory (if configured) and
 // inserts a QuarantineEntry into the database with category "error".
-func (s *QuarantineStore) Record(ctx context.Context, filename string, data []byte, reason string) error {
+func (s *QuarantineStore) Record(ctx context.Context, filename string, data []byte, reason string) (*models.QuarantineEntry, error) {
+	contentHash := hashBytes(data)
+	if existing := s.dedup(contentHash, reason, filename); existing != nil {
+		return existing, nil
+	}
+
 	filePath := s.writeFile(filename, data)
 
 	entry := &models.QuarantineEntry{
@@ -64,9 +78,10 @@ func (s *QuarantineStore) Record(ctx context.Context, filename string, data []by
 		ReceivedAt:  time.Now(),
 		ErrorReason: reason,
 		Category:    models.QuarantineCategoryError,
+		ContentHash: contentHash,
 	}
 	if err := s.repo.Insert(entry); err != nil {
-		return fmt.Errorf("quarantine_store: db insert: %w", err)
+		return nil, fmt.Errorf("quarantine_store: db insert: %w", err)
 	}
 	if s.publisher != nil {
 		s.publisher.Publish(events.Event{
@@ -76,13 +91,18 @@ func (s *QuarantineStore) Record(ctx context.Context, filename string, data []by
 			Reason:       reason,
 		})
 	}
-	return nil
+	return entry, nil
 }
 
 // RecordUnidentified stores a file that parsed correctly but had no patient ID.
 // The raw bytes are written to disk (required so the file can be re-ingested on
 // assignment) and the extracted metadata is serialized into the entry for review.
-func (s *QuarantineStore) RecordUnidentified(ctx context.Context, item IngestItem, meta *module.ECGMetadata, reason string) error {
+func (s *QuarantineStore) RecordUnidentified(ctx context.Context, item IngestItem, meta *module.ECGMetadata, reason string) (*models.QuarantineEntry, error) {
+	contentHash := hashBytes(item.Data)
+	if existing := s.dedup(contentHash, reason, item.Filename); existing != nil {
+		return existing, nil
+	}
+
 	filePath := s.writeFile(item.Filename, item.Data)
 
 	entry := &models.QuarantineEntry{
@@ -91,6 +111,7 @@ func (s *QuarantineStore) RecordUnidentified(ctx context.Context, item IngestIte
 		ReceivedAt:  time.Now(),
 		ErrorReason: reason,
 		Category:    models.QuarantineCategoryUnidentified,
+		ContentHash: contentHash,
 	}
 	if meta != nil {
 		entry.Vendor = meta.VendorName
@@ -105,7 +126,7 @@ func (s *QuarantineStore) RecordUnidentified(ctx context.Context, item IngestIte
 		}
 	}
 	if err := s.repo.Insert(entry); err != nil {
-		return fmt.Errorf("quarantine_store: db insert: %w", err)
+		return nil, fmt.Errorf("quarantine_store: db insert: %w", err)
 	}
 	if s.publisher != nil {
 		s.publisher.Publish(events.Event{
@@ -116,7 +137,28 @@ func (s *QuarantineStore) RecordUnidentified(ctx context.Context, item IngestIte
 			Reason:       reason,
 		})
 	}
-	return nil
+	return entry, nil
+}
+
+// dedup returns the existing entry holding contentHash after refreshing its
+// ReceivedAt/ErrorReason, or nil when the file is new to the quarantine.
+func (s *QuarantineStore) dedup(contentHash, reason, filename string) *models.QuarantineEntry {
+	existing, err := s.repo.FindByContentHash(contentHash)
+	if err != nil || existing == nil {
+		return nil
+	}
+	slog.Info("quarantine: duplicate file re-sent — refreshing existing entry",
+		"filename", filename, "entry_id", existing.ID)
+	if err := s.repo.TouchReceived(existing.ID, reason); err != nil {
+		slog.Warn("quarantine: touch failed", "entry_id", existing.ID, "error", err)
+	}
+	return existing
+}
+
+// hashBytes returns the SHA-256 hex digest of data.
+func hashBytes(data []byte) string {
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])
 }
 
 // writeFile writes data to the quarantine directory and returns the destination
