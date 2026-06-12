@@ -918,13 +918,13 @@ function PatientDetail({
                         onClose={() => setDownloadOpenId(null)}
                         ecgIds={[ecg.id]}
                         busy={downloading}
-                        onConfirm={async (formats) => {
+                        onConfirm={async (formats, mode) => {
                           setDownloadOpenId(null);
                           setDownloading(true);
                           try {
                             // One request: a single format streams the file,
                             // multiple formats come back as one ZIP.
-                            await downloadECGFormats(ecg.id, formats);
+                            await downloadECGFormats(ecg.id, formats, mode);
                           } catch {
                             notify("error", t("ecg.downloadError"));
                           } finally {
@@ -1034,13 +1034,15 @@ function BulkECGFooter({
               onClose={() => setExportOpen(false)}
               ecgIds={Array.from(ecgIds)}
               busy={busy}
-              onConfirm={async (formats) => {
+              onConfirm={async (formats, mode) => {
                 setExportOpen(false);
                 setBusy(true);
                 try {
                   const job = await createExportJob({
                     ecg_ids: Array.from(ecgIds),
                     formats,
+                    anonymize: mode === "anonymize",
+                    inject: mode === "inject",
                   });
                   // Open the progress toast (WebSocket) which surfaces the ZIP
                   // download link when the job completes.

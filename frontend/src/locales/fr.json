@@ -101,6 +101,15 @@
         "document_type": "Type document",
         "document_version": "Version document"
       }
+    },
+    "patientData": {
+      "title": "Données patient (formats convertis)",
+      "file": "Valeurs du fichier",
+      "fileHint": "Conserver les données patient telles qu'enregistrées par l'appareil",
+      "inject": "Injecter les données HL7",
+      "injectHint": "Remplacer IPP, nom et sexe par les données enrichies du SIH",
+      "anonymize": "Anonymiser",
+      "anonymizeHint": "Retirer nom, IPP et date de naissance de la sortie (recherche)"
     }
   },
   "export": {

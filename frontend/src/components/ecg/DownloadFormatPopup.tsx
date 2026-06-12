@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import { useQuery } from '@tanstack/react-query'
 import { Download, X } from 'lucide-react'
 import { fetchExportFormats } from '../../lib/api'
-import type { ExportFormat } from '../../lib/api'
+import type { ExportFormat, PatientDataMode } from '../../lib/api'
 import { Spinner } from '../ui/Spinner'
 import { useDownloadFormatPrefs } from '../../hooks/useDownloadFormatPrefs'
 
@@ -16,7 +16,7 @@ interface Props {
   // ECGs' vendors — resolved by the backend so invalid combinations are never offered.
   ecgIds: number[]
   busy?: boolean
-  onConfirm: (formats: string[]) => void
+  onConfirm: (formats: string[], mode: PatientDataMode) => void
 }
 
 // DownloadFormatPopup is a centered modal showing a checkbox list of available
@@ -41,11 +41,17 @@ export function DownloadFormatPopup({ open, onClose, ecgIds, busy, onConfirm }: 
   const { selected: persisted, save } = useDownloadFormatPrefs(availableIds)
 
   const [checked, setChecked] = useState<Set<string>>(() => new Set(persisted))
+  // Patient data handling for converted formats — resets to passthrough on open
+  // (anonymisation must be an explicit choice every time, never a sticky pref).
+  const [mode, setMode] = useState<PatientDataMode>('file')
 
   // Re-sync the local checkbox state whenever the popup re-opens (persisted prefs
   // may have changed since the last mount).
   useEffect(() => {
-    if (open) setChecked(new Set(persisted))
+    if (open) {
+      setChecked(new Set(persisted))
+      setMode('file')
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
@@ -75,10 +81,13 @@ export function DownloadFormatPopup({ open, onClose, ecgIds, busy, onConfirm }: 
     const ordered = availableIds.filter((id) => checked.has(id))
     if (ordered.length === 0) return
     save(ordered)
-    onConfirm(ordered)
+    onConfirm(ordered, mode)
   }
 
   const hasSelection = checked.size > 0
+  // The converters only run for converted formats — patient-data options are
+  // meaningless for the verbatim original file.
+  const hasConvertedSelection = [...checked].some((id) => id !== 'original')
 
   return createPortal(
     <div
@@ -128,6 +137,38 @@ export function DownloadFormatPopup({ open, onClose, ecgIds, busy, onConfirm }: 
               </li>
             ))}
           </ul>
+        )}
+
+        {hasConvertedSelection && (
+          <div className="mb-4 border-t border-border pt-3">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">
+              {t('ecg.patientData.title')}
+            </p>
+            <div className="space-y-1.5">
+              {(['file', 'inject', 'anonymize'] as PatientDataMode[]).map((m) => (
+                <label
+                  key={m}
+                  className="flex items-start gap-2 text-xs cursor-pointer hover:bg-muted/40 rounded px-2 py-1.5 transition-colors"
+                >
+                  <input
+                    type="radio"
+                    name="patient-data-mode"
+                    checked={mode === m}
+                    onChange={() => setMode(m)}
+                    className="mt-0.5 accent-primary cursor-pointer"
+                  />
+                  <span>
+                    <span className="text-foreground font-medium">
+                      {t(`ecg.patientData.${m}`)}
+                    </span>
+                    <span className="block text-[10px] text-muted-foreground">
+                      {t(`ecg.patientData.${m}Hint`)}
+                    </span>
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
         )}
 
         <div className="flex justify-end gap-2">

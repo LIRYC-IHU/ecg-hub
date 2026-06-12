@@ -178,17 +178,29 @@ async function triggerBlobDownload(url: string): Promise<void> {
   }, 100);
 }
 
+// PatientDataMode controls patient data in converted downloads:
+// "file" keeps the values from the source file, "inject" overwrites them with
+// the HL7-enriched demographics, "anonymize" strips identifying fields.
+export type PatientDataMode = "file" | "inject" | "anonymize";
+
+function patientDataQuery(mode?: PatientDataMode): string {
+  if (mode === "inject") return "&inject=1";
+  if (mode === "anonymize") return "&anonymize=1";
+  return "";
+}
+
 // downloadECGFormat triggers a browser download for a specific export format.
 // format = "original" | "xmlfda" | "dicom" | ...
 export async function downloadECGFormat(
   id: number,
   format: string,
+  mode?: PatientDataMode,
 ): Promise<void> {
   if (format === "original") {
     await triggerBlobDownload(`${BASE_URL}/api/v1/ecgs/${id}/download`);
   } else {
     await triggerBlobDownload(
-      `${BASE_URL}/api/v1/ecgs/${id}/download?format=${encodeURIComponent(format)}`,
+      `${BASE_URL}/api/v1/ecgs/${id}/download?format=${encodeURIComponent(format)}${patientDataQuery(mode)}`,
     );
   }
 }
@@ -199,14 +211,15 @@ export async function downloadECGFormat(
 export async function downloadECGFormats(
   id: number,
   formats: string[],
+  mode?: PatientDataMode,
 ): Promise<void> {
   if (formats.length === 0) return;
   if (formats.length === 1) {
-    await downloadECGFormat(id, formats[0]);
+    await downloadECGFormat(id, formats[0], mode);
     return;
   }
   const query = formats.map((f) => `format=${encodeURIComponent(f)}`).join("&");
-  await triggerBlobDownload(`${BASE_URL}/api/v1/ecgs/${id}/download?${query}`);
+  await triggerBlobDownload(`${BASE_URL}/api/v1/ecgs/${id}/download?${query}${patientDataQuery(mode)}`);
 }
 
 export interface AdminStats {
@@ -646,6 +659,8 @@ export async function patchECGMetadata(
 export interface ExportJobRequest {
   ecg_ids: number[];
   formats: string[];
+  anonymize?: boolean; // strip identifying fields in converted outputs
+  inject?: boolean; // overwrite patient fields with HL7-enriched demographics
 }
 
 export interface ExportJobResponse {

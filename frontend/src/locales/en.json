@@ -101,6 +101,15 @@
         "document_type": "Document type",
         "document_version": "Document version"
       }
+    },
+    "patientData": {
+      "title": "Patient data (converted formats)",
+      "file": "File values",
+      "fileHint": "Keep the patient data exactly as recorded by the device",
+      "inject": "Inject HL7 demographics",
+      "injectHint": "Overwrite patient ID, name and gender with the HIS-enriched data",
+      "anonymize": "Anonymize",
+      "anonymizeHint": "Strip name, patient ID and birth date from the output (research)"
     }
   },
   "export": {

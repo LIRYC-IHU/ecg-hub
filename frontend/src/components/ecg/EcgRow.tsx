@@ -133,13 +133,13 @@ export function EcgRow({ ecg, isSelected, onToggle, canForceHL7, canDelete, canR
             onClose={() => setDownloadOpen(false)}
             ecgIds={[ecg.id]}
             busy={downloading}
-            onConfirm={async (formats) => {
+            onConfirm={async (formats, mode) => {
               setDownloadOpen(false)
               setDownloading(true)
               try {
                 // One request: a single format streams the file, multiple formats
                 // come back as one ZIP from the backend.
-                await downloadECGFormats(ecg.id, formats)
+                await downloadECGFormats(ecg.id, formats, mode)
               } catch (err) {
                 notify('error', (err as { message?: string })?.message ?? t('ecg.downloadError'))
               } finally {
