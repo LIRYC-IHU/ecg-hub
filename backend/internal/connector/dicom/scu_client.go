@@ -14,7 +14,7 @@ import (
 	"github.com/apaladiychuk/go-dicom/dicomtag"
 	netdicom "github.com/apaladiychuk/go-netdicom"
 
-	"github.com/LIRYC-IHU/ecg-hub/internal/config"
+	"github.com/LIRYC-IHU/ecg-hub/internal/connector"
 )
 
 // SCUClient is a DICOM Service Class User that sends C-ECHO and C-STORE
@@ -30,7 +30,7 @@ type SCUClient struct {
 
 // NewSCUClient creates a client from connector config. Returns an error if
 // the timeout duration is unparseable.
-func NewSCUClient(cfg config.DICOMConnectorConfig) (*SCUClient, error) {
+func NewSCUClient(cfg connector.DICOMEndpoint) (*SCUClient, error) {
 	timeout := 30 * time.Second
 	if cfg.Timeout != "" {
 		d, err := time.ParseDuration(cfg.Timeout)
