@@ -3,6 +3,7 @@ package export
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -44,10 +45,23 @@ var (
 	ErrConversionFailed = errors.New("export: bridge conversion failed")
 )
 
+// ConvertOptions controls patient-data handling in the converted output.
+// Zero value = passthrough (file values kept verbatim).
+type ConvertOptions struct {
+	// Anonymize strips patient-identifying fields (name, ID, birth date) from
+	// the output — passes --anonymize to the converter binary. Intended for
+	// research exports.
+	Anonymize bool
+	// InjectPatient overwrites the patient/acquisition fields in the output
+	// with the HL7-enriched demographics from the patients table, using the
+	// converter's stdin-JSON protocol. Requires a non-nil patient.
+	InjectPatient bool
+}
+
 // Converter is the interface used by the download handler to produce converted output.
 // Implemented by ECGBridge; can be stubbed in tests.
 type Converter interface {
-	Convert(ctx context.Context, sourcePath, vendor, format string, patient *models.Patient) ([]byte, error)
+	Convert(ctx context.Context, sourcePath, vendor, format string, patient *models.Patient, opts ConvertOptions) ([]byte, error)
 	SupportsFormat(vendor, format string) bool
 	SupportedFormats(vendor string) []string
 	ConvertToXMLFDA(ctx context.Context, sourcePath, vendor string, patient *models.Patient) ([]byte, error)
@@ -91,10 +105,10 @@ func (b *ECGBridge) SupportedFormats(vendor string) []string {
 
 // Convert converts the ECG file at sourcePath to the requested format.
 // vendor and format must match a key in the binaries map (e.g. "philips", "xmlfda").
-// patient demographics are optional.
+// patient demographics are optional unless opts.InjectPatient is set.
 // Returns ErrFormatNotSupported if no binary is registered for vendor+format.
 // Returns ErrConversionFailed (wrapping stderr) on non-zero exit or deadline exceeded.
-func (b *ECGBridge) Convert(ctx context.Context, sourcePath, vendor, format string, patient *models.Patient) ([]byte, error) {
+func (b *ECGBridge) Convert(ctx context.Context, sourcePath, vendor, format string, patient *models.Patient, opts ConvertOptions) ([]byte, error) {
 	key := vendor + ":" + format
 	binary, ok := b.binaries[key]
 	if !ok {
@@ -105,10 +119,25 @@ func (b *ECGBridge) Convert(ctx context.Context, sourcePath, vendor, format stri
 	ctx, cancel := context.WithTimeout(ctx, b.timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, binary, "--input", sourcePath)
+	args := []string{"--input", sourcePath}
+	if opts.Anonymize {
+		args = append(args, "--anonymize")
+	}
+
+	cmd := exec.CommandContext(ctx, binary, args...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
+
+	// HL7 metadata injection: the converters accept a JSON object on stdin and
+	// overwrite the corresponding patient/acquisition fields in the output.
+	// Only fields present in the JSON overwrite — absent fields keep the file value.
+	if opts.InjectPatient && patient != nil {
+		inject := buildInjectJSON(patient)
+		if len(inject) > 0 {
+			cmd.Stdin = bytes.NewReader(inject)
+		}
+	}
 
 	err := cmd.Run()
 	appmetrics.ModuleConversionDuration.WithLabelValues(vendor, format).Observe(time.Since(start).Seconds())
@@ -126,5 +155,31 @@ func (b *ECGBridge) Convert(ctx context.Context, sourcePath, vendor, format stri
 // ConvertToXMLFDA converts the ECG file at sourcePath to FDA HL7 v3 aECG XML.
 // Delegates to Convert with format="xmlfda".
 func (b *ECGBridge) ConvertToXMLFDA(ctx context.Context, sourcePath, vendor string, patient *models.Patient) ([]byte, error) {
-	return b.Convert(ctx, sourcePath, vendor, "xmlfda", patient)
+	return b.Convert(ctx, sourcePath, vendor, "xmlfda", patient, ConvertOptions{})
+}
+
+// buildInjectJSON serialises the HL7-enriched patient demographics into the
+// converters' stdin-JSON protocol. Keys: patientID, patientName ("LAST^First",
+// HL7 PN order), gender. Only populated fields are included so file values are
+// preserved for anything the HIS did not provide. Returns nil when there is
+// nothing to inject.
+func buildInjectJSON(p *models.Patient) []byte {
+	fields := map[string]string{}
+	if p.PatientID != "" {
+		fields["patientID"] = p.PatientID
+	}
+	if p.LastName != "" || p.FirstName != "" {
+		fields["patientName"] = p.LastName + "^" + p.FirstName
+	}
+	if p.Gender != "" {
+		fields["gender"] = p.Gender
+	}
+	if len(fields) == 0 {
+		return nil
+	}
+	raw, err := json.Marshal(fields)
+	if err != nil {
+		return nil
+	}
+	return raw
 }

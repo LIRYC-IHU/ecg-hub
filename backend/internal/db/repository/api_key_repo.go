@@ -1,6 +1,10 @@
 package repository
 
 import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
 	"time"
 
 	"gorm.io/gorm"
@@ -53,6 +57,23 @@ func (r *APIKeyRepository) GetByHash(hash string) (*models.APIKey, error) {
 		return nil, err
 	}
 	return &key, nil
+}
+
+// ResolveAPIKey authenticates a plaintext API key: hashes it, looks up the
+// stored hash and returns the owning internal user ID (ecg_hub_users.id).
+// LastUsedAt is refreshed best-effort. Returns an error for unknown keys.
+// The key inherits the owning user's role — permission checks apply unchanged.
+func (r *APIKeyRepository) ResolveAPIKey(ctx context.Context, plaintext string) (string, error) {
+	sum := sha256.Sum256([]byte(plaintext))
+	hash := hex.EncodeToString(sum[:])
+
+	var key models.APIKey
+	if err := r.db.WithContext(ctx).Where("key_hash = ?", hash).First(&key).Error; err != nil {
+		return "", fmt.Errorf("api_key_repo: resolve: %w", err)
+	}
+	// Best-effort — a failed timestamp update must never block authentication.
+	_ = r.TouchLastUsed(key.ID)
+	return key.UserID, nil
 }
 
 // TouchLastUsed records the most recent use of a key (best-effort, for the UI).

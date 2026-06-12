@@ -3,8 +3,12 @@ package export
 import (
 	"context"
 	"errors"
+	"os"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 )
 
 // ─── ECGBridge.ConvertToXMLFDA ────────────────────────────────────────────────
@@ -32,3 +36,66 @@ func TestConvertToXMLFDA_BinaryNotFound(t *testing.T) {
 	}
 }
 
+
+// ─── ConvertOptions: anonymize flag + HL7 metadata injection ─────────────────
+
+// writeEchoScript creates a shell script that prints its arguments and stdin,
+// standing in for a converter binary.
+func writeEchoScript(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	path := dir + "/fake-converter"
+	script := "#!/bin/sh\nprintf 'ARGS:%s\\n' \"$*\"\ncat\n"
+	if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
+		t.Fatalf("write script: %v", err)
+	}
+	return path
+}
+
+func TestConvert_AnonymizeFlagPassed(t *testing.T) {
+	bin := writeEchoScript(t)
+	bridge := NewECGBridge(map[string]string{"philips:xmlfda": bin}, 5*time.Second)
+
+	out, err := bridge.Convert(context.Background(), "/in.xml", "philips", "xmlfda", nil,
+		ConvertOptions{Anonymize: true})
+	if err != nil {
+		t.Fatalf("Convert: %v", err)
+	}
+	if !strings.Contains(string(out), "--anonymize") {
+		t.Errorf("expected --anonymize in args, got: %s", out)
+	}
+}
+
+func TestConvert_InjectPatientStdin(t *testing.T) {
+	bin := writeEchoScript(t)
+	bridge := NewECGBridge(map[string]string{"philips:xmlfda": bin}, 5*time.Second)
+
+	patient := &models.Patient{PatientID: "P42", FirstName: "John", LastName: "DOE", Gender: "M"}
+	out, err := bridge.Convert(context.Background(), "/in.xml", "philips", "xmlfda", patient,
+		ConvertOptions{InjectPatient: true})
+	if err != nil {
+		t.Fatalf("Convert: %v", err)
+	}
+	for _, want := range []string{`"patientID":"P42"`, `"patientName":"DOE^John"`, `"gender":"M"`} {
+		if !strings.Contains(string(out), want) {
+			t.Errorf("stdin JSON should contain %s, got: %s", want, out)
+		}
+	}
+	if strings.Contains(string(out), "--anonymize") {
+		t.Errorf("anonymize must not be passed when not requested")
+	}
+}
+
+func TestConvert_NoOptions_NoExtraArgsNoStdin(t *testing.T) {
+	bin := writeEchoScript(t)
+	bridge := NewECGBridge(map[string]string{"philips:xmlfda": bin}, 5*time.Second)
+
+	out, err := bridge.Convert(context.Background(), "/in.xml", "philips", "xmlfda",
+		&models.Patient{PatientID: "P1"}, ConvertOptions{})
+	if err != nil {
+		t.Fatalf("Convert: %v", err)
+	}
+	if strings.Contains(string(out), "--anonymize") || strings.Contains(string(out), "patientID") {
+		t.Errorf("zero options must not alter args or stdin, got: %s", out)
+	}
+}

@@ -20,7 +20,7 @@ import (
 
 // batchConverter converts a single ECG file to the requested format.
 type batchConverter interface {
-	Convert(ctx context.Context, sourcePath, vendor, format string, patient *models.Patient) ([]byte, error)
+	Convert(ctx context.Context, sourcePath, vendor, format string, patient *models.Patient, opts ConvertOptions) ([]byte, error)
 	SupportsFormat(vendor, format string) bool
 }
 
@@ -38,6 +38,9 @@ type Job struct {
 	UserID  string
 	ECGIDs  []string
 	Formats []string
+	// Patient-data options for converted outputs (see ConvertOptions).
+	Anonymize bool
+	Inject    bool
 }
 
 // WorkerPool processes batch export jobs concurrently (FR19, NFR-SC3).
@@ -227,7 +230,10 @@ func buildZIP(job Job, ecgs []models.ECG, zipPath string, exportRepo *repository
 				patient, _ = pf.FindByPatientID(ecg.PatientID)
 			}
 
-			converted, convErr := bridge.Convert(context.Background(), ecg.FilePath, ecg.Vendor, fmtID, patient)
+			converted, convErr := bridge.Convert(context.Background(), ecg.FilePath, ecg.Vendor, fmtID, patient, ConvertOptions{
+				Anonymize:     job.Anonymize,
+				InjectPatient: job.Inject,
+			})
 			if convErr != nil {
 				return fmt.Errorf("convert ecg %s (%s) to %s: %w", ecg.ID, ecg.FilePath, fmtID, convErr)
 			}

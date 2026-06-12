@@ -245,6 +245,31 @@ func (r *UserRepo) roleNameByID(ctx context.Context, roleID string) (string, err
 	return rec.Name, nil
 }
 
+// IdentityByID returns the external identifier (username) and current role
+// name for the given internal user ID — the reverse of ResolveIdentity, used
+// by the API-key authentication path (keys store the internal uuid).
+func (r *UserRepo) IdentityByID(ctx context.Context, id string) (string, string, error) {
+	type row struct {
+		ExternalID string
+		RoleName   *string
+	}
+	var rec row
+	err := r.db.WithContext(ctx).
+		Table("ecg_hub_users u").
+		Select("u.external_id, r.name as role_name").
+		Joins("LEFT JOIN roles r ON r.id = u.role_id").
+		Where("u.id = ?", id).
+		Take(&rec).Error
+	if err != nil {
+		return "", "", fmt.Errorf("user_repo: identity by id: %w", err)
+	}
+	role := ""
+	if rec.RoleName != nil {
+		role = *rec.RoleName
+	}
+	return rec.ExternalID, role, nil
+}
+
 // GetByID returns the user record for the given internal ID.
 func (r *UserRepo) GetByID(ctx context.Context, id string) (*UserRecord, error) {
 	var rec UserRecord

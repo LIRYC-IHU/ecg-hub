@@ -13,6 +13,11 @@ type ExportJob struct {
 	// Formats is the list of output formats requested for this job (e.g. ["original", "xmlfda"]).
 	// Stored as JSONB to preserve order and allow repeated downloads in a single ZIP.
 	Formats        []string   `gorm:"type:jsonb;serializer:json;not null"`
+	// Anonymize strips identifying fields from converted outputs; Inject
+	// overwrites patient fields with HL7-enriched demographics. Converted
+	// formats only — the original file is always included verbatim.
+	Anonymize      bool       `gorm:"not null;default:false"`
+	Inject         bool       `gorm:"not null;default:false"`
 	FilePath       *string    // nil until job completes; path to ZIP on disk
 	Error          *string    // non-nil only when status == "failed"
 	CreatedAt      time.Time  `gorm:"autoCreateTime;index"`

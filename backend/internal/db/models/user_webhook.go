@@ -54,10 +54,10 @@ type UserWebhook struct {
 
 	// Events restricts delivery to these event types (see AllWebhookEvents).
 	// Empty array = all events.
-	Events datatypes.JSON `gorm:"type:jsonb;not null;default:'[]'" json:"events"`
+	Events datatypes.JSON `gorm:"type:jsonb;not null;default:'[]'" json:"events" swaggertype:"array,string"`
 	// Vendors restricts delivery to ECGs from these modules (e.g. "mindray",
 	// "philips", "dicom"). Empty array = all vendors.
-	Vendors datatypes.JSON `gorm:"type:jsonb;not null;default:'[]'" json:"vendors"`
+	Vendors datatypes.JSON `gorm:"type:jsonb;not null;default:'[]'" json:"vendors" swaggertype:"array,string"`
 
 	// Delivery feedback shown in the UI — updated best-effort by the dispatcher.
 	LastStatusCode  int        `gorm:"not null;default:0" json:"last_status_code"`
