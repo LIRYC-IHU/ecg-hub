@@ -15,7 +15,7 @@ import (
 	"github.com/apaladiychuk/go-netdicom/dimse"
 
 	dicomconn "github.com/LIRYC-IHU/ecg-hub/internal/connector/dicom"
-	"github.com/LIRYC-IHU/ecg-hub/internal/config"
+	"github.com/LIRYC-IHU/ecg-hub/internal/connector"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 )
 
@@ -84,16 +84,15 @@ func (m *mockSCP) onStore(
 	return dimse.Success
 }
 
-func (m *mockSCP) cfg() config.ConnectorConfig {
-	return config.ConnectorConfig{
+func (m *mockSCP) cfg() connector.Config {
+	return connector.Config{
 		Name:     "test-orthanc",
-		Enabled:  true,
 		Protocol: "dicom_cstore",
-		Filters: config.ConnectorFilters{
+		Filters: connector.Filters{
 			Extensions: []string{".dcm"},
 			Vendors:    []string{"dicom"},
 		},
-		DICOM: config.DICOMConnectorConfig{
+		DICOM: connector.DICOMEndpoint{
 			Host:      m.host,
 			Port:      m.port,
 			CallingAE: "TEST-SCU",
@@ -154,10 +153,10 @@ func TestDICOMConnector_Accepts(t *testing.T) {
 }
 
 func TestDICOMConnector_Accepts_EmptyFilters(t *testing.T) {
-	cfg := config.ConnectorConfig{
+	cfg := connector.Config{
 		Name:     "test-no-filter",
 		Protocol: "dicom_cstore",
-		DICOM: config.DICOMConnectorConfig{
+		DICOM: connector.DICOMEndpoint{
 			Host:      "127.0.0.1",
 			Port:      11112,
 			CallingAE: "TEST",
@@ -197,10 +196,10 @@ func TestDICOMConnector_Health_SCPUp(t *testing.T) {
 }
 
 func TestDICOMConnector_Health_SCPDown(t *testing.T) {
-	cfg := config.ConnectorConfig{
+	cfg := connector.Config{
 		Name:     "test-down",
 		Protocol: "dicom_cstore",
-		DICOM: config.DICOMConnectorConfig{
+		DICOM: connector.DICOMEndpoint{
 			Host:      "127.0.0.1",
 			Port:      1, // nothing listening
 			CallingAE: "TEST",
@@ -275,10 +274,10 @@ func TestDICOMConnector_Forward_VerifiesSOPClass(t *testing.T) {
 }
 
 func TestDICOMConnector_Forward_SCPDown(t *testing.T) {
-	cfg := config.ConnectorConfig{
+	cfg := connector.Config{
 		Name:     "test-fwd-down",
 		Protocol: "dicom_cstore",
-		DICOM: config.DICOMConnectorConfig{
+		DICOM: connector.DICOMEndpoint{
 			Host:      "127.0.0.1",
 			Port:      1,
 			CallingAE: "TEST",
@@ -318,9 +317,9 @@ func TestDICOMConnector_Forward_BadFile(t *testing.T) {
 // ─── New() Tests ─────────────────────────────────────────────────────────────
 
 func TestNew_InvalidTimeout(t *testing.T) {
-	cfg := config.ConnectorConfig{
+	cfg := connector.Config{
 		Name: "test-bad-timeout",
-		DICOM: config.DICOMConnectorConfig{
+		DICOM: connector.DICOMEndpoint{
 			Host:    "127.0.0.1",
 			Port:    4242,
 			Timeout: "not-a-duration",
@@ -333,9 +332,9 @@ func TestNew_InvalidTimeout(t *testing.T) {
 }
 
 func TestNew_Defaults(t *testing.T) {
-	cfg := config.ConnectorConfig{
+	cfg := connector.Config{
 		Name: "test-defaults",
-		DICOM: config.DICOMConnectorConfig{
+		DICOM: connector.DICOMEndpoint{
 			Host: "127.0.0.1",
 			Port: 4242,
 		},

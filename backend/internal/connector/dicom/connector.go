@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/LIRYC-IHU/ecg-hub/internal/config"
 	"github.com/LIRYC-IHU/ecg-hub/internal/connector"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 	appmetrics "github.com/LIRYC-IHU/ecg-hub/internal/metrics"
@@ -20,14 +19,14 @@ const healthTimeout = 5 * time.Second
 // DICOMConnector forwards ECG files to a remote PACS via DICOM C-STORE.
 // Implements connector.Connector.
 type DICOMConnector struct {
-	cfg    config.ConnectorConfig
+	cfg    connector.Config
 	client *SCUClient
 }
 
 var _ connector.Connector = (*DICOMConnector)(nil)
 
 // New constructs a DICOMConnector from a loaded ConnectorConfig.
-func New(cfg config.ConnectorConfig) (*DICOMConnector, error) {
+func New(cfg connector.Config) (*DICOMConnector, error) {
 	client, err := NewSCUClient(cfg.DICOM)
 	if err != nil {
 		return nil, fmt.Errorf("connector/dicom[%s]: %w", cfg.Name, err)
