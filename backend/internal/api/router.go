@@ -196,10 +196,10 @@ func (r *RouterConfig) RegisterRoutes() {
 	api := r.e.Group("", mw.HealthzMiddleware(r.authProvider, r.userRepo))
 	api.GET("/healthz", handlers.HealthHandler(pinger, r.dicomStatus, r.ftpStatus, r.ectpStatus, r.connCheckers))
 
-	// Swagger UI — requires authentication + ecg.read permission.
-	// Only Patients, ECG and Exports tags are shown (clinical workflows).
-	allowedTags := map[string]bool{"Patients": true, "ECG": true, "Exports": true}
-	r.e.GET("/swagger/doc.json", handlers.SwaggerFilterHandler(allowedTags), mw.AuthMiddleware(r.authProvider, r.userRepo, apiKeyRepo), mw.RequirePermission(r.checker, auth.PermSwaggerRead))
+	// Swagger UI — requires authentication + swagger.read permission.
+	// The spec itself is generated restricted to the Patients, ECG and health
+	// tags (swag init --tags) — the endpoints a machine client (webhook
+	// receiver) needs. Everything else is simply absent from the document.
 	swaggerHandler := echoSwagger.EchoWrapHandler(
 		echoSwagger.URL("/swagger/doc.json"),
 		echoSwagger.DocExpansion("list"),
