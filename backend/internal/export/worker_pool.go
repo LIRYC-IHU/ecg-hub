@@ -297,6 +297,8 @@ func outputExtension(format string) string {
 		return ".xml"
 	case "dicom":
 		return ".dcm"
+	case "pdf":
+		return ".pdf"
 	default:
 		return ""
 	}

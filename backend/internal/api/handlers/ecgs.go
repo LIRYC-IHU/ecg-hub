@@ -124,7 +124,7 @@ func downloadECGHandler(repo ecgByIDFinder, patRepo patientByIDFinder, bridge ex
 		if len(formats) == 1 {
 			format = formats[0]
 		}
-		if format == "xmlfda" || format == "dicom" {
+		if format == "xmlfda" || format == "dicom" || format == "pdf" {
 			return handleConvertDownload(c, ecg, id, userID, patRepo, bridge, format, opts, db)
 		}
 		if opts.Anonymize || opts.InjectPatient {
@@ -577,8 +577,8 @@ func handleConvertDownload(
 			})
 	}
 
-	outExt := map[string]string{"xmlfda": ".xml", "dicom": ".dcm"}[format]
-	contentType := map[string]string{"xmlfda": "application/xml", "dicom": "application/dicom"}[format]
+	outExt := map[string]string{"xmlfda": ".xml", "dicom": ".dcm", "pdf": ".pdf"}[format]
+	contentType := map[string]string{"xmlfda": "application/xml", "dicom": "application/dicom", "pdf": "application/pdf"}[format]
 
 	base := ecg.PatientID
 	if base == "" {
@@ -619,7 +619,7 @@ func parseDownloadFormats(c echo.Context) []string {
 // convertedName derives the output filename for a converted format from the original
 // filename: the extension is swapped for the format's extension.
 func convertedName(originalFilename, format string) string {
-	outExt := map[string]string{"xmlfda": ".xml", "dicom": ".dcm"}[format]
+	outExt := map[string]string{"xmlfda": ".xml", "dicom": ".dcm", "pdf": ".pdf"}[format]
 	ext := filepath.Ext(originalFilename)
 	base := strings.TrimSuffix(originalFilename, ext)
 	if base == "" {

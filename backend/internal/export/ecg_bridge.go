@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"os/exec"
 	"time"
 
@@ -22,12 +23,13 @@ type FormatMeta struct {
 }
 
 // ExportFormatOrder is the canonical display order of export formats.
-var ExportFormatOrder = []string{"original", "xmlfda", "dicom"}
+var ExportFormatOrder = []string{"original", "pdf", "xmlfda", "dicom"}
 
 // exportFormatMeta holds UI metadata for each known format. "original" has no fixed
 // extension — it depends on the source vendor — so it is left blank.
 var exportFormatMeta = map[string]FormatMeta{
 	"original": {ID: "original", Label: "Original", Extension: ""},
+	"pdf":      {ID: "pdf", Label: "PDF Report", Extension: ".pdf"},
 	"xmlfda":   {ID: "xmlfda", Label: "FDA HL7 aECG XML", Extension: ".xml"},
 	"dicom":    {ID: "dicom", Label: "DICOM ECG", Extension: ".dcm"},
 }
@@ -72,6 +74,10 @@ type Converter interface {
 type ECGBridge struct {
 	binaries map[string]string
 	timeout  time.Duration
+	// pdfBinary is the path to the fda-to-pdf renderer. PDF is produced by first
+	// converting the source to FDA aECG XML, then rendering that — so any vendor
+	// that supports "xmlfda" also supports "pdf". Empty disables the pdf format.
+	pdfBinary string
 }
 
 // NewECGBridge constructs an ECGBridge with the given vendor:format→binary map and per-conversion timeout.
@@ -79,11 +85,24 @@ func NewECGBridge(binaries map[string]string, timeout time.Duration) *ECGBridge 
 	return &ECGBridge{binaries: binaries, timeout: timeout}
 }
 
+// WithPDFBinary enables the "pdf" export format, rendered via the given
+// fda-to-pdf binary. Returns the bridge for chaining.
+func (b *ECGBridge) WithPDFBinary(path string) *ECGBridge {
+	b.pdfBinary = path
+	return b
+}
+
 // SupportsFormat returns true if a binary is registered for the given vendor+format combination,
 // or if format is "original" (which never requires a binary).
 func (b *ECGBridge) SupportsFormat(vendor, format string) bool {
 	if format == "original" {
 		return true
+	}
+	if format == "pdf" {
+		// PDF is rendered from the vendor's FDA aECG XML, so it is available
+		// wherever both the fda-to-pdf binary and an xmlfda converter exist.
+		_, hasXML := b.binaries[vendor+":xmlfda"]
+		return b.pdfBinary != "" && hasXML
 	}
 	_, ok := b.binaries[vendor+":"+format]
 	return ok
@@ -109,6 +128,13 @@ func (b *ECGBridge) SupportedFormats(vendor string) []string {
 // Returns ErrFormatNotSupported if no binary is registered for vendor+format.
 // Returns ErrConversionFailed (wrapping stderr) on non-zero exit or deadline exceeded.
 func (b *ECGBridge) Convert(ctx context.Context, sourcePath, vendor, format string, patient *models.Patient, opts ConvertOptions) ([]byte, error) {
+	// PDF is a two-step format: source → FDA aECG XML → PDF. Handling it here
+	// means anonymisation and HL7 patient injection (applied in the xmlfda step)
+	// carry through to the rendered report for free.
+	if format == "pdf" {
+		return b.convertToPDF(ctx, sourcePath, vendor, patient, opts)
+	}
+
 	key := vendor + ":" + format
 	binary, ok := b.binaries[key]
 	if !ok {
@@ -156,6 +182,51 @@ func (b *ECGBridge) Convert(ctx context.Context, sourcePath, vendor, format stri
 // Delegates to Convert with format="xmlfda".
 func (b *ECGBridge) ConvertToXMLFDA(ctx context.Context, sourcePath, vendor string, patient *models.Patient) ([]byte, error) {
 	return b.Convert(ctx, sourcePath, vendor, "xmlfda", patient, ConvertOptions{})
+}
+
+// convertToPDF renders a printable PDF report by first converting the source to
+// FDA aECG XML (honouring anonymise/inject) and then running the fda-to-pdf
+// binary on it. fda-to-pdf reads -i <file> and writes -o <file>.
+func (b *ECGBridge) convertToPDF(ctx context.Context, sourcePath, vendor string, patient *models.Patient, opts ConvertOptions) ([]byte, error) {
+	if b.pdfBinary == "" {
+		return nil, fmt.Errorf("%w: %s:pdf (no fda-to-pdf binary)", ErrFormatNotSupported, vendor)
+	}
+
+	xml, err := b.Convert(ctx, sourcePath, vendor, "xmlfda", patient, opts)
+	if err != nil {
+		return nil, err
+	}
+
+	in, err := os.CreateTemp("", "ecg-*.fda.xml")
+	if err != nil {
+		return nil, fmt.Errorf("%w: create temp xml: %v", ErrConversionFailed, err)
+	}
+	defer os.Remove(in.Name())
+	if _, err := in.Write(xml); err != nil {
+		in.Close()
+		return nil, fmt.Errorf("%w: write temp xml: %v", ErrConversionFailed, err)
+	}
+	in.Close()
+	outPath := in.Name() + ".pdf"
+	defer os.Remove(outPath)
+
+	start := time.Now()
+	ctx, cancel := context.WithTimeout(ctx, b.timeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, b.pdfBinary, "-i", in.Name(), "-o", outPath)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	err = cmd.Run()
+	appmetrics.ModuleConversionDuration.WithLabelValues(vendor, "pdf").Observe(time.Since(start).Seconds())
+	if err != nil {
+		appmetrics.ModuleConversionErrors.WithLabelValues(vendor, "pdf").Inc()
+		slog.Error("ecg-bridge: pdf conversion error",
+			"vendor", vendor, "binary", b.pdfBinary, "stderr", stderr.String(), "error", err)
+		return nil, fmt.Errorf("%w: %s", ErrConversionFailed, stderr.String())
+	}
+	return os.ReadFile(outPath)
 }
 
 // buildInjectJSON serialises the HL7-enriched patient demographics into the
