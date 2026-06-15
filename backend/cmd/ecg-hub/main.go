@@ -176,7 +176,10 @@ func main() {
 		"muse:dicom":          bridgeBin("BRIDGE_MUSE_TO_DICOM", "muse-to-dicom"),
 	}
 
-	bridge := export.NewECGBridge(binaries, 5*time.Second)
+	// PDF reports are rendered from FDA aECG XML, so a single fda-to-pdf binary
+	// serves every vendor that can produce xmlfda (see ECGBridge.convertToPDF).
+	bridge := export.NewECGBridge(binaries, 5*time.Second).
+		WithPDFBinary(bridgeBin("BRIDGE_FDA_TO_PDF", "fda-to-pdf"))
 
 	// Keycloak Admin client — optional, enabled via env vars only (OIDC itself
 	// is configured from the admin UI and stored in DB). Handlers receiving nil
