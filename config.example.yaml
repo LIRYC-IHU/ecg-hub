@@ -1,124 +1,37 @@
-# ECG Hub — Configuration Example
-# Copy to config.yaml. Never put secrets here — use .env exclusively.
+# ECG Hub — config.yaml example.
+# Copy to config.yaml. NEVER put secrets here — those live in .env.
+#
+# IMPORTANT: this file is INFRASTRUCTURE ONLY. Auth providers (OIDC/LDAP),
+# ingestion modules (FTP/DICOM), HL7, outbound connectors, webhooks and metrics
+# are configured from the admin UI and stored in the database — they are NOT read
+# from this file. The backend only parses the four sections below.
 
 server:
+  # TCP port the Go server listens on. 0 → defaults to 4444.
   port: 4444
-  # tls: false  # true = terminate TLS directly on the Go server (bare-metal).
-  #             # Behind nginx (default deployment), keep false — TLS terminates at the proxy.
-  # cert_file: /certs/server.crt  # required when tls: true
-  # key_file: /certs/server.key   # required when tls: true
+  # tls: terminate TLS directly on the Go server (bare-metal). Behind nginx
+  # (the default prod deployment) keep false — TLS terminates at the proxy.
+  tls: false
+  # cert_file: /etc/ecg-hub/certs/server.crt   # required when tls: true
+  # key_file:  /etc/ecg-hub/certs/server.key   # required when tls: true
 
 database:
-  # host, port, user, password, name are read from environment variables.
-  # Set DATABASE_URL in .env: postgres://user:pass@host:5432/ecghub?sslmode=disable
+  # The connection string is DATABASE_URL (in .env). These tune the pool only.
   max_open_conns: 10
   max_idle_conns: 5
 
-auth:
-  # providers: list of active authentication backends (FR34).
-  # Accepted values: oidc, ldap. Multiple providers can be active simultaneously.
-  # Tokens from any configured provider are accepted; the login page shows all options.
-  providers: [oidc, ldap]
-
-  oidc:
-    # issuer_url: OIDC issuer (e.g. https://keycloak.example.com/realms/chu)
-    # internal_url: OIDC internal URL for server-to-server calls (e.g. http://keycloak:8080/realms/chu)
-    # redirect_url: OIDC redirect URL (e.g. https://domaine.com/api/v1/auth/oidc/callback)
-    # admin_role_name: name of the OIDC role granting admin access (default: admin)
-    # client_id: set via OIDC_CLIENT_ID env var
-    # client_secret: set via OIDC_CLIENT_SECRET env var
-
-  ldap:
-    # host: ldap.example.com
-    # port: 389
-    # tls: false  # true for LDAPS
-    # base_dn: dc=example,dc=com
-    # user_search_dn: dc=example,dc=com
-    # user_filter: "(uid=%s)"
-    # admin_users: [alice, bob]  # users granted admin access regardless of group
-    # bind_dn: set via LDAP_BIND_DN env var
-    # bind_password: set via LDAP_BIND_PASSWORD env var
-
-ftp:
-  enabled: true
-  port: 2121
-  # passive_transfer_port_range: "30000-30010"
-  # public_host: "127.0.0.1"  # public IP/hostname advertised to FTP clients for passive mode
-  # tls: false  # true required in production
-  # username and password set via FTP_USERNAME / FTP_PASSWORD env vars
-
-hl7:
-  # host: hl7.example.com
-  # port: 2575
-  # retry_interval: 5m
-  # max_retries: 3
-  # username and password set via HL7_USERNAME / HL7_PASSWORD env vars
-
 storage:
+  # Mount point for the main ECG file volume.
   volume_path: /data/ecg
+  # Separate volume for quarantined files (may need a different retention policy).
   quarantine_path: /data/ecg-quarantine
-  # max_size_gb: 50  # optional soft cap on total ECG storage volume
+  # Soft cap on volume_path: oldest files are rotated out when exceeded.
+  # Accepts Ki/Mi/Gi (binary) or k/m/g (decimal). Empty / "0" disables rotation
+  # (not recommended in production).
+  max_size: "50Gi"
 
 export:
+  # Number of background export workers (PDF / FDA aECG / DICOM generation).
   workers: 2
+  # How long generated export files are kept in the temp area before cleanup.
   tmp_ttl: 2h
-
-webhook:
-  enabled: false
-  # url: https://external-system.example.com/webhook
-  # secret set via WEBHOOK_SECRET env var
-
-metrics:
-  enabled: false
-  # port: 9090
-
-dicom:
-  enabled: false
-  # port: 11112
-  # echo_enabled: true
-  # ae_title: ECG-HUB
-
-proxy:
-  enabled: true
-  connectors:
-    - name: polaris
-      enabled: true
-      protocol: ectp_ftp
-      filters:
-        extensions: [".DAT", ".dat"] # vide = accepte tout
-        vendors: [] # vide = accepte tout
-      retry:
-        max_attempts: 3
-        interval: 5m
-      ectp:
-        host: 10.33.35.69
-        port: 30003
-      ftp:
-        host: 10.33.35.69
-        port: 21
-        # credentials via env vars: POLARIS_FTP_USERNAME / POLARIS_FTP_PASSWORD
-
-    - name: orthanc
-      enabled: false
-      protocol: dicom_cstore
-      filters:
-        extensions: [".dcm"]
-        vendors: ["dicom"]
-      retry:
-        max_attempts: 3
-        interval: 5m
-      dicom:
-        host: pacs.example.com
-        port: 4242
-        calling_ae: ECGHUB
-        called_ae: ORTHANC
-        timeout: 30s
-        # strict_sop: false  # true = reject unknown SOP classes
-
-modules:
-  # active: list of ECG format modules to load at startup.
-  # Accepted values: philips, dicom
-  active: []
-  # active:
-  #   - philips
-  #   - dicom
