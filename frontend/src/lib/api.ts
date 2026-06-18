@@ -97,7 +97,7 @@ export interface ECGFilterFacets {
 
 export async function fetchECGFilterFacets(): Promise<ECGFilterFacets> {
   const res = await fetch(`${BASE_URL}/api/v1/ecgs/filters`);
-  if (!res.ok) return { vendors: [], device_models: [] };
+  if (!res.ok) return { vendors: [], device_models: [], file_formats: [] };
   return res.json();
 }
 
@@ -733,7 +733,7 @@ export async function getExportJob(jobId: string): Promise<ExportJobResponse> {
 }
 
 export async function setAppUserRole(
-  userId: number,
+  userId: string,
   role: string,
 ): Promise<void> {
   const res = await fetch(`${BASE_URL}/api/v1/admin/app-users/${userId}/role`, {

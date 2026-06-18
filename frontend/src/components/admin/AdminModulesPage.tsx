@@ -17,7 +17,6 @@ import {
   connectorTypeFromProtocol,
   fetchModuleSettings,
   saveModuleSettings,
-  type FTPModuleConfig,
   type DICOMModuleConfig,
   type ConnectorConfig,
   type ConnectorType,

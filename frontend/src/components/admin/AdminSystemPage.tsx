@@ -1,12 +1,9 @@
-import { useState } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import {
   CheckCircle,
   AlertCircle,
   Webhook,
-  Copy,
-  Lock,
   Database,
   Server,
   Activity,
@@ -108,7 +105,6 @@ function ConnectorStatusSection({
 export function AdminSystemPage() {
   const { t } = useTranslation();
   const { stats, health } = useAdminStats();
-  const { notify } = useNotification();
 
   const modulesQuery = useQuery({
     queryKey: ["admin", "modules"],
@@ -175,11 +171,6 @@ export function AdminSystemPage() {
       label: ectpEnabled ? `:${ectpPort}` : disabledLabel,
     },
   ];
-
-  function copyToClipboard(text: string) {
-    void navigator.clipboard.writeText(text);
-    notify("success", t("admin.system.webhook.urlCopied"));
-  }
 
   const kpis = stats.data
     ? [

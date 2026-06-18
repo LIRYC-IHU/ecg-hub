@@ -52,14 +52,20 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    # nginx master starts as root: it binds :80, chowns its cache/temp dirs and
+    # drops privileges to the unprivileged `nginx` user. With `cap_drop: ALL`
+    # these would fail, so grant back exactly the capabilities it needs at boot.
     cap_add:
-      - NET_BIND_SERVICE # nginx binds the privileged ports 80 + 443
+      - NET_BIND_SERVICE # bind the privileged port 80
+      - CHOWN            # chown cache/temp dirs to the nginx user
+      - SETUID           # drop worker processes to uid nginx
+      - SETGID           # drop worker processes to gid nginx
+      - DAC_OVERRIDE     # write pid/cache regardless of dir perms
     volumes:
       # Host-mode nginx (upstream = 127.0.0.1:4444, no Docker DNS resolver).
+      # TLS is terminated by an external Traefik that forwards HTTP to :80, so
+      # no certificates are mounted here.
       - ./nginx.host.conf:/etc/nginx/conf.d/default.conf:ro
-      # TLS certificates required by nginx.host.conf.
-      - ./certs/server.crt:/etc/nginx/certs/server.crt:ro
-      - ./certs/server.key:/etc/nginx/certs/server.key:ro
 
 volumes:
   ecg-storage:

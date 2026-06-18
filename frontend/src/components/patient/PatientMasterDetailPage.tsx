@@ -1390,7 +1390,7 @@ export function PatientMasterDetailPage({
       );
       if (res.ok) {
         const json = await res.json();
-        const ids = new Set((json.data ?? []).map((e: { id: number }) => e.id));
+        const ids = new Set<number>((json.data ?? []).map((e: { id: number }) => e.id));
         setSelectedECGs((prev) => {
           const next = new Set(prev);
           for (const id of ids) next.delete(id);

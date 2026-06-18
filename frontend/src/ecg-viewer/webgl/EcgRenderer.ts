@@ -128,14 +128,20 @@ export class EcgRenderer {
   private lastPxPerMm: number = CSS_PX_PER_MM;
   /** Hard cap on canvas internal pixels along one axis (driver/GPU limit). */
   private maxInternalPx: number = DEFAULT_MAX_INTERNAL_PX;
+  private glCanvas: HTMLCanvasElement;
+  private overlayCanvas: HTMLCanvasElement;
+  /** Element to read theme CSS variables from. */
+  private themeHost: HTMLElement;
 
   constructor(
-    private glCanvas: HTMLCanvasElement,
-    private overlayCanvas: HTMLCanvasElement,
-    /** Element to read theme CSS variables from. */
-    private themeHost: HTMLElement,
+    glCanvas: HTMLCanvasElement,
+    overlayCanvas: HTMLCanvasElement,
+    themeHost: HTMLElement,
     options: ViewerOptions,
   ) {
+    this.glCanvas = glCanvas;
+    this.overlayCanvas = overlayCanvas;
+    this.themeHost = themeHost;
     const gl = glCanvas.getContext('webgl', {
       antialias: true,
       preserveDrawingBuffer: true,
@@ -441,7 +447,7 @@ export class EcgRenderer {
 
   private drawOverlay(p: OverlayParams) {
     const ctx = this.overlayCtx;
-    const { cssWidth, cssHeight, dpr, theme, grid } = p;
+    const { cssWidth, cssHeight, dpr, theme } = p;
     this.hits = [];
     this.caliperHits = [];
 

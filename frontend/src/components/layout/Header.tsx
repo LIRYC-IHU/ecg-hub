@@ -50,7 +50,6 @@ export function Header({
   language,
   onToggleLang,
   canManageWebhooks = false,
-  canManageApiKeys = false,
 }: HeaderProps) {
   const { t } = useTranslation();
   const location = useLocation();

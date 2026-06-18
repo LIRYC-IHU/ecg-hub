@@ -11,7 +11,7 @@ import type {
   Caliper,
   EcgRecord,
   ViewerOptions,
-} from '../types';
+} from './types';
 import { AMP_SCALES, LAYOUTS, TIME_SCALES } from './types';
 import { EcgRenderer, type RenderInfo } from './webgl/EcgRenderer';
 import './ECGViewer.css';
@@ -416,7 +416,7 @@ export const ECGViewer = forwardRef<ECGViewerHandle, ECGViewerProps>(function EC
   // ---------- Pointer interactions on the overlay canvas ----------
   const updateOption = useCallback(
     <K extends keyof ViewerOptions>(key: K, value: ViewerOptions[K]) => {
-      setOptions((prev) => ({ ...prev, [key]: value }));
+      setOptions((prev: ViewerOptions) => ({ ...prev, [key]: value }));
     },
     [],
   );
