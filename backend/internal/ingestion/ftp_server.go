@@ -93,7 +93,7 @@ func (s *Server) GetSettings() (*ftpserver.Settings, error) {
 		TLSRequired: tlsMode,
 	}
 
-	if r := s.cfg.PassiveTransferPortRange; r != "" {
+	if r := strings.TrimSpace(s.cfg.PassiveTransferPortRange); r != "" {
 		pr, err := parsePortRange(r)
 		if err != nil {
 			return nil, fmt.Errorf("ftp: config: passive_transfer_port_range: %w", err)
@@ -105,8 +105,10 @@ func (s *Server) GetSettings() (*ftpserver.Settings, error) {
 	// Required when the server runs inside Docker and clients connect from the host:
 	// without this, ftpserverlib returns the container's internal IP (e.g. 172.x.x.x)
 	// which is unreachable from outside Docker.
-	if s.cfg.PublicHost != "" {
-		settings.PublicHost = s.cfg.PublicHost
+	// Trimmed defensively: a trailing space makes ftpserverlib reject it as an
+	// "invalid passive IP" and the server fails to start.
+	if h := strings.TrimSpace(s.cfg.PublicHost); h != "" {
+		settings.PublicHost = h
 	}
 
 	return settings, nil
