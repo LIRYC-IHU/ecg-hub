@@ -180,9 +180,14 @@ export function AdminRolesPage() {
     <div className="p-6">
       {/* Header */}
       <div className="mb-6 flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-lg font-semibold text-foreground">{t('admin.roles.title')}</h1>
-          <p className="text-sm text-muted-foreground mt-1">{t('admin.roles.subtitle')}</p>
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/20">
+            <Shield className="h-5 w-5" />
+          </div>
+          <div>
+            <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground">{t('admin.roles.title')}</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">{t('admin.roles.subtitle')}</p>
+          </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <button
@@ -217,7 +222,7 @@ export function AdminRolesPage() {
       <div className="flex gap-6">
         {/* Role list */}
         <div className="w-56 shrink-0">
-          <div className="bg-card rounded-lg border border-border overflow-hidden">
+          <div className="bg-card rounded-xl border border-border overflow-hidden">
             {isLoading && (
               <div className="flex justify-center p-4">
                 <Spinner size={16} className="text-muted-foreground" />
@@ -228,10 +233,10 @@ export function AdminRolesPage() {
               <button
                 key={role.id}
                 onClick={() => setSelectedId(role.id)}
-                className={`w-full flex items-center gap-2 px-3 py-2.5 text-sm text-left border-b border-border transition-colors relative last:border-0 ${
+                className={`w-full flex items-center gap-2 px-3 py-2.5 text-sm text-left border-b border-border transition-all duration-200 ease-out relative last:border-0 ${
                   selectedId === role.id
                     ? 'bg-primary/5 text-primary font-medium'
-                    : 'text-foreground hover:bg-muted/50'
+                    : 'text-foreground hover:bg-muted/50 hover:translate-x-0.5'
                 }`}
               >
                 {selectedId === role.id && (
@@ -289,7 +294,7 @@ export function AdminRolesPage() {
 
         {/* Permission matrix */}
         {selectedRole ? (
-          <div className="flex-1 bg-card rounded-lg border border-border p-6">
+          <div className="flex-1 bg-card rounded-xl border border-border p-6">
             <div className="flex items-start justify-between mb-6">
               <div>
                 <h2 className="text-base font-semibold text-foreground capitalize">{selectedRole.name}</h2>
@@ -367,7 +372,7 @@ export function AdminRolesPage() {
           </div>
         ) : (
           !isLoading && roles.length > 0 && (
-            <div className="flex-1 bg-card rounded-lg border border-border flex items-center justify-center">
+            <div className="flex-1 bg-card rounded-xl border border-border flex items-center justify-center">
               <p className="text-sm text-muted-foreground">{t('admin.roles.selectRole')}</p>
             </div>
           )

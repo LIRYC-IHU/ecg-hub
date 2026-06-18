@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
+import { Users, Check, X } from 'lucide-react'
 import { fetchUsers, setUserRole, fetchRoles } from '../../lib/api'
 import { Spinner } from '../ui/Spinner'
 import { useNotification } from '../../context/NotificationContext'
@@ -62,8 +63,15 @@ export function AdminUsersPage() {
 
   return (
     <div className="max-w-4xl space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">{t('nav.users')}</h1>
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/20">
+            <Users className="h-5 w-5" />
+          </div>
+          <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground">
+            {t('nav.users')}
+          </h1>
+        </div>
         <p className="text-xs text-muted-foreground">
           {t('admin.users.requires')} <code>OIDC_ADMIN_CLIENT_SECRET</code>
         </p>
@@ -75,7 +83,7 @@ export function AdminUsersPage() {
         </div>
       )}
 
-      <div className="border rounded-lg bg-card overflow-hidden shadow-sm">
+      <div className="border rounded-xl bg-card overflow-hidden shadow-sm">
         <table className="w-full text-sm">
           <thead className="bg-muted/30 border-b">
             <tr>
@@ -105,7 +113,7 @@ export function AdminUsersPage() {
               const selected = pendingRole[user.id]
               const fb = feedback[user.id]
               return (
-                <tr key={user.id} className="border-b last:border-0 hover:bg-muted/10">
+                <tr key={user.id} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
                   <td className="px-4 py-2.5 font-medium">{user.username}</td>
                   <td className="px-4 py-2.5 text-xs text-muted-foreground">{user.email ?? '—'}</td>
                   <td className="px-4 py-2.5">
@@ -136,8 +144,8 @@ export function AdminUsersPage() {
                         {t('admin.users.apply')}
                       </button>
                     )}
-                    {fb === 'ok' && <span className="text-xs text-success ml-2">✓</span>}
-                    {fb === 'err' && <span className="text-xs text-destructive ml-2">✗</span>}
+                    {fb === 'ok' && <Check className="inline w-3.5 h-3.5 text-success ml-2" />}
+                    {fb === 'err' && <X className="inline w-3.5 h-3.5 text-destructive ml-2" />}
                   </td>
                 </tr>
               )

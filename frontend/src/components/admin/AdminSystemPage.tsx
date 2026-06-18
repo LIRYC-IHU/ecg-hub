@@ -223,13 +223,18 @@ export function AdminSystemPage() {
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-lg font-semibold text-foreground">
-          {t("admin.system.title")}
-        </h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          {t("admin.system.subtitle")}
-        </p>
+      <div className="flex items-center gap-3">
+        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/20">
+          <Server className="h-5 w-5" />
+        </div>
+        <div>
+          <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground">
+            {t("admin.system.title")}
+          </h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {t("admin.system.subtitle")}
+          </p>
+        </div>
       </div>
       {/* Global status banner */}
       <div className="bg-card rounded-lg border border-border p-4 flex items-center gap-3">

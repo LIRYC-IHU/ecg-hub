@@ -571,13 +571,18 @@ export function AdminAuthPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-lg font-semibold text-foreground">
-          {t("admin.authProviders.title")}
-        </h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          {t("admin.authProviders.subtitle")}
-        </p>
+      <div className="flex items-center gap-3">
+        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/20">
+          <Shield className="h-5 w-5" />
+        </div>
+        <div>
+          <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground">
+            {t("admin.authProviders.title")}
+          </h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {t("admin.authProviders.subtitle")}
+          </p>
+        </div>
       </div>
 
       <p className="text-xs text-muted-foreground bg-muted/50 border border-border rounded-lg px-4 py-2.5">

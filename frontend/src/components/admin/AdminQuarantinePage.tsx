@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import {
@@ -11,10 +11,12 @@ import {
   HelpCircle,
 } from "lucide-react";
 import type { QuarantineEntry } from "../../lib/api";
+import type { Patient } from "../../types";
 import {
   fetchQuarantine,
   deleteQuarantineEntry,
   assignQuarantineEntry,
+  fetchPatients,
 } from "../../lib/api";
 import { Spinner } from "../ui/Spinner";
 import { EmptyState } from "../ui/EmptyState";
@@ -64,7 +66,6 @@ export function AdminQuarantinePage({ canDelete, canAssign }: Props) {
   const [perPage, setPerPage] = useState<number>(25);
   const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [assigningId, setAssigningId] = useState<string | null>(null);
-  const [patientIdInput, setPatientIdInput] = useState("");
   const { data, isLoading } = useQuery({
     queryKey: ["admin", "quarantine", page],
     queryFn: () => fetchQuarantine(page, perPage),
@@ -82,12 +83,18 @@ export function AdminQuarantinePage({ canDelete, canAssign }: Props) {
   });
 
   const assignMutation = useMutation({
-    mutationFn: ({ id, patientId }: { id: string; patientId: string }) =>
-      assignQuarantineEntry(id, patientId),
+    mutationFn: ({
+      id,
+      patientId,
+      createNew,
+    }: {
+      id: string;
+      patientId: string;
+      createNew: boolean;
+    }) => assignQuarantineEntry(id, patientId, createNew),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["admin", "quarantine"] });
       setAssigningId(null);
-      setPatientIdInput("");
       notify("success", t("admin.quarantine.assigned"));
     },
     onError: () => notify("error", t("admin.quarantine.assignError")),
@@ -139,8 +146,8 @@ export function AdminQuarantinePage({ canDelete, canAssign }: Props) {
               className="w-4 h-4 rounded border-border accent-primary cursor-pointer"
             />
           )}
-          <AlertTriangle className="w-5 h-5 text-quarantine" />
-          <h1 className="text-lg font-semibold text-foreground">
+          <AlertTriangle className="w-6 h-6 text-quarantine" />
+          <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground">
             {t("admin.quarantine.title")}
           </h1>
           {total > 0 && (
@@ -275,12 +282,11 @@ export function AdminQuarantinePage({ canDelete, canAssign }: Props) {
                   <div className="flex items-center gap-1 justify-end">
                     {isUnidentified && canAssign && (
                       <button
-                        onClick={() => {
+                        onClick={() =>
                           setAssigningId(
                             assigningId === entry.id ? null : entry.id,
-                          );
-                          setPatientIdInput("");
-                        }}
+                          )
+                        }
                         className="flex items-center gap-1 text-[10px] font-medium text-primary hover:underline px-1.5 py-1 rounded hover:bg-primary/10 transition-colors"
                         title={t("admin.quarantine.assign")}
                       >
@@ -321,63 +327,19 @@ export function AdminQuarantinePage({ canDelete, canAssign }: Props) {
                   </div>
                 </div>
 
-                {/* Assign panel */}
+                {/* Assign panel — search + confirm (anti wrong-patient) */}
                 {isUnidentified && assigningId === entry.id && (
-                  <div className="px-4 py-3 bg-primary/5 border-b border-border">
-                    <p className="text-[11px] text-muted-foreground mb-2">
-                      {t("admin.quarantine.assignHint")}
-                    </p>
-                    <div className="flex items-center gap-2">
-                      <input
-                        autoFocus
-                        type="text"
-                        value={patientIdInput}
-                        onChange={(e) => setPatientIdInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (
-                            e.key === "Enter" &&
-                            patientIdInput.trim() &&
-                            !assignMutation.isPending
-                          ) {
-                            assignMutation.mutate({
-                              id: entry.id,
-                              patientId: patientIdInput.trim(),
-                            });
-                          }
-                        }}
-                        placeholder={t("admin.quarantine.patientIdPlaceholder")}
-                        className="flex-1 text-xs bg-card border border-border rounded-lg px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-ring/20"
-                      />
-                      <button
-                        onClick={() =>
-                          assignMutation.mutate({
-                            id: entry.id,
-                            patientId: patientIdInput.trim(),
-                          })
-                        }
-                        disabled={
-                          !patientIdInput.trim() || assignMutation.isPending
-                        }
-                        className="flex items-center gap-1 text-xs font-medium bg-primary text-primary-foreground px-3 py-2 rounded-lg hover:opacity-90 disabled:opacity-50"
-                      >
-                        {assignMutation.isPending ? (
-                          <Spinner size={12} />
-                        ) : (
-                          <UserPlus className="w-3.5 h-3.5" />
-                        )}
-                        {t("admin.quarantine.assignConfirm")}
-                      </button>
-                      <button
-                        onClick={() => {
-                          setAssigningId(null);
-                          setPatientIdInput("");
-                        }}
-                        className="text-xs text-muted-foreground hover:underline px-2"
-                      >
-                        {t("common.cancel")}
-                      </button>
-                    </div>
-                  </div>
+                  <AssignPanel
+                    isPending={assignMutation.isPending}
+                    onConfirm={(patientId, createNew) =>
+                      assignMutation.mutate({
+                        id: entry.id,
+                        patientId,
+                        createNew,
+                      })
+                    }
+                    onCancel={() => setAssigningId(null)}
+                  />
                 )}
               </div>
             );
@@ -477,6 +439,200 @@ export function AdminQuarantinePage({ canDelete, canAssign }: Props) {
             </div>
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+// AssignPanel drives the "assign an unidentified ECG to a patient" flow as a
+// search → select → confirm sequence. Two outcomes:
+//   • existing patient → pick from search, confirm name + DOB (anti wrong-patient);
+//   • unknown ID → explicit "new patient" path (create_new), where demographics
+//     are filled later by HL7 enrichment from the HIS. This preserves the original
+//     unidentified-ECG workflow, which assigns to patient IDs not yet in ECG Hub.
+function AssignPanel({
+  isPending,
+  onConfirm,
+  onCancel,
+}: {
+  isPending: boolean;
+  onConfirm: (patientId: string, createNew: boolean) => void;
+  onCancel: () => void;
+}) {
+  const { t } = useTranslation();
+  const [q, setQ] = useState("");
+  const [debounced, setDebounced] = useState("");
+  const [selected, setSelected] = useState<Patient | null>(null);
+  const [newMode, setNewMode] = useState(false);
+
+  useEffect(() => {
+    const h = setTimeout(() => setDebounced(q.trim()), 250);
+    return () => clearTimeout(h);
+  }, [q]);
+
+  const { data, isFetching } = useQuery({
+    queryKey: ["assign-patient-search", debounced],
+    queryFn: () => fetchPatients({ q: debounced, per_page: 8 }),
+    enabled: debounced.length >= 2 && !selected && !newMode,
+    staleTime: 10_000,
+  });
+  const results = data?.data ?? [];
+
+  const fmtDob = (dob: string | null) =>
+    dob ? new Date(dob).toLocaleDateString("fr-FR") : "—";
+
+  // A new-patient ID candidate only makes sense when the query looks like an ID
+  // (no spaces) and nothing matched — nudging the nurse to type the HIS ID.
+  const canCreateNew =
+    !isFetching &&
+    debounced.length >= 2 &&
+    results.length === 0 &&
+    !debounced.includes(" ");
+
+  return (
+    <div className="px-4 py-3 bg-primary/5 border-b border-border">
+      <p className="text-[11px] text-muted-foreground mb-2">
+        {t("admin.quarantine.assignHint")}
+      </p>
+
+      {selected ? (
+        // ── Existing patient confirmation ──
+        <>
+          <div className="text-xs bg-card border border-warning/40 rounded-lg px-3 py-2.5">
+            <p className="text-[11px] text-muted-foreground mb-1">
+              {t("admin.quarantine.assignConfirmQuestion")}
+            </p>
+            <p className="font-semibold text-foreground">
+              {selected.last_name} {selected.first_name}
+            </p>
+            <p className="text-muted-foreground">
+              {t("admin.quarantine.bornOn")} {fmtDob(selected.date_of_birth)}
+              {" · "}
+              {selected.nda || selected.patient_id}
+            </p>
+          </div>
+          <div className="flex items-center gap-2 mt-2">
+            <button
+              onClick={() => onConfirm(selected.patient_id, false)}
+              disabled={isPending}
+              className="flex items-center gap-1 text-xs font-medium bg-primary text-primary-foreground px-3 py-2 rounded-lg hover:opacity-90 disabled:opacity-50"
+            >
+              {isPending ? (
+                <Spinner size={12} />
+              ) : (
+                <UserPlus className="w-3.5 h-3.5" />
+              )}
+              {t("admin.quarantine.assignConfirm")}
+            </button>
+            <button
+              onClick={() => setSelected(null)}
+              className="text-xs text-muted-foreground hover:underline px-2"
+            >
+              {t("admin.quarantine.assignChange")}
+            </button>
+            <button
+              onClick={onCancel}
+              className="text-xs text-muted-foreground hover:underline px-2"
+            >
+              {t("common.cancel")}
+            </button>
+          </div>
+        </>
+      ) : newMode ? (
+        // ── New patient confirmation (demographics via HL7) ──
+        <>
+          <div className="text-xs bg-card border border-warning/40 rounded-lg px-3 py-2.5">
+            <p className="text-[11px] text-muted-foreground mb-1">
+              {t("admin.quarantine.assignNewConfirmQuestion")}
+            </p>
+            <p className="font-semibold text-foreground">
+              {t("admin.quarantine.newPatientId")} {debounced}
+            </p>
+            <p className="text-[11px] text-muted-foreground mt-1">
+              {t("admin.quarantine.assignNewHint")}
+            </p>
+          </div>
+          <div className="flex items-center gap-2 mt-2">
+            <button
+              onClick={() => onConfirm(debounced, true)}
+              disabled={isPending}
+              className="flex items-center gap-1 text-xs font-medium bg-primary text-primary-foreground px-3 py-2 rounded-lg hover:opacity-90 disabled:opacity-50"
+            >
+              {isPending ? (
+                <Spinner size={12} />
+              ) : (
+                <UserPlus className="w-3.5 h-3.5" />
+              )}
+              {t("admin.quarantine.assignNewConfirm")}
+            </button>
+            <button
+              onClick={() => setNewMode(false)}
+              className="text-xs text-muted-foreground hover:underline px-2"
+            >
+              {t("admin.quarantine.assignChange")}
+            </button>
+            <button
+              onClick={onCancel}
+              className="text-xs text-muted-foreground hover:underline px-2"
+            >
+              {t("common.cancel")}
+            </button>
+          </div>
+        </>
+      ) : (
+        // ── Search ──
+        <>
+          <input
+            autoFocus
+            type="text"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder={t("admin.quarantine.assignSearchPlaceholder")}
+            className="w-full text-xs bg-card border border-border rounded-lg px-3 py-2 text-foreground focus:outline-none focus:ring-2 focus:ring-ring/20"
+          />
+          <div className="mt-2 space-y-1">
+            {isFetching && (
+              <Spinner size={12} className="text-muted-foreground" />
+            )}
+            {results.map((p) => (
+              <button
+                key={p.patient_id}
+                onClick={() => setSelected(p)}
+                className="w-full text-left text-xs bg-card border border-border rounded-lg px-3 py-2 hover:bg-muted/40 transition-colors"
+              >
+                <span className="font-medium text-foreground">
+                  {p.last_name} {p.first_name}
+                </span>
+                <span className="text-muted-foreground">
+                  {" — "}
+                  {t("admin.quarantine.bornOn")} {fmtDob(p.date_of_birth)}
+                  {" · "}
+                  {p.nda || p.patient_id}
+                </span>
+              </button>
+            ))}
+            {canCreateNew && (
+              <div className="pt-1">
+                <p className="text-[11px] text-muted-foreground mb-1">
+                  {t("admin.quarantine.assignNoMatch")}
+                </p>
+                <button
+                  onClick={() => setNewMode(true)}
+                  className="w-full flex items-center gap-1.5 text-xs font-medium text-primary border border-dashed border-primary/40 rounded-lg px-3 py-2 hover:bg-primary/10 transition-colors"
+                >
+                  <UserPlus className="w-3.5 h-3.5" />
+                  {t("admin.quarantine.assignNewWithId")} «&nbsp;{debounced}&nbsp;»
+                </button>
+              </div>
+            )}
+          </div>
+          <button
+            onClick={onCancel}
+            className="mt-2 text-xs text-muted-foreground hover:underline"
+          >
+            {t("common.cancel")}
+          </button>
+        </>
       )}
     </div>
   );

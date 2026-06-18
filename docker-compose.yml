@@ -1,43 +1,44 @@
-services:
-  # db:
-  #   image: postgres:16-alpine
-  #   environment:
-  #     POSTGRES_DB: ecghub
-  #     POSTGRES_USER: ${DB_USER}
-  #     POSTGRES_PASSWORD: ${DB_PASSWORD}
-  #   volumes:
-  #     - postgres-data:/var/lib/postgresql/data
-  #   healthcheck:
-  #     test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ecghub"]
-  #     interval: 5s
-  #     timeout: 5s
-  #     retries: 5
+# ECG Hub — production stack, HOST networking (Linux only).
+#
+# Why host networking: ECG Hub listens on many ports (HTTP 4444, FTP + passive
+# range, DICOM 4242, ECTP 30003, metrics 9091). Host mode binds every listener
+# directly on the host — no port mapping, no NAT — so the backend sees real
+# client IPs and FTP passive mode "just works" (PublicHost becomes trivial).
+#
+# Requirements:
+#   - Linux host (host networking is a no-op on Docker Desktop Mac/Windows).
+#   - Nothing else on the host may already use these ports (80, 443, 4444, the
+#     FTP/DICOM/ECTP/metrics ports, and 5432 if Postgres runs on the host).
+#   - DATABASE_URL in .env points at the DB as reachable from the host, e.g.
+#     postgres://ecghub_user:...@127.0.0.1:5432/ecghub?sslmode=disable
+#
+# For bridge networking instead, use the published-ports variant (see git
+# history / nginx.conf) — but you then must publish every port and configure
+# the FTP passive range + PublicHost manually.
 
+services:
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     env_file: .env
-    # Hardening (NFR-S1): drop all Linux capabilities and forbid privilege escalation.
-    # FTP/DICOM bind non-privileged ports (>1024), so no capability is needed.
+    network_mode: host
+    restart: unless-stopped
+    # Hardening (NFR-S1): drop all Linux capabilities, forbid privilege escalation.
     security_opt:
       - no-new-privileges:true
     cap_drop:
       - ALL
-    # read_only root FS is recommended but commented until export/converter temp
-    # write paths are confirmed. To enable: uncomment and provide tmpfs for /tmp.
-    # read_only: true
-    # tmpfs:
-    #   - /tmp
+    # The default FTP/DICOM/ECTP ports are all > 1024, so no capability is needed.
+    # ONLY if the device requires FTP on the privileged port 21: grant the bind
+    # capability and set the FTP port to 21 in Admin > Modules > FTP.
+    # cap_add:
+    #   - NET_BIND_SERVICE
     volumes:
       - ./config.yaml:/app/config.yaml:ro
       - ecg-storage:/data/ecg
       - ecg-quarantine:/data/ecg-quarantine
-    expose:
-      - "4444"
-    ports:
-      - "2121:2121"
-      - "30000-30010:30000-30010"
+    # No `ports:` / `expose:` — host networking binds listeners on the host directly.
 
   frontend:
     build:
@@ -45,21 +46,21 @@ services:
       dockerfile: Dockerfile
     depends_on:
       - backend
-    ports:
-      - "80:80"
-      - "443:443"
+    network_mode: host
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE # nginx binds the privileged ports 80 + 443
     volumes:
-      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
-      # TLS certificates — required by nginx.conf (production TLS termination).
-      # Drop your certificate + key here, or point to your PKI-managed paths.
+      # Host-mode nginx (upstream = 127.0.0.1:4444, no Docker DNS resolver).
+      - ./nginx.host.conf:/etc/nginx/conf.d/default.conf:ro
+      # TLS certificates required by nginx.host.conf.
       - ./certs/server.crt:/etc/nginx/certs/server.crt:ro
       - ./certs/server.key:/etc/nginx/certs/server.key:ro
 
 volumes:
-  # postgres-data:
-  # IT: to use an external pre-created volume, replace with:
-  #   ecg-storage:
-  #     external: true
-  #     name: my-ecg-volume
   ecg-storage:
   ecg-quarantine:

@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { useState, useMemo } from 'react'
-import { Search, Check, Trash2 } from 'lucide-react'
+import { Search, Check, Trash2, Users } from 'lucide-react'
 import { fetchAppUsers, setAppUserRole, deleteAppUser, fetchRoles, fetchUserDefaults, saveUserDefaults } from '../../lib/api'
 import { Spinner } from '../ui/Spinner'
 import { useNotification } from '../../context/NotificationContext'
@@ -112,13 +112,18 @@ export function AdminAppUsersPage() {
   return (
     <div className="p-6">
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-lg font-semibold text-foreground">{t('admin.appUsers.title')}</h1>
-        <p className="text-sm text-muted-foreground mt-1">{t('admin.appUsers.subtitle')}</p>
+      <div className="mb-6 flex items-center gap-3">
+        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/20">
+          <Users className="h-5 w-5" />
+        </div>
+        <div>
+          <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground">{t('admin.appUsers.title')}</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">{t('admin.appUsers.subtitle')}</p>
+        </div>
       </div>
 
       {/* Default role for new users */}
-      <div className="bg-card border border-border rounded-lg px-4 py-3 mb-5 flex items-center justify-between gap-4">
+      <div className="bg-card border border-border rounded-xl px-4 py-3 mb-5 flex items-center justify-between gap-4">
         <div>
           <p className="text-sm font-medium text-foreground">{t('admin.appUsers.defaultRole')}</p>
           <p className="text-xs text-muted-foreground mt-0.5">{t('admin.appUsers.defaultRoleHint')}</p>
@@ -158,7 +163,7 @@ export function AdminAppUsersPage() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder={t('admin.appUsers.searchPlaceholder')}
-          className="w-full pl-10 pr-4 py-2.5 text-sm bg-card border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-ring/20 placeholder:text-muted-foreground/50"
+          className="w-full pl-10 pr-4 py-2.5 text-sm bg-card border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-ring/20 placeholder:text-muted-foreground/50"
         />
       </div>
 
@@ -169,7 +174,7 @@ export function AdminAppUsersPage() {
       )}
 
       {/* Table */}
-      <div className="bg-card rounded-lg border border-border overflow-hidden">
+      <div className="bg-card rounded-xl border border-border overflow-hidden">
         {/* Header row */}
         <div className="grid grid-cols-[1fr_100px_110px_160px_90px] gap-4 px-4 py-2.5 bg-muted/50 border-b border-border">
           <span className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
@@ -210,7 +215,7 @@ export function AdminAppUsersPage() {
           return (
             <div
               key={user.id}
-              className="grid grid-cols-[1fr_100px_110px_160px_90px] gap-4 px-4 py-3 items-center border-b border-border last:border-0 hover:bg-muted/20 transition-colors"
+              className="grid grid-cols-[1fr_100px_110px_160px_90px] gap-4 px-4 py-3 items-center border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
             >
               {/* User */}
               <p className="text-sm font-medium text-foreground font-mono truncate">

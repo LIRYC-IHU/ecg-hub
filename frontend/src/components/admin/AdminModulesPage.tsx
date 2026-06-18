@@ -163,10 +163,10 @@ function FTPCard({ ftpStatus }: { ftpStatus: "running" | "stopped" | "error" | u
     mutationFn: (overrideEnabled?: boolean) =>
       saveFTPConfig({
         port,
-        passive_port_range: `${passiveLow}-${passiveHigh}`,
-        public_host: publicHost,
+        passive_port_range: `${passiveLow}-${passiveHigh}`.trim(),
+        public_host: publicHost.trim(),
         tls,
-        username,
+        username: username.trim(),
         password,
         enabled: overrideEnabled !== undefined ? overrideEnabled : enabled,
       }),
@@ -1457,13 +1457,18 @@ export function AdminModulesPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-lg font-semibold text-foreground">
-          {t("modules.title")}
-        </h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          {t("modules.subtitle")}
-        </p>
+      <div className="flex items-center gap-3">
+        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/20">
+          <Settings2 className="h-5 w-5" />
+        </div>
+        <div>
+          <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground">
+            {t("modules.title")}
+          </h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {t("modules.subtitle")}
+          </p>
+        </div>
       </div>
 
       <ModuleActivationSection />

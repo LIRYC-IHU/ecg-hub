@@ -9,9 +9,23 @@ import {
   Trash2,
   Shield,
   Copy,
+  ScrollText,
+  LogIn,
+  KeyRound,
+  Webhook,
+  Plug,
+  Settings,
+  Power,
+  UserCog,
+  FileEdit,
+  Search,
+  FileUp,
+  FileJson,
+  ChevronDown,
 } from "lucide-react";
 import { useAuditLogs } from "../../hooks/useAuditLogs";
 import type { AuditLogFilters } from "../../lib/api";
+import { fetchAuditLogsForExport } from "../../lib/api";
 import { Spinner } from "../ui/Spinner";
 
 const PAGE_SIZE = 50;
@@ -19,42 +33,149 @@ const PAGE_SIZE = 50;
 type ActionKey =
   | "view"
   | "download"
+  | "ecg_download"
+  | "ecg_search"
+  | "ecg_metadata_update"
+  | "patient_ecg_list"
   | "hl7_force"
   | "delete"
   | "quarantine_decision"
-  | "ecg_duplicate_skipped";
+  | "ecg_duplicate_skipped"
+  | "export_create"
+  | "login_success"
+  | "login_failed"
+  | "role_change"
+  | "role_created"
+  | "role_updated"
+  | "role_deleted"
+  | "user_created"
+  | "user_deleted"
+  | "api_key_created"
+  | "api_key_deleted"
+  | "webhook_created"
+  | "webhook_updated"
+  | "webhook_deleted"
+  | "auth_config_saved"
+  | "auth_config_deleted"
+  | "connector_config_saved"
+  | "connector_config_deleted"
+  | "module_started"
+  | "module_stopped"
+  | "module_settings_saved"
+  | "branding_updated"
+  | "hl7_settings_saved"
+  | "hl7_bulk_retry"
+  | "system_initialized";
+
+const primary = "bg-primary/10 text-primary";
+const success = "bg-success/10 text-success";
+const warning = "bg-warning/10 text-warning";
+const destructive = "bg-destructive/10 text-destructive";
 
 const actionConfig: Record<
   ActionKey,
   { icon: React.ElementType; label: string; cls: string }
 > = {
-  view: { icon: Eye, label: "view", cls: "bg-primary/10 text-primary" },
-  download: {
-    icon: Download,
-    label: "download",
-    cls: "bg-success/10 text-success",
-  },
-  hl7_force: {
-    icon: RefreshCw,
-    label: "hl7_force",
-    cls: "bg-warning/10 text-warning",
-  },
-  delete: {
-    icon: Trash2,
-    label: "delete",
-    cls: "bg-destructive/10 text-destructive",
-  },
-  quarantine_decision: {
-    icon: Shield,
-    label: "quarantine_decision",
-    cls: "bg-quarantine/10 text-quarantine",
-  },
-  ecg_duplicate_skipped: {
-    icon: Copy,
-    label: "ecg_duplicate_skipped",
-    cls: "bg-warning/10 text-warning",
-  },
+  // Data access
+  view: { icon: Eye, label: "view", cls: primary },
+  download: { icon: Download, label: "download", cls: success },
+  ecg_download: { icon: Download, label: "ecg_download", cls: success },
+  ecg_search: { icon: Search, label: "ecg_search", cls: primary },
+  ecg_metadata_update: { icon: FileEdit, label: "ecg_metadata_update", cls: warning },
+  patient_ecg_list: { icon: Eye, label: "patient_ecg_list", cls: primary },
+  hl7_force: { icon: RefreshCw, label: "hl7_force", cls: warning },
+  delete: { icon: Trash2, label: "delete", cls: destructive },
+  quarantine_decision: { icon: Shield, label: "quarantine_decision", cls: "bg-quarantine/10 text-quarantine" },
+  ecg_duplicate_skipped: { icon: Copy, label: "ecg_duplicate_skipped", cls: warning },
+  export_create: { icon: FileUp, label: "export_create", cls: success },
+  // Auth / session
+  login_success: { icon: LogIn, label: "login_success", cls: success },
+  login_failed: { icon: LogIn, label: "login_failed", cls: destructive },
+  // Users / roles
+  role_change: { icon: UserCog, label: "role_change", cls: warning },
+  role_created: { icon: Shield, label: "role_created", cls: warning },
+  role_updated: { icon: Shield, label: "role_updated", cls: warning },
+  role_deleted: { icon: Shield, label: "role_deleted", cls: destructive },
+  user_created: { icon: UserCog, label: "user_created", cls: success },
+  user_deleted: { icon: UserCog, label: "user_deleted", cls: destructive },
+  // Credentials
+  api_key_created: { icon: KeyRound, label: "api_key_created", cls: warning },
+  api_key_deleted: { icon: KeyRound, label: "api_key_deleted", cls: destructive },
+  webhook_created: { icon: Webhook, label: "webhook_created", cls: warning },
+  webhook_updated: { icon: Webhook, label: "webhook_updated", cls: warning },
+  webhook_deleted: { icon: Webhook, label: "webhook_deleted", cls: destructive },
+  // System config
+  auth_config_saved: { icon: Settings, label: "auth_config_saved", cls: warning },
+  auth_config_deleted: { icon: Settings, label: "auth_config_deleted", cls: destructive },
+  connector_config_saved: { icon: Plug, label: "connector_config_saved", cls: warning },
+  connector_config_deleted: { icon: Plug, label: "connector_config_deleted", cls: destructive },
+  module_started: { icon: Power, label: "module_started", cls: success },
+  module_stopped: { icon: Power, label: "module_stopped", cls: destructive },
+  module_settings_saved: { icon: Settings, label: "module_settings_saved", cls: warning },
+  branding_updated: { icon: Settings, label: "branding_updated", cls: primary },
+  hl7_settings_saved: { icon: Settings, label: "hl7_settings_saved", cls: warning },
+  hl7_bulk_retry: { icon: RefreshCw, label: "hl7_bulk_retry", cls: warning },
+  system_initialized: { icon: Power, label: "system_initialized", cls: success },
 };
+
+// Export scope tiers — group actions by sensitivity for filtered JSON exports.
+// "all" includes everything (and any future/unknown action). Keep in sync with
+// the audit action taxonomy in backend models/audit_log.go.
+type ExportScope = "all" | "critical" | "sensitive" | "routine";
+
+const SCOPE_ACTIONS: Record<Exclude<ExportScope, "all">, Set<string>> = {
+  // Security / access-critical
+  critical: new Set([
+    "login_success",
+    "login_failed",
+    "role_change",
+    "role_created",
+    "role_updated",
+    "role_deleted",
+    "user_created",
+    "user_deleted",
+    "api_key_created",
+    "api_key_deleted",
+    "auth_config_saved",
+    "auth_config_deleted",
+    "delete",
+    "system_initialized",
+  ]),
+  // System config changes + data egress
+  sensitive: new Set([
+    "connector_config_saved",
+    "connector_config_deleted",
+    "module_started",
+    "module_stopped",
+    "module_settings_saved",
+    "hl7_settings_saved",
+    "hl7_bulk_retry",
+    "hl7_force",
+    "webhook_created",
+    "webhook_updated",
+    "webhook_deleted",
+    "branding_updated",
+    "export_create",
+    "quarantine_decision",
+    "ecg_metadata_update",
+  ]),
+  // Read / data access + pipeline
+  routine: new Set([
+    "view",
+    "download",
+    "ecg_download",
+    "ecg_search",
+    "patient_ecg_list",
+    "ecg_ingested",
+    "ecg_duplicate_skipped",
+    "hl7_exhausted",
+  ]),
+};
+
+function actionInScope(actionName: string, scope: ExportScope): boolean {
+  if (scope === "all") return true;
+  return SCOPE_ACTIONS[scope].has(actionName);
+}
 
 export function AdminAuditPage() {
   const { t } = useTranslation();
@@ -62,6 +183,14 @@ export function AdminAuditPage() {
   const [userId, setUserId] = useState("");
   const [action, setAction] = useState("");
   const [expandedRow, setExpandedRow] = useState<number | null>(null);
+
+  // JSON export options.
+  const [showExport, setShowExport] = useState(false);
+  const [expPretty, setExpPretty] = useState(true);
+  const [expScope, setExpScope] = useState<ExportScope>("all");
+  const [expAll, setExpAll] = useState(false);
+  const [expCount, setExpCount] = useState(100);
+  const [exporting, setExporting] = useState(false);
 
   const filters: AuditLogFilters = {
     page,
@@ -73,35 +202,58 @@ export function AdminAuditPage() {
   const { logs, total, isLoading } = useAuditLogs(filters);
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
-  function exportCSV() {
-    const header = "date,user,action,resource_id";
-    const rows = logs.map((l) =>
-      [
-        new Date(l.created_at).toISOString(),
-        l.user_id,
-        l.action,
-        l.resource_id,
-      ].join(","),
-    );
-    const blob = new Blob([[header, ...rows].join("\n")], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `audit-${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+  async function exportJSON() {
+    setExporting(true);
+    try {
+      // Scope filtering is client-side, so when a tier is selected we fetch
+      // everything and keep the last N matching rows; otherwise honour the
+      // "last N / all" choice directly. The on-screen user filter is respected.
+      const fetched = await fetchAuditLogsForExport({
+        all: expAll || expScope !== "all",
+        limit: expCount,
+        user_id: userId || undefined,
+      });
+      const scoped = fetched.filter((l) => actionInScope(l.action, expScope));
+      const rows = expAll ? scoped : scoped.slice(0, expCount);
+
+      const payload = {
+        exported_at: new Date().toISOString(),
+        scope: expScope,
+        count: rows.length,
+        ...(userId ? { user_id: userId } : {}),
+        logs: rows,
+      };
+      const json = expPretty
+        ? JSON.stringify(payload, null, 2)
+        : JSON.stringify(payload);
+      const blob = new Blob([json], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `audit-${expScope}-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setShowExport(false);
+    } finally {
+      setExporting(false);
+    }
   }
 
   return (
     <div className="p-6">
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-lg font-semibold text-foreground">
-          {t("admin.audit.title")}
-        </h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          {t("admin.audit.subtitle")}
-        </p>
+      <div className="mb-6 flex items-center gap-3">
+        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/20">
+          <ScrollText className="h-5 w-5" />
+        </div>
+        <div>
+          <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground">
+            {t("admin.audit.title")}
+          </h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {t("admin.audit.subtitle")}
+          </p>
+        </div>
       </div>
 
       {/* Filter bar */}
@@ -139,12 +291,132 @@ export function AdminAuditPage() {
               {total} {t("admin.audit.entries")}
             </span>
           )}
-          <button
-            onClick={exportCSV}
-            className="text-xs px-3 py-1.5 border border-border rounded-lg hover:bg-muted/40 transition-colors text-muted-foreground"
-          >
-            {t("admin.audit.exportCSV")}
-          </button>
+          <div className="relative">
+            <button
+              onClick={() => setShowExport((v) => !v)}
+              className="flex items-center gap-1.5 text-xs px-3 py-1.5 border border-border rounded-lg hover:bg-muted/40 transition-colors text-muted-foreground"
+            >
+              <FileJson size={13} />
+              {t("admin.audit.exportJSON")}
+              <ChevronDown
+                size={13}
+                className={`transition-transform ${showExport ? "rotate-180" : ""}`}
+              />
+            </button>
+
+            {showExport && (
+              <>
+                {/* Click-away backdrop */}
+                <div
+                  className="fixed inset-0 z-10"
+                  onClick={() => setShowExport(false)}
+                />
+                <div className="absolute right-0 mt-2 z-20 w-72 bg-card border border-border rounded-xl shadow-lg p-4 space-y-4">
+                  <p className="text-xs font-semibold text-foreground">
+                    {t("admin.audit.exportTitle")}
+                  </p>
+
+                  {/* Format */}
+                  <div className="space-y-1.5">
+                    <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+                      {t("admin.audit.exportFormat")}
+                    </span>
+                    <div className="flex gap-1.5">
+                      {[
+                        { v: true, label: t("admin.audit.exportPretty") },
+                        { v: false, label: t("admin.audit.exportCompact") },
+                      ].map((o) => (
+                        <button
+                          key={String(o.v)}
+                          onClick={() => setExpPretty(o.v)}
+                          className={`flex-1 text-xs px-2 py-1.5 rounded-md border transition-colors ${
+                            expPretty === o.v
+                              ? "border-primary bg-primary/10 text-primary"
+                              : "border-border text-muted-foreground hover:bg-muted/40"
+                          }`}
+                        >
+                          {o.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Scope */}
+                  <div className="space-y-1.5">
+                    <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+                      {t("admin.audit.exportScope")}
+                    </span>
+                    <select
+                      value={expScope}
+                      onChange={(e) =>
+                        setExpScope(e.target.value as ExportScope)
+                      }
+                      className="w-full text-xs border border-border rounded-md px-2 py-1.5 bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-ring/20"
+                    >
+                      <option value="all">
+                        {t("admin.audit.exportScopeAll")}
+                      </option>
+                      <option value="critical">
+                        {t("admin.audit.exportScopeCritical")}
+                      </option>
+                      <option value="sensitive">
+                        {t("admin.audit.exportScopeSensitive")}
+                      </option>
+                      <option value="routine">
+                        {t("admin.audit.exportScopeRoutine")}
+                      </option>
+                    </select>
+                  </div>
+
+                  {/* Count (tail N / all) */}
+                  <div className="space-y-1.5">
+                    <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
+                      {t("admin.audit.exportCount")}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">
+                        {t("admin.audit.exportLastN")}
+                      </span>
+                      <input
+                        type="number"
+                        min={1}
+                        value={expCount}
+                        disabled={expAll}
+                        onChange={(e) =>
+                          setExpCount(Math.max(1, Number(e.target.value) || 1))
+                        }
+                        className="w-20 text-xs border border-border rounded-md px-2 py-1.5 bg-background text-foreground focus:outline-none focus:ring-1 focus:ring-ring/20 disabled:opacity-40"
+                      />
+                      <label className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={expAll}
+                          onChange={(e) => setExpAll(e.target.checked)}
+                          className="accent-primary"
+                        />
+                        {t("admin.audit.exportAll")}
+                      </label>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={exportJSON}
+                    disabled={exporting}
+                    className="w-full flex items-center justify-center gap-1.5 text-xs px-3 py-2 rounded-lg bg-primary text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50"
+                  >
+                    {exporting ? (
+                      <Spinner size={13} />
+                    ) : (
+                      <Download size={13} />
+                    )}
+                    {exporting
+                      ? t("admin.audit.exporting")
+                      : t("admin.audit.exportDownload")}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
@@ -195,9 +467,12 @@ export function AdminAuditPage() {
                   {new Date(log.created_at).toLocaleString("fr-FR")}
                 </span>
 
-                {/* User */}
-                <span className="text-xs font-mono text-foreground truncate">
-                  {log.user_id}
+                {/* User — display name, raw UUID on hover for traceability */}
+                <span
+                  className="text-xs text-foreground truncate"
+                  title={log.user_id}
+                >
+                  {log.username || log.user_id}
                 </span>
 
                 {/* Action badge */}
