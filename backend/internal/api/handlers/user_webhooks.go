@@ -9,6 +9,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"gorm.io/datatypes"
+	"gorm.io/gorm"
 
 	mw "github.com/LIRYC-IHU/ecg-hub/internal/api/middleware"
 	"github.com/LIRYC-IHU/ecg-hub/internal/auth"
@@ -114,7 +115,7 @@ func ListUserWebhooksHandler(repo *repository.UserWebhookRepository) echo.Handle
 //	@Failure		400		{object}	map[string]string
 //	@Security		BearerAuth
 //	@Router			/api/v1/webhooks [post]
-func CreateUserWebhookHandler(repo *repository.UserWebhookRepository, encKey string) echo.HandlerFunc {
+func CreateUserWebhookHandler(repo *repository.UserWebhookRepository, encKey string, db *gorm.DB) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		userID, _ := c.Get(mw.CtxKeyUserID).(string)
 		var req webhookRequest
@@ -152,6 +153,8 @@ func CreateUserWebhookHandler(repo *repository.UserWebhookRepository, encKey str
 		if err := repo.Create(hook); err != nil {
 			return c.JSON(http.StatusInternalServerError, mw.APIError("DB_ERROR", "failed to create webhook"))
 		}
+		_ = mw.WriteAuditLog(c.Request().Context(), db, userID, "webhook_created", hook.ID,
+			map[string]any{"url": hook.URL})
 		return c.JSON(http.StatusCreated, toWebhookResponse(*hook))
 	}
 }
@@ -169,7 +172,7 @@ func CreateUserWebhookHandler(repo *repository.UserWebhookRepository, encKey str
 //	@Failure		404		{object}	map[string]string
 //	@Security		BearerAuth
 //	@Router			/api/v1/webhooks/{id} [put]
-func UpdateUserWebhookHandler(repo *repository.UserWebhookRepository, encKey string) echo.HandlerFunc {
+func UpdateUserWebhookHandler(repo *repository.UserWebhookRepository, encKey string, db *gorm.DB) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		userID, _ := c.Get(mw.CtxKeyUserID).(string)
 		hook, err := repo.GetByUser(userID, c.Param("id"))
@@ -220,6 +223,8 @@ func UpdateUserWebhookHandler(repo *repository.UserWebhookRepository, encKey str
 		if err := repo.Update(hook); err != nil {
 			return c.JSON(http.StatusInternalServerError, mw.APIError("DB_ERROR", "failed to update webhook"))
 		}
+		_ = mw.WriteAuditLog(c.Request().Context(), db, userID, "webhook_updated", hook.ID,
+			map[string]any{"url": hook.URL})
 		return c.JSON(http.StatusOK, toWebhookResponse(*hook))
 	}
 }
@@ -233,15 +238,17 @@ func UpdateUserWebhookHandler(repo *repository.UserWebhookRepository, encKey str
 //	@Failure		404	{object}	map[string]string
 //	@Security		BearerAuth
 //	@Router			/api/v1/webhooks/{id} [delete]
-func DeleteUserWebhookHandler(repo *repository.UserWebhookRepository) echo.HandlerFunc {
+func DeleteUserWebhookHandler(repo *repository.UserWebhookRepository, db *gorm.DB) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		userID, _ := c.Get(mw.CtxKeyUserID).(string)
-		if err := repo.DeleteByUser(userID, c.Param("id")); err != nil {
+		id := c.Param("id")
+		if err := repo.DeleteByUser(userID, id); err != nil {
 			if errors.Is(err, repository.ErrWebhookNotFound) {
 				return c.JSON(http.StatusNotFound, mw.APIError("NOT_FOUND", "webhook not found"))
 			}
 			return c.JSON(http.StatusInternalServerError, mw.APIError("DB_ERROR", "failed to delete webhook"))
 		}
+		_ = mw.WriteAuditLog(c.Request().Context(), db, userID, "webhook_deleted", id, nil)
 		return c.NoContent(http.StatusNoContent)
 	}
 }

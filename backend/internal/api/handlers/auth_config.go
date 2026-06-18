@@ -9,7 +9,9 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"gorm.io/gorm"
 
+	mw "github.com/LIRYC-IHU/ecg-hub/internal/api/middleware"
 	"github.com/LIRYC-IHU/ecg-hub/internal/auth"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
@@ -149,7 +151,7 @@ func ListAuthProvidersHandler(repo *repository.AuthConfigRepository, encKey stri
 
 // SaveOIDCConfigHandler handles PUT /admin/auth/oidc.
 // Encrypts and stores OIDC configuration.
-func SaveOIDCConfigHandler(repo *repository.AuthConfigRepository, encKey string) echo.HandlerFunc {
+func SaveOIDCConfigHandler(repo *repository.AuthConfigRepository, encKey string, db *gorm.DB) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		var req SaveOIDCRequest
 		if err := c.Bind(&req); err != nil {
@@ -227,6 +229,9 @@ func SaveOIDCConfigHandler(repo *repository.AuthConfigRepository, encKey string)
 		}
 
 		slog.Info("auth_config: OIDC config saved, restart required to apply changes")
+		actorID, _ := c.Get(mw.CtxKeyUserID).(string)
+		_ = mw.WriteAuditLog(c.Request().Context(), db, actorID, "auth_config_saved", "oidc",
+			map[string]any{"provider": "oidc"})
 
 		return c.JSON(http.StatusOK, map[string]any{
 			"message":          "OIDC configuration saved",
@@ -237,7 +242,7 @@ func SaveOIDCConfigHandler(repo *repository.AuthConfigRepository, encKey string)
 
 // SaveLDAPConfigHandler handles PUT /admin/auth/ldap.
 // Encrypts and stores LDAP configuration.
-func SaveLDAPConfigHandler(repo *repository.AuthConfigRepository, encKey string) echo.HandlerFunc {
+func SaveLDAPConfigHandler(repo *repository.AuthConfigRepository, encKey string, db *gorm.DB) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		var req SaveLDAPRequest
 		if err := c.Bind(&req); err != nil {
@@ -318,6 +323,9 @@ func SaveLDAPConfigHandler(repo *repository.AuthConfigRepository, encKey string)
 		}
 
 		slog.Info("auth_config: LDAP config saved, restart required to apply changes")
+		actorID, _ := c.Get(mw.CtxKeyUserID).(string)
+		_ = mw.WriteAuditLog(c.Request().Context(), db, actorID, "auth_config_saved", "ldap",
+			map[string]any{"provider": "ldap"})
 
 		return c.JSON(http.StatusOK, map[string]any{
 			"message":          "LDAP configuration saved",
@@ -327,7 +335,7 @@ func SaveLDAPConfigHandler(repo *repository.AuthConfigRepository, encKey string)
 }
 
 // DeleteAuthProviderHandler handles DELETE /admin/auth/providers/:id.
-func DeleteAuthProviderHandler(repo *repository.AuthConfigRepository) echo.HandlerFunc {
+func DeleteAuthProviderHandler(repo *repository.AuthConfigRepository, db *gorm.DB) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		id := c.Param("id")
 		if id == "" {
@@ -345,6 +353,8 @@ func DeleteAuthProviderHandler(repo *repository.AuthConfigRepository) echo.Handl
 		}
 
 		slog.Info("auth_config: provider config deleted", "id", id)
+		actorID, _ := c.Get(mw.CtxKeyUserID).(string)
+		_ = mw.WriteAuditLog(c.Request().Context(), db, actorID, "auth_config_deleted", id, nil)
 
 		return c.JSON(http.StatusOK, map[string]any{
 			"message":          "auth provider config deleted",

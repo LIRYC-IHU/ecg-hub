@@ -224,7 +224,7 @@ func (r *RouterConfig) RegisterRoutes() {
 	authConfigRepoForProvider := repository.NewAuthConfigRepository(r.gormDB)
 	publicV1.GET("/auth/provider", handlers.AuthProviderHandler(r.authProvider, authConfigRepoForProvider))
 	loginAuthConfigRepo := repository.NewAuthConfigRepository(r.gormDB)
-	publicV1.POST("/auth/login", handlers.LoginHandlerWithDB(r.authProvider, loginAuthConfigRepo, r.authEncKey, r.cfg.JWTSecret, r.userRepo), loginRateLimiter)
+	publicV1.POST("/auth/login", handlers.LoginHandlerWithDB(r.authProvider, loginAuthConfigRepo, r.authEncKey, r.cfg.JWTSecret, r.userRepo, r.gormDB), loginRateLimiter)
 
 	// OIDC Authorization Code Flow
 	{
@@ -285,17 +285,17 @@ func (r *RouterConfig) RegisterRoutes() {
 
 	// User management (Keycloak) — requires admin.users
 	apiV1.GET("/admin/users", handlers.ListUsersHandler(r.keycloakAdmin), mw.RequirePermission(r.checker, auth.PermAdminUsers))
-	apiV1.PUT("/admin/users/:id/role", handlers.SetUserRoleHandler(r.keycloakAdmin), mw.RequirePermission(r.checker, auth.PermAdminUsers))
+	apiV1.PUT("/admin/users/:id/role", handlers.SetUserRoleHandler(r.keycloakAdmin, r.gormDB), mw.RequirePermission(r.checker, auth.PermAdminUsers))
 
 	// Role CRUD — requires admin.roles
 	apiV1.GET("/admin/roles", handlers.ListRolesHandler(roleRepo), mw.RequirePermission(r.checker, auth.PermAdminRoles))
-	apiV1.POST("/admin/roles", handlers.CreateRoleHandler(roleRepo, r.checker), mw.RequirePermission(r.checker, auth.PermAdminRoles))
-	apiV1.PUT("/admin/roles/:id", handlers.UpdateRoleHandler(roleRepo, r.checker), mw.RequirePermission(r.checker, auth.PermAdminRoles))
-	apiV1.DELETE("/admin/roles/:id", handlers.DeleteRoleHandler(roleRepo, r.checker), mw.RequirePermission(r.checker, auth.PermAdminRoles))
+	apiV1.POST("/admin/roles", handlers.CreateRoleHandler(roleRepo, r.checker, r.gormDB), mw.RequirePermission(r.checker, auth.PermAdminRoles))
+	apiV1.PUT("/admin/roles/:id", handlers.UpdateRoleHandler(roleRepo, r.checker, r.gormDB), mw.RequirePermission(r.checker, auth.PermAdminRoles))
+	apiV1.DELETE("/admin/roles/:id", handlers.DeleteRoleHandler(roleRepo, r.checker, r.gormDB), mw.RequirePermission(r.checker, auth.PermAdminRoles))
 
 	// DB user registry — users who have logged in + their roles
 	apiV1.GET("/admin/app-users", handlers.ListAppUsersHandler(r.userRepo), mw.RequirePermission(r.checker, auth.PermAdminUsers))
-	apiV1.PUT("/admin/app-users/:id/role", handlers.SetAppUserRoleHandler(r.userRepo), mw.RequirePermission(r.checker, auth.PermAdminUsers))
+	apiV1.PUT("/admin/app-users/:id/role", handlers.SetAppUserRoleHandler(r.userRepo, r.gormDB), mw.RequirePermission(r.checker, auth.PermAdminUsers))
 	apiV1.DELETE("/admin/app-users/:id", handlers.DeleteAppUserHandler(r.userRepo, localUserRepo, r.gormDB), mw.RequirePermission(r.checker, auth.PermAdminUsers))
 
 	// Quarantine — list requires quarantine.read, delete requires quarantine.delete,
@@ -320,8 +320,8 @@ func (r *RouterConfig) RegisterRoutes() {
 
 	// Module hot-control (EPIC-007 Phase 1) — requires admin.system
 	apiV1.GET("/admin/modules/status", handlers.ListModuleStatusHandler(module.GlobalRegistry), mw.RequirePermission(r.checker, auth.PermAdminSystem))
-	apiV1.POST("/admin/modules/:name/stop", handlers.StopModuleHandler(module.GlobalRegistry, r.moduleConfigRepo), mw.RequirePermission(r.checker, auth.PermAdminSystem))
-	apiV1.POST("/admin/modules/:name/start", handlers.StartModuleHandler(module.GlobalRegistry, r.moduleConfigRepo, r.authEncKey, r.cfg, r.ftpQueue), mw.RequirePermission(r.checker, auth.PermAdminSystem))
+	apiV1.POST("/admin/modules/:name/stop", handlers.StopModuleHandler(module.GlobalRegistry, r.moduleConfigRepo, r.gormDB), mw.RequirePermission(r.checker, auth.PermAdminSystem))
+	apiV1.POST("/admin/modules/:name/start", handlers.StartModuleHandler(module.GlobalRegistry, r.moduleConfigRepo, r.authEncKey, r.cfg, r.ftpQueue, r.gormDB), mw.RequirePermission(r.checker, auth.PermAdminSystem))
 
 	// FTP module configuration — requires admin.system
 	apiV1.GET("/admin/modules/ftp/config", handlers.GetFTPConfigHandler(r.moduleConfigRepo, r.authEncKey), mw.RequirePermission(r.checker, auth.PermAdminSystem))
@@ -333,20 +333,20 @@ func (r *RouterConfig) RegisterRoutes() {
 
 	// Vendor module activation settings (DB-backed, replaces config.yaml modules.active) — requires admin.system
 	apiV1.GET("/admin/settings/modules", handlers.GetModuleSettingsHandler(r.moduleSettingsRepo, r.activeModules), mw.RequirePermission(r.checker, auth.PermAdminSystem))
-	apiV1.PUT("/admin/settings/modules", handlers.SaveModuleSettingsHandler(r.moduleSettingsRepo, r.ingestRouter), mw.RequirePermission(r.checker, auth.PermAdminSystem))
+	apiV1.PUT("/admin/settings/modules", handlers.SaveModuleSettingsHandler(r.moduleSettingsRepo, r.ingestRouter, r.gormDB), mw.RequirePermission(r.checker, auth.PermAdminSystem))
 
 	// User creation defaults (default role for new logins) — requires admin.roles
 	apiV1.GET("/admin/settings/user-defaults", handlers.GetUserDefaultsHandler(r.moduleSettingsRepo), mw.RequirePermission(r.checker, auth.PermAdminRoles))
 	apiV1.PUT("/admin/settings/user-defaults", handlers.SaveUserDefaultsHandler(r.moduleSettingsRepo), mw.RequirePermission(r.checker, auth.PermAdminRoles))
 
 	// Center branding (name + logo) — requires admin.branding
-	apiV1.PUT("/admin/settings/branding", handlers.SaveBrandingHandler(r.moduleSettingsRepo), mw.RequirePermission(r.checker, auth.PermAdminBranding))
-	apiV1.POST("/admin/settings/branding/logo", handlers.UploadLogoHandler(r.moduleSettingsRepo), mw.RequirePermission(r.checker, auth.PermAdminBranding))
+	apiV1.PUT("/admin/settings/branding", handlers.SaveBrandingHandler(r.moduleSettingsRepo, r.gormDB), mw.RequirePermission(r.checker, auth.PermAdminBranding))
+	apiV1.POST("/admin/settings/branding/logo", handlers.UploadLogoHandler(r.moduleSettingsRepo, r.gormDB), mw.RequirePermission(r.checker, auth.PermAdminBranding))
 
 	// Proxy connector configuration (Story 7.6) — requires admin.system
 	apiV1.GET("/admin/connectors/config", handlers.ListConnectorConfigsHandler(r.moduleConfigRepo, r.authEncKey), mw.RequirePermission(r.checker, auth.PermAdminSystem))
-	apiV1.PUT("/admin/connectors/:name/config", handlers.SaveConnectorConfigHandler(r.moduleConfigRepo, r.authEncKey, module.GlobalRegistry, r.connectorReload), mw.RequirePermission(r.checker, auth.PermAdminSystem))
-	apiV1.DELETE("/admin/connectors/:name", handlers.DeleteConnectorConfigHandler(r.moduleConfigRepo, r.connectorReload), mw.RequirePermission(r.checker, auth.PermAdminSystem))
+	apiV1.PUT("/admin/connectors/:name/config", handlers.SaveConnectorConfigHandler(r.moduleConfigRepo, r.authEncKey, module.GlobalRegistry, r.connectorReload, r.gormDB), mw.RequirePermission(r.checker, auth.PermAdminSystem))
+	apiV1.DELETE("/admin/connectors/:name", handlers.DeleteConnectorConfigHandler(r.moduleConfigRepo, r.connectorReload, r.gormDB), mw.RequirePermission(r.checker, auth.PermAdminSystem))
 	apiV1.POST("/admin/connectors/:name/test", handlers.TestConnectorHandler(r.moduleConfigRepo, r.authEncKey), mw.RequirePermission(r.checker, auth.PermAdminSystem))
 
 	// Outbound PACS connectors — requires admin.system
@@ -377,17 +377,17 @@ func (r *RouterConfig) RegisterRoutes() {
 	if r.userWebhookRepo != nil && r.webhookDispatcher != nil {
 		apiV1.GET("/webhooks/options", handlers.WebhookOptionsHandler(r.ingestRouter), mw.RequirePermission(r.checker, auth.PermWebhookManage))
 		apiV1.GET("/webhooks", handlers.ListUserWebhooksHandler(r.userWebhookRepo), mw.RequirePermission(r.checker, auth.PermWebhookManage))
-		apiV1.POST("/webhooks", handlers.CreateUserWebhookHandler(r.userWebhookRepo, r.authEncKey), mw.RequirePermission(r.checker, auth.PermWebhookManage))
-		apiV1.PUT("/webhooks/:id", handlers.UpdateUserWebhookHandler(r.userWebhookRepo, r.authEncKey), mw.RequirePermission(r.checker, auth.PermWebhookManage))
-		apiV1.DELETE("/webhooks/:id", handlers.DeleteUserWebhookHandler(r.userWebhookRepo), mw.RequirePermission(r.checker, auth.PermWebhookManage))
+		apiV1.POST("/webhooks", handlers.CreateUserWebhookHandler(r.userWebhookRepo, r.authEncKey, r.gormDB), mw.RequirePermission(r.checker, auth.PermWebhookManage))
+		apiV1.PUT("/webhooks/:id", handlers.UpdateUserWebhookHandler(r.userWebhookRepo, r.authEncKey, r.gormDB), mw.RequirePermission(r.checker, auth.PermWebhookManage))
+		apiV1.DELETE("/webhooks/:id", handlers.DeleteUserWebhookHandler(r.userWebhookRepo, r.gormDB), mw.RequirePermission(r.checker, auth.PermWebhookManage))
 		apiV1.POST("/webhooks/:id/test", handlers.TestUserWebhookHandler(r.userWebhookRepo, r.webhookDispatcher), mw.RequirePermission(r.checker, auth.PermWebhookManage))
 	}
 
 	// Per-user API keys — requires apikey.manage: keys grant durable
 	// programmatic access, so handing them out is an explicit role decision.
 	apiV1.GET("/api-keys", handlers.ListAPIKeysHandler(apiKeyRepo), mw.RequirePermission(r.checker, auth.PermAPIKeyManage))
-	apiV1.POST("/api-keys", handlers.CreateAPIKeyHandler(apiKeyRepo), mw.RequirePermission(r.checker, auth.PermAPIKeyManage))
-	apiV1.DELETE("/api-keys/:id", handlers.DeleteAPIKeyHandler(apiKeyRepo), mw.RequirePermission(r.checker, auth.PermAPIKeyManage))
+	apiV1.POST("/api-keys", handlers.CreateAPIKeyHandler(apiKeyRepo, r.gormDB), mw.RequirePermission(r.checker, auth.PermAPIKeyManage))
+	apiV1.DELETE("/api-keys/:id", handlers.DeleteAPIKeyHandler(apiKeyRepo, r.gormDB), mw.RequirePermission(r.checker, auth.PermAPIKeyManage))
 
 	// Tags — list visible to all readers, create/delete/apply require specific permissions
 	tagRepo := repository.NewTagRepository(r.gormDB)
@@ -420,7 +420,7 @@ func (r *RouterConfig) RegisterRoutes() {
 	// HL7 scheduler settings — requires hl7.config
 	if r.hl7SettingsRepo != nil {
 		apiV1.GET("/admin/hl7/settings", handlers.GetHL7SettingsHandler(r.hl7SettingsRepo, r.hl7Scheduler), mw.RequirePermission(r.checker, auth.PermHL7Config))
-		apiV1.PUT("/admin/hl7/settings", handlers.UpdateHL7SettingsHandler(r.hl7SettingsRepo, r.hl7Scheduler), mw.RequirePermission(r.checker, auth.PermHL7Config))
+		apiV1.PUT("/admin/hl7/settings", handlers.UpdateHL7SettingsHandler(r.hl7SettingsRepo, r.hl7Scheduler, r.gormDB), mw.RequirePermission(r.checker, auth.PermHL7Config))
 	}
 	// HL7 ping — always available (used to test connection before enabling scheduler)
 	if r.hl7SettingsRepo != nil {
@@ -434,9 +434,9 @@ func (r *RouterConfig) RegisterRoutes() {
 	// Auth provider configuration (OIDC/LDAP from UI) — requires admin.auth_config
 	authConfigRepo := repository.NewAuthConfigRepository(r.gormDB)
 	apiV1.GET("/admin/auth/providers", handlers.ListAuthProvidersHandler(authConfigRepo, r.authEncKey), mw.RequirePermission(r.checker, auth.PermAdminAuthConfig))
-	apiV1.PUT("/admin/auth/oidc", handlers.SaveOIDCConfigHandler(authConfigRepo, r.authEncKey), mw.RequirePermission(r.checker, auth.PermAdminAuthConfig))
-	apiV1.PUT("/admin/auth/ldap", handlers.SaveLDAPConfigHandler(authConfigRepo, r.authEncKey), mw.RequirePermission(r.checker, auth.PermAdminAuthConfig))
-	apiV1.DELETE("/admin/auth/providers/:id", handlers.DeleteAuthProviderHandler(authConfigRepo), mw.RequirePermission(r.checker, auth.PermAdminAuthConfig))
+	apiV1.PUT("/admin/auth/oidc", handlers.SaveOIDCConfigHandler(authConfigRepo, r.authEncKey, r.gormDB), mw.RequirePermission(r.checker, auth.PermAdminAuthConfig))
+	apiV1.PUT("/admin/auth/ldap", handlers.SaveLDAPConfigHandler(authConfigRepo, r.authEncKey, r.gormDB), mw.RequirePermission(r.checker, auth.PermAdminAuthConfig))
+	apiV1.DELETE("/admin/auth/providers/:id", handlers.DeleteAuthProviderHandler(authConfigRepo, r.gormDB), mw.RequirePermission(r.checker, auth.PermAdminAuthConfig))
 	apiV1.POST("/admin/auth/oidc/test", handlers.TestOIDCHandler(r.authEncKey), mw.RequirePermission(r.checker, auth.PermAdminAuthConfig))
 	apiV1.POST("/admin/auth/ldap/test", handlers.TestLDAPHandler(r.authEncKey), mw.RequirePermission(r.checker, auth.PermAdminAuthConfig))
 }

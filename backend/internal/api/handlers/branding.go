@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/labstack/echo/v4"
+	"gorm.io/gorm"
 
 	mw "github.com/LIRYC-IHU/ecg-hub/internal/api/middleware"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
@@ -35,7 +36,7 @@ func GetBrandingHandler(repo *repository.ModuleSettingsRepository) echo.HandlerF
 // SaveBrandingHandler handles PUT /api/v1/admin/settings/branding.
 // Body: { "center_name": "CHU name", "logo_base64": "data:image/png;base64,..." }
 // logo_base64 may be empty to keep the existing logo.
-func SaveBrandingHandler(repo *repository.ModuleSettingsRepository) echo.HandlerFunc {
+func SaveBrandingHandler(repo *repository.ModuleSettingsRepository, db *gorm.DB) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		var body struct {
 			CenterName string `json:"center_name"`
@@ -58,6 +59,9 @@ func SaveBrandingHandler(repo *repository.ModuleSettingsRepository) echo.Handler
 		if err := repo.SetBranding(body.CenterName, logo); err != nil {
 			return c.JSON(http.StatusInternalServerError, mw.APIError("INTERNAL", err.Error()))
 		}
+		actorID, _ := c.Get(mw.CtxKeyUserID).(string)
+		_ = mw.WriteAuditLog(c.Request().Context(), db, actorID, "branding_updated", "",
+			map[string]any{"center_name": body.CenterName})
 		return c.JSON(http.StatusOK, map[string]any{
 			"data": map[string]any{
 				"center_name": body.CenterName,
@@ -69,7 +73,7 @@ func SaveBrandingHandler(repo *repository.ModuleSettingsRepository) echo.Handler
 // UploadLogoHandler handles POST /api/v1/admin/settings/branding/logo.
 // Accepts multipart/form-data field "logo" (PNG, JPEG, SVG, max 512 KB).
 // Stores as a base64 data URI in the singleton settings row.
-func UploadLogoHandler(repo *repository.ModuleSettingsRepository) echo.HandlerFunc {
+func UploadLogoHandler(repo *repository.ModuleSettingsRepository, db *gorm.DB) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		file, err := c.FormFile("logo")
 		if err != nil {
@@ -110,6 +114,9 @@ func UploadLogoHandler(repo *repository.ModuleSettingsRepository) echo.HandlerFu
 		if err := repo.SetBranding(centerName, dataURI); err != nil {
 			return c.JSON(http.StatusInternalServerError, mw.APIError("INTERNAL", err.Error()))
 		}
+		actorID, _ := c.Get(mw.CtxKeyUserID).(string)
+		_ = mw.WriteAuditLog(c.Request().Context(), db, actorID, "branding_updated", "",
+			map[string]any{"logo_updated": true, "content_type": ct})
 
 		return c.JSON(http.StatusOK, map[string]any{
 			"data": map[string]any{

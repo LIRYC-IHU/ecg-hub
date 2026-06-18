@@ -10,7 +10,9 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"gorm.io/gorm"
 
+	mw "github.com/LIRYC-IHU/ecg-hub/internal/api/middleware"
 	"github.com/LIRYC-IHU/ecg-hub/internal/auth"
 	"github.com/LIRYC-IHU/ecg-hub/internal/config"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
@@ -46,7 +48,7 @@ func ListModuleStatusHandler(reg *module.Registry) echo.HandlerFunc {
 //
 // POST /api/v1/admin/modules/:name/stop
 // Returns 404 when the module is not registered, 500 on stop error, 200 on success.
-func StopModuleHandler(reg *module.Registry, moduleConfigRepo *repository.ModuleConfigRepository) echo.HandlerFunc {
+func StopModuleHandler(reg *module.Registry, moduleConfigRepo *repository.ModuleConfigRepository, db *gorm.DB) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		name := c.Param("name")
 		if err := reg.Stop(name); err != nil {
@@ -63,6 +65,8 @@ func StopModuleHandler(reg *module.Registry, moduleConfigRepo *repository.Module
 		if err := moduleConfigRepo.SetEnabled(name, false); err != nil {
 			slog.Warn("module_control: failed to persist disabled state", "module", name, "error", err)
 		}
+		actorID, _ := c.Get(mw.CtxKeyUserID).(string)
+		_ = mw.WriteAuditLog(c.Request().Context(), db, actorID, "module_stopped", name, nil)
 		return c.JSON(http.StatusOK, map[string]string{"status": "stopped"})
 	}
 }
@@ -80,6 +84,7 @@ func StartModuleHandler(
 	encKey string,
 	cfg *config.Config,
 	ftpQueue ingestion.IngestQueue,
+	db *gorm.DB,
 ) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		name := c.Param("name")
@@ -106,6 +111,8 @@ func StartModuleHandler(
 			})
 		}
 
+		actorID, _ := c.Get(mw.CtxKeyUserID).(string)
+		_ = mw.WriteAuditLog(c.Request().Context(), db, actorID, "module_started", name, nil)
 		return c.JSON(http.StatusOK, map[string]string{"status": "running"})
 	}
 }
@@ -175,6 +182,20 @@ func StartFTPFromDB(
 	}
 
 	server := ingestion.New(settings, queue)
+
+	// Re-wire the FTP file-received hook: a UI-triggered restart builds a fresh
+	// server instance that would otherwise lose the hook, silently breaking
+	// nihon-kohden ECTP FILE|ENDS verification (the device gets a 500 because the
+	// upload is never recorded). The trackers are registered at startup in main.go.
+	for _, tracker := range module.FTPFileTrackers() {
+		t := tracker
+		server.SetFileReceivedHook(func(filename string) {
+			if err := t.RegisterFTPFile(filename); err != nil {
+				slog.Warn("ftp: failed to register transfer", "filename", filename, "error", err)
+			}
+		})
+	}
+
 	if err := server.Start(); err != nil {
 		return err
 	}

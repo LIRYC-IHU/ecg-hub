@@ -73,12 +73,10 @@ func SearchPatientsHandler(db *gorm.DB) echo.HandlerFunc {
 		}
 		orderClause := col + " " + order
 
-		userID, _ := c.Get(mw.CtxKeyUserID).(string)
-
 		query := db.Model(&models.Patient{})
 		if params.Q != "" {
 			like := "%" + params.Q + "%"
-			query = query.Where("patients.last_name ILIKE ? OR patients.first_name ILIKE ? OR patients.patient_id ILIKE ? OR patients.nip ILIKE ?", like, like, like, like)
+			query = query.Where("patients.last_name ILIKE ? OR patients.first_name ILIKE ? OR patients.patient_id ILIKE ? OR patients.nda ILIKE ?", like, like, like, like)
 		}
 		if params.Tags != "" {
 			tagIDs := strings.Split(params.Tags, ",")
@@ -112,9 +110,9 @@ func SearchPatientsHandler(db *gorm.DB) echo.HandlerFunc {
 			result[i] = dto.PatientWithStatsToDTO(&p)
 		}
 
-		// Audit log — non-blocking: a failed audit write must not return 500 to the user (NFR-R2).
-		_ = mw.WriteAuditLog(c.Request().Context(), db, userID, "patient_search", "",
-			map[string]any{"query": params.Q})
+		// Note: patient list/search is intentionally NOT audited — it fires on every
+		// browse of the patient list and floods the audit trail with low-value rows.
+		// Meaningful patient access is captured by "patient_ecg_list" and "ecg_download".
 
 		return c.JSON(http.StatusOK, map[string]any{
 			"data":     result,

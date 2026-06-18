@@ -35,7 +35,7 @@ func ListLocalUsersHandler(repo *repository.LocalUserRepository) echo.HandlerFun
 
 // CreateLocalUserHandler handles POST /api/v1/admin/local-users.
 // Body: { "username": "alice", "password": "Secret1!", "role": "reader" }
-func CreateLocalUserHandler(repo *repository.LocalUserRepository) echo.HandlerFunc {
+func CreateLocalUserHandler(repo *repository.LocalUserRepository, db *gorm.DB) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		var body struct {
 			Username string `json:"username"`
@@ -62,6 +62,9 @@ func CreateLocalUserHandler(repo *repository.LocalUserRepository) echo.HandlerFu
 		if err != nil {
 			return c.JSON(http.StatusConflict, mw.APIError("CONFLICT", err.Error()))
 		}
+		actorID, _ := c.Get(mw.CtxKeyUserID).(string)
+		_ = mw.WriteAuditLog(c.Request().Context(), db, actorID, "user_created", user.ID,
+			map[string]any{"username": user.Username, "role": user.Role, "provider": "local"})
 		return c.JSON(http.StatusCreated, map[string]any{
 			"id":       user.ID,
 			"username": user.Username,
@@ -72,7 +75,7 @@ func CreateLocalUserHandler(repo *repository.LocalUserRepository) echo.HandlerFu
 
 // SetLocalUserRoleHandler handles PUT /api/v1/admin/local-users/:id/role.
 // Body: { "role": "reader" }
-func SetLocalUserRoleHandler(repo *repository.LocalUserRepository) echo.HandlerFunc {
+func SetLocalUserRoleHandler(repo *repository.LocalUserRepository, db *gorm.DB) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		id := c.Param("id")
 		var body struct {
@@ -84,6 +87,9 @@ func SetLocalUserRoleHandler(repo *repository.LocalUserRepository) echo.HandlerF
 		if err := repo.SetRole(id, body.Role); err != nil {
 			return c.JSON(http.StatusInternalServerError, mw.APIError("INTERNAL", err.Error()))
 		}
+		actorID, _ := c.Get(mw.CtxKeyUserID).(string)
+		_ = mw.WriteAuditLog(c.Request().Context(), db, actorID, "role_change", id,
+			map[string]any{"target_user": id, "new_role": body.Role, "provider": "local"})
 		return c.NoContent(http.StatusNoContent)
 	}
 }

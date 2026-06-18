@@ -10,7 +10,9 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"gorm.io/gorm"
 
+	mw "github.com/LIRYC-IHU/ecg-hub/internal/api/middleware"
 	"github.com/LIRYC-IHU/ecg-hub/internal/auth"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
@@ -151,7 +153,7 @@ func ListConnectorConfigsHandler(repo *repository.ModuleConfigRepository, encKey
 // Preserves any masked or empty password fields using the existing stored value.
 // reload, when non-nil, rebuilds the runtime connector dispatcher from the DB
 // so changes take effect immediately (no restart).
-func SaveConnectorConfigHandler(repo *repository.ModuleConfigRepository, encKey string, registry *module.Registry, reload func()) echo.HandlerFunc {
+func SaveConnectorConfigHandler(repo *repository.ModuleConfigRepository, encKey string, registry *module.Registry, reload func(), db *gorm.DB) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		name := c.Param("name")
 		if name == "" {
@@ -245,6 +247,10 @@ func SaveConnectorConfigHandler(repo *repository.ModuleConfigRepository, encKey 
 		slog.Info("connector_config: connector config saved", "name", name, "protocol", req.Protocol, "enabled", req.Enabled)
 		_ = registry
 
+		actorID, _ := c.Get(mw.CtxKeyUserID).(string)
+		_ = mw.WriteAuditLog(c.Request().Context(), db, actorID, "connector_config_saved", name,
+			map[string]any{"protocol": req.Protocol, "enabled": req.Enabled})
+
 		// Rebuild the runtime connectors from the DB so the change is live now.
 		if reload != nil {
 			reload()
@@ -259,7 +265,7 @@ func SaveConnectorConfigHandler(repo *repository.ModuleConfigRepository, encKey 
 
 // DeleteConnectorConfigHandler handles DELETE /admin/connectors/:name.
 // reload, when non-nil, rebuilds the runtime connector dispatcher from the DB.
-func DeleteConnectorConfigHandler(repo *repository.ModuleConfigRepository, reload func()) echo.HandlerFunc {
+func DeleteConnectorConfigHandler(repo *repository.ModuleConfigRepository, reload func(), db *gorm.DB) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		name := c.Param("name")
 		if name == "" {
@@ -293,6 +299,8 @@ func DeleteConnectorConfigHandler(repo *repository.ModuleConfigRepository, reloa
 		}
 
 		slog.Info("connector_config: connector deleted", "name", name)
+		actorID, _ := c.Get(mw.CtxKeyUserID).(string)
+		_ = mw.WriteAuditLog(c.Request().Context(), db, actorID, "connector_config_deleted", name, nil)
 		if reload != nil {
 			reload()
 		}

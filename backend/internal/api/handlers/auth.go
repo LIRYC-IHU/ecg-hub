@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/labstack/echo/v4"
+	"gorm.io/gorm"
 
 	mw "github.com/LIRYC-IHU/ecg-hub/internal/api/middleware"
 	"github.com/LIRYC-IHU/ecg-hub/internal/auth"
@@ -104,11 +105,22 @@ func AuthProviderHandler(provider auth.Provider, authConfigRepo *repository.Auth
 //	@Failure		401		{object}	map[string]string	"UNAUTHENTICATED"
 //	@Router			/api/v1/auth/login [post]
 func LoginHandler(provider auth.Provider) echo.HandlerFunc {
-	return LoginHandlerWithDB(provider, nil, "", "", nil)
+	return LoginHandlerWithDB(provider, nil, "", "", nil, nil)
 }
 
 // LoginHandlerWithDB is like LoginHandler but also tries LDAP config from DB when ldapAuth is nil.
-func LoginHandlerWithDB(provider auth.Provider, authConfigRepo *repository.AuthConfigRepository, encKey, jwtSecret string, userStore auth.UserStore) echo.HandlerFunc {
+// When db is non-nil, login outcomes (success/failure) are written to the audit log.
+func LoginHandlerWithDB(provider auth.Provider, authConfigRepo *repository.AuthConfigRepository, encKey, jwtSecret string, userStore auth.UserStore, db *gorm.DB) echo.HandlerFunc {
+	// auditLogin records a login outcome. The actor is the attempted username
+	// (the internal uuid is not yet known at this point); the audit list falls
+	// back to showing user_id verbatim, which for login IS the username.
+	auditLogin := func(c echo.Context, username, action string) {
+		if db == nil {
+			return
+		}
+		_ = mw.WriteAuditLog(c.Request().Context(), db, username, action, username,
+			map[string]any{"ip": c.RealIP()})
+	}
 	return func(c echo.Context) error {
 		var req LoginRequest
 		if err := c.Bind(&req); err != nil {
@@ -134,6 +146,7 @@ func LoginHandlerWithDB(provider auth.Provider, authConfigRepo *repository.AuthC
 			if err == nil {
 				loginThrottle.Reset(throttleKey)
 				setJWTCookie(c, token)
+				auditLogin(c, req.Username, "login_success")
 				return c.NoContent(http.StatusNoContent)
 			}
 		}
@@ -144,12 +157,14 @@ func LoginHandlerWithDB(provider auth.Provider, authConfigRepo *repository.AuthC
 			if err == nil {
 				loginThrottle.Reset(throttleKey)
 				setJWTCookie(c, token)
+				auditLogin(c, req.Username, "login_success")
 				return c.NoContent(http.StatusNoContent)
 			}
 		}
 
 		// All authentication paths failed — record the failure for lockout accounting.
 		loginThrottle.Fail(throttleKey)
+		auditLogin(c, req.Username, "login_failed")
 		return c.JSON(http.StatusUnauthorized, mw.APIError("UNAUTHENTICATED", "invalid credentials"))
 	}
 }

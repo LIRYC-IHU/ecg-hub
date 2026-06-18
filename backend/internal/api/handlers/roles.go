@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/labstack/echo/v4"
+	"gorm.io/gorm"
 
 	mw "github.com/LIRYC-IHU/ecg-hub/internal/api/middleware"
 	"github.com/LIRYC-IHU/ecg-hub/internal/auth"
@@ -81,7 +82,7 @@ func ListRolesHandler(repo roleRepoIface) echo.HandlerFunc {
 //	@Failure		409		{object}	map[string]string
 //	@Security		BearerAuth
 //	@Router			/api/v1/admin/roles [post]
-func CreateRoleHandler(repo roleRepoIface, checker *auth.PermissionChecker) echo.HandlerFunc {
+func CreateRoleHandler(repo roleRepoIface, checker *auth.PermissionChecker, db *gorm.DB) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		var req roleRequest
 		if err := c.Bind(&req); err != nil {
@@ -98,6 +99,9 @@ func CreateRoleHandler(repo roleRepoIface, checker *auth.PermissionChecker) echo
 			return c.JSON(http.StatusConflict, mw.APIError("CONFLICT", err.Error()))
 		}
 		checker.Invalidate(role.Name)
+		actorID, _ := c.Get(mw.CtxKeyUserID).(string)
+		_ = mw.WriteAuditLog(c.Request().Context(), db, actorID, "role_created", role.ID,
+			map[string]any{"name": role.Name, "permissions": req.Permissions})
 		return c.JSON(http.StatusCreated, role)
 	}
 }
@@ -116,7 +120,7 @@ func CreateRoleHandler(repo roleRepoIface, checker *auth.PermissionChecker) echo
 //	@Failure		400		{object}	map[string]string
 //	@Security		BearerAuth
 //	@Router			/api/v1/admin/roles/{id} [put]
-func UpdateRoleHandler(repo roleRepoIface, checker *auth.PermissionChecker) echo.HandlerFunc {
+func UpdateRoleHandler(repo roleRepoIface, checker *auth.PermissionChecker, db *gorm.DB) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		id := c.Param("id")
 		var req roleRequest
@@ -150,6 +154,9 @@ func UpdateRoleHandler(repo roleRepoIface, checker *auth.PermissionChecker) echo
 			return c.JSON(http.StatusInternalServerError, mw.APIError("INTERNAL", err.Error()))
 		}
 		checker.Invalidate(req.Name)
+		actorID, _ := c.Get(mw.CtxKeyUserID).(string)
+		_ = mw.WriteAuditLog(c.Request().Context(), db, actorID, "role_updated", id,
+			map[string]any{"name": req.Name, "permissions": req.Permissions})
 		return c.NoContent(http.StatusNoContent)
 	}
 }
@@ -163,7 +170,7 @@ func UpdateRoleHandler(repo roleRepoIface, checker *auth.PermissionChecker) echo
 //	@Success		204
 //	@Security		BearerAuth
 //	@Router			/api/v1/admin/roles/{id} [delete]
-func DeleteRoleHandler(repo roleRepoIface, checker *auth.PermissionChecker) echo.HandlerFunc {
+func DeleteRoleHandler(repo roleRepoIface, checker *auth.PermissionChecker, db *gorm.DB) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		id := c.Param("id")
 		if err := repo.Delete(c.Request().Context(), id); err != nil {
@@ -172,6 +179,8 @@ func DeleteRoleHandler(repo roleRepoIface, checker *auth.PermissionChecker) echo
 			}
 			return c.JSON(http.StatusInternalServerError, mw.APIError("INTERNAL", err.Error()))
 		}
+		actorID, _ := c.Get(mw.CtxKeyUserID).(string)
+		_ = mw.WriteAuditLog(c.Request().Context(), db, actorID, "role_deleted", id, nil)
 		return c.NoContent(http.StatusNoContent)
 	}
 }

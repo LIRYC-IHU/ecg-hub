@@ -9,6 +9,7 @@ import (
 	"github.com/labstack/echo/v4"
 	"gorm.io/gorm"
 
+	mw "github.com/LIRYC-IHU/ecg-hub/internal/api/middleware"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
 )
@@ -81,7 +82,7 @@ func GetHL7SettingsHandler(repo *repository.HL7SettingsRepository, scheduler HL7
 
 // UpdateHL7SettingsHandler handles PUT /admin/hl7/settings.
 // Updates the settings and reloads the scheduler.
-func UpdateHL7SettingsHandler(repo *repository.HL7SettingsRepository, scheduler HL7SchedulerStatus) echo.HandlerFunc {
+func UpdateHL7SettingsHandler(repo *repository.HL7SettingsRepository, scheduler HL7SchedulerStatus, db *gorm.DB) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		var req UpdateHL7SettingsRequest
 		if err := c.Bind(&req); err != nil {
@@ -192,6 +193,10 @@ func UpdateHL7SettingsHandler(repo *repository.HL7SettingsRepository, scheduler 
 			}
 		}
 
+		actorID, _ := c.Get(mw.CtxKeyUserID).(string)
+		_ = mw.WriteAuditLog(c.Request().Context(), db, actorID, "hl7_settings_saved", "",
+			map[string]any{"trigger_mode": settings.TriggerMode, "enabled": settings.Enabled, "host": settings.Host, "port": settings.Port})
+
 		return c.JSON(http.StatusOK, map[string]any{"data": settings})
 	}
 }
@@ -298,6 +303,10 @@ func BulkRetryHL7Handler(db *gorm.DB) echo.HandlerFunc {
 				"message": "bulk retry failed",
 			})
 		}
+
+		actorID, _ := c.Get(mw.CtxKeyUserID).(string)
+		_ = mw.WriteAuditLog(c.Request().Context(), db, actorID, "hl7_bulk_retry", "",
+			map[string]any{"count": result.RowsAffected})
 
 		return c.JSON(http.StatusOK, map[string]any{
 			"count":   result.RowsAffected,

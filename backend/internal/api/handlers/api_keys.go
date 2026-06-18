@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/labstack/echo/v4"
+	"gorm.io/gorm"
 
 	mw "github.com/LIRYC-IHU/ecg-hub/internal/api/middleware"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
@@ -59,7 +60,7 @@ func ListAPIKeysHandler(repo *repository.APIKeyRepository) echo.HandlerFunc {
 // CreateAPIKeyHandler handles POST /api/v1/api-keys.
 // Body: { "name": "my integration" }
 // Returns the created key metadata plus the plaintext `key` — shown exactly once.
-func CreateAPIKeyHandler(repo *repository.APIKeyRepository) echo.HandlerFunc {
+func CreateAPIKeyHandler(repo *repository.APIKeyRepository, db *gorm.DB) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		userID := c.Get(mw.CtxKeyUserID).(string)
 
@@ -92,6 +93,9 @@ func CreateAPIKeyHandler(repo *repository.APIKeyRepository) echo.HandlerFunc {
 			return c.JSON(http.StatusInternalServerError, mw.APIError("INTERNAL", "failed to store API key"))
 		}
 
+		_ = mw.WriteAuditLog(c.Request().Context(), db, userID, "api_key_created", key.ID,
+			map[string]any{"name": key.Name, "prefix": key.Prefix})
+
 		// The plaintext key is included only in this creation response.
 		return c.JSON(http.StatusCreated, map[string]any{
 			"data": map[string]any{
@@ -107,7 +111,7 @@ func CreateAPIKeyHandler(repo *repository.APIKeyRepository) echo.HandlerFunc {
 
 // DeleteAPIKeyHandler handles DELETE /api/v1/api-keys/:id.
 // Only deletes a key owned by the authenticated user.
-func DeleteAPIKeyHandler(repo *repository.APIKeyRepository) echo.HandlerFunc {
+func DeleteAPIKeyHandler(repo *repository.APIKeyRepository, db *gorm.DB) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		userID := c.Get(mw.CtxKeyUserID).(string)
 		id := c.Param("id")
@@ -121,6 +125,7 @@ func DeleteAPIKeyHandler(repo *repository.APIKeyRepository) echo.HandlerFunc {
 		if !deleted {
 			return c.JSON(http.StatusNotFound, mw.APIError("NOT_FOUND", "API key not found"))
 		}
+		_ = mw.WriteAuditLog(c.Request().Context(), db, userID, "api_key_deleted", id, nil)
 		return c.NoContent(http.StatusNoContent)
 	}
 }

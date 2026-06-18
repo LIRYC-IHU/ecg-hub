@@ -149,3 +149,6 @@ certs/
 *.pem
 *.key
 *.crt
+
+# Local backups (never commit medical data)
+/backups/

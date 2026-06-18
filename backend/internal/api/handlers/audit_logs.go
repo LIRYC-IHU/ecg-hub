@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/labstack/echo/v4"
@@ -17,6 +18,10 @@ import (
 type auditLister interface {
 	List(p repository.AuditListParams) ([]models.AuditLog, int64, error)
 }
+
+// usernameResolver maps internal user IDs to display names. Optional — when
+// absent the audit log falls back to showing the raw UUID.
+type usernameResolver func(ctx context.Context, ids []string) map[string]string
 
 // maxAuditPerPage caps per_page to prevent oversized queries on potentially large audit tables.
 const maxAuditPerPage = 200
@@ -51,10 +56,11 @@ type AuditLogListParams struct {
 // @Security BearerAuth
 // @Router /api/v1/audit-logs [get]
 func ListAuditLogsHandler(db *gorm.DB) echo.HandlerFunc {
-	return listAuditLogsHandler(repository.NewAuditRepository(db))
+	userRepo := repository.NewUserRepo(db)
+	return listAuditLogsHandler(repository.NewAuditRepository(db), userRepo.UsernamesByIDs)
 }
 
-func listAuditLogsHandler(repo auditLister) echo.HandlerFunc {
+func listAuditLogsHandler(repo auditLister, resolve ...usernameResolver) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		var params AuditLogListParams
 		if err := c.Bind(&params); err != nil {
@@ -85,6 +91,25 @@ func listAuditLogsHandler(repo auditLister) echo.HandlerFunc {
 		result := make([]dto.AuditLogDTO, len(entries))
 		for i, e := range entries {
 			result[i] = dto.AuditLogToDTO(&e)
+		}
+
+		// Enrich with display names (resolved UUID → username). Best-effort: any
+		// unresolved id keeps the raw UUID so the row is never blank.
+		if len(resolve) > 0 && resolve[0] != nil && len(result) > 0 {
+			ids := make([]string, 0, len(result))
+			seen := make(map[string]struct{}, len(result))
+			for _, r := range result {
+				if _, ok := seen[r.UserID]; !ok {
+					seen[r.UserID] = struct{}{}
+					ids = append(ids, r.UserID)
+				}
+			}
+			names := resolve[0](c.Request().Context(), ids)
+			for i := range result {
+				if name, ok := names[result[i].UserID]; ok && name != "" {
+					result[i].Username = name
+				}
+			}
 		}
 
 		return c.JSON(http.StatusOK, map[string]any{

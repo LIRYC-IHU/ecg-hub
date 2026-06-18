@@ -220,6 +220,13 @@ func main() {
 		if dba, ok := m.(module.DBAccessor); ok {
 			dba.SetDB(gormDB)
 		}
+		// Record modules that track FTP uploads (e.g. nihon-kohden ECTP FILE|ENDS
+		// verification) so the file-received hook can be (re)built every time the
+		// FTP server starts — including UI-triggered restarts (see StartFTPFromDB).
+		// Must run before StartFTPFromDB below so the startup wiring sees it.
+		if tracker, ok := m.(module.FTPFileTracker); ok {
+			module.RegisterFTPFileTracker(tracker)
+		}
 		if s, ok := m.(module.Startable); ok {
 			if err := s.Start(cfg); err != nil {
 				slog.Error("FATAL: module start failed", "module", m.Name(), "error", err)
@@ -448,23 +455,10 @@ func main() {
 		module.GlobalRegistry.Register("ftp", &ftpModuleWrapper{server: ftpServer, status: module.StatusStopped})
 	}
 
-	// Wire FTP file-received hook for modules that implement FTPFileTracker
-	// (e.g. nihon-kohden uses it for ECTP FILE|ENDS verification).
-	// Uses the FTP server registered in GlobalRegistry (started from DB or config.yaml).
-	if ftpMod, ok := module.GlobalRegistry.Get("ftp"); ok {
-		if hookable, ok2 := ftpMod.(interface{ SetFileReceivedHook(func(string)) }); ok2 {
-			for _, m := range activeModules {
-				if tracker, ok := m.(module.FTPFileTracker); ok {
-					name := m.Name()
-					hookable.SetFileReceivedHook(func(filename string) {
-						if err := tracker.RegisterFTPFile(filename); err != nil {
-							slog.Warn("ftp: failed to register transfer", "module", name, "filename", filename, "error", err)
-						}
-					})
-				}
-			}
-		}
-	}
+	// The FTP file-received hook (nihon-kohden ECTP verification) is wired inside
+	// StartFTPFromDB, directly on the real *ingestion.Server — the GlobalRegistry
+	// only holds Stop()-only wrappers, so it cannot carry the hook. Trackers were
+	// registered above via module.RegisterFTPFileTracker before FTP was started.
 
 	// Auto-start DICOM from DB configuration if enabled (survives container restart).
 	// DICOM is configured exclusively from the admin UI (Modules > DICOM).

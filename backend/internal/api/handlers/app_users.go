@@ -55,7 +55,7 @@ func ListAppUsersHandler(repo appUserRepo) echo.HandlerFunc {
 //	@Failure		400	{object}	map[string]string
 //	@Security		BearerAuth
 //	@Router			/api/v1/admin/app-users/{id}/role [put]
-func SetAppUserRoleHandler(repo appUserRepo) echo.HandlerFunc {
+func SetAppUserRoleHandler(repo appUserRepo, db *gorm.DB) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		id := c.Param("id")
 		if id == "" {
@@ -72,6 +72,9 @@ func SetAppUserRoleHandler(repo appUserRepo) echo.HandlerFunc {
 		}
 		// Invalidate all existing sessions for this user so they pick up the new role.
 		_ = repo.SetUpdateJWT(c.Request().Context(), id, true)
+		actorID, _ := c.Get(mw.CtxKeyUserID).(string)
+		_ = mw.WriteAuditLog(c.Request().Context(), db, actorID, "role_change", id,
+			map[string]any{"target_user": id, "new_role": body.Role})
 		return c.NoContent(http.StatusNoContent)
 	}
 }

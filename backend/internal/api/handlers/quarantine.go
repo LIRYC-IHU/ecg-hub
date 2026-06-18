@@ -146,8 +146,12 @@ func DeleteQuarantineHandler(db *gorm.DB) echo.HandlerFunc {
 }
 
 // assignRequest is the body of POST /api/v1/admin/quarantine/:id/assign.
+// CreateNew must be set explicitly to assign to a patient_id that does not yet
+// exist in ECG Hub (a new patient created on re-ingest, then enriched via HL7).
+// Without it, an unknown patient_id is rejected — guarding against typos.
 type assignRequest struct {
 	PatientID string `json:"patient_id"`
+	CreateNew bool   `json:"create_new"`
 }
 
 // reingester is the subset of *ingestion.Persister used to re-ingest an assigned file.
@@ -185,6 +189,23 @@ func AssignQuarantineHandler(persister reingester, db *gorm.DB) echo.HandlerFunc
 		req.PatientID = strings.TrimSpace(req.PatientID)
 		if req.PatientID == "" {
 			return c.JSON(http.StatusBadRequest, mw.APIError("BAD_REQUEST", "patient_id is required"))
+		}
+
+		// Anti wrong-patient guard. Two legitimate cases:
+		//   1. Patient already exists → assign (UI confirmed name + DOB).
+		//   2. Patient unknown → only allowed when the caller explicitly opts in via
+		//      create_new (a new patient ID from the HIS, created on re-ingest and
+		//      enriched via HL7). Default path rejects unknown IDs to catch typos.
+		var patient models.Patient
+		patientExists := true
+		if err := db.Where("patient_id = ?", req.PatientID).First(&patient).Error; err != nil {
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return c.JSON(http.StatusInternalServerError, mw.APIError("DB_ERROR", "patient lookup failed"))
+			}
+			patientExists = false
+			if !req.CreateNew {
+				return c.JSON(http.StatusNotFound, mw.APIError("PATIENT_NOT_FOUND", "patient inconnu — vérifiez l'identifiant ou créez un nouveau patient"))
+			}
 		}
 
 		entry, err := repo.FindByID(id)
@@ -247,14 +268,20 @@ func AssignQuarantineHandler(persister reingester, db *gorm.DB) echo.HandlerFunc
 			}
 		}
 
+		patientName := ""
+		if patientExists {
+			patientName = strings.TrimSpace(patient.LastName + " " + patient.FirstName)
+		}
 		userID, _ := c.Get(mw.CtxKeyUserID).(string)
 		_ = mw.WriteAuditLog(c.Request().Context(), db, userID, "quarantine_decision",
 			id, map[string]any{
-				"action":     "assign",
-				"id":         id,
-				"patient_id": req.PatientID,
-				"filename":   entry.Filename,
-				"vendor":     entry.Vendor,
+				"action":       "assign",
+				"id":           id,
+				"patient_id":   req.PatientID,
+				"patient_name": patientName,
+				"new_patient":  !patientExists,
+				"filename":     entry.Filename,
+				"vendor":       entry.Vendor,
 			})
 
 		return c.JSON(http.StatusOK, map[string]any{

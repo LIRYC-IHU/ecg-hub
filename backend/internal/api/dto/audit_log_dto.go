@@ -12,6 +12,7 @@ type AuditLogDTO struct {
 	ID         string          `json:"id"`
 	CreatedAt  string          `json:"created_at"` // ISO 8601 UTC
 	UserID     string          `json:"user_id"`
+	Username   string          `json:"username"` // resolved display name (ecg_hub_users.external_id); empty if unknown
 	Action     string          `json:"action"`
 	ResourceID string          `json:"resource_id"`
 	Details    json.RawMessage `json:"details"` // JSONB passthrough — no double-encoding

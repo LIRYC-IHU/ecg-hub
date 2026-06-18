@@ -114,6 +114,14 @@ func SaveFTPConfigHandler(repo *repository.ModuleConfigRepository, encKey string
 			})
 		}
 
+		// Trim surrounding whitespace on free-text inputs: a stray space (e.g. in
+		// PublicHost) is otherwise persisted and later rejected by ftpserverlib as an
+		// "invalid passive IP", crashing the FTP server at start. Password is left
+		// untouched — spaces may be significant in a secret.
+		req.PublicHost = strings.TrimSpace(req.PublicHost)
+		req.PassivePortRange = strings.TrimSpace(req.PassivePortRange)
+		req.Username = strings.TrimSpace(req.Username)
+
 		if req.Port < 1 || req.Port > 65535 {
 			return c.JSON(http.StatusBadRequest, map[string]string{
 				"code":    "INVALID_PARAMS",

@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/labstack/echo/v4"
+	"gorm.io/gorm"
 
 	mw "github.com/LIRYC-IHU/ecg-hub/internal/api/middleware"
 	"github.com/LIRYC-IHU/ecg-hub/internal/auth"
@@ -51,7 +52,7 @@ func ListUsersHandler(admin *auth.KeycloakAdminClient) echo.HandlerFunc {
 //	@Failure		400		{object}	map[string]string
 //	@Security		BearerAuth
 //	@Router			/api/v1/admin/users/{id}/role [put]
-func SetUserRoleHandler(admin *auth.KeycloakAdminClient) echo.HandlerFunc {
+func SetUserRoleHandler(admin *auth.KeycloakAdminClient, db *gorm.DB) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		if admin == nil {
 			return c.JSON(http.StatusServiceUnavailable,
@@ -73,6 +74,10 @@ func SetUserRoleHandler(admin *auth.KeycloakAdminClient) echo.HandlerFunc {
 			return c.JSON(http.StatusBadGateway,
 				mw.APIError("KEYCLOAK_ERROR", "Failed to set role: "+err.Error()))
 		}
+
+		actorID, _ := c.Get(mw.CtxKeyUserID).(string)
+		_ = mw.WriteAuditLog(c.Request().Context(), db, actorID, "role_change", userID,
+			map[string]any{"target_user": userID, "new_role": body.Role, "provider": "keycloak"})
 
 		return c.JSON(http.StatusOK, map[string]any{"user_id": userID, "role": body.Role})
 	}
