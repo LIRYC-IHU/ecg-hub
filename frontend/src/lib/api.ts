@@ -422,6 +422,39 @@ export async function fetchAuditLogs(
   return res.json();
 }
 
+// API caps per_page at 200; paginate to gather more for exports.
+const AUDIT_MAX_PER_PAGE = 200;
+
+// fetchAuditLogsForExport returns the most recent audit logs (DESC order).
+// When `all` is true it walks every page until exhausted; otherwise it stops
+// once `limit` rows have been collected. Optional `user_id` narrows the export.
+export async function fetchAuditLogsForExport(opts: {
+  all: boolean;
+  limit: number;
+  user_id?: string;
+}): Promise<import("../types").AuditLog[]> {
+  const out: import("../types").AuditLog[] = [];
+  let page = 1;
+  // Hard ceiling so a runaway "all" export can't loop forever.
+  const maxPages = 1000;
+  while (page <= maxPages) {
+    const target = opts.all
+      ? AUDIT_MAX_PER_PAGE
+      : Math.min(AUDIT_MAX_PER_PAGE, opts.limit - out.length);
+    if (!opts.all && target <= 0) break;
+    const res = await fetchAuditLogs({
+      page,
+      per_page: target,
+      user_id: opts.user_id,
+    });
+    out.push(...res.data);
+    if (res.data.length === 0 || out.length >= res.total) break;
+    if (!opts.all && out.length >= opts.limit) break;
+    page++;
+  }
+  return opts.all ? out : out.slice(0, opts.limit);
+}
+
 export interface PatientFilters {
   q?: string;
   tags?: string[];
@@ -594,11 +627,12 @@ export async function deleteQuarantineEntry(id: string): Promise<void> {
 export async function assignQuarantineEntry(
   id: string,
   patientId: string,
+  createNew = false,
 ): Promise<void> {
   const res = await fetch(`${BASE_URL}/api/v1/admin/quarantine/${id}/assign`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ patient_id: patientId }),
+    body: JSON.stringify({ patient_id: patientId, create_new: createNew }),
   });
   if (!res.ok) {
     const err: ErrorResponse = await res.json();

@@ -14,7 +14,13 @@ import {
   Tag,
   Copy,
   RefreshCw,
+  Activity,
+  CalendarClock,
+  CheckCircle2,
+  Hourglass,
 } from "lucide-react";
+import { gsap } from "gsap";
+import { useGSAP } from "@gsap/react";
 import { useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePatients } from "../../hooks/usePatients";
@@ -37,7 +43,6 @@ import {
   fetchActiveHL7Mappings,
   fetchHL7History,
   type TagDTO,
-  type HL7Attempt,
 } from "../../lib/api";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../../hooks/useAuth";
@@ -47,6 +52,8 @@ import { TagBadge } from "../ui/TagBadge";
 import { TagManager } from "../tags/TagManager";
 import { ECGViewerModal } from "../ecg/ECGViewerModal";
 import type { Patient, ECG } from "../../types";
+
+gsap.registerPlugin(useGSAP);
 
 // ─── Small helpers ───────────────────────────────────────────────────────────
 
@@ -65,7 +72,7 @@ function PatientAvatar({
   const sz = `${size}px`;
   return (
     <div
-      className={`rounded-full flex items-center justify-center font-semibold flex-shrink-0 ${
+      className={`rounded-full flex items-center justify-center font-semibold shrink-0 ${
         isF
           ? "bg-pink-500/10 text-pink-400 ring-1 ring-pink-500/20"
           : "bg-blue-500/10 text-blue-400 ring-1 ring-blue-500/20"
@@ -210,6 +217,8 @@ function PatientGrid({
 }) {
   const { t } = useTranslation();
   const { notify } = useNotification();
+  const gridRef = useRef<HTMLDivElement>(null);
+
   if (isLoading) {
     return (
       <div className="flex justify-center py-16">
@@ -227,7 +236,7 @@ function PatientGrid({
   }
 
   return (
-    <div className="flex flex-col gap-1 p-4">
+    <div ref={gridRef} className="flex flex-col gap-1.5 p-4">
       {patients.map((patient) => {
         const isPinned = pinned.has(patient.patient_id);
         const isChecked = checked.has(patient.id);
@@ -236,10 +245,10 @@ function PatientGrid({
           <div
             key={patient.id}
             onClick={() => onSelect(patient)}
-            className={`group flex items-center gap-4 px-4 py-3 rounded-lg border cursor-pointer transition-all duration-150 ${
+            className={`pg-row group flex items-center gap-4 px-4 py-3 rounded-xl border cursor-pointer transition-all duration-200 ease-out hover:-translate-y-0.5 ${
               isChecked
-                ? "border-primary/40 bg-primary/5"
-                : "border-border bg-card hover:bg-muted/40 hover:border-primary/30"
+                ? "border-primary/40 bg-primary/5 shadow-sm shadow-primary/5"
+                : "border-border bg-card hover:bg-muted/40 hover:border-primary/30 hover:shadow-md hover:shadow-black/5"
             }`}
           >
             <div
@@ -333,10 +342,10 @@ function PatientRow({
   return (
     <div
       onClick={onSelect}
-      className={`group mx-2 px-3 py-2.5 rounded-md flex items-center gap-2.5 cursor-pointer transition-colors ${
+      className={`pl-row group mx-2 px-3 py-2.5 rounded-md flex items-center gap-2.5 cursor-pointer transition-all duration-200 ease-out ${
         isSelected
           ? "bg-primary/10 border-l-2 border-primary"
-          : "border-l-2 border-transparent hover:bg-muted/40"
+          : "border-l-2 border-transparent hover:bg-muted/40 hover:translate-x-0.5"
       }`}
     >
       <PatientAvatar patient={patient} size={34} />
@@ -348,7 +357,7 @@ function PatientRow({
           {(patient.unviewed_count ?? 0) > 0 && (
             <span
               title={t("patient.newEcgs", { count: patient.unviewed_count })}
-              className="shrink-0 inline-flex items-center justify-center min-w-[16px] h-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-semibold"
+              className="shrink-0 inline-flex items-center justify-center min-w-4 h-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-semibold"
             >
               {patient.unviewed_count}
             </span>
@@ -618,6 +627,7 @@ function PatientDetail({
   const [viewerEcgId, setViewerEcgId] = useState<string | null>(null);
   const [downloadOpenId, setDownloadOpenId] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
+  const detailRef = useRef<HTMLDivElement>(null);
   const deleteMutation = useMutation({
     mutationFn: (id: number) => deleteECG(id),
     onSuccess: () => {
@@ -669,13 +679,39 @@ function PatientDetail({
     }
   }, [allChecked, selectedOnPage.length, ecgs.length, patient.id]);
 
+  // Entrance choreography: header band + bento rise in, exam rows stagger up.
+  // Keyed to patient.id so switching patients re-plays it (not on poll refetch).
+  useGSAP(
+    () => {
+      gsap.from(".detail-band", {
+        y: 10,
+        opacity: 0,
+        duration: 0.4,
+        ease: "power2.out",
+        stagger: 0.08,
+      });
+      gsap.from(".ecg-row", {
+        y: 12,
+        opacity: 0,
+        duration: 0.45,
+        ease: "",
+        stagger: 0.03,
+        delay: 0.1,
+      });
+    },
+    { scope: detailRef, dependencies: [patient.id] },
+  );
+
   return (
-    <div className="flex flex-col h-full min-h-0 overflow-hidden relative">
+    <div
+      ref={detailRef}
+      className="flex flex-col h-full min-h-0 overflow-hidden relative"
+    >
       {/* Patient header */}
-      <div className="px-8 py-6 border-b border-border flex items-start gap-5 shrink-0">
+      <div className="detail-band px-8 py-7 border-b border-border flex items-start gap-5 shrink-0">
         <PatientAvatar patient={patient} size={56} />
         <div className="flex-1 min-w-0">
-          <h2 className="text-xl font-semibold tracking-tight text-foreground">
+          <h2 className="font-display text-2xl font-semibold tracking-tight text-foreground">
             {patient.last_name}, {patient.first_name}
           </h2>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-sm text-muted-foreground">
@@ -768,34 +804,55 @@ function PatientDetail({
         </div>
       </div>
 
-      {/* Stats strip */}
-      <div className="grid grid-cols-4 gap-3 px-8 py-4 border-b border-border shrink-0">
+      {/* Metric bento */}
+      <div className="detail-band grid grid-cols-4 grid-flow-dense gap-3 px-8 py-5 border-b border-border shrink-0">
         {[
-          { label: t("patient.totalEcgs"), value: total, cls: "text-primary" },
+          {
+            label: t("patient.totalEcgs"),
+            value: total,
+            cls: "text-primary",
+            Icon: Activity,
+            accent: "bg-primary/10 text-primary ring-primary/20",
+          },
           {
             label: t("patient.lastExam"),
             value: formatDate(patient.last_activity),
-            cls: "text-foreground font-mono text-sm",
+            cls: "text-foreground font-mono text-base",
+            Icon: CalendarClock,
+            accent: "bg-muted text-muted-foreground ring-border",
           },
           {
             label: t("patient.hl7Sent"),
             value: sentCount,
-            cls: "text-green-400",
+            cls: "text-green-500",
+            Icon: CheckCircle2,
+            accent: "bg-green-500/10 text-green-500 ring-green-500/20",
           },
           {
             label: t("patient.hl7Pending"),
             value: pendingCount,
-            cls: "text-amber-400",
+            cls: "text-amber-500",
+            Icon: Hourglass,
+            accent: "bg-amber-500/10 text-amber-500 ring-amber-500/20",
           },
         ].map((s) => (
           <div
             key={s.label}
-            className="p-3 rounded-lg border border-border bg-muted/20"
+            className="group rounded-xl border border-border bg-card p-4 transition-all duration-200 ease-out hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-md hover:shadow-black/5"
           >
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              {s.label}
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                {s.label}
+              </span>
+              <span
+                className={`flex h-7 w-7 items-center justify-center rounded-lg ring-1 ${s.accent}`}
+              >
+                <s.Icon className="h-3.5 w-3.5" />
+              </span>
             </div>
-            <div className={`text-lg font-semibold mt-1 ${s.cls}`}>
+            <div
+              className={`font-display mt-2 text-2xl font-semibold leading-none tabular-nums ${s.cls}`}
+            >
               {s.value}
             </div>
           </div>
@@ -843,12 +900,12 @@ function PatientDetail({
               <div
                 key={ecg.id}
                 onClick={() => onToggleECG(ecg.id)}
-                className={`flex items-center gap-3 p-3.5 rounded-lg border cursor-pointer transition-colors ${
+                className={`ecg-row flex items-center gap-3 p-3.5 rounded-xl border cursor-pointer transition-all duration-200 ease-out hover:-translate-y-0.5 hover:shadow-md hover:shadow-black/5 ${
                   isSelected
                     ? "border-primary/40 bg-primary/5"
                     : ecg.viewed
                       ? "border-border bg-muted/10 hover:bg-muted/30"
-                      : "border-primary/30 bg-primary/[0.04] hover:bg-primary/10"
+                      : "border-primary/30 bg-primary/4 hover:bg-primary/10"
                 }`}
               >
                 <div onClick={(e) => e.stopPropagation()}>
@@ -1393,11 +1450,6 @@ export function PatientMasterDetailPage({
       return next;
     });
   }, []);
-
-  const handleClearECGsForPatient = useCallback(() => {
-    if (!selectedPatient) return;
-    setSelectedECGs(new Set());
-  }, [selectedPatient]);
 
   const handleClearAllECGs = useCallback(() => {
     setSelectedECGs(new Set());
