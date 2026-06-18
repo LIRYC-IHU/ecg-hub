@@ -148,6 +148,34 @@ func (r *UserRepo) List(ctx context.Context) ([]AppUser, error) {
 	return users, nil
 }
 
+// UsernamesByIDs maps internal user IDs (ecg_hub_users.id) to their display name
+// (external_id — the username for local accounts, the JWT subject for OIDC).
+// Used to render audit logs with names instead of raw UUIDs. IDs with no matching
+// row (e.g. system-generated audit entries) are simply absent from the result.
+func (r *UserRepo) UsernamesByIDs(ctx context.Context, ids []string) map[string]string {
+	out := make(map[string]string, len(ids))
+	if len(ids) == 0 {
+		return out
+	}
+	type row struct {
+		ID         string
+		ExternalID string
+	}
+	var rows []row
+	if err := r.db.WithContext(ctx).
+		Table("ecg_hub_users").
+		Select("id, external_id").
+		Where("id IN ?", ids).
+		Find(&rows).Error; err != nil {
+		// Best-effort enrichment: on error, callers fall back to the raw UUID.
+		return out
+	}
+	for _, rec := range rows {
+		out[rec.ID] = rec.ExternalID
+	}
+	return out
+}
+
 // ResolveIdentity returns the internal user ID (ecg_hub_users.id) and current
 // role name for the given external identifier (JWT subject), in a single query.
 // Returns ("", "", nil) when the user is unknown — e.g. a token issued before
