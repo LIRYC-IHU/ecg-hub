@@ -1,0 +1,484 @@
+basePath: /api/v1
+definitions:
+  handlers.ConnectorHealthEntry:
+    properties:
+      ae_title:
+        type: string
+      host:
+        type: string
+      name:
+        type: string
+      port:
+        type: integer
+      protocol:
+        type: string
+      status:
+        description: '"ok" or error message'
+        type: string
+    type: object
+  handlers.HealthResponse:
+    properties:
+      connectors:
+        description: outbound PACS connectors (empty when none configured)
+        items:
+          $ref: '#/definitions/handlers.ConnectorHealthEntry'
+        type: array
+      database:
+        description: '"ok" or "error"'
+        type: string
+      dicom_enabled:
+        description: 'true when dicom.enabled: true in config'
+        type: boolean
+      dicom_port:
+        description: configured port (0 when disabled)
+        type: integer
+      ectp_enabled:
+        description: true when nihon-kohden module is active
+        type: boolean
+      ectp_port:
+        description: ECTP TCP port (0 when disabled)
+        type: integer
+      ftp_enabled:
+        description: 'true when ftp.enabled: true in config'
+        type: boolean
+      ftp_port:
+        description: configured port (0 when disabled)
+        type: integer
+      status:
+        description: '"ok" or "degraded"'
+        type: string
+    type: object
+host: localhost
+info:
+  contact:
+    name: LIRYC-IHU
+    url: https://www.ihu-liryc.fr
+  description: API for ECG file ingestion, storage, conversion, and clinical workflow
+    management.
+  title: ECG Hub API
+  version: "1.0"
+paths:
+  /api/v1/ecgs:
+    get:
+      parameters:
+      - description: Search patient name, ID, filename
+        in: query
+        name: q
+        type: string
+      - description: HL7 status filter
+        enum:
+        - pending
+        - success
+        - hl7_exhausted
+        in: query
+        name: hl7_status
+        type: string
+      - description: Vendor filter
+        in: query
+        name: vendor
+        type: string
+      - description: Device model filter
+        in: query
+        name: device_model
+        type: string
+      - description: File extension filter (e.g. .xml, .dat, .dcm)
+        in: query
+        name: file_format
+        type: string
+      - description: Start date (YYYY-MM-DD)
+        in: query
+        name: from
+        type: string
+      - description: End date (YYYY-MM-DD)
+        in: query
+        name: to
+        type: string
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - default: 50
+        description: Items per page
+        in: query
+        name: per_page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      - ApiKeyAuth: []
+      summary: List all ECGs (cross-patient timeline)
+      tags:
+      - ECG
+  /api/v1/ecgs/{id}:
+    delete:
+      parameters:
+      - description: ECG UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Delete ECG
+      tags:
+      - ECG
+  /api/v1/ecgs/{id}/download:
+    get:
+      parameters:
+      - description: ECG UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Export format — repeat the parameter to receive a ZIP bundle
+          (e.g. ?format=original&format=xmlfda)
+        enum:
+        - original
+        - xmlfda
+        - dicom
+        in: query
+        name: format
+        type: string
+      - description: Strip patient-identifying fields from converted outputs (research
+          use). Mutually exclusive with inject; converted formats only.
+        in: query
+        name: anonymize
+        type: boolean
+      - description: Overwrite patient fields in converted outputs with the HL7-enriched
+          demographics from the HIS. Mutually exclusive with anonymize; converted
+          formats only.
+        in: query
+        name: inject
+        type: boolean
+      produces:
+      - application/octet-stream
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: file
+        "400":
+          description: BAD_OPTIONS — invalid anonymize/inject combination
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "422":
+          description: Unprocessable Entity
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "502":
+          description: Bad Gateway
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      - ApiKeyAuth: []
+      summary: Download ECG file
+      tags:
+      - ECG
+  /api/v1/ecgs/{id}/hl7/force:
+    post:
+      parameters:
+      - description: ECG UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Force HL7 retry for an ECG
+      tags:
+      - ECG
+  /api/v1/ecgs/{id}/metadata:
+    get:
+      parameters:
+      - description: ECG UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      - ApiKeyAuth: []
+      summary: Get ECG metadata
+      tags:
+      - ECG
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: ECG UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Metadata fields to update
+        in: body
+        name: body
+        required: true
+        schema:
+          additionalProperties: true
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update ECG metadata
+      tags:
+      - ECG
+  /api/v1/ecgs/{id}/view:
+    post:
+      description: Stamps viewed_at on first view; clears the "new" indicator. Idempotent.
+      parameters:
+      - description: ECG UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Mark an ECG as viewed
+      tags:
+      - ECG
+  /api/v1/ecgs/filters:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get filter facets (vendors, device models, file formats)
+      tags:
+      - ECG
+  /api/v1/patients:
+    get:
+      parameters:
+      - description: Search query
+        in: query
+        name: q
+        type: string
+      - description: Sort field
+        enum:
+        - patient_id
+        - last_name
+        - created_at
+        in: query
+        name: sort_by
+        type: string
+      - description: Sort order
+        enum:
+        - asc
+        - desc
+        in: query
+        name: sort_order
+        type: string
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - default: 50
+        description: Items per page
+        in: query
+        name: per_page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      - ApiKeyAuth: []
+      summary: Search patients
+      tags:
+      - Patients
+  /api/v1/patients/{id}/ecgs:
+    get:
+      parameters:
+      - description: Patient UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Start date (YYYY-MM-DD)
+        in: query
+        name: from
+        type: string
+      - description: End date (YYYY-MM-DD)
+        in: query
+        name: to
+        type: string
+      - description: Vendor filter
+        in: query
+        name: vendor
+        type: string
+      - description: HL7 status
+        enum:
+        - pending
+        - success
+        - hl7_exhausted
+        in: query
+        name: hl7_status
+        type: string
+      - description: Page number
+        in: query
+        name: page
+        type: integer
+      - description: Items per page
+        in: query
+        name: per_page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      - ApiKeyAuth: []
+      summary: List ECGs for a patient
+      tags:
+      - Patients
+  /api/v1/patients/{id}/ecgs/view:
+    post:
+      description: Marks every unviewed ECG of the patient as viewed and returns how
+        many were updated.
+      parameters:
+      - description: Patient business ID (patient_id)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Mark all of a patient's ECGs as viewed
+      tags:
+      - Patients
+  /healthz:
+    get:
+      description: Returns system health including database connectivity, FTP and
+        DICOM server status
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.HealthResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/handlers.HealthResponse'
+      summary: Health check
+      tags:
+      - health
+securityDefinitions:
+  ApiKeyAuth:
+    description: Per-user API key ("ecghub_…") created from the API Keys page. Inherits
+      the owning user's role and permissions — intended for machine clients such as
+      webhook receivers fetching ECG files.
+    in: header
+    name: X-API-Key
+    type: apiKey
+  BearerAuth:
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"
