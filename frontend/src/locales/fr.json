@@ -450,6 +450,8 @@
         "baseDn": "Base DN",
         "userSearchDn": "DN de recherche utilisateurs",
         "userFilter": "Filtre utilisateur",
+        "usernameAttribute": "Attribut username",
+        "uuidAttribute": "Attribut UUID",
         "bindDn": "Bind DN",
         "bindPassword": "Mot de passe Bind",
         "adminGroupDn": "DN groupe admin",
