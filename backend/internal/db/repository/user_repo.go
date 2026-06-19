@@ -10,24 +10,32 @@ import (
 
 // UserRecord is the GORM model for ecg_hub_users.
 type UserRecord struct {
-	ID         string    `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
-	ExternalID string    `gorm:"type:text;not null;uniqueIndex"`
-	Provider   string    `gorm:"not null;default:'oidc'"`
-	RoleID     string    `gorm:"type:uuid;not null;index"`
-	CreatedAt  time.Time `gorm:"autoCreateTime"`
-	LastLogin  time.Time `gorm:"not null"`
-	UpdateJWT  bool      `gorm:"not null;default:false"`
+	ID         string `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
+	ExternalID string `gorm:"type:text;not null;uniqueIndex"`
+	Provider   string `gorm:"not null;default:'oidc'"`
+	RoleID     string `gorm:"type:uuid;not null;index"`
+	// RoleManuallySet is true once an admin assigns the role through the UX
+	// (Admin > App Users). While true, the IdP groups/roles claim no longer
+	// overrides the role on login; clearing the role in the UX resets it to false
+	// so the identity provider drives the role again.
+	RoleManuallySet bool      `gorm:"not null;default:false"`
+	CreatedAt       time.Time `gorm:"autoCreateTime"`
+	LastLogin       time.Time `gorm:"not null"`
+	UpdateJWT       bool      `gorm:"not null;default:false"`
 }
 
 func (UserRecord) TableName() string { return "ecg_hub_users" }
 
 // AppUser is the application-level representation returned to API callers.
 type AppUser struct {
-	ID         string    `json:"id"`
-	ExternalID string    `json:"external_id"`
-	Provider   string    `json:"provider"`
-	RoleName   string    `json:"role_name"`
-	LastLogin  time.Time `json:"last_login"`
+	ID         string `json:"id"`
+	ExternalID string `json:"external_id"`
+	Provider   string `json:"provider"`
+	RoleName   string `json:"role_name"`
+	// RoleManuallySet is true when an admin pinned the role via the UX; false means
+	// the role is driven by the identity provider's groups/roles claim on each login.
+	RoleManuallySet bool      `json:"role_manually_set"`
+	LastLogin       time.Time `json:"last_login"`
 }
 
 // UserRepo provides access to the ecg_hub_users table.
@@ -42,9 +50,9 @@ func NewUserRepo(db *gorm.DB) *UserRepo {
 }
 
 // UpsertLogin implements auth.UserStore.
-// Creates or updates the user record, syncing the role if provided.
-// Returns the effective role name.
-func (r *UserRepo) UpsertLogin(ctx context.Context, externalID, provider, roleName string) (string, error) {
+// Creates or updates the user record, applying the first provider-supplied role
+// candidate that matches a role defined in ECG Hub. Returns the effective role name.
+func (r *UserRepo) UpsertLogin(ctx context.Context, externalID, provider string, roleCandidates []string) (string, error) {
 	now := time.Now()
 
 	// Try to find existing user.
@@ -52,9 +60,10 @@ func (r *UserRepo) UpsertLogin(ctx context.Context, externalID, provider, roleNa
 	err := r.db.WithContext(ctx).Where("external_id = ?", externalID).First(&rec).Error
 
 	if err == gorm.ErrRecordNotFound {
-		// New user: resolve role_id from roleName, falling back to the configured default role.
+		// New user: pick the first candidate matching a defined ECG Hub role,
+		// falling back to the configured default role.
 		defaultRole, _ := r.settingsRepo.GetDefaultRole()
-		roleID, resolvedName, err := r.resolveRole(ctx, roleName, defaultRole)
+		roleID, resolvedName, err := r.resolveRole(ctx, roleCandidates, defaultRole)
 		if err != nil {
 			return "", err
 		}
@@ -74,35 +83,29 @@ func (r *UserRepo) UpsertLogin(ctx context.Context, externalID, provider, roleNa
 	}
 
 	// Existing user: update last_login.
-	// Priority: DB role (set via UX) > provider role (Keycloak/LDAP) > reader default.
-	// A role explicitly set through the admin UI always wins over what the provider says.
+	// Priority: role pinned via UX (role_manually_set) > provider role > default.
+	// Once an admin assigns a role in the UX it is pinned and the IdP no longer
+	// overrides it; otherwise the role is re-synced from the provider on every login.
 	updates := map[string]any{"last_login": now}
 	effectiveName := ""
 
-	if rec.RoleID != "" {
-		// User already has a DB-assigned role — UX management takes priority.
+	if rec.RoleManuallySet && rec.RoleID != "" {
+		// Role pinned by an admin — keep it, ignore the provider claim.
 		name, nameErr := r.roleNameByID(ctx, rec.RoleID)
 		if nameErr == nil {
 			effectiveName = name
 		}
 	}
 
-	if effectiveName == "" && roleName != "" {
-		// No DB role yet — initialise from provider role.
-		roleID, _, syncErr := r.resolveRole(ctx, roleName, "")
-		if syncErr == nil && roleID != "" {
-			updates["role_id"] = roleID
-		}
-		effectiveName = roleName
-	}
-
 	if effectiveName == "" {
-		// Last resort: assign the configured default role.
+		// Not pinned: re-sync from the provider's groups/roles, falling back to default.
 		defaultRole, _ := r.settingsRepo.GetDefaultRole()
-		roleID, _, _ := r.resolveRole(ctx, defaultRole, defaultRole)
-		if roleID != "" {
-			updates["role_id"] = roleID
-			effectiveName = defaultRole
+		roleID, resolvedName, syncErr := r.resolveRole(ctx, roleCandidates, defaultRole)
+		if syncErr == nil && roleID != "" {
+			if roleID != rec.RoleID {
+				updates["role_id"] = roleID
+			}
+			effectiveName = resolvedName
 		}
 	}
 
@@ -115,16 +118,17 @@ func (r *UserRepo) UpsertLogin(ctx context.Context, externalID, provider, roleNa
 // List returns all users with their role names.
 func (r *UserRepo) List(ctx context.Context) ([]AppUser, error) {
 	type row struct {
-		ID         string
-		ExternalID string
-		Provider   string
-		RoleName   *string
-		LastLogin  time.Time
+		ID              string
+		ExternalID      string
+		Provider        string
+		RoleName        *string
+		RoleManuallySet bool
+		LastLogin       time.Time
 	}
 	var rows []row
 	err := r.db.WithContext(ctx).
 		Table("ecg_hub_users u").
-		Select("u.id, u.external_id, u.provider, r.name as role_name, u.last_login").
+		Select("u.id, u.external_id, u.provider, r.name as role_name, u.role_manually_set, u.last_login").
 		Joins("LEFT JOIN roles r ON r.id = u.role_id").
 		Order("u.last_login DESC").
 		Find(&rows).Error
@@ -138,11 +142,12 @@ func (r *UserRepo) List(ctx context.Context) ([]AppUser, error) {
 			roleName = *row.RoleName
 		}
 		users[i] = AppUser{
-			ID:         row.ID,
-			ExternalID: row.ExternalID,
-			Provider:   row.Provider,
-			RoleName:   roleName,
-			LastLogin:  row.LastLogin,
+			ID:              row.ID,
+			ExternalID:      row.ExternalID,
+			Provider:        row.Provider,
+			RoleName:        roleName,
+			RoleManuallySet: row.RoleManuallySet,
+			LastLogin:       row.LastLogin,
 		}
 	}
 	return users, nil
@@ -228,40 +233,61 @@ func (r *UserRepo) GetCurrentRole(ctx context.Context, externalID string) (strin
 	return role.Name, nil
 }
 
-// SetRole assigns a role to a user by name. Passing empty string clears the role.
+// SetRole assigns a role to a user by name through the admin UX. This pins the role:
+// role_manually_set is set so the IdP groups/roles claim no longer overrides it on
+// login. Passing an empty string clears the role and resets the pin, letting the
+// identity provider drive the role again on the next login.
 func (r *UserRepo) SetRole(ctx context.Context, id string, roleName string) error {
 	var roleID *string
+	manuallySet := false
 	if roleName != "" {
 		var rec RoleRecord
 		if err := r.db.WithContext(ctx).Where("name = ?", roleName).First(&rec).Error; err != nil {
 			return fmt.Errorf("user_repo: role %q not found: %w", roleName, err)
 		}
 		roleID = &rec.ID
+		manuallySet = true
 	}
-	return r.db.WithContext(ctx).Model(&UserRecord{}).Where("id = ?", id).Update("role_id", roleID).Error
+	return r.db.WithContext(ctx).Model(&UserRecord{}).Where("id = ?", id).
+		Updates(map[string]any{"role_id": roleID, "role_manually_set": manuallySet}).Error
 }
 
 // resolveRole returns the role ID and name for the given roleName.
 // Falls back to fallbackName if roleName is empty or not found in the DB.
-func (r *UserRepo) resolveRole(ctx context.Context, roleName, fallbackName string) (string, string, error) {
-	name := roleName
-	if name == "" {
-		name = fallbackName
-	}
-	if name == "" {
-		return "", "", nil
-	}
-	var rec RoleRecord
-	if err := r.db.WithContext(ctx).Where("name = ?", name).First(&rec).Error; err != nil {
-		// Role not in DB — try the fallback instead (prevents invalid OIDC/LDAP roles from being accepted).
-		if name != fallbackName && fallbackName != "" {
-			if err := r.db.WithContext(ctx).Where("name = ?", fallbackName).First(&rec).Error; err == nil {
-				return rec.ID, rec.Name, nil
-			}
+// resolveRole returns the (id, name) of the first candidate that matches a role
+// defined in ECG Hub. Candidates that don't exist as roles (e.g. unrelated IdP
+// groups or Keycloak system roles) are skipped — this is what prevents arbitrary
+// provider roles from being accepted without any hard-coded role list. When no
+// candidate matches, it falls back to fallbackName if that role exists.
+func (r *UserRepo) resolveRole(ctx context.Context, candidates []string, fallbackName string) (string, string, error) {
+	lookup := func(name string) (*RoleRecord, error) {
+		if name == "" {
+			return nil, gorm.ErrRecordNotFound
 		}
-		return "", name, nil
+		var rec RoleRecord
+		if err := r.db.WithContext(ctx).Where("name = ?", name).First(&rec).Error; err != nil {
+			return nil, err
+		}
+		return &rec, nil
 	}
-	return rec.ID, rec.Name, nil
+
+	for _, name := range candidates {
+		rec, err := lookup(name)
+		if err == nil {
+			return rec.ID, rec.Name, nil
+		}
+		if err != gorm.ErrRecordNotFound {
+			return "", "", fmt.Errorf("user_repo: resolve role %q: %w", name, err)
+		}
+	}
+
+	// No candidate matched a defined role — try the configured fallback.
+	if rec, err := lookup(fallbackName); err == nil {
+		return rec.ID, rec.Name, nil
+	} else if err != gorm.ErrRecordNotFound {
+		return "", "", fmt.Errorf("user_repo: resolve fallback role %q: %w", fallbackName, err)
+	}
+	return "", fallbackName, nil
 }
 
 // roleNameByID returns the role name for a given role ID.
