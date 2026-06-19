@@ -142,7 +142,7 @@ func LoginWithLDAPFromDB(ctx context.Context, username, password, jwtSecret stri
 	// Register the login in ecg_hub_users (unified identity). A role assigned
 	// from the admin UI takes priority over the LDAP-group-derived role.
 	if userStore != nil {
-		if dbRole, err := userStore.UpsertLogin(ctx, username, "ldap", role); err == nil && dbRole != "" {
+		if dbRole, err := userStore.UpsertLogin(ctx, username, "ldap", []string{role}); err == nil && dbRole != "" {
 			role = dbRole
 		}
 	}
