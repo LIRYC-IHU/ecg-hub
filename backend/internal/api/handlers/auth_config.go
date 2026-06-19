@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -268,6 +269,7 @@ func SaveLDAPConfigHandler(repo *repository.AuthConfigRepository, encKey string,
 				"message": "host and port are required",
 			})
 		}
+		req.Host = strings.TrimPrefix(req.Host, "ldap://")
 
 		// If bind_password is masked or empty, keep existing from DB.
 		if req.BindPassword == maskedSecret || req.BindPassword == "" {
