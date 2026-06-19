@@ -300,6 +300,12 @@
       "apply": "Appliquer",
       "selectRole": "— sélectionner —",
       "noRole": "aucun",
+      "roleSource": {
+        "manual": "Manuel",
+        "manualHint": "Rôle fixé par un admin — le fournisseur d'identité ne l'écrase plus. Videz le rôle pour redonner la main à l'IdP.",
+        "auto": "Auto (IdP)",
+        "autoHint": "Rôle piloté par le claim groupes/rôles du fournisseur d'identité — resynchronisé à chaque connexion."
+      },
       "requires": "Nécessite",
       "errorBanner": "Impossible de charger les utilisateurs — vérifier que OIDC_ADMIN_CLIENT_SECRET est configuré et que le client OIDC a les droits view-users / manage-users sur le realm.",
       "roleDesc": {
@@ -429,7 +435,10 @@
         "redirectUrl": "URL de redirection",
         "logoutUrl": "URL de déconnexion (optionnel)",
         "tls": "TLS",
-        "adminRoleName": "Nom du rôle admin",
+        "scopes": "Scopes",
+        "usernameClaim": "Claim username",
+        "usernameClaimDefault": "défaut (preferred_username → sub)",
+        "groupsClaim": "Claim groupes/rôles",
         "testOk": "Connexion OIDC réussie",
         "testFail": "Connexion OIDC échouée : {{error}}"
       },

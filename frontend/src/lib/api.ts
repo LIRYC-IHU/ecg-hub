@@ -568,6 +568,7 @@ export interface AppUser {
   external_id: string;
   provider: string;
   role_name: string;
+  role_manually_set: boolean; // true = role pinned via UX; false = driven by IdP groups
   last_login: string;
 }
 

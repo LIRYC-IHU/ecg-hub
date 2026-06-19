@@ -300,6 +300,12 @@
       "apply": "Apply",
       "selectRole": "— select —",
       "noRole": "none",
+      "roleSource": {
+        "manual": "Manual",
+        "manualHint": "Role pinned by an admin — the identity provider no longer overrides it. Clear the role to let the IdP drive it again.",
+        "auto": "Auto (IdP)",
+        "autoHint": "Role driven by the identity provider's groups/roles claim — re-synced on every login."
+      },
       "requires": "Requires",
       "errorBanner": "Unable to load users — check that OIDC_ADMIN_CLIENT_SECRET is configured and that the OIDC client has view-users / manage-users rights on the realm.",
       "roleDesc": {
@@ -429,7 +435,10 @@
         "redirectUrl": "Redirect URL",
         "logoutUrl": "Logout URL (optional)",
         "tls": "TLS",
-        "adminRoleName": "Admin role name",
+        "scopes": "Scopes",
+        "usernameClaim": "Username claim",
+        "usernameClaimDefault": "default (preferred_username → sub)",
+        "groupsClaim": "Groups/roles claim",
         "testOk": "OIDC connection successful",
         "testFail": "OIDC connection failed: {{error}}"
       },
