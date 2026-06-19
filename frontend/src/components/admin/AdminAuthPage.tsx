@@ -79,7 +79,9 @@ function OIDCCard({ provider }: { provider: AuthProviderDTO | undefined }) {
   const [redirectUrl, setRedirectUrl] = useState("");
   const [logoutUrl, setLogoutUrl] = useState("");
   const [tls, setTls] = useState(true);
-  const [adminRoleName, setAdminRoleName] = useState("");
+  const [scopes, setScopes] = useState("profile, email");
+  const [usernameClaim, setUsernameClaim] = useState("default");
+  const [groupsClaim, setGroupsClaim] = useState("");
   const [active, setActive] = useState(false);
 
   useEffect(() => {
@@ -92,7 +94,13 @@ function OIDCCard({ provider }: { provider: AuthProviderDTO | undefined }) {
       setRedirectUrl((cfg.redirect_url as string) ?? "");
       setLogoutUrl((cfg.logout_url as string) ?? "");
       setTls((cfg.tls as boolean) ?? true);
-      setAdminRoleName((cfg.admin_role_name as string) ?? "");
+      setScopes(
+        Array.isArray(cfg.scopes) && cfg.scopes.length
+          ? (cfg.scopes as string[]).join(", ")
+          : "profile, email",
+      );
+      setUsernameClaim((cfg.username_claim as string) || "default");
+      setGroupsClaim((cfg.groups_claim as string) ?? "");
       setActive(provider.active);
     }
   }, [provider]);
@@ -105,7 +113,9 @@ function OIDCCard({ provider }: { provider: AuthProviderDTO | undefined }) {
     redirect_url: redirectUrl,
     logout_url: logoutUrl,
     tls,
-    admin_role_name: adminRoleName,
+    scopes: scopes.split(",").map((s) => s.trim()).filter(Boolean),
+    username_claim: usernameClaim,
+    groups_claim: groupsClaim.trim(),
     active,
   });
 
@@ -230,14 +240,41 @@ function OIDCCard({ provider }: { provider: AuthProviderDTO | undefined }) {
         </div>
         <div>
           <label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-            {t("admin.authProviders.oidc.adminRoleName")}
+            {t("admin.authProviders.oidc.scopes")}
           </label>
           <input
             type="text"
-            value={adminRoleName}
-            onChange={(e) => setAdminRoleName(e.target.value)}
+            value={scopes}
+            onChange={(e) => setScopes(e.target.value)}
             className={`mt-1 ${inputClass}`}
-            placeholder="admin"
+            placeholder="profile, email"
+          />
+        </div>
+        <div>
+          <label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            {t("admin.authProviders.oidc.usernameClaim")}
+          </label>
+          <select
+            value={usernameClaim}
+            onChange={(e) => setUsernameClaim(e.target.value)}
+            className={`mt-1 ${inputClass}`}
+          >
+            <option value="default">{t("admin.authProviders.oidc.usernameClaimDefault")}</option>
+            <option value="subject">subject (sub)</option>
+            <option value="email">email</option>
+            <option value="username">username (preferred_username)</option>
+          </select>
+        </div>
+        <div>
+          <label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            {t("admin.authProviders.oidc.groupsClaim")}
+          </label>
+          <input
+            type="text"
+            value={groupsClaim}
+            onChange={(e) => setGroupsClaim(e.target.value)}
+            className={`mt-1 ${inputClass}`}
+            placeholder="groups"
           />
         </div>
         <div>
@@ -304,6 +341,8 @@ function LDAPCard({ provider }: { provider: AuthProviderDTO | undefined }) {
   const [adminGroupDn, setAdminGroupDn] = useState("");
   const [writerGroupDn, setWriterGroupDn] = useState("");
   const [adminUsers, setAdminUsers] = useState("");
+  const [usernameAttribute, setUsernameAttribute] = useState("");
+  const [uuidAttribute, setUuidAttribute] = useState("objectGUID");
   const [active, setActive] = useState(false);
 
   useEffect(() => {
@@ -320,6 +359,8 @@ function LDAPCard({ provider }: { provider: AuthProviderDTO | undefined }) {
       setAdminGroupDn((cfg.admin_group_dn as string) ?? "");
       setWriterGroupDn((cfg.writer_group_dn as string) ?? "");
       setAdminUsers(Array.isArray(cfg.admin_users) ? (cfg.admin_users as string[]).join(", ") : "");
+      setUsernameAttribute((cfg.username_attribute as string) ?? "");
+      setUuidAttribute((cfg.uuid_attribute as string) || "objectGUID");
       setActive(provider.active);
     }
   }, [provider]);
@@ -336,6 +377,8 @@ function LDAPCard({ provider }: { provider: AuthProviderDTO | undefined }) {
     admin_group_dn: adminGroupDn,
     writer_group_dn: writerGroupDn,
     admin_users: adminUsers.split(",").map((s) => s.trim()).filter(Boolean),
+    username_attribute: usernameAttribute.trim(),
+    uuid_attribute: uuidAttribute.trim(),
     active,
   });
 
@@ -453,7 +496,31 @@ function LDAPCard({ provider }: { provider: AuthProviderDTO | undefined }) {
             value={userFilter}
             onChange={(e) => setUserFilter(e.target.value)}
             className={`mt-1 ${inputClass}`}
-            placeholder="(uid={{username}})"
+            placeholder="optional — e.g. (sAMAccountName=%s)"
+          />
+        </div>
+        <div>
+          <label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            {t("admin.authProviders.ldap.usernameAttribute")}
+          </label>
+          <input
+            type="text"
+            value={usernameAttribute}
+            onChange={(e) => setUsernameAttribute(e.target.value)}
+            className={`mt-1 ${inputClass}`}
+            placeholder="uid"
+          />
+        </div>
+        <div>
+          <label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            {t("admin.authProviders.ldap.uuidAttribute")}
+          </label>
+          <input
+            type="text"
+            value={uuidAttribute}
+            onChange={(e) => setUuidAttribute(e.target.value)}
+            className={`mt-1 ${inputClass}`}
+            placeholder="objectGUID"
           />
         </div>
         <div>

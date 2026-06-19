@@ -227,14 +227,24 @@ export function AdminAppUsersPage() {
                 {user.provider.toUpperCase()}
               </span>
 
-              {/* Current role */}
-              {user.role_name ? (
-                <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full w-fit ${roleColors[user.role_name] ?? 'bg-muted text-muted-foreground'}`}>
-                  {user.role_name}
+              {/* Current role + source */}
+              <div className="flex flex-col items-start gap-0.5">
+                {user.role_name ? (
+                  <span className={`text-[11px] font-medium px-2 py-0.5 rounded-full w-fit ${roleColors[user.role_name] ?? 'bg-muted text-muted-foreground'}`}>
+                    {user.role_name}
+                  </span>
+                ) : (
+                  <span className="text-[11px] text-muted-foreground">{t('admin.users.noRole')}</span>
+                )}
+                <span
+                  className="text-[10px] text-muted-foreground"
+                  title={t(user.role_manually_set ? 'admin.users.roleSource.manualHint' : 'admin.users.roleSource.autoHint')}
+                >
+                  {user.role_manually_set
+                    ? t('admin.users.roleSource.manual')
+                    : t('admin.users.roleSource.auto')}
                 </span>
-              ) : (
-                <span className="text-[11px] text-muted-foreground">{t('admin.users.noRole')}</span>
-              )}
+              </div>
 
               {/* Role selector */}
               <select
