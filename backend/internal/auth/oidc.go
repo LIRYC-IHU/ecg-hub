@@ -240,7 +240,7 @@ func (p *OIDCProvider) ExchangeAndIssue(ctx context.Context, code string) (strin
 
 	// Pass every group/role from the claim to the store, which applies the first one
 	// that matches a role defined in ECG Hub (Admin > Roles) — no hard-coded mapping.
-	role, upsertErr := p.userStore.UpsertLogin(ctx, sub, "oidc", groups)
+	role, upsertErr := p.userStore.UpsertLogin(ctx, "", sub, "oidc", groups)
 	if upsertErr != nil {
 		// Non-fatal: fall back to the default reader role so login still succeeds.
 		role = "reader"
