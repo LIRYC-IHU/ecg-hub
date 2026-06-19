@@ -2,7 +2,6 @@ package auth
 
 import (
 	"context"
-	"strings"
 	"sync"
 	"time"
 
@@ -151,22 +150,3 @@ func (p *PermissionChecker) load(ctx context.Context, role string) map[string]bo
 	return perms
 }
 
-// keycloakSystemRoles are Keycloak built-in role names that should be ignored
-// when extracting the ECG Hub role from realm_access.roles.
-var keycloakSystemRoles = map[string]bool{
-	"offline_access":    true,
-	"uma_authorization": true,
-	"uma_protection":    true,
-}
-
-// IsSystemRole reports whether a Keycloak role name is a built-in system role
-// that should be ignored when selecting the ECG Hub application role.
-func IsSystemRole(role string) bool {
-	if keycloakSystemRoles[role] {
-		return true
-	}
-	if strings.HasPrefix(role, "default-roles-") {
-		return true
-	}
-	return false
-}
