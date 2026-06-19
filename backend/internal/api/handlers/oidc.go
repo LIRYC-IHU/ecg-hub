@@ -60,13 +60,15 @@ func OIDCCallbackHandler(flow auth.OIDCFlow) echo.HandlerFunc {
 // ─── Dynamic OIDC handlers (config from DB) ──────────────────────────────────
 
 type oidcDBParams struct {
-	IssuerURL     string `json:"issuer_url"`
-	InternalURL   string `json:"internal_url"`
-	ClientID      string `json:"client_id"`
-	ClientSecret  string `json:"client_secret"`
-	RedirectURL   string `json:"redirect_url"`
-	TLS           bool   `json:"tls"`
-	AdminRoleName string `json:"admin_role_name"`
+	IssuerURL     string   `json:"issuer_url"`
+	InternalURL   string   `json:"internal_url"`
+	ClientID      string   `json:"client_id"`
+	ClientSecret  string   `json:"client_secret"`
+	RedirectURL   string   `json:"redirect_url"`
+	TLS           bool     `json:"tls"`
+	Scopes        []string `json:"scopes"`
+	UsernameClaim string   `json:"username_claim"`
+	GroupsClaim   string   `json:"groups_claim"`
 }
 
 func oidcFlowFromDB(c echo.Context, staticFlow auth.OIDCFlow, repo *repository.AuthConfigRepository, encKey, jwtSecret string, userStore auth.UserStore) (auth.OIDCFlow, error) {
@@ -95,7 +97,9 @@ func oidcFlowFromDB(c echo.Context, staticFlow auth.OIDCFlow, repo *repository.A
 		ClientSecret:  params.ClientSecret,
 		RedirectURL:   params.RedirectURL,
 		TLS:           params.TLS,
-		AdminRoleName: params.AdminRoleName,
+		Scopes:        params.Scopes,
+		UsernameClaim: params.UsernameClaim,
+		GroupsClaim:   params.GroupsClaim,
 		JWTSecret:     jwtSecret,
 	}, userStore)
 	if err != nil {
