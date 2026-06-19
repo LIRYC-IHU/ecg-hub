@@ -24,14 +24,16 @@ const maskedSecret = "••••••"
 
 // OIDCConfig is the decrypted JSON stored for an OIDC provider.
 type OIDCConfig struct {
-	IssuerURL     string `json:"issuer_url"`
-	InternalURL   string `json:"internal_url,omitempty"`
-	ClientID      string `json:"client_id"`
-	ClientSecret  string `json:"client_secret"`
-	RedirectURL   string `json:"redirect_url"`
-	LogoutURL     string `json:"logout_url,omitempty"`
-	TLS           bool   `json:"tls"`
-	AdminRoleName string `json:"admin_role_name"`
+	IssuerURL     string   `json:"issuer_url"`
+	InternalURL   string   `json:"internal_url,omitempty"`
+	ClientID      string   `json:"client_id"`
+	ClientSecret  string   `json:"client_secret"`
+	RedirectURL   string   `json:"redirect_url"`
+	LogoutURL     string   `json:"logout_url,omitempty"`
+	TLS           bool     `json:"tls"`
+	Scopes        []string `json:"scopes,omitempty"`
+	UsernameClaim string   `json:"username_claim,omitempty"`
+	GroupsClaim   string   `json:"groups_claim,omitempty"`
 }
 
 // --- LDAP config JSON shape ---
@@ -55,15 +57,17 @@ type LDAPConfig struct {
 
 // SaveOIDCRequest is the body for PUT /admin/auth/oidc.
 type SaveOIDCRequest struct {
-	IssuerURL     string `json:"issuer_url"`
-	InternalURL   string `json:"internal_url"`
-	ClientID      string `json:"client_id"`
-	ClientSecret  string `json:"client_secret"`
-	RedirectURL   string `json:"redirect_url"`
-	LogoutURL     string `json:"logout_url"`
-	TLS           bool   `json:"tls"`
-	AdminRoleName string `json:"admin_role_name"`
-	Active        bool   `json:"active"`
+	IssuerURL     string   `json:"issuer_url"`
+	InternalURL   string   `json:"internal_url"`
+	ClientID      string   `json:"client_id"`
+	ClientSecret  string   `json:"client_secret"`
+	RedirectURL   string   `json:"redirect_url"`
+	LogoutURL     string   `json:"logout_url"`
+	TLS           bool     `json:"tls"`
+	Scopes        []string `json:"scopes"`
+	UsernameClaim string   `json:"username_claim"`
+	GroupsClaim   string   `json:"groups_claim"`
+	Active        bool     `json:"active"`
 }
 
 // SaveLDAPRequest is the body for PUT /admin/auth/ldap.
@@ -196,7 +200,9 @@ func SaveOIDCConfigHandler(repo *repository.AuthConfigRepository, encKey string,
 			RedirectURL:   req.RedirectURL,
 			LogoutURL:     req.LogoutURL,
 			TLS:           req.TLS,
-			AdminRoleName: req.AdminRoleName,
+			Scopes:        req.Scopes,
+			UsernameClaim: req.UsernameClaim,
+			GroupsClaim:   req.GroupsClaim,
 		}
 
 		configJSON, err := json.Marshal(oidcCfg)
