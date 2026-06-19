@@ -63,7 +63,10 @@ function buildEcgPath(width: number, height: number, beats: number): string {
     pts.push([(i / total) * width, mid - v * ampScale]);
   }
   return pts
-    .map(([px, py], i) => `${i === 0 ? "M" : "L"}${px.toFixed(1)},${py.toFixed(1)}`)
+    .map(
+      ([px, py], i) =>
+        `${i === 0 ? "M" : "L"}${px.toFixed(1)},${py.toFixed(1)}`,
+    )
     .join(" ");
 }
 
@@ -112,7 +115,7 @@ export function LoginPage() {
   // Entrance choreography + looping heartbeat trace.
   useGSAP(
     () => {
-      const tl = gsap.timeline({ defaults: { ease: "power3.out" } });
+      const tl = gsap.timeline({ defaults: { ease: "" } });
       tl.from(".reveal", {
         y: 28,
         opacity: 0,
@@ -214,7 +217,13 @@ export function LoginPage() {
               <stop offset="0%" stopColor="#38bdf8" />
               <stop offset="100%" stopColor="#67e8f9" />
             </linearGradient>
-            <filter id="trace-glow" x="-20%" y="-50%" width="140%" height="200%">
+            <filter
+              id="trace-glow"
+              x="-20%"
+              y="-50%"
+              width="140%"
+              height="200%"
+            >
               <feGaussianBlur stdDeviation="6" result="b" />
               <feMerge>
                 <feMergeNode in="b" />
@@ -243,12 +252,7 @@ export function LoginPage() {
             strokeLinejoin="round"
             filter="url(#trace-glow)"
           />
-          <circle
-            ref={dotRef}
-            r="7"
-            fill="#a5f3fc"
-            filter="url(#trace-glow)"
-          />
+          <circle ref={dotRef} r="7" fill="#a5f3fc" filter="url(#trace-glow)" />
         </svg>
 
         {/* Brand mark */}

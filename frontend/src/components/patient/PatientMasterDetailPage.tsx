@@ -687,7 +687,7 @@ function PatientDetail({
         y: 10,
         opacity: 0,
         duration: 0.4,
-        ease: "power2.out",
+        ease: "",
         stagger: 0.08,
       });
       gsap.from(".ecg-row", {
@@ -1390,7 +1390,9 @@ export function PatientMasterDetailPage({
       );
       if (res.ok) {
         const json = await res.json();
-        const ids = new Set<number>((json.data ?? []).map((e: { id: number }) => e.id));
+        const ids = new Set<number>(
+          (json.data ?? []).map((e: { id: number }) => e.id),
+        );
         setSelectedECGs((prev) => {
           const next = new Set(prev);
           for (const id of ids) next.delete(id);
