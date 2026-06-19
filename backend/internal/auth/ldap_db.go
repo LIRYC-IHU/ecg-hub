@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 
 	ldap "github.com/go-ldap/ldap/v3"
 
@@ -24,7 +25,30 @@ type ldapDBConfig struct {
 	WriterGroupDN string   `json:"writer_group_dn"`
 	AdminUsers    []string `json:"admin_users"`
 	AdminRoleName string   `json:"admin_role_name"`
-	JWTSecret     string   `json:"jwt_secret"`
+	// UsernameAttribute is the LDAP attribute used as the canonical ECG Hub
+	// username (external_id), e.g. "uid", "sAMAccountName", "cn" or "mail".
+	// When empty, the login name typed by the user is used.
+	UsernameAttribute string `json:"username_attribute"`
+	// UUIDAttribute is the immutable LDAP attribute that uniquely identifies the
+	// user regardless of renames — "objectGUID" (Active Directory, binary) or
+	// "entryUUID" (OpenLDAP). Defaults to "objectGUID" when empty.
+	UUIDAttribute string `json:"uuid_attribute"`
+	JWTSecret     string `json:"jwt_secret"`
+}
+
+// defaultLDAPUUIDAttribute is used when no UUID attribute is configured.
+const defaultLDAPUUIDAttribute = "objectGUID"
+
+// formatLDAPUUID renders an LDAP UUID attribute value as a stable string. A 16-byte
+// value is treated as an Active Directory objectGUID and formatted in its canonical
+// mixed-endian GUID form; anything else (e.g. OpenLDAP entryUUID) is returned as-is.
+func formatLDAPUUID(raw []byte) string {
+	if len(raw) == 16 {
+		return fmt.Sprintf("%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x",
+			raw[3], raw[2], raw[1], raw[0], raw[5], raw[4], raw[7], raw[6],
+			raw[8], raw[9], raw[10], raw[11], raw[12], raw[13], raw[14], raw[15])
+	}
+	return string(raw)
 }
 
 // LoginWithLDAPFromDB reads the LDAP config from DB, authenticates the user, and issues a JWT.
@@ -34,22 +58,31 @@ type ldapDBConfig struct {
 func LoginWithLDAPFromDB(ctx context.Context, username, password, jwtSecret string, repo *repository.AuthConfigRepository, encKey string, userStore UserStore) (string, error) {
 	dbCfg, err := repo.Get("ldap")
 	if err != nil || dbCfg == nil {
+		slog.Warn("ldap DEBUG: no DB config found (LDAP not configured/active)", "error", err)
 		return "", fmt.Errorf("auth: ldap: no DB config found")
 	}
 
 	decrypted, err := DecryptString(dbCfg.ConfigEncrypted, encKey)
 	if err != nil {
+		slog.Warn("ldap DEBUG: decrypt config failed", "error", err)
 		return "", fmt.Errorf("auth: ldap: decrypt config: %w", err)
 	}
 
 	var cfg ldapDBConfig
 	if err := json.Unmarshal([]byte(decrypted), &cfg); err != nil {
+		slog.Warn("ldap DEBUG: parse config failed", "error", err)
 		return "", fmt.Errorf("auth: ldap: parse config: %w", err)
 	}
 
 	if cfg.Host == "" {
+		slog.Warn("ldap DEBUG: host not configured")
 		return "", fmt.Errorf("auth: ldap: host not configured")
 	}
+	slog.Warn("ldap DEBUG: attempting login",
+		"login", username, "host", cfg.Host, "port", cfg.Port, "tls", cfg.TLS,
+		"base_dn", cfg.BaseDN, "user_search_dn", cfg.UserSearchDN, "user_filter", cfg.UserFilter,
+		"bind_dn", cfg.BindDN, "username_attribute", cfg.UsernameAttribute,
+		"uuid_attribute", cfg.UUIDAttribute)
 
 	scheme := "ldap"
 	port := cfg.Port
@@ -62,8 +95,10 @@ func LoginWithLDAPFromDB(ctx context.Context, username, password, jwtSecret stri
 		port = 389
 	}
 
-	l, err := ldap.DialURL(fmt.Sprintf("%s://%s:%d", scheme, cfg.Host, port))
+	dialURL := fmt.Sprintf("%s://%s:%d", scheme, cfg.Host, port)
+	l, err := ldap.DialURL(dialURL)
 	if err != nil {
+		slog.Warn("ldap DEBUG: dial failed", "url", dialURL, "error", err)
 		return "", fmt.Errorf("auth: ldap: dial: %w", err)
 	}
 	defer l.Close()
@@ -71,19 +106,40 @@ func LoginWithLDAPFromDB(ctx context.Context, username, password, jwtSecret stri
 	// Bind as service account.
 	if cfg.BindDN != "" {
 		if err := l.Bind(cfg.BindDN, cfg.BindPassword); err != nil {
+			slog.Warn("ldap DEBUG: service bind failed", "bind_dn", cfg.BindDN, "error", err)
 			return "", fmt.Errorf("auth: ldap: service bind: %w", err)
 		}
 	}
 
-	// Search for user.
+	// Build the search filter. When no explicit filter is set, derive it from the
+	// username attribute (Keycloak-style): (<usernameAttribute>=<username>). This
+	// is why setting "sAMAccountName" as the username attribute is enough for AD —
+	// no need to also craft a custom filter. user_filter stays an advanced override
+	// (use %s for the typed username, e.g. "(&(objectClass=user)(sAMAccountName=%s))").
 	userFilter := cfg.UserFilter
 	if userFilter == "" {
-		userFilter = "(uid=%s)"
+		attr := cfg.UsernameAttribute
+		if attr == "" {
+			attr = "uid"
+		}
+		userFilter = "(" + attr + "=%s)"
 	}
 	filter := fmt.Sprintf(userFilter, ldap.EscapeFilter(username))
 	searchBase := cfg.UserSearchDN
 	if searchBase == "" {
 		searchBase = cfg.BaseDN
+	}
+
+	uuidAttr := cfg.UUIDAttribute
+	if uuidAttr == "" {
+		uuidAttr = defaultLDAPUUIDAttribute
+	}
+
+	// Request memberOf (for group-based roles), the username attribute and the
+	// immutable UUID attribute.
+	attrs := []string{"dn", "memberOf", uuidAttr}
+	if cfg.UsernameAttribute != "" {
+		attrs = append(attrs, cfg.UsernameAttribute)
 	}
 
 	searchReq := ldap.NewSearchRequest(
@@ -92,22 +148,52 @@ func LoginWithLDAPFromDB(ctx context.Context, username, password, jwtSecret stri
 		ldap.NeverDerefAliases,
 		1, 0, false,
 		filter,
-		[]string{"dn", "memberOf"},
+		attrs,
 		nil,
 	)
 	result, err := l.Search(searchReq)
 	if err != nil {
+		slog.Warn("ldap DEBUG: search failed", "filter", filter, "search_base", searchBase, "error", err)
 		return "", fmt.Errorf("auth: ldap: search: %w", err)
 	}
 	if len(result.Entries) == 0 {
+		slog.Warn("ldap DEBUG: user not found", "login", username, "filter", filter, "search_base", searchBase)
 		return "", fmt.Errorf("auth: ldap: user not found")
 	}
-	userDN := result.Entries[0].DN
+	entry := result.Entries[0]
+	userDN := entry.DN
 
 	// Bind as user to verify password.
 	if err := l.Bind(userDN, password); err != nil {
+		slog.Warn("ldap DEBUG: password bind failed (invalid credentials)", "dn", userDN, "error", err)
 		return "", fmt.Errorf("auth: ldap: invalid credentials")
 	}
+
+	// Resolve the canonical username from the configured attribute (fallback to the
+	// login name typed by the user).
+	effectiveUsername := username
+	if cfg.UsernameAttribute != "" {
+		if v := entry.GetAttributeValue(cfg.UsernameAttribute); v != "" {
+			effectiveUsername = v
+		}
+	}
+
+	// Resolve the immutable UUID (objectGUID / entryUUID). Read raw to handle the
+	// binary AD objectGUID, then format to a stable string.
+	ldapUUID := formatLDAPUUID(entry.GetRawAttributeValue(uuidAttr))
+
+	memberOf := entry.GetAttributeValues("memberOf")
+
+	// TEMP DEBUG: inspect what LDAP returned during configuration/tests.
+	slog.Warn("ldap DEBUG: user resolved",
+		"login", username,
+		"dn", userDN,
+		"username_attribute", cfg.UsernameAttribute,
+		"effective_username", effectiveUsername,
+		"uuid_attribute", uuidAttr,
+		"ldap_uuid", ldapUUID,
+		"member_of", memberOf,
+	)
 
 	// Determine role.
 	adminRoleName := cfg.AdminRoleName
@@ -117,13 +203,13 @@ func LoginWithLDAPFromDB(ctx context.Context, username, password, jwtSecret stri
 
 	role := "reader"
 	for _, u := range cfg.AdminUsers {
-		if u == username {
+		if u == effectiveUsername || u == username {
 			role = adminRoleName
 			break
 		}
 	}
 	if role == "reader" && cfg.AdminGroupDN != "" {
-		for _, v := range result.Entries[0].GetAttributeValues("memberOf") {
+		for _, v := range memberOf {
 			if v == cfg.AdminGroupDN {
 				role = adminRoleName
 				break
@@ -131,7 +217,7 @@ func LoginWithLDAPFromDB(ctx context.Context, username, password, jwtSecret stri
 		}
 	}
 	if role == "reader" && cfg.WriterGroupDN != "" {
-		for _, v := range result.Entries[0].GetAttributeValues("memberOf") {
+		for _, v := range memberOf {
 			if v == cfg.WriterGroupDN {
 				role = "writer"
 				break
@@ -139,14 +225,16 @@ func LoginWithLDAPFromDB(ctx context.Context, username, password, jwtSecret stri
 		}
 	}
 
+	slog.Warn("ldap DEBUG: role derived", "effective_username", effectiveUsername, "role", role)
+
 	// Register the login in ecg_hub_users (unified identity). A role assigned
 	// from the admin UI takes priority over the LDAP-group-derived role.
 	if userStore != nil {
-		if dbRole, err := userStore.UpsertLogin(ctx, username, "ldap", []string{role}); err == nil && dbRole != "" {
+		if dbRole, err := userStore.UpsertLogin(ctx, ldapUUID, effectiveUsername, "ldap", []string{role}); err == nil && dbRole != "" {
 			role = dbRole
 		}
 	}
 
 	// Issue JWT using the provided application secret.
-	return IssueAppToken(username, role, []byte(jwtSecret))
+	return IssueAppToken(effectiveUsername, role, []byte(jwtSecret))
 }
