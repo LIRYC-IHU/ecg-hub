@@ -40,17 +40,19 @@ type OIDCConfig struct {
 
 // LDAPConfig is the decrypted JSON stored for an LDAP provider.
 type LDAPConfig struct {
-	Host          string   `json:"host"`
-	Port          int      `json:"port"`
-	TLS           bool     `json:"tls"`
-	BaseDN        string   `json:"base_dn"`
-	UserSearchDN  string   `json:"user_search_dn"`
-	UserFilter    string   `json:"user_filter"`
-	BindDN        string   `json:"bind_dn"`
-	BindPassword  string   `json:"bind_password"`
-	AdminGroupDN  string   `json:"admin_group_dn"`
-	WriterGroupDN string   `json:"writer_group_dn"`
-	AdminUsers    []string `json:"admin_users"`
+	Host              string   `json:"host"`
+	Port              int      `json:"port"`
+	TLS               bool     `json:"tls"`
+	BaseDN            string   `json:"base_dn"`
+	UserSearchDN      string   `json:"user_search_dn"`
+	UserFilter        string   `json:"user_filter"`
+	BindDN            string   `json:"bind_dn"`
+	BindPassword      string   `json:"bind_password"`
+	AdminGroupDN      string   `json:"admin_group_dn"`
+	WriterGroupDN     string   `json:"writer_group_dn"`
+	AdminUsers        []string `json:"admin_users"`
+	UsernameAttribute string   `json:"username_attribute,omitempty"`
+	UUIDAttribute     string   `json:"uuid_attribute,omitempty"`
 }
 
 // --- Request bodies ---
@@ -72,18 +74,20 @@ type SaveOIDCRequest struct {
 
 // SaveLDAPRequest is the body for PUT /admin/auth/ldap.
 type SaveLDAPRequest struct {
-	Host          string   `json:"host"`
-	Port          int      `json:"port"`
-	TLS           bool     `json:"tls"`
-	BaseDN        string   `json:"base_dn"`
-	UserSearchDN  string   `json:"user_search_dn"`
-	UserFilter    string   `json:"user_filter"`
-	BindDN        string   `json:"bind_dn"`
-	BindPassword  string   `json:"bind_password"`
-	AdminGroupDN  string   `json:"admin_group_dn"`
-	WriterGroupDN string   `json:"writer_group_dn"`
-	AdminUsers    []string `json:"admin_users"`
-	Active        bool     `json:"active"`
+	Host              string   `json:"host"`
+	Port              int      `json:"port"`
+	TLS               bool     `json:"tls"`
+	BaseDN            string   `json:"base_dn"`
+	UserSearchDN      string   `json:"user_search_dn"`
+	UserFilter        string   `json:"user_filter"`
+	BindDN            string   `json:"bind_dn"`
+	BindPassword      string   `json:"bind_password"`
+	AdminGroupDN      string   `json:"admin_group_dn"`
+	WriterGroupDN     string   `json:"writer_group_dn"`
+	AdminUsers        []string `json:"admin_users"`
+	UsernameAttribute string   `json:"username_attribute"`
+	UUIDAttribute     string   `json:"uuid_attribute"`
+	Active            bool     `json:"active"`
 }
 
 // --- Handlers ---
@@ -286,17 +290,19 @@ func SaveLDAPConfigHandler(repo *repository.AuthConfigRepository, encKey string,
 		}
 
 		ldapCfg := LDAPConfig{
-			Host:          req.Host,
-			Port:          req.Port,
-			TLS:           req.TLS,
-			BaseDN:        req.BaseDN,
-			UserSearchDN:  req.UserSearchDN,
-			UserFilter:    req.UserFilter,
-			BindDN:        req.BindDN,
-			BindPassword:  req.BindPassword,
-			AdminGroupDN:  req.AdminGroupDN,
-			WriterGroupDN: req.WriterGroupDN,
-			AdminUsers:    req.AdminUsers,
+			Host:              req.Host,
+			Port:              req.Port,
+			TLS:               req.TLS,
+			BaseDN:            req.BaseDN,
+			UserSearchDN:      req.UserSearchDN,
+			UserFilter:        req.UserFilter,
+			BindDN:            req.BindDN,
+			BindPassword:      req.BindPassword,
+			AdminGroupDN:      req.AdminGroupDN,
+			WriterGroupDN:     req.WriterGroupDN,
+			AdminUsers:        req.AdminUsers,
+			UsernameAttribute: req.UsernameAttribute,
+			UUIDAttribute:     req.UUIDAttribute,
 		}
 
 		configJSON, err := json.Marshal(ldapCfg)
