@@ -13,7 +13,12 @@ type UserRecord struct {
 	ID         string `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
 	ExternalID string `gorm:"type:text;not null;uniqueIndex"`
 	Provider   string `gorm:"not null;default:'oidc'"`
-	RoleID     string `gorm:"type:uuid;not null;index"`
+	// ProviderUID is the identity provider's immutable unique id (e.g. LDAP
+	// objectGUID/entryUUID). When set, logins are keyed on it so a username
+	// rename keeps the same ECG Hub identity. Empty for providers that key on
+	// external_id directly (OIDC sub, local accounts).
+	ProviderUID string `gorm:"type:text;index"`
+	RoleID      string `gorm:"type:uuid;not null;index"`
 	// RoleManuallySet is true once an admin assigns the role through the UX
 	// (Admin > App Users). While true, the IdP groups/roles claim no longer
 	// overrides the role on login; clearing the role in the UX resets it to false
@@ -52,14 +57,36 @@ func NewUserRepo(db *gorm.DB) *UserRepo {
 // UpsertLogin implements auth.UserStore.
 // Creates or updates the user record, applying the first provider-supplied role
 // candidate that matches a role defined in ECG Hub. Returns the effective role name.
-func (r *UserRepo) UpsertLogin(ctx context.Context, externalID, provider string, roleCandidates []string) (string, error) {
+//
+// When providerUID is set the user is looked up by it first (rename-safe), falling
+// back to external_id — which also back-fills provider_uid for users created before
+// the UID was configured. external_id is kept in sync with the current username.
+func (r *UserRepo) UpsertLogin(ctx context.Context, providerUID, externalID, provider string, roleCandidates []string) (string, error) {
 	now := time.Now()
 
-	// Try to find existing user.
 	var rec UserRecord
-	err := r.db.WithContext(ctx).Where("external_id = ?", externalID).First(&rec).Error
+	found := false
 
-	if err == gorm.ErrRecordNotFound {
+	// 1. Prefer the immutable provider UID (survives username renames).
+	if providerUID != "" {
+		e := r.db.WithContext(ctx).Where("provider = ? AND provider_uid = ?", provider, providerUID).First(&rec).Error
+		if e == nil {
+			found = true
+		} else if e != gorm.ErrRecordNotFound {
+			return "", fmt.Errorf("user_repo: lookup by uid: %w", e)
+		}
+	}
+	// 2. Fall back to external_id (display username).
+	if !found {
+		e := r.db.WithContext(ctx).Where("external_id = ?", externalID).First(&rec).Error
+		if e == nil {
+			found = true
+		} else if e != gorm.ErrRecordNotFound {
+			return "", fmt.Errorf("user_repo: lookup user: %w", e)
+		}
+	}
+
+	if !found {
 		// New user: pick the first candidate matching a defined ECG Hub role,
 		// falling back to the configured default role.
 		defaultRole, _ := r.settingsRepo.GetDefaultRole()
@@ -68,18 +95,16 @@ func (r *UserRepo) UpsertLogin(ctx context.Context, externalID, provider string,
 			return "", err
 		}
 		rec = UserRecord{
-			ExternalID: externalID,
-			Provider:   provider,
-			RoleID:     roleID,
-			LastLogin:  now,
+			ExternalID:  externalID,
+			Provider:    provider,
+			ProviderUID: providerUID,
+			RoleID:      roleID,
+			LastLogin:   now,
 		}
 		if err := r.db.WithContext(ctx).Create(&rec).Error; err != nil {
 			return "", fmt.Errorf("user_repo: create user: %w", err)
 		}
 		return resolvedName, nil
-	}
-	if err != nil {
-		return "", fmt.Errorf("user_repo: lookup user: %w", err)
 	}
 
 	// Existing user: update last_login.
@@ -87,6 +112,14 @@ func (r *UserRepo) UpsertLogin(ctx context.Context, externalID, provider string,
 	// Once an admin assigns a role in the UX it is pinned and the IdP no longer
 	// overrides it; otherwise the role is re-synced from the provider on every login.
 	updates := map[string]any{"last_login": now}
+	// Keep the display username in sync with the provider (handles renames) and
+	// back-fill the provider UID when it becomes available.
+	if externalID != "" && rec.ExternalID != externalID {
+		updates["external_id"] = externalID
+	}
+	if providerUID != "" && rec.ProviderUID != providerUID {
+		updates["provider_uid"] = providerUID
+	}
 	effectiveName := ""
 
 	if rec.RoleManuallySet && rec.RoleID != "" {
