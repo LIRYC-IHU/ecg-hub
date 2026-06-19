@@ -28,7 +28,8 @@ type OIDCProvider struct {
 	oauth2Cfg     oauth2.Config
 	jwtSecret     []byte
 	issuerURL     string
-	adminRoleName string
+	usernameClaim string
+	groupsClaim   string
 	userStore     UserStore
 }
 
@@ -36,14 +37,23 @@ type OIDCProvider struct {
 // OIDC is configured exclusively from the admin UI (Admin > Auth) — there is no
 // static config.yaml path anymore.
 type OIDCParams struct {
-	IssuerURL     string
-	InternalURL   string
-	ClientID      string
-	ClientSecret  string
-	RedirectURL   string
-	TLS           bool
-	AdminRoleName string
-	JWTSecret     string
+	IssuerURL    string
+	InternalURL  string
+	ClientID     string
+	ClientSecret string
+	RedirectURL  string
+	TLS          bool
+	// Scopes requested at authorization (openid is always added). Defaults to
+	// {"profile", "email"} when empty.
+	Scopes []string
+	// UsernameClaim selects which ID-token claim maps to the ECG Hub username:
+	// "default" (preferred_username, fallback sub), "subject", "email", "username".
+	UsernameClaim string
+	// GroupsClaim is the ID-token claim that holds the user's groups/roles
+	// (e.g. Authentik "groups"). When empty, falls back to Keycloak
+	// realm_access.roles read from the access token.
+	GroupsClaim string
+	JWTSecret   string
 }
 
 // NewOIDCProviderFromParams creates an OIDCProvider from explicit params (e.g. from DB config).
@@ -102,12 +112,12 @@ func NewOIDCProviderFromParams(ctx context.Context, p OIDCParams, userStore User
 		ClientSecret: p.ClientSecret,
 		RedirectURL:  p.RedirectURL,
 		Endpoint:     endpoint,
-		Scopes:       []string{oidc.ScopeOpenID, "profile", "email"},
+		Scopes:       buildScopes(p.Scopes),
 	}
 
-	adminRoleName := p.AdminRoleName
-	if adminRoleName == "" {
-		adminRoleName = "admin"
+	usernameClaim := p.UsernameClaim
+	if usernameClaim == "" {
+		usernameClaim = "default"
 	}
 
 	return &OIDCProvider{
@@ -115,9 +125,27 @@ func NewOIDCProviderFromParams(ctx context.Context, p OIDCParams, userStore User
 		oauth2Cfg:     oauth2Cfg,
 		jwtSecret:     []byte(p.JWTSecret),
 		issuerURL:     p.IssuerURL,
-		adminRoleName: adminRoleName,
+		usernameClaim: usernameClaim,
+		groupsClaim:   p.GroupsClaim,
 		userStore:     userStore,
 	}, nil
+}
+
+// buildScopes returns the OAuth2 scopes, always including openid. When configured is
+// empty it defaults to the standard {profile, email}.
+func buildScopes(configured []string) []string {
+	if len(configured) == 0 {
+		return []string{oidc.ScopeOpenID, "profile", "email"}
+	}
+	scopes := []string{oidc.ScopeOpenID}
+	for _, s := range configured {
+		s = strings.TrimSpace(s)
+		if s == "" || s == oidc.ScopeOpenID {
+			continue
+		}
+		scopes = append(scopes, s)
+	}
+	return scopes
 }
 
 // LogoutURL returns the Keycloak end-session URL that clears the Keycloak session.
@@ -184,36 +212,38 @@ func (p *OIDCProvider) ExchangeAndIssue(ctx context.Context, code string) (strin
 		return "", fmt.Errorf("auth: oidc: verify id token: %w", err)
 	}
 
-	// Extract sub and preferred_username from the verified ID token.
-	var idClaims struct {
-		Sub               string `json:"sub"`
-		PreferredUsername string `json:"preferred_username"`
-	}
-	if err := idToken.Claims(&idClaims); err != nil {
+	// Decode all verified ID-token claims so the configurable username/groups claims
+	// can be read generically.
+	var claims map[string]any
+	if err := idToken.Claims(&claims); err != nil {
 		return "", fmt.Errorf("auth: oidc: extract id token claims: %w", err)
 	}
 
-	sub := idClaims.PreferredUsername
+	sub := selectUsername(p.usernameClaim, claims)
 	if sub == "" {
-		sub = idClaims.Sub
+		return "", fmt.Errorf("auth: oidc: username claim %q is empty in id token", p.usernameClaim)
 	}
 
-	// realm_access.roles is in the access token, not the ID token, by default in Keycloak.
-	// Decode the access token payload without re-verifying (it comes from the same trusted exchange).
-	// Extract role from Keycloak realm_access.roles (may be empty for users without a realm role).
-	keycloakRole, err := extractRoleFromAccessToken(oauth2Token.AccessToken, p.adminRoleName)
-	if err != nil {
-		return "", fmt.Errorf("auth: oidc: extract roles from access token: %w", err)
-	}
-
-	// Upsert user in DB: if Keycloak has a role, sync it; otherwise fall back to DB/default.
-	role, upsertErr := p.userStore.UpsertLogin(ctx, sub, "oidc", keycloakRole)
-	if upsertErr != nil {
-		// Non-fatal: use Keycloak role or reader as fallback.
-		role = keycloakRole
-		if role == "" {
-			role = "reader"
+	// Determine the user's groups/roles. Prefer the configured ID-token claim
+	// (e.g. Authentik "groups"); otherwise fall back to Keycloak realm_access.roles
+	// in the access token, which is the historical behaviour.
+	var groups []string
+	if p.groupsClaim != "" {
+		groups = stringSliceFromClaim(claims[p.groupsClaim])
+	} else {
+		var err error
+		groups, err = rolesFromAccessToken(oauth2Token.AccessToken)
+		if err != nil {
+			return "", fmt.Errorf("auth: oidc: extract roles from access token: %w", err)
 		}
+	}
+
+	// Pass every group/role from the claim to the store, which applies the first one
+	// that matches a role defined in ECG Hub (Admin > Roles) — no hard-coded mapping.
+	role, upsertErr := p.userStore.UpsertLogin(ctx, sub, "oidc", groups)
+	if upsertErr != nil {
+		// Non-fatal: fall back to the default reader role so login still succeeds.
+		role = "reader"
 	}
 	if role == "" {
 		return "", fmt.Errorf("auth: oidc: no role could be determined for user %q", sub)
@@ -258,17 +288,67 @@ func (p *OIDCProvider) IssueToken(sub, role string) (string, error) {
 	return IssueAppToken(sub, role, p.jwtSecret)
 }
 
-// extractRoleFromAccessToken decodes the access token JWT payload (without re-verifying the
-// signature — the token was just received from a trusted Keycloak exchange) and returns the
-// ECG Hub role from realm_access.roles.
-func extractRoleFromAccessToken(accessToken, adminRoleName string) (string, error) {
+// selectUsername maps the configured username claim to a value from the verified
+// ID-token claims. "default" prefers preferred_username and falls back to sub.
+func selectUsername(claim string, claims map[string]any) string {
+	get := func(key string) string {
+		if v, ok := claims[key].(string); ok {
+			return v
+		}
+		return ""
+	}
+	switch claim {
+	case "subject":
+		return get("sub")
+	case "email":
+		return get("email")
+	case "username":
+		return get("preferred_username")
+	default: // "default" / unknown
+		if u := get("preferred_username"); u != "" {
+			return u
+		}
+		return get("sub")
+	}
+}
+
+// stringSliceFromClaim coerces a claim value (string or array of strings) into a
+// slice of strings. Non-string array elements are skipped.
+func stringSliceFromClaim(v any) []string {
+	switch t := v.(type) {
+	case nil:
+		return nil
+	case string:
+		if t == "" {
+			return nil
+		}
+		return []string{t}
+	case []string:
+		return t
+	case []any:
+		out := make([]string, 0, len(t))
+		for _, e := range t {
+			if s, ok := e.(string); ok && s != "" {
+				out = append(out, s)
+			}
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+// rolesFromAccessToken decodes the access token JWT payload (without re-verifying the
+// signature — the token was just received from a trusted Keycloak exchange) and returns
+// the Keycloak realm_access.roles list. Used as a fallback when no groups claim is set.
+func rolesFromAccessToken(accessToken string) ([]string, error) {
 	parts := strings.Split(accessToken, ".")
 	if len(parts) != 3 {
-		return "", fmt.Errorf("unexpected access token format")
+		return nil, fmt.Errorf("unexpected access token format")
 	}
 	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
 	if err != nil {
-		return "", fmt.Errorf("decode payload: %w", err)
+		return nil, fmt.Errorf("decode payload: %w", err)
 	}
 	var claims struct {
 		RealmAccess struct {
@@ -276,26 +356,8 @@ func extractRoleFromAccessToken(accessToken, adminRoleName string) (string, erro
 		} `json:"realm_access"`
 	}
 	if err := json.Unmarshal(payload, &claims); err != nil {
-		return "", fmt.Errorf("unmarshal claims: %w", err)
+		return nil, fmt.Errorf("unmarshal claims: %w", err)
 	}
-	return extractRole(claims.RealmAccess.Roles, adminRoleName), nil
+	return claims.RealmAccess.Roles, nil
 }
 
-// extractRole selects the ECG Hub role from the Keycloak realm_access.roles list.
-// The adminRoleName is always checked first so it takes priority over any other role.
-// Falls back to the first non-system role for non-admin users.
-func extractRole(roles []string, adminRoleName string) string {
-	// Admin role has highest priority — check explicitly first.
-	for _, r := range roles {
-		if r == adminRoleName {
-			return r
-		}
-	}
-	// For regular users, return the first non-system Keycloak role.
-	for _, r := range roles {
-		if !IsSystemRole(r) {
-			return r
-		}
-	}
-	return ""
-}

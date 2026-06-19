@@ -61,7 +61,7 @@ func (p *LocalProvider) Login(ctx context.Context, username, password string) (s
 	// are keyed on the internal uuid, and a DB-assigned role takes priority.
 	role := user.Role
 	if p.userStore != nil {
-		if dbRole, err := p.userStore.UpsertLogin(ctx, user.Username, "local", user.Role); err == nil && dbRole != "" {
+		if dbRole, err := p.userStore.UpsertLogin(ctx, user.Username, "local", []string{user.Role}); err == nil && dbRole != "" {
 			role = dbRole
 		}
 	}
