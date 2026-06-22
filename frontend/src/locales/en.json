@@ -403,6 +403,7 @@
         "ecg_write": "Edit ECG metadata",
         "ecg_download": "Download ECGs",
         "ecg_delete": "Delete ECGs",
+        "ecg_upload": "Upload ECG files",
         "ecg_force_hl7": "Force HL7 retry",
         "hl7_config": "Configure HL7",
         "hl7_bulk_retry": "Bulk retry exhausted",
@@ -505,8 +506,29 @@
     "from": "From",
     "to": "to"
   },
+  "uploads": {
+    "title": "Upload ECGs",
+    "subtitle": "Manually import ECG files from offline or isolated devices. Each file is processed like an FTP upload: valid files are stored, files without a patient ID go to the review queue, invalid files are rejected.",
+    "selectFiles": "Click to select ECG files (or drag & drop)",
+    "filesSelected": "{{count}} file(s) selected",
+    "upload": "Upload & process",
+    "uploadError": "Upload failed",
+    "processing": "Processing {{done}} / {{total}}…",
+    "done": "{{count}} file(s) processed",
+    "newUpload": "New upload",
+    "assign": "Assign patient",
+    "status": {
+      "queued": "Processing",
+      "ingested": "Stored",
+      "unidentified": "To assign",
+      "quarantined": "Error",
+      "duplicate": "Duplicate",
+      "rejected": "Rejected"
+    }
+  },
   "nav": {
     "patients": "Patients",
+    "uploads": "Upload",
     "users": "Rights",
     "appUsers": "Users",
     "roles": "Roles",
@@ -523,6 +545,7 @@
   "apiKeys": {
     "title": "API Keys",
     "subtitle": "Generate personal keys to access the API (e.g. Swagger).",
+    "swaggerLink": "API docs",
     "nameLabel": "Key name",
     "namePlaceholder": "e.g. My integration",
     "generate": "Generate key",
