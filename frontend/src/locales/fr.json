@@ -403,6 +403,7 @@
         "ecg_write": "Modifier les métadonnées ECG",
         "ecg_download": "Télécharger les ECG",
         "ecg_delete": "Supprimer les ECG",
+        "ecg_upload": "Importer des fichiers ECG",
         "ecg_force_hl7": "Forcer la tentative HL7",
         "hl7_config": "Configurer HL7",
         "hl7_bulk_retry": "Relance en masse des épuisés",
@@ -506,8 +507,29 @@
     "from": "Du",
     "to": "au"
   },
+  "uploads": {
+    "title": "Importer des ECG",
+    "subtitle": "Importez manuellement des fichiers ECG depuis des appareils hors ligne ou isolés. Chaque fichier est traité comme un dépôt FTP : les fichiers valides sont stockés, ceux sans identifiant patient vont dans la file de revue, les fichiers invalides sont rejetés.",
+    "selectFiles": "Cliquez pour sélectionner des fichiers ECG (ou glisser-déposer)",
+    "filesSelected": "{{count}} fichier(s) sélectionné(s)",
+    "upload": "Importer & traiter",
+    "uploadError": "Échec de l'import",
+    "processing": "Traitement {{done}} / {{total}}…",
+    "done": "{{count}} fichier(s) traité(s)",
+    "newUpload": "Nouvel import",
+    "assign": "Assigner un patient",
+    "status": {
+      "queued": "Traitement",
+      "ingested": "Stocké",
+      "unidentified": "À assigner",
+      "quarantined": "Erreur",
+      "duplicate": "Doublon",
+      "rejected": "Rejeté"
+    }
+  },
   "nav": {
     "patients": "Patients",
+    "uploads": "Import",
     "users": "Droits",
     "appUsers": "Utilisateurs",
     "roles": "Rôles",
@@ -524,6 +546,7 @@
   "apiKeys": {
     "title": "Clés API",
     "subtitle": "Générez des clés personnelles pour accéder à l'API (ex. Swagger).",
+    "swaggerLink": "Doc API",
     "nameLabel": "Nom de la clé",
     "namePlaceholder": "ex. Mon intégration",
     "generate": "Générer la clé",

@@ -16,7 +16,7 @@ BACKEND_DIR   := backend
 FRONTEND_DIR  := frontend
 BIN           := $(BACKEND_DIR)/ecg-hub
 CMD           := ./cmd/ecg-hub
-SWAGGER_TAGS  := ECG,Patients,health
+SWAGGER_TAGS  := ECG,Patients,health,uploads
 SWAGGER_OUT   := docs
 SWAG          := $(shell go env GOPATH)/bin/swag
 

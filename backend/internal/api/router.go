@@ -277,6 +277,10 @@ func (r *RouterConfig) RegisterRoutes() {
 	// Force HL7 retry — requires ecg.force_hl7
 	apiV1.POST("/ecgs/:id/hl7/force", handlers.ForceHL7Handler(r.gormDB, r.hl7Enricher), mw.RequirePermission(r.checker, auth.PermECGForceHL7))
 
+	// Manual ECG upload (offline/isolated devices) — feeds the shared ingestion
+	// pipeline; live per-file status streams over /events/ws. Requires ecg.upload.
+	apiV1.POST("/uploads", handlers.UploadECGsHandler(r.ftpQueue, r.gormDB), mw.RequirePermission(r.checker, auth.PermECGUpload))
+
 	// Audit log — requires admin.audit
 	apiV1.GET("/audit-logs", handlers.ListAuditLogsHandler(r.gormDB), mw.RequirePermission(r.checker, auth.PermAdminAudit))
 

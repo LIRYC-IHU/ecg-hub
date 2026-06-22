@@ -152,6 +152,18 @@ func (s *QuarantineStore) dedup(contentHash, reason, filename string) *models.Qu
 	if err := s.repo.TouchReceived(existing.ID, reason); err != nil {
 		slog.Warn("quarantine: touch failed", "entry_id", existing.ID, "error", err)
 	}
+	// Notify connected clients — a silently skipped re-send (e.g. re-uploading an
+	// already-quarantined or unidentified file) looks like a stuck/lost file to the
+	// operator. Mirror the persister's duplicate event so the UI shows "duplicate".
+	if s.publisher != nil {
+		s.publisher.Publish(events.Event{
+			Type:         events.TypeECGDuplicate,
+			QuarantineID: existing.ID,
+			Vendor:       existing.Vendor,
+			Filename:     filename,
+			Reason:       reason,
+		})
+	}
 	return existing
 }
 
