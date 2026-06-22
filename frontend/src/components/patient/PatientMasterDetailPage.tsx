@@ -43,6 +43,7 @@ import {
   fetchActiveHL7Mappings,
   fetchHL7History,
   type TagDTO,
+  type ECGFilters,
 } from "../../lib/api";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../../hooks/useAuth";
@@ -600,6 +601,7 @@ function PatientDetail({
   canRead,
   canDelete,
   canForceHL7,
+  filters,
   selectedECGs,
   onToggleECG,
   onSetAllECGs,
@@ -610,6 +612,7 @@ function PatientDetail({
   canRead: boolean;
   canDelete: boolean;
   canForceHL7: boolean;
+  filters: ECGFilters;
   selectedECGs: Set<number>;
   onToggleECG: (ecgId: number) => void;
   onSetAllECGs: (ecgIds: number[]) => void;
@@ -657,6 +660,7 @@ function PatientDetail({
   };
 
   const { ecgs, total, isLoading } = useECGs(patient.id as unknown as number, {
+    ...filters,
     per_page: 50,
   });
 
@@ -1156,7 +1160,7 @@ interface Props {
   canForceHL7: boolean;
   search: string;
   onSearchChange: (value: string) => void;
-  filters: Record<string, string | undefined>;
+  filters: ECGFilters;
 }
 
 export function PatientMasterDetailPage({
@@ -1165,6 +1169,7 @@ export function PatientMasterDetailPage({
   canForceHL7,
   search,
   onSearchChange,
+  filters,
 }: Props) {
   const { t } = useTranslation();
   const { notify } = useNotification();
@@ -1248,11 +1253,17 @@ export function PatientMasterDetailPage({
   const { patients, total, isLoading } = usePatients({
     ...(debouncedSearch ? { q: debouncedSearch } : {}),
     ...(selectedTags.length > 0 ? { tags: selectedTags } : {}),
+    ...filters,
     sort_by: sortBy,
     sort_order: sortOrder,
     page,
     per_page: perPage,
   });
+
+  // Reset to page 1 whenever the ECG filters change so we never land on a now-empty page.
+  useEffect(() => {
+    setPage(1);
+  }, [filters]);
 
   const totalPages = Math.max(1, Math.ceil(total / perPage));
 
@@ -1802,6 +1813,7 @@ export function PatientMasterDetailPage({
           canRead={canRead}
           canDelete={canDelete}
           canForceHL7={canForceHL7}
+          filters={filters}
           selectedECGs={selectedECGs}
           onToggleECG={handleToggleECG}
           onSetAllECGs={handleSetAllECGs}

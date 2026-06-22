@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useQuery } from "@tanstack/react-query";
 import { useECGs } from "../../hooks/useECGs";
 import { EcgRow } from "./EcgRow";
 import { Spinner } from "../ui/Spinner";
 import { EmptyState } from "../ui/EmptyState";
-import type { ECGFilters } from "../../lib/api";
+import { fetchECGFilterFacets, type ECGFilters } from "../../lib/api";
 import type { Patient } from "../../types";
 
 interface Props {
@@ -31,6 +32,11 @@ export function EcgListPanel({
   const { t } = useTranslation();
   const [filters, setFilters] = useState<ECGFilters>({});
   const { ecgs, total, isLoading } = useECGs(patient.id, filters);
+  const { data: facets } = useQuery({
+    queryKey: ["ecg-filter-facets"],
+    queryFn: fetchECGFilterFacets,
+    staleTime: 5 * 60_000,
+  });
 
   function handleFilterChange(patch: Partial<ECGFilters>) {
     setFilters((prev) => ({ ...prev, ...patch }));
@@ -78,10 +84,40 @@ export function EcgListPanel({
           }
           className="text-xs bg-card border border-border rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring/20"
         >
-          <option value="">Toutes sources</option>
-          <option value="dicom">DICOM</option>
-          <option value="philips">Philips</option>
-          <option value="muse">GE MUSE</option>
+          <option value="">{t("filters.allVendors")}</option>
+          {facets?.vendors.map((v) => (
+            <option key={v} value={v}>
+              {v}
+            </option>
+          ))}
+        </select>
+        <select
+          value={filters.device_model ?? ""}
+          onChange={(e) =>
+            handleFilterChange({ device_model: e.target.value || undefined })
+          }
+          className="text-xs bg-card border border-border rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring/20"
+        >
+          <option value="">{t("filters.allModels")}</option>
+          {facets?.device_models.map((m) => (
+            <option key={m} value={m}>
+              {m}
+            </option>
+          ))}
+        </select>
+        <select
+          value={filters.file_format ?? ""}
+          onChange={(e) =>
+            handleFilterChange({ file_format: e.target.value || undefined })
+          }
+          className="text-xs bg-card border border-border rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-ring/20"
+        >
+          <option value="">{t("filters.allFormats")}</option>
+          {facets?.file_formats?.map((fmt) => (
+            <option key={fmt} value={fmt}>
+              .{fmt}
+            </option>
+          ))}
         </select>
         <select
           value={filters.hl7_status ?? ""}
