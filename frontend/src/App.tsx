@@ -13,6 +13,7 @@ import {
   Settings2,
   Activity,
   Palette,
+  UploadCloud,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Spinner } from "./components/ui/Spinner";
@@ -36,6 +37,7 @@ import { AdminHL7Page } from "./components/admin/AdminHL7Page";
 import { AdminBrandingPage } from "./components/admin/AdminBrandingPage";
 import { ApiKeysPage } from "./components/settings/ApiKeysPage";
 import { WebhooksPage } from "./components/settings/WebhooksPage";
+import { UploadPage } from "./components/uploads/UploadPage";
 import {
   fetchAdminStats,
   fetchECGFilterFacets,
@@ -85,6 +87,8 @@ function App() {
     status === "authenticated" && hasPermission("ecg.force_hl7");
   const canRead = status === "authenticated" && hasPermission("ecg.read");
   const canWrite = status === "authenticated" && hasPermission("ecg.write");
+  const canUpload =
+    status === "authenticated" && hasPermission("ecg.upload");
   const canViewUsers =
     status === "authenticated" && hasPermission("admin.users");
   const canViewAudit =
@@ -164,6 +168,7 @@ function App() {
 
   const sidebarNavItems: SidebarNavItem[] = [
     { to: "/", icon: Heart, labelKey: "nav.patients" },
+    canUpload && { to: "/uploads", icon: UploadCloud, labelKey: "nav.uploads" },
     canViewUsers && { to: "/app-users", icon: Users, labelKey: "nav.appUsers" },
     canViewRoles && { to: "/roles", icon: Shield, labelKey: "nav.roles" },
     canViewBranding && { to: "/branding", icon: Palette, labelKey: "nav.branding" },
@@ -200,7 +205,7 @@ function App() {
       />
 
       <div className="flex-1 min-h-0 flex overflow-hidden">
-        {isAdmin && <Sidebar navItems={sidebarNavItems} />}
+        {(isAdmin || canUpload) && <Sidebar navItems={sidebarNavItems} />}
 
         <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
           <Routes>
@@ -359,6 +364,16 @@ function App() {
                 </div>
               }
             />
+            {canUpload && (
+              <Route
+                path="/uploads"
+                element={
+                  <div className="flex-1 min-h-0 overflow-auto">
+                    <UploadPage />
+                  </div>
+                }
+              />
+            )}
             {canViewUsers && (
               <>
                 <Route
