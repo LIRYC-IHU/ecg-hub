@@ -21,6 +21,21 @@ type PatientSearchParams struct {
 	SortOrder string `query:"sort_order"` // "asc" | "desc"
 	Page      int    `query:"page"`
 	PerPage   int    `query:"per_page"`
+
+	// ECG-level filters: when set, only patients owning at least one ECG matching
+	// ALL of them are returned (applied via an EXISTS subquery on ecgs).
+	Vendor      string `query:"vendor"`       // exact vendor match
+	DeviceModel string `query:"device_model"` // exact device model match (from extra JSONB)
+	FileFormat  string `query:"file_format"`  // file extension filter (e.g. ".xml", ".dat", ".dcm")
+	HL7Status   string `query:"hl7_status"`   // "pending"|"success"|"hl7_exhausted"
+	From        string `query:"from"`         // YYYY-MM-DD, inclusive
+	To          string `query:"to"`           // YYYY-MM-DD, inclusive
+}
+
+// hasECGFilters reports whether any ECG-level filter is set.
+func (p PatientSearchParams) hasECGFilters() bool {
+	return p.Vendor != "" || p.DeviceModel != "" || p.FileFormat != "" ||
+		p.HL7Status != "" || p.From != "" || p.To != ""
 }
 
 // allowedPatientSortBy maps accepted sort_by values to their SQL column name.
@@ -42,6 +57,12 @@ var allowedPatientSortBy = map[string]string{
 // @Param q query string false "Search query"
 // @Param sort_by query string false "Sort field" Enums(patient_id, last_name, created_at)
 // @Param sort_order query string false "Sort order" Enums(asc, desc)
+// @Param vendor query string false "Only patients with an ECG from this vendor"
+// @Param device_model query string false "Only patients with an ECG from this device model"
+// @Param file_format query string false "Only patients with an ECG of this file extension"
+// @Param hl7_status query string false "Only patients with an ECG in this HL7 status" Enums(pending, success, hl7_exhausted)
+// @Param from query string false "Only patients with an ECG recorded on/after this date (YYYY-MM-DD)"
+// @Param to query string false "Only patients with an ECG recorded on/before this date (YYYY-MM-DD)"
 // @Param page query int false "Page number" default(1)
 // @Param per_page query int false "Items per page" default(50)
 // @Produce json
@@ -89,6 +110,35 @@ func SearchPatientsHandler(db *gorm.DB) echo.HandlerFunc {
 			)
 		}
 
+		// ECG-level filters: keep only patients with at least one matching ECG.
+		if params.hasECGFilters() {
+			sub := db.Table("ecgs").Select("1").
+				Where("ecgs.patient_id = patients.patient_id")
+			if params.Vendor != "" {
+				sub = sub.Where("ecgs.vendor = ?", params.Vendor)
+			}
+			if params.DeviceModel != "" {
+				sub = sub.Where("ecgs.extra->>'device_model' = ?", params.DeviceModel)
+			}
+			if params.FileFormat != "" {
+				sub = sub.Where("LOWER(substring(ecgs.original_filename from '\\.([^.]+)$')) = LOWER(?)", strings.TrimPrefix(params.FileFormat, "."))
+			}
+			if params.HL7Status != "" {
+				sub = sub.Where("ecgs.hl7_status = ?", params.HL7Status)
+			}
+			if params.From != "" {
+				if t, err := time.Parse("2006-01-02", params.From); err == nil {
+					sub = sub.Where("ecgs.recorded_at >= ?", t)
+				}
+			}
+			if params.To != "" {
+				if t, err := time.Parse("2006-01-02", params.To); err == nil {
+					sub = sub.Where("ecgs.recorded_at < ?", t.AddDate(0, 0, 1))
+				}
+			}
+			query = query.Where("EXISTS (?)", sub)
+		}
+
 		var total int64
 		if err := query.Count(&total).Error; err != nil {
 			return c.JSON(http.StatusInternalServerError, mw.APIError("DB_ERROR", "query failed"))
@@ -125,12 +175,14 @@ func SearchPatientsHandler(db *gorm.DB) echo.HandlerFunc {
 
 // ECGListParams holds query parameters for GET /api/v1/patients/:id/ecgs.
 type ECGListParams struct {
-	From      string `query:"from"`       // ISO 8601 date "YYYY-MM-DD", inclusive
-	To        string `query:"to"`         // ISO 8601 date "YYYY-MM-DD", inclusive
-	Vendor    string `query:"vendor"`     // exact match
-	HL7Status string `query:"hl7_status"` // "pending"|"success"|"hl7_exhausted"
-	Page      int    `query:"page"`
-	PerPage   int    `query:"per_page"`
+	From        string `query:"from"`         // ISO 8601 date "YYYY-MM-DD", inclusive
+	To          string `query:"to"`           // ISO 8601 date "YYYY-MM-DD", inclusive
+	Vendor      string `query:"vendor"`       // exact match
+	DeviceModel string `query:"device_model"` // exact device model match (from extra JSONB)
+	FileFormat  string `query:"file_format"`  // file extension filter (e.g. ".xml", ".dat", ".dcm")
+	HL7Status   string `query:"hl7_status"`   // "pending"|"success"|"hl7_exhausted"
+	Page        int    `query:"page"`
+	PerPage     int    `query:"per_page"`
 }
 
 // ListPatientECGsHandler handles GET /api/v1/patients/:id/ecgs.
@@ -146,6 +198,8 @@ type ECGListParams struct {
 // @Param from query string false "Start date (YYYY-MM-DD)"
 // @Param to query string false "End date (YYYY-MM-DD)"
 // @Param vendor query string false "Vendor filter"
+// @Param device_model query string false "Device model filter"
+// @Param file_format query string false "File extension filter (e.g. .xml, .dat, .dcm)"
 // @Param hl7_status query string false "HL7 status" Enums(pending, success, hl7_exhausted)
 // @Param page query int false "Page number"
 // @Param per_page query int false "Items per page"
@@ -206,6 +260,12 @@ func ListPatientECGsHandler(db *gorm.DB) echo.HandlerFunc {
 		if params.Vendor != "" {
 			q = q.Where("vendor = ?", params.Vendor)
 		}
+		if params.DeviceModel != "" {
+			q = q.Where("extra->>'device_model' = ?", params.DeviceModel)
+		}
+		if params.FileFormat != "" {
+			q = q.Where("LOWER(substring(original_filename from '\\.([^.]+)$')) = LOWER(?)", strings.TrimPrefix(params.FileFormat, "."))
+		}
 		if params.HL7Status != "" {
 			q = q.Where("hl7_status = ?", params.HL7Status)
 		}
@@ -230,10 +290,12 @@ func ListPatientECGsHandler(db *gorm.DB) echo.HandlerFunc {
 		userID, _ := c.Get(mw.CtxKeyUserID).(string)
 		_ = mw.WriteAuditLog(c.Request().Context(), db, userID, "patient_ecg_list",
 			id, map[string]any{
-				"vendor":     params.Vendor,
-				"hl7_status": params.HL7Status,
-				"from":       params.From,
-				"to":         params.To,
+				"vendor":       params.Vendor,
+				"device_model": params.DeviceModel,
+				"file_format":  params.FileFormat,
+				"hl7_status":   params.HL7Status,
+				"from":         params.From,
+				"to":           params.To,
 			})
 
 		return c.JSON(http.StatusOK, map[string]any{
