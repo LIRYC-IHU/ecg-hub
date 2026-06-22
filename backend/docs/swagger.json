@@ -676,6 +676,47 @@
                 }
             }
         },
+        "/api/v1/uploads": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    },
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Push one or more ECG files into the ingestion pipeline (same as FTP/DICOM).\nAccessible with an API key (X-API-Key header) so offline/isolated devices and\nscripts can submit files without an interactive login. Requires the ecg.upload\npermission on the key's role. Valid files are stored, files without a patient ID\ngo to the unidentified review queue, invalid files are rejected.",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "uploads"
+                ],
+                "summary": "Upload ECG files manually (offline/isolated devices)",
+                "parameters": [
+                    {
+                        "type": "file",
+                        "description": "ECG files (repeat the field for multiple)",
+                        "name": "files",
+                        "in": "formData",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/healthz": {
             "get": {
                 "description": "Returns system health including database connectivity, FTP and DICOM server status",

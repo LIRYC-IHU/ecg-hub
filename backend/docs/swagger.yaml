@@ -487,6 +487,36 @@ paths:
       summary: Mark all of a patient's ECGs as viewed
       tags:
       - Patients
+  /api/v1/uploads:
+    post:
+      consumes:
+      - multipart/form-data
+      description: |-
+        Push one or more ECG files into the ingestion pipeline (same as FTP/DICOM).
+        Accessible with an API key (X-API-Key header) so offline/isolated devices and
+        scripts can submit files without an interactive login. Requires the ecg.upload
+        permission on the key's role. Valid files are stored, files without a patient ID
+        go to the unidentified review queue, invalid files are rejected.
+      parameters:
+      - description: ECG files (repeat the field for multiple)
+        in: formData
+        name: files
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      - ApiKeyAuth: []
+      summary: Upload ECG files manually (offline/isolated devices)
+      tags:
+      - uploads
   /healthz:
     get:
       description: Returns system health including database connectivity, FTP and
