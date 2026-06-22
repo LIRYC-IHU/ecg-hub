@@ -46,6 +46,7 @@ import (
 	appmetrics "github.com/LIRYC-IHU/ecg-hub/internal/metrics"
 	"github.com/LIRYC-IHU/ecg-hub/internal/module"
 	_ "github.com/LIRYC-IHU/ecg-hub/internal/module/dicom"
+	_ "github.com/LIRYC-IHU/ecg-hub/internal/module/fda"
 	_ "github.com/LIRYC-IHU/ecg-hub/internal/module/mindray"
 	_ "github.com/LIRYC-IHU/ecg-hub/internal/module/muse"
 	_ "github.com/LIRYC-IHU/ecg-hub/internal/module/nihon-kohden"
@@ -174,6 +175,10 @@ func main() {
 		"mindray:dicom":       bridgeBin("BRIDGE_MINDRAY_TO_DICOM", "mindray-to-dicom"),
 		"muse:xmlfda":         bridgeBin("BRIDGE_MUSE_TO_FDA", "muse-to-fda"),
 		"muse:dicom":          bridgeBin("BRIDGE_MUSE_TO_DICOM", "muse-to-dicom"),
+		// fda: the source is already FDA aECG XML (some devices export it directly),
+		// so DICOM is produced by fda-to-dicom and PDF by fda-to-pdf rendering the
+		// source verbatim. "original" already serves the FDA XML download.
+		"fda:dicom": bridgeBin("BRIDGE_FDA_TO_DICOM", "fda-to-dicom"),
 	}
 
 	// PDF reports are rendered from FDA aECG XML, so a single fda-to-pdf binary
