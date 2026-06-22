@@ -126,6 +126,8 @@ export interface ECGFilters {
   from?: string;
   to?: string;
   vendor?: string;
+  device_model?: string;
+  file_format?: string;
   hl7_status?: "pending" | "success" | "hl7_exhausted";
   page?: number;
   per_page?: number;
@@ -139,6 +141,8 @@ export async function fetchECGs(
   if (filters.from) params.set("from", filters.from);
   if (filters.to) params.set("to", filters.to);
   if (filters.vendor) params.set("vendor", filters.vendor);
+  if (filters.device_model) params.set("device_model", filters.device_model);
+  if (filters.file_format) params.set("file_format", filters.file_format);
   if (filters.hl7_status) params.set("hl7_status", filters.hl7_status);
   params.set("page", String(filters.page ?? 1));
   params.set("per_page", String(filters.per_page ?? 20));
@@ -462,6 +466,13 @@ export interface PatientFilters {
   sort_order?: "asc" | "desc";
   page?: number;
   per_page?: number;
+  // ECG-level filters: keep only patients owning at least one matching ECG.
+  vendor?: string;
+  device_model?: string;
+  file_format?: string;
+  hl7_status?: "pending" | "success" | "hl7_exhausted";
+  from?: string;
+  to?: string;
 }
 
 export async function fetchPatients(
@@ -473,6 +484,12 @@ export async function fetchPatients(
     params.set("tags", filters.tags.join(","));
   if (filters.sort_by) params.set("sort_by", filters.sort_by);
   if (filters.sort_order) params.set("sort_order", filters.sort_order);
+  if (filters.vendor) params.set("vendor", filters.vendor);
+  if (filters.device_model) params.set("device_model", filters.device_model);
+  if (filters.file_format) params.set("file_format", filters.file_format);
+  if (filters.hl7_status) params.set("hl7_status", filters.hl7_status);
+  if (filters.from) params.set("from", filters.from);
+  if (filters.to) params.set("to", filters.to);
   params.set("page", String(filters.page ?? 1));
   params.set("per_page", String(filters.per_page ?? 50));
   const res = await fetch(`${BASE_URL}/api/v1/patients?${params}`);
