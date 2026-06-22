@@ -16,6 +16,7 @@ const (
 	PermECGDownload      = "ecg.download"
 	PermECGDelete        = "ecg.delete"
 	PermECGForceHL7      = "ecg.force_hl7"
+	PermECGUpload        = "ecg.upload" // manually upload ECG files for offline/isolated devices
 	PermHL7Config        = "hl7.config"
 	PermHL7BulkRetry     = "hl7.bulk_retry"
 	PermTagCreate        = "tag.create"
@@ -43,6 +44,7 @@ var AllPermissions = []string{
 	PermECGDownload,
 	PermECGDelete,
 	PermECGForceHL7,
+	PermECGUpload,
 	PermHL7Config,
 	PermHL7BulkRetry,
 	PermTagCreate,
