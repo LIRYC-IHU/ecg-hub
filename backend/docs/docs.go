@@ -491,6 +491,47 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
+                        "type": "string",
+                        "description": "Only patients with an ECG from this vendor",
+                        "name": "vendor",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Only patients with an ECG from this device model",
+                        "name": "device_model",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Only patients with an ECG of this file extension",
+                        "name": "file_format",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "pending",
+                            "success",
+                            "hl7_exhausted"
+                        ],
+                        "type": "string",
+                        "description": "Only patients with an ECG in this HL7 status",
+                        "name": "hl7_status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Only patients with an ECG recorded on/after this date (YYYY-MM-DD)",
+                        "name": "from",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Only patients with an ECG recorded on/before this date (YYYY-MM-DD)",
+                        "name": "to",
+                        "in": "query"
+                    },
+                    {
                         "type": "integer",
                         "default": 1,
                         "description": "Page number",
@@ -557,6 +598,18 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Vendor filter",
                         "name": "vendor",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Device model filter",
+                        "name": "device_model",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "File extension filter (e.g. .xml, .dat, .dcm)",
+                        "name": "file_format",
                         "in": "query"
                     },
                     {

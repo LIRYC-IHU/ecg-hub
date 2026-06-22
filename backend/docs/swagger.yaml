@@ -354,6 +354,34 @@ paths:
         in: query
         name: sort_order
         type: string
+      - description: Only patients with an ECG from this vendor
+        in: query
+        name: vendor
+        type: string
+      - description: Only patients with an ECG from this device model
+        in: query
+        name: device_model
+        type: string
+      - description: Only patients with an ECG of this file extension
+        in: query
+        name: file_format
+        type: string
+      - description: Only patients with an ECG in this HL7 status
+        enum:
+        - pending
+        - success
+        - hl7_exhausted
+        in: query
+        name: hl7_status
+        type: string
+      - description: Only patients with an ECG recorded on/after this date (YYYY-MM-DD)
+        in: query
+        name: from
+        type: string
+      - description: Only patients with an ECG recorded on/before this date (YYYY-MM-DD)
+        in: query
+        name: to
+        type: string
       - default: 1
         description: Page number
         in: query
@@ -397,6 +425,14 @@ paths:
       - description: Vendor filter
         in: query
         name: vendor
+        type: string
+      - description: Device model filter
+        in: query
+        name: device_model
+        type: string
+      - description: File extension filter (e.g. .xml, .dat, .dcm)
+        in: query
+        name: file_format
         type: string
       - description: HL7 status
         enum:
