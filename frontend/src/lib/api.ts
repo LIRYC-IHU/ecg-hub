@@ -157,6 +157,37 @@ export async function fetchECGs(
   return res.json();
 }
 
+// ─── Manual ECG upload (offline/isolated devices) ──────────────────────────
+export interface UploadFileResult {
+  filename: string;
+  size: number;
+  status: "queued" | "rejected";
+  error?: string;
+}
+
+export interface UploadResponse {
+  files: UploadFileResult[];
+  queued: number;
+}
+
+// uploadECGs sends one or more ECG files to the manual ingestion endpoint. Each
+// accepted file is processed by the same pipeline as FTP/DICOM; live per-file
+// status arrives over the /events/ws WebSocket (correlated by filename).
+export async function uploadECGs(files: File[]): Promise<UploadResponse> {
+  const fd = new FormData();
+  for (const f of files) fd.append("files", f);
+  // No explicit Content-Type: the browser sets the multipart boundary.
+  const res = await fetch(`${BASE_URL}/api/v1/uploads`, {
+    method: "POST",
+    body: fd,
+  });
+  if (!res.ok) {
+    const err: ErrorResponse = await res.json();
+    throw err;
+  }
+  return res.json();
+}
+
 // triggerBlobDownload fetches a URL and triggers a browser download from a blob.
 // Unlike window.location.href, this allows catching JSON error responses.
 async function triggerBlobDownload(url: string): Promise<void> {
@@ -514,6 +545,7 @@ export const ALL_PERMISSIONS = [
   "ecg.download",
   "ecg.delete",
   "ecg.force_hl7",
+  "ecg.upload",
   "quarantine.read",
   "quarantine.delete",
   "quarantine.assign",
