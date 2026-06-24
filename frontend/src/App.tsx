@@ -85,6 +85,8 @@ function App() {
   const canDelete = status === "authenticated" && hasPermission("ecg.delete");
   const canForceHL7 =
     status === "authenticated" && hasPermission("ecg.force_hl7");
+  const canSendResult =
+    status === "authenticated" && hasPermission("ecg.send_result");
   const canRead = status === "authenticated" && hasPermission("ecg.read");
   const canWrite = status === "authenticated" && hasPermission("ecg.write");
   const canUpload =
@@ -354,6 +356,7 @@ function App() {
                     <PatientMasterDetailPage
                       canDelete={canDelete}
                       canForceHL7={canForceHL7}
+                      canSendResult={canSendResult}
                       canRead={canRead}
                       canWrite={canWrite}
                       search={globalSearch}

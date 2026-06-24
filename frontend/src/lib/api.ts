@@ -430,6 +430,47 @@ export async function forceHL7(ecgId: number): Promise<void> {
   }
 }
 
+// ORUAttempt mirrors the backend models.HL7ORUAttempt — the outcome of an outbound
+// HL7 ORU result-send (ECG result pushed to the HIS/DPI).
+export interface ORUAttempt {
+  id: string;
+  ecg_id: string;
+  patient_id: string;
+  status: "success" | "rejected" | "failed";
+  msa_code?: string;
+  msa_message?: string;
+  error?: string;
+  included_pdf: boolean;
+  triggered_by?: string;
+  response_ms: number;
+  created_at: string;
+}
+
+// sendECGResult manually triggers the outbound ORU result-send for an ECG.
+// Requires the ecg.send_result permission. Returns the recorded attempt on success;
+// throws the ErrorResponse (HIS rejection / send failure / disabled) otherwise.
+export async function sendECGResult(ecgId: number): Promise<ORUAttempt> {
+  const res = await fetch(`${BASE_URL}/api/v1/ecgs/${ecgId}/send-result`, {
+    method: "POST",
+  });
+  const json = await res.json();
+  if (!res.ok) {
+    // On a send failure the body is { error, attempt }; guards return { code, message }.
+    throw (json.error ?? json) as ErrorResponse;
+  }
+  return json.attempt as ORUAttempt;
+}
+
+// fetchECGORUStatus returns the most recent outbound ORU attempt for an ECG, or null.
+export async function fetchECGORUStatus(
+  ecgId: number,
+): Promise<ORUAttempt | null> {
+  const res = await fetch(`${BASE_URL}/api/v1/ecgs/${ecgId}/oru-status`);
+  if (!res.ok) throw new Error("Failed to fetch ORU status");
+  const json = await res.json();
+  return (json.attempt as ORUAttempt | null) ?? null;
+}
+
 export interface AuditLogFilters {
   user_id?: string;
   action?: string;
@@ -546,6 +587,7 @@ export const ALL_PERMISSIONS = [
   "ecg.delete",
   "ecg.force_hl7",
   "ecg.upload",
+  "ecg.send_result",
   "quarantine.read",
   "quarantine.delete",
   "quarantine.assign",
@@ -1047,6 +1089,12 @@ export interface HL7Settings {
   receiving_facility: string;
   version: string;
   processing_id: string;
+  // Outbound ORU (result-sending) settings
+  oru_enabled: boolean;
+  oru_trigger_mode: "auto" | "manual";
+  oru_host: string;
+  oru_port: number;
+  oru_include_pdf: boolean;
 }
 
 export async function fetchHL7Settings(): Promise<HL7Settings> {
@@ -1073,6 +1121,11 @@ export async function updateHL7Settings(
       | "receiving_facility"
       | "version"
       | "processing_id"
+      | "oru_enabled"
+      | "oru_trigger_mode"
+      | "oru_host"
+      | "oru_port"
+      | "oru_include_pdf"
     >
   >,
 ): Promise<HL7Settings> {

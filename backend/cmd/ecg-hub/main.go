@@ -39,9 +39,9 @@ import (
 	dbpkg "github.com/LIRYC-IHU/ecg-hub/internal/db"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
 	dicomsrv "github.com/LIRYC-IHU/ecg-hub/internal/dicom"
+	"github.com/LIRYC-IHU/ecg-hub/internal/events"
 	"github.com/LIRYC-IHU/ecg-hub/internal/export"
 	"github.com/LIRYC-IHU/ecg-hub/internal/hl7"
-	"github.com/LIRYC-IHU/ecg-hub/internal/events"
 	"github.com/LIRYC-IHU/ecg-hub/internal/ingestion"
 	appmetrics "github.com/LIRYC-IHU/ecg-hub/internal/metrics"
 	"github.com/LIRYC-IHU/ecg-hub/internal/module"
@@ -335,6 +335,20 @@ func main() {
 		hl7Enricher = hl7EnricherForPersister
 	}
 
+	// Outbound HL7 ORU result-sending service. Independent of the inbound QRY client
+	// above: it pushes ECG results (optionally with the rendered PDF report) to the
+	// HIS/DPI configured in the ORU settings. The PDF is produced via the export bridge;
+	// every send is recorded as an HL7ORUAttempt for audit/status. Always constructed so
+	// the manual endpoint works even when auto mode is off.
+	hl7ORUAttemptRepo := repository.NewHL7ORUAttemptRepository(gormDB)
+	hl7ORUService := hl7.NewORUService(
+		hl7SettingsRepo,
+		ecgRepo,
+		patRepo,
+		export.NewORUPDFRenderer(bridge),
+		hl7ORUAttemptRepo,
+	)
+
 	// Auth encryption key for storing provider configs encrypted in DB
 	// (OIDC/LDAP secrets, FTP/HL7/connector credentials, webhook secrets).
 	// This key is the only thing protecting those secrets at rest, so in
@@ -438,6 +452,9 @@ func main() {
 		WithAuditWriter(repository.NewAuditRepository(gormDB)).
 		WithEventPublisher(eventHub)
 	router.WithPersister(persister)
+
+	// Outbound HL7 ORU: expose the manual send-result route (guarded by ecg.send_result).
+	router.WithORUService(hl7ORUService)
 
 	router.RegisterRoutes()
 
@@ -550,6 +567,12 @@ func main() {
 	// connectors configured — so connectors added later from the UI become
 	// active immediately via the hot-reload callback.
 	persister.WithConnectorDispatcher(connDispatcher)
+
+	// Wire the outbound ORU trigger: when ORU is enabled in "auto" mode, the ECG result
+	// is pushed to the HIS/DPI after enrichment completes. Manual sends use the same
+	// service via the API endpoint regardless of trigger mode.
+	persister.WithORUTrigger(hl7ORUService)
+
 	connRetryJob.Start()
 	slog.Info("connector: retry job started", "connectors", len(connSettings))
 	defer func() {

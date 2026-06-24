@@ -46,6 +46,13 @@ type ecgConnectorDispatcher interface {
 	Dispatch(ecg *models.ECG, filePath string)
 }
 
+// ecgORUTrigger is the optional outbound HL7 ORU result-send interface (implemented by
+// *hl7.ORUService). When nil, or when AutoMode() is false, no result is auto-sent on ingest.
+type ecgORUTrigger interface {
+	AutoMode() bool
+	SendForECG(ctx context.Context, ecgID, triggeredBy string) (*models.HL7ORUAttempt, error)
+}
+
 // ecgInserter is the repository interface for ECG persistence (implemented by *repository.ECGRepository).
 type ecgInserter interface {
 	Insert(ecg *models.ECG) error
@@ -75,6 +82,8 @@ type Persister struct {
 	enricherMu   sync.RWMutex           // guards concurrent read (persist) / write (WithEnricher)
 	dispatcher   ecgConnectorDispatcher // nil when connector forwarding is disabled; guarded by dispatcherMu
 	dispatcherMu sync.RWMutex           // guards concurrent read (persist) / write (WithConnectorDispatcher)
+	oruTrigger   ecgORUTrigger          // nil when outbound ORU is disabled; guarded by oruMu
+	oruMu        sync.RWMutex           // guards concurrent read (persist) / write (WithORUTrigger)
 	publisher    events.Publisher       // nil when realtime events are disabled
 	ctx          context.Context
 	cancel       context.CancelFunc
@@ -119,6 +128,16 @@ func (p *Persister) SetEnricher(e interface {
 	p.enricherMu.Lock()
 	p.enricher = e
 	p.enricherMu.Unlock()
+}
+
+// WithORUTrigger attaches an optional outbound HL7 ORU trigger to the Persister.
+// When set and its AutoMode() is true, the ECG result is pushed to the HIS/DPI after
+// enrichment completes. Safe to call concurrently with running persist goroutines.
+func (p *Persister) WithORUTrigger(o ecgORUTrigger) *Persister {
+	p.oruMu.Lock()
+	p.oruTrigger = o
+	p.oruMu.Unlock()
+	return p
 }
 
 // WithAuditWriter attaches an optional audit writer to the Persister.
@@ -360,10 +379,22 @@ func (p *Persister) persist(ri RoutedItem) error {
 	p.enricherMu.RLock()
 	e := p.enricher
 	p.enricherMu.RUnlock()
-	if e != nil {
+	p.oruMu.RLock()
+	oru := p.oruTrigger
+	p.oruMu.RUnlock()
+	if e != nil || oru != nil {
 		go func() {
-			if err := e.Enrich(context.Background(), ecg.ID, ecg.PatientID); err != nil {
-				slog.Warn("ingestion: hl7 enrichment error", "ecg_id", ecg.ID, "error", err)
+			// Enrich first so the auto ORU result carries the HL7-enriched demographics.
+			if e != nil {
+				if err := e.Enrich(context.Background(), ecg.ID, ecg.PatientID); err != nil {
+					slog.Warn("ingestion: hl7 enrichment error", "ecg_id", ecg.ID, "error", err)
+				}
+			}
+			// Auto-send the outbound ORU result when enabled in "auto" trigger mode.
+			if oru != nil && oru.AutoMode() {
+				if _, err := oru.SendForECG(context.Background(), ecg.ID, "auto"); err != nil {
+					slog.Warn("ingestion: hl7 oru auto-send error", "ecg_id", ecg.ID, "error", err)
+				}
 			}
 		}()
 	}

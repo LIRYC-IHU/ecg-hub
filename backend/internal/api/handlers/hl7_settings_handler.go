@@ -47,6 +47,13 @@ type UpdateHL7SettingsRequest struct {
 	ReceivingFacility    *string `json:"receiving_facility"`
 	Version              *string `json:"version"`
 	ProcessingID         *string `json:"processing_id"`
+
+	// Outbound ORU fields
+	ORUEnabled     *bool   `json:"oru_enabled"`
+	ORUTriggerMode *string `json:"oru_trigger_mode"`
+	ORUHost        *string `json:"oru_host"`
+	ORUPort        *int    `json:"oru_port"`
+	ORUIncludePDF  *bool   `json:"oru_include_pdf"`
 }
 
 // GetHL7SettingsHandler returns GET /admin/hl7/settings.
@@ -174,6 +181,36 @@ func UpdateHL7SettingsHandler(repo *repository.HL7SettingsRepository, scheduler 
 		}
 		if req.ProcessingID != nil {
 			settings.ProcessingID = *req.ProcessingID
+		}
+
+		// Apply outbound ORU field updates.
+		if req.ORUEnabled != nil {
+			settings.ORUEnabled = *req.ORUEnabled
+		}
+		if req.ORUTriggerMode != nil {
+			mode := *req.ORUTriggerMode
+			if mode != "auto" && mode != "manual" {
+				return c.JSON(http.StatusBadRequest, map[string]string{
+					"code":    "INVALID_PARAMS",
+					"message": "oru_trigger_mode must be 'auto' or 'manual'",
+				})
+			}
+			settings.ORUTriggerMode = mode
+		}
+		if req.ORUHost != nil {
+			settings.ORUHost = *req.ORUHost
+		}
+		if req.ORUPort != nil {
+			if *req.ORUPort < 1 || *req.ORUPort > 65535 {
+				return c.JSON(http.StatusBadRequest, map[string]string{
+					"code":    "INVALID_PARAMS",
+					"message": "oru_port must be between 1 and 65535",
+				})
+			}
+			settings.ORUPort = *req.ORUPort
+		}
+		if req.ORUIncludePDF != nil {
+			settings.ORUIncludePDF = *req.ORUIncludePDF
 		}
 
 		if err := repo.Update(settings); err != nil {

@@ -11,12 +11,13 @@ import (
 // Permission constants — the complete set of ECG Hub permissions.
 const (
 	PermPatientRead      = "patient.read"
-	PermECGRead          = "ecg.read"          // reserved: future graphical ECG viewer
-	PermECGWrite         = "ecg.write"         // edit ECG metadata (DB + source file)
+	PermECGRead          = "ecg.read"  // reserved: future graphical ECG viewer
+	PermECGWrite         = "ecg.write" // edit ECG metadata (DB + source file)
 	PermECGDownload      = "ecg.download"
 	PermECGDelete        = "ecg.delete"
 	PermECGForceHL7      = "ecg.force_hl7"
-	PermECGUpload        = "ecg.upload" // manually upload ECG files for offline/isolated devices
+	PermECGUpload        = "ecg.upload"      // manually upload ECG files for offline/isolated devices
+	PermECGSendResult    = "ecg.send_result" // trigger an outbound HL7 ORU result (ECG + PDF) to the HIS/DPI
 	PermHL7Config        = "hl7.config"
 	PermHL7BulkRetry     = "hl7.bulk_retry"
 	PermTagCreate        = "tag.create"
@@ -45,6 +46,7 @@ var AllPermissions = []string{
 	PermECGDelete,
 	PermECGForceHL7,
 	PermECGUpload,
+	PermECGSendResult,
 	PermHL7Config,
 	PermHL7BulkRetry,
 	PermTagCreate,
@@ -151,4 +153,3 @@ func (p *PermissionChecker) load(ctx context.Context, role string) map[string]bo
 	p.mu.Unlock()
 	return perms
 }
-

@@ -20,8 +20,8 @@ import (
 	mw "github.com/LIRYC-IHU/ecg-hub/internal/api/middleware"
 	"github.com/LIRYC-IHU/ecg-hub/internal/auth"
 	"github.com/LIRYC-IHU/ecg-hub/internal/config"
-	"github.com/LIRYC-IHU/ecg-hub/internal/events"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
+	"github.com/LIRYC-IHU/ecg-hub/internal/events"
 	"github.com/LIRYC-IHU/ecg-hub/internal/export"
 	"github.com/LIRYC-IHU/ecg-hub/internal/hl7"
 	"github.com/LIRYC-IHU/ecg-hub/internal/ingestion"
@@ -73,12 +73,13 @@ type RouterConfig struct {
 	moduleConfigRepo   *repository.ModuleConfigRepository
 	moduleSettingsRepo *repository.ModuleSettingsRepository
 	ftpQueue           ingestion.IngestQueue
-	ingestRouter       *ingestion.Router   // for hot module reload
-	persister          *ingestion.Persister // for re-ingesting assigned unidentified ECGs; nil disables the assign route
-	eventHub           *events.Hub          // realtime ingestion event hub; nil disables the events WS route
+	ingestRouter       *ingestion.Router                 // for hot module reload
+	persister          *ingestion.Persister              // for re-ingesting assigned unidentified ECGs; nil disables the assign route
+	eventHub           *events.Hub                       // realtime ingestion event hub; nil disables the events WS route
 	userWebhookRepo    *repository.UserWebhookRepository // per-user webhooks; nil disables the /webhooks routes
 	webhookDispatcher  *webhook.Dispatcher               // delivers user webhooks; required by the test route
 	connectorReload    func()                            // rebuilds the outbound connector runtime from DB after a config change
+	oruService         handlers.ORUSender                // outbound HL7 ORU result-sender; nil disables the send-result route
 }
 
 // WithConnectorReload attaches the callback that rebuilds the outbound PACS
@@ -96,6 +97,14 @@ func (r *RouterConfig) WithConnectorReload(reload func()) *RouterConfig {
 func (r *RouterConfig) WithUserWebhooks(repo *repository.UserWebhookRepository, d *webhook.Dispatcher) *RouterConfig {
 	r.userWebhookRepo = repo
 	r.webhookDispatcher = d
+	return r
+}
+
+// WithORUService attaches the outbound HL7 ORU result-sender so the manual
+// POST /ecgs/:id/send-result route can be registered. Must be called before
+// RegisterRoutes. Returns r for chaining.
+func (r *RouterConfig) WithORUService(svc handlers.ORUSender) *RouterConfig {
+	r.oruService = svc
 	return r
 }
 
@@ -276,6 +285,16 @@ func (r *RouterConfig) RegisterRoutes() {
 
 	// Force HL7 retry — requires ecg.force_hl7
 	apiV1.POST("/ecgs/:id/hl7/force", handlers.ForceHL7Handler(r.gormDB, r.hl7Enricher), mw.RequirePermission(r.checker, auth.PermECGForceHL7))
+
+	// Outbound HL7 ORU result-send. Manual trigger — works regardless of the
+	// configured trigger mode. POST requires ecg.send_result; the status badge
+	// (latest attempt) is readable with ecg.read. Both registered only when the
+	// ORU service is wired (HL7 enabled).
+	hl7ORUAttemptRepo := repository.NewHL7ORUAttemptRepository(r.gormDB)
+	apiV1.GET("/ecgs/:id/oru-status", handlers.GetECGORUStatusHandler(hl7ORUAttemptRepo), mw.RequirePermission(r.checker, auth.PermECGRead))
+	if r.oruService != nil {
+		apiV1.POST("/ecgs/:id/send-result", handlers.SendECGResultHandler(r.oruService, r.gormDB), mw.RequirePermission(r.checker, auth.PermECGSendResult))
+	}
 
 	// Manual ECG upload (offline/isolated devices) — feeds the shared ingestion
 	// pipeline; live per-file status streams over /events/ws. Requires ecg.upload.

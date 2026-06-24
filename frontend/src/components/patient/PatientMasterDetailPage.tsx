@@ -14,6 +14,7 @@ import {
   Tag,
   Copy,
   RefreshCw,
+  Send,
   Activity,
   CalendarClock,
   CheckCircle2,
@@ -40,6 +41,8 @@ import {
   fetchECGTags,
   untagECG,
   forceHL7,
+  sendECGResult,
+  fetchECGORUStatus,
   fetchActiveHL7Mappings,
   fetchHL7History,
   type TagDTO,
@@ -596,11 +599,65 @@ function PatientTagDots({ patientId }: { patientId: string }) {
 
 // ─── Right panel: patient detail ─────────────────────────────────────────────
 
+// OruSendButton renders the per-ECG "send result to DPI" action with a status dot
+// reflecting the latest outbound ORU attempt (green=sent, red=rejected, amber=failed).
+function OruSendButton({ ecgId }: { ecgId: number }) {
+  const { t } = useTranslation();
+  const { notify } = useNotification();
+  const queryClient = useQueryClient();
+
+  const { data: status } = useQuery({
+    queryKey: ["oru-status", ecgId],
+    queryFn: () => fetchECGORUStatus(ecgId),
+    staleTime: 30_000,
+  });
+
+  const mutation = useMutation({
+    mutationFn: () => sendECGResult(ecgId),
+    onSuccess: () => {
+      notify("success", t("ecg.oruSent"));
+      void queryClient.invalidateQueries({ queryKey: ["oru-status", ecgId] });
+    },
+    onError: (err: { message?: string }) =>
+      notify("error", err?.message ?? t("ecg.oruError")),
+  });
+
+  const dot =
+    status?.status === "success"
+      ? "bg-success"
+      : status?.status === "rejected"
+        ? "bg-destructive"
+        : status?.status === "failed"
+          ? "bg-warning"
+          : "";
+
+  return (
+    <button
+      title={t("ecg.sendResult")}
+      onClick={() => mutation.mutate()}
+      disabled={mutation.isPending}
+      className="relative w-7 h-7 rounded flex items-center justify-center text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors disabled:opacity-50"
+    >
+      {mutation.isPending ? (
+        <Spinner size={13} />
+      ) : (
+        <Send className="w-3.5 h-3.5" />
+      )}
+      {dot && !mutation.isPending && (
+        <span
+          className={`absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full ${dot}`}
+        />
+      )}
+    </button>
+  );
+}
+
 function PatientDetail({
   patient,
   canRead,
   canDelete,
   canForceHL7,
+  canSendResult,
   filters,
   selectedECGs,
   onToggleECG,
@@ -612,6 +669,7 @@ function PatientDetail({
   canRead: boolean;
   canDelete: boolean;
   canForceHL7: boolean;
+  canSendResult: boolean;
   filters: ECGFilters;
   selectedECGs: Set<number>;
   onToggleECG: (ecgId: number) => void;
@@ -995,6 +1053,7 @@ function PatientDetail({
                       />
                     </>
                   )}
+                  {canSendResult && <OruSendButton ecgId={ecg.id} />}
                   {canDelete &&
                     (confirmDeleteId === String(ecg.id) ? (
                       <>
@@ -1052,12 +1111,14 @@ function BulkECGFooter({
   ecgIds,
   canRead,
   canDelete,
+  canSendResult,
   onClear,
 }: {
   count: number;
   ecgIds: Set<number>;
   canRead: boolean;
   canDelete: boolean;
+  canSendResult: boolean;
   onClear: () => void;
 }) {
   const { t } = useTranslation();
@@ -1119,6 +1180,44 @@ function BulkECGFooter({
             />
           </>
         )}
+        {canSendResult && (
+          <button
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              let ok = 0;
+              let failed = 0;
+              try {
+                for (const id of ecgIds) {
+                  try {
+                    await sendECGResult(id);
+                    ok++;
+                  } catch {
+                    failed++;
+                  }
+                }
+                if (failed === 0) {
+                  notify("success", t("ecg.oruSentBulk", { count: ok }));
+                } else {
+                  notify(
+                    "warn",
+                    t("ecg.oruSentBulkPartial", { ok, failed }),
+                  );
+                }
+                void queryClient.invalidateQueries({
+                  queryKey: ["oru-status"],
+                });
+                onClear();
+              } finally {
+                setBusy(false);
+              }
+            }}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-colors disabled:opacity-50"
+          >
+            <Send className="w-3.5 h-3.5" />
+            {t("ecg.sendResultBulk")}
+          </button>
+        )}
         {canDelete && (
           <button
             disabled={busy}
@@ -1158,6 +1257,7 @@ interface Props {
   canRead: boolean;
   canWrite: boolean;
   canForceHL7: boolean;
+  canSendResult: boolean;
   search: string;
   onSearchChange: (value: string) => void;
   filters: ECGFilters;
@@ -1167,6 +1267,7 @@ export function PatientMasterDetailPage({
   canDelete,
   canRead,
   canForceHL7,
+  canSendResult,
   search,
   onSearchChange,
   filters,
@@ -1813,6 +1914,7 @@ export function PatientMasterDetailPage({
           canRead={canRead}
           canDelete={canDelete}
           canForceHL7={canForceHL7}
+          canSendResult={canSendResult}
           filters={filters}
           selectedECGs={selectedECGs}
           onToggleECG={handleToggleECG}
@@ -1829,6 +1931,7 @@ export function PatientMasterDetailPage({
           ecgIds={selectedECGs}
           canRead={canRead}
           canDelete={canDelete}
+          canSendResult={canSendResult}
           onClear={handleClearAllECGs}
         />
       )}

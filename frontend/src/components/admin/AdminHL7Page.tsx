@@ -262,6 +262,176 @@ function HL7ConnectionForm({
   );
 }
 
+// ─── HL7 Outbound ORU Form (result-sending) ─────────────────────────────────
+
+function HL7ORUForm({
+  settings,
+  onSave,
+  saving,
+}: {
+  settings: HL7Settings;
+  onSave: (
+    data: Partial<
+      Pick<
+        HL7Settings,
+        | "oru_enabled"
+        | "oru_trigger_mode"
+        | "oru_host"
+        | "oru_port"
+        | "oru_include_pdf"
+      >
+    >,
+  ) => void;
+  saving: boolean;
+}) {
+  const { t } = useTranslation();
+  const [enabled, setEnabled] = useState(settings.oru_enabled ?? false);
+  const [triggerMode, setTriggerMode] = useState(
+    settings.oru_trigger_mode ?? "manual",
+  );
+  const [host, setHost] = useState(settings.oru_host ?? "");
+  const [port, setPort] = useState(settings.oru_port ?? 2575);
+  const [includePdf, setIncludePdf] = useState(settings.oru_include_pdf ?? true);
+  const [portError, setPortError] = useState("");
+
+  const isDirty =
+    enabled !== (settings.oru_enabled ?? false) ||
+    triggerMode !== (settings.oru_trigger_mode ?? "manual") ||
+    host !== (settings.oru_host ?? "") ||
+    port !== (settings.oru_port ?? 2575) ||
+    includePdf !== (settings.oru_include_pdf ?? true);
+
+  const handlePortChange = (v: string) => {
+    const n = parseInt(v, 10);
+    setPort(isNaN(n) ? 0 : n);
+    if (isNaN(n) || n < 1 || n > 65535) {
+      setPortError(
+        t("admin.system.hl7.portError", "Port must be between 1 and 65535"),
+      );
+    } else {
+      setPortError("");
+    }
+  };
+
+  const handleSave = () => {
+    if (portError) return;
+    onSave({
+      oru_enabled: enabled,
+      oru_trigger_mode: triggerMode,
+      oru_host: host,
+      oru_port: port,
+      oru_include_pdf: includePdf,
+    });
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Enabled toggle */}
+        <div>
+          <label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            {t("admin.system.hl7.oruEnabled", "Outbound ORU")}
+          </label>
+          <div className="mt-2">
+            <button
+              onClick={() => setEnabled((v) => !v)}
+              className={`relative w-10 h-5 rounded-full transition-colors ${enabled ? "bg-primary" : "bg-muted-foreground/30"}`}
+            >
+              <span
+                className={`absolute left-0.5 top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${enabled ? "translate-x-5" : "translate-x-0"}`}
+              />
+            </button>
+          </div>
+        </div>
+
+        {/* Trigger mode */}
+        <div>
+          <label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            {t("admin.system.hl7.oruTriggerMode", "Trigger")}
+          </label>
+          <select
+            value={triggerMode}
+            onChange={(e) =>
+              setTriggerMode(e.target.value as "auto" | "manual")
+            }
+            className="mt-1 w-full text-xs border border-border rounded-md px-2 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring/20"
+          >
+            <option value="manual">
+              {t("admin.system.hl7.oruModeManual", "Manual (button)")}
+            </option>
+            <option value="auto">
+              {t("admin.system.hl7.oruModeAuto", "Auto (on ingest)")}
+            </option>
+          </select>
+        </div>
+
+        {/* Include PDF toggle */}
+        <div>
+          <label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            {t("admin.system.hl7.oruIncludePdf", "Embed PDF (OBX/ED)")}
+          </label>
+          <div className="mt-2">
+            <button
+              onClick={() => setIncludePdf((v) => !v)}
+              className={`relative w-10 h-5 rounded-full transition-colors ${includePdf ? "bg-primary" : "bg-muted-foreground/30"}`}
+            >
+              <span
+                className={`absolute left-0.5 top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${includePdf ? "translate-x-5" : "translate-x-0"}`}
+              />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* ORU Host */}
+        <div className="lg:col-span-2">
+          <label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            {t("admin.system.hl7.oruHost", "Result destination host")}
+          </label>
+          <input
+            type="text"
+            value={host}
+            onChange={(e) => setHost(e.target.value)}
+            placeholder="mirth.hospital.local"
+            className="mt-1 w-full text-xs font-mono border border-border rounded-md px-2 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring/20"
+          />
+        </div>
+
+        {/* ORU Port */}
+        <div>
+          <label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            {t("admin.system.hl7.oruPort", "Result destination port")}
+          </label>
+          <input
+            type="number"
+            min={1}
+            max={65535}
+            value={port}
+            onChange={(e) => handlePortChange(e.target.value)}
+            className={`mt-1 w-full text-xs border rounded-md px-2 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring/20 ${portError ? "border-destructive" : "border-border"}`}
+          />
+          {portError && (
+            <p className="text-[10px] text-destructive mt-0.5">{portError}</p>
+          )}
+        </div>
+      </div>
+
+      {isDirty && (
+        <button
+          onClick={handleSave}
+          disabled={saving || !!portError}
+          className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-medium bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50 transition-opacity"
+        >
+          {saving && <Spinner size={11} className="text-primary-foreground" />}
+          <Save className="w-3 h-3" />
+          {t("admin.system.hl7.saveSettings")}
+        </button>
+      )}
+    </div>
+  );
+}
+
 // ─── HL7 Scheduler Form (local state + save button) ─────────────────────────
 
 function HL7SchedulerForm({
@@ -1231,6 +1401,56 @@ function HL7ConnectionSection() {
   );
 }
 
+// ─── HL7 Outbound ORU Settings Section ──────────────────────────────────────
+
+function HL7ORUSection() {
+  const { t } = useTranslation();
+  const { notify } = useNotification();
+  const queryClient = useQueryClient();
+
+  const { data: settings, isLoading } = useQuery({
+    queryKey: ["admin", "hl7-settings"],
+    queryFn: fetchHL7Settings,
+    staleTime: 30_000,
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: (data: Parameters<typeof updateHL7Settings>[0]) =>
+      updateHL7Settings(data),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["admin", "hl7-settings"],
+      });
+      notify("success", t("admin.system.hl7.settingsSaved"));
+    },
+    onError: () => notify("error", t("admin.system.hl7.settingsError")),
+  });
+
+  if (isLoading || !settings) return null;
+
+  return (
+    <div className="bg-card rounded-lg border border-border p-5">
+      <div className="flex items-center gap-3 mb-1">
+        <Send className="w-5 h-5 text-muted-foreground" />
+        <h2 className="text-sm font-semibold text-foreground">
+          {t("admin.system.hl7.oruTitle", "Outbound results (ORU)")}
+        </h2>
+      </div>
+      <p className="text-xs text-muted-foreground mb-4">
+        {t(
+          "admin.system.hl7.oruSubtitle",
+          "Push the ECG result (optionally with the PDF report) to the HIS/DPI. Manual sends require the ecg.send_result permission.",
+        )}
+      </p>
+      <HL7ORUForm
+        settings={settings}
+        onSave={(data) => updateMutation.mutate(data)}
+        saving={updateMutation.isPending}
+      />
+    </div>
+  );
+}
+
 // ─── AdminHL7Page ─────────────────────────────────────────────────────────────
 
 export function AdminHL7Page() {
@@ -1256,10 +1476,13 @@ export function AdminHL7Page() {
       {/* 1. Connection Settings */}
       <HL7ConnectionSection />
 
-      {/* 2. Scheduler */}
+      {/* 2. Outbound results (ORU) */}
+      <HL7ORUSection />
+
+      {/* 3. Scheduler */}
       <HL7SchedulerSection />
 
-      {/* 3. Query Test + Field Mapping */}
+      {/* 4. Query Test + Field Mapping */}
       <HL7TestSection />
     </div>
   );

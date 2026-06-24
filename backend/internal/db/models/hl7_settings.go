@@ -23,6 +23,15 @@ type HL7Settings struct {
 	ReceivingFacility    string `gorm:"type:text;default:''" json:"receiving_facility"`
 	Version              string `gorm:"type:text;default:'2.5'" json:"version"`
 	ProcessingID         string `gorm:"type:text;default:'P'" json:"processing_id"`
+
+	// Outbound ORU (result-sending) settings — independent from the inbound QRY^A19 query above.
+	// This flux pushes the ECG result (optionally with the PDF report embedded as an OBX/ED
+	// segment) to the HIS/DPI, typically a distinct integration engine (e.g. Mirth).
+	ORUEnabled     bool   `gorm:"not null;default:false" json:"oru_enabled"`                   // master switch for outbound ORU
+	ORUTriggerMode string `gorm:"type:text;not null;default:'manual'" json:"oru_trigger_mode"` // "auto" (on successful ingest) or "manual" (UI button)
+	ORUHost        string `gorm:"type:text;default:''" json:"oru_host"`                        // result destination host (separate from query Host)
+	ORUPort        int    `gorm:"default:2575" json:"oru_port"`                                // result destination port
+	ORUIncludePDF  bool   `gorm:"not null;default:true" json:"oru_include_pdf"`                // embed the PDF report as base64 in an OBX/ED segment
 }
 
 func (HL7Settings) TableName() string { return "hl7_settings" }
