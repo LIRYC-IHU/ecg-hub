@@ -8,11 +8,19 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 
 	"github.com/LIRYC-IHU/ecg-hub/internal/auth"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 )
+
+// TestMain enables loopback webhook delivery for the whole package test run:
+// httptest servers bind to 127.0.0.1, which the SSRF guard blocks in production.
+func TestMain(m *testing.M) {
+	allowLoopbackWebhookForTest = true
+	os.Exit(m.Run())
+}
 
 func TestMatches(t *testing.T) {
 	tests := []struct {
@@ -157,3 +165,52 @@ func TestMultiNotifier(t *testing.T) {
 type notifierFunc func(event, ecgID string) error
 
 func (f notifierFunc) Notify(event, ecgID string) error { return f(event, ecgID) }
+
+// TestWebhookDialControl_SSRF verifies the dial guard blocks loopback / metadata /
+// unspecified / multicast while allowing public and RFC1918 internal targets.
+func TestWebhookDialControl_SSRF(t *testing.T) {
+	// Exercise the production policy (loopback blocked); restore for other tests.
+	allowLoopbackWebhookForTest = false
+	defer func() { allowLoopbackWebhookForTest = true }()
+
+	blocked := []string{
+		"127.0.0.1:80",        // loopback
+		"[::1]:443",           // IPv6 loopback
+		"169.254.169.254:80",  // cloud metadata (link-local)
+		"0.0.0.0:80",          // unspecified
+		"224.0.0.1:80",        // multicast
+	}
+	for _, addr := range blocked {
+		if err := webhookDialControl("tcp", addr, nil); err == nil {
+			t.Errorf("expected %s to be blocked by SSRF guard", addr)
+		}
+	}
+
+	allowed := []string{
+		"8.8.8.8:443",      // public
+		"10.1.2.3:80",      // RFC1918 — legitimate internal research server
+		"192.168.1.10:80",  // RFC1918
+		"172.16.0.5:443",   // RFC1918
+	}
+	for _, addr := range allowed {
+		if err := webhookDialControl("tcp", addr, nil); err != nil {
+			t.Errorf("expected %s to be allowed, got %v", addr, err)
+		}
+	}
+}
+
+// TestValidateWebhookURL verifies only http/https URLs with a host are accepted.
+func TestValidateWebhookURL(t *testing.T) {
+	bad := []string{"", "ftp://x", "file:///etc/passwd", "http://", "://nope"}
+	for _, u := range bad {
+		if err := validateWebhookURL(u); err == nil {
+			t.Errorf("expected %q to be rejected", u)
+		}
+	}
+	good := []string{"http://example.com/hook", "https://10.0.0.1:9000/x"}
+	for _, u := range good {
+		if err := validateWebhookURL(u); err != nil {
+			t.Errorf("expected %q to be accepted, got %v", u, err)
+		}
+	}
+}

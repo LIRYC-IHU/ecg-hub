@@ -9,8 +9,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
+	"net/url"
 	"sync"
+	"syscall"
 	"time"
 
 	"gorm.io/gorm"
@@ -47,20 +50,84 @@ type Dispatcher struct {
 // NewDispatcher builds a Dispatcher. baseURL is the public origin of this
 // server (e.g. "http://ecg-hub.chu.fr") used to build absolute callback links.
 func NewDispatcher(repo *repository.UserWebhookRepository, db *gorm.DB, encKey, baseURL string) *Dispatcher {
+	// Shared dialer with an SSRF guard: Control runs after DNS resolution with the
+	// IP about to be dialed, so disallowed targets are blocked even across DNS
+	// rebinding and HTTP redirects.
+	dialer := &net.Dialer{Timeout: 10 * time.Second, Control: webhookDialControl}
 	return &Dispatcher{
 		repo:    repo,
 		db:      db,
 		encKey:  encKey,
 		baseURL: baseURL,
-		client:  &http.Client{Timeout: 10 * time.Second},
+		client: &http.Client{
+			Timeout:       10 * time.Second,
+			CheckRedirect: noWebhookRedirect,
+			Transport:     &http.Transport{DialContext: dialer.DialContext},
+		},
 		insecureClient: &http.Client{
-			Timeout: 10 * time.Second,
+			Timeout:       10 * time.Second,
+			CheckRedirect: noWebhookRedirect,
 			Transport: &http.Transport{
+				DialContext:     dialer.DialContext,
 				TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec // per-webhook opt-in for self-signed receivers
 			},
 		},
 		stop: make(chan struct{}),
 	}
+}
+
+// allowLoopbackWebhookForTest relaxes the loopback block so unit tests can deliver
+// to httptest servers (which bind to 127.0.0.1). It is NEVER set in production code.
+var allowLoopbackWebhookForTest bool
+
+// noWebhookRedirect stops webhook deliveries from following HTTP redirects — a 3xx
+// to an internal URL would otherwise sidestep the SSRF guard. Returning
+// ErrUseLastResponse hands the redirect response back to Deliver, which treats any
+// non-2xx as a failure.
+func noWebhookRedirect(_ *http.Request, _ []*http.Request) error {
+	return http.ErrUseLastResponse
+}
+
+// webhookDialControl is a net.Dialer.Control hook that refuses connections an
+// attacker with webhook.manage could use to reach the ECG Hub host itself or cloud
+// metadata (SSRF). It runs on the post-resolution IP, so it also defeats DNS
+// rebinding. RFC1918 private ranges are intentionally allowed: internal research
+// servers are a legitimate webhook target on the deployment subnet.
+func webhookDialControl(_, address string, _ syscall.RawConn) error {
+	host, _, err := net.SplitHostPort(address)
+	if err != nil {
+		return fmt.Errorf("webhook: invalid dial address %q: %w", address, err)
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return fmt.Errorf("webhook: unresolved dial host %q", host)
+	}
+	if ip.IsLoopback() && allowLoopbackWebhookForTest {
+		return nil
+	}
+	if ip.IsLoopback() || ip.IsUnspecified() ||
+		ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
+		ip.IsMulticast() || ip.IsInterfaceLocalMulticast() {
+		return fmt.Errorf("webhook: refusing to connect to disallowed address %s (SSRF guard)", ip)
+	}
+	return nil
+}
+
+// validateWebhookURL rejects non-HTTP(S) schemes and empty hosts before any network
+// call. The dial-time guard (webhookDialControl) enforces the IP policy; this gives
+// a clear early error for obviously invalid targets.
+func validateWebhookURL(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("webhook: invalid URL: %w", err)
+	}
+	if u.Scheme != "http" && u.Scheme != "https" {
+		return fmt.Errorf("webhook: unsupported URL scheme %q (only http/https allowed)", u.Scheme)
+	}
+	if u.Hostname() == "" {
+		return fmt.Errorf("webhook: URL has no host")
+	}
+	return nil
 }
 
 // Run subscribes to the event hub and dispatches until Stop is called.
@@ -226,6 +293,9 @@ func (d *Dispatcher) deliverWithRetry(hook models.UserWebhook, p Payload) {
 // Exported so the "test webhook" handler can perform a synchronous delivery.
 func (d *Dispatcher) Deliver(hook models.UserWebhook, p Payload) (int, error) {
 	p.WebhookID = hook.ID
+	if err := validateWebhookURL(hook.URL); err != nil {
+		return 0, err
+	}
 	body, err := json.Marshal(p)
 	if err != nil {
 		return 0, fmt.Errorf("marshal payload: %w", err)
