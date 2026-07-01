@@ -31,6 +31,9 @@ type HL7SettingsResponse struct {
 
 // UpdateHL7SettingsRequest is the body for PUT /admin/hl7/settings.
 type UpdateHL7SettingsRequest struct {
+	// Global master switch
+	HL7Enabled *bool `json:"hl7_enabled"`
+
 	// Scheduler fields
 	TriggerMode    *string `json:"trigger_mode"`
 	CronExpression *string `json:"cron_expression"`
@@ -109,6 +112,9 @@ func UpdateHL7SettingsHandler(repo *repository.HL7SettingsRepository, scheduler 
 		}
 
 		// Apply partial updates.
+		if req.HL7Enabled != nil {
+			settings.HL7Enabled = *req.HL7Enabled
+		}
 		if req.TriggerMode != nil {
 			mode := *req.TriggerMode
 			if mode != "immediate" && mode != "scheduled" {
