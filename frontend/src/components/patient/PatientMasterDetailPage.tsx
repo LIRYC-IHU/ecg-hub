@@ -1831,6 +1831,7 @@ export function PatientMasterDetailPage({
             ecgIds={selectedECGs}
             canRead={canRead}
             canDelete={canDelete}
+            canSendResult={canSendResult}
             onClear={handleClearAllECGs}
           />
         )}
