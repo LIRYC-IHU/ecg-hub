@@ -85,6 +85,10 @@ func (s *Scheduler) Start() error {
 		return fmt.Errorf("hl7 scheduler: failed to read settings: %w", err)
 	}
 
+	if !settings.HL7Enabled {
+		slog.Info("hl7 scheduler: HL7 integration disabled at this site")
+		return nil
+	}
 	if !settings.Enabled {
 		slog.Info("hl7 scheduler: disabled in settings")
 		return nil
@@ -132,6 +136,10 @@ func (s *Scheduler) Reload() error {
 		return fmt.Errorf("hl7 scheduler: reload failed to read settings: %w", err)
 	}
 
+	if !settings.HL7Enabled {
+		slog.Info("hl7 scheduler: HL7 integration disabled at this site after reload")
+		return nil
+	}
 	if !settings.Enabled {
 		slog.Info("hl7 scheduler: disabled after reload")
 		return nil
