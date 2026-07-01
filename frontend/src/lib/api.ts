@@ -1077,6 +1077,7 @@ export interface HL7Settings {
   max_retries: number;
   timeout: string;
   enabled: boolean;
+  hl7_enabled: boolean; // global master switch for the HL7 integration at this site
   updated_at: string;
   last_run?: string;
   next_run?: string;
@@ -1112,6 +1113,7 @@ export async function updateHL7Settings(
       | "cron_expression"
       | "max_retries"
       | "enabled"
+      | "hl7_enabled"
       | "timeout"
       | "host"
       | "port"
