@@ -58,32 +58,26 @@ func formatLDAPUUID(raw []byte) string {
 func LoginWithLDAPFromDB(ctx context.Context, username, password, jwtSecret string, repo *repository.AuthConfigRepository, encKey string, userStore UserStore) (string, error) {
 	dbCfg, err := repo.Get("ldap")
 	if err != nil || dbCfg == nil {
-		slog.Warn("ldap DEBUG: no DB config found (LDAP not configured/active)", "error", err)
+		slog.Debug("ldap: not configured", "error", err)
 		return "", fmt.Errorf("auth: ldap: no DB config found")
 	}
 
 	decrypted, err := DecryptString(dbCfg.ConfigEncrypted, encKey)
 	if err != nil {
-		slog.Warn("ldap DEBUG: decrypt config failed", "error", err)
+		slog.Warn("ldap: decrypt config failed", "error", err)
 		return "", fmt.Errorf("auth: ldap: decrypt config: %w", err)
 	}
 
 	var cfg ldapDBConfig
 	if err := json.Unmarshal([]byte(decrypted), &cfg); err != nil {
-		slog.Warn("ldap DEBUG: parse config failed", "error", err)
+		slog.Warn("ldap: parse config failed", "error", err)
 		return "", fmt.Errorf("auth: ldap: parse config: %w", err)
 	}
 
 	if cfg.Host == "" {
-		slog.Warn("ldap DEBUG: host not configured")
+		slog.Warn("ldap: host not configured")
 		return "", fmt.Errorf("auth: ldap: host not configured")
 	}
-	slog.Warn("ldap DEBUG: attempting login",
-		"login", username, "host", cfg.Host, "port", cfg.Port, "tls", cfg.TLS,
-		"base_dn", cfg.BaseDN, "user_search_dn", cfg.UserSearchDN, "user_filter", cfg.UserFilter,
-		"bind_dn", cfg.BindDN, "username_attribute", cfg.UsernameAttribute,
-		"uuid_attribute", cfg.UUIDAttribute)
-
 	scheme := "ldap"
 	port := cfg.Port
 	if cfg.TLS {
@@ -98,7 +92,7 @@ func LoginWithLDAPFromDB(ctx context.Context, username, password, jwtSecret stri
 	dialURL := fmt.Sprintf("%s://%s:%d", scheme, cfg.Host, port)
 	l, err := ldap.DialURL(dialURL)
 	if err != nil {
-		slog.Warn("ldap DEBUG: dial failed", "url", dialURL, "error", err)
+		slog.Warn("ldap: dial failed", "url", dialURL, "error", err)
 		return "", fmt.Errorf("auth: ldap: dial: %w", err)
 	}
 	defer l.Close()
@@ -106,7 +100,7 @@ func LoginWithLDAPFromDB(ctx context.Context, username, password, jwtSecret stri
 	// Bind as service account.
 	if cfg.BindDN != "" {
 		if err := l.Bind(cfg.BindDN, cfg.BindPassword); err != nil {
-			slog.Warn("ldap DEBUG: service bind failed", "bind_dn", cfg.BindDN, "error", err)
+			slog.Warn("ldap: service bind failed", "error", err)
 			return "", fmt.Errorf("auth: ldap: service bind: %w", err)
 		}
 	}
@@ -153,11 +147,11 @@ func LoginWithLDAPFromDB(ctx context.Context, username, password, jwtSecret stri
 	)
 	result, err := l.Search(searchReq)
 	if err != nil {
-		slog.Warn("ldap DEBUG: search failed", "filter", filter, "search_base", searchBase, "error", err)
+		slog.Warn("ldap: search failed", "error", err)
 		return "", fmt.Errorf("auth: ldap: search: %w", err)
 	}
 	if len(result.Entries) == 0 {
-		slog.Warn("ldap DEBUG: user not found", "login", username, "filter", filter, "search_base", searchBase)
+		slog.Debug("ldap: user not found", "login", username)
 		return "", fmt.Errorf("auth: ldap: user not found")
 	}
 	entry := result.Entries[0]
@@ -165,7 +159,7 @@ func LoginWithLDAPFromDB(ctx context.Context, username, password, jwtSecret stri
 
 	// Bind as user to verify password.
 	if err := l.Bind(userDN, password); err != nil {
-		slog.Warn("ldap DEBUG: password bind failed (invalid credentials)", "dn", userDN, "error", err)
+		slog.Debug("ldap: password bind failed", "error", err)
 		return "", fmt.Errorf("auth: ldap: invalid credentials")
 	}
 
@@ -183,17 +177,6 @@ func LoginWithLDAPFromDB(ctx context.Context, username, password, jwtSecret stri
 	ldapUUID := formatLDAPUUID(entry.GetRawAttributeValue(uuidAttr))
 
 	memberOf := entry.GetAttributeValues("memberOf")
-
-	// TEMP DEBUG: inspect what LDAP returned during configuration/tests.
-	slog.Warn("ldap DEBUG: user resolved",
-		"login", username,
-		"dn", userDN,
-		"username_attribute", cfg.UsernameAttribute,
-		"effective_username", effectiveUsername,
-		"uuid_attribute", uuidAttr,
-		"ldap_uuid", ldapUUID,
-		"member_of", memberOf,
-	)
 
 	// Determine role.
 	adminRoleName := cfg.AdminRoleName
@@ -224,8 +207,6 @@ func LoginWithLDAPFromDB(ctx context.Context, username, password, jwtSecret stri
 			}
 		}
 	}
-
-	slog.Warn("ldap DEBUG: role derived", "effective_username", effectiveUsername, "role", role)
 
 	// Register the login in ecg_hub_users (unified identity). A role assigned
 	// from the admin UI takes priority over the LDAP-group-derived role.
