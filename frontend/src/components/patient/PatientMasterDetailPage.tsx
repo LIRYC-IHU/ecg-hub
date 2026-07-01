@@ -44,6 +44,7 @@ import {
   sendECGResult,
   fetchECGORUStatus,
   fetchActiveHL7Mappings,
+  fetchHL7Settings,
   fetchHL7History,
   type TagDTO,
   type ECGFilters,
@@ -1314,9 +1315,11 @@ export function PatientMasterDetailPage({
   useEffect(() => {
     if (hl7Notified.current || !canConfigHL7) return;
     hl7Notified.current = true;
-    fetchActiveHL7Mappings()
-      .then(({ active }) => {
-        if (!active) {
+    // Only warn about a missing mapping when the HL7 integration is globally
+    // enabled — if the site turned HL7 off, there's nothing to configure.
+    Promise.all([fetchHL7Settings(), fetchActiveHL7Mappings()])
+      .then(([settings, { active }]) => {
+        if (settings.hl7_enabled && !active) {
           notify("warn", t("patient.hl7NotConfigured"), {
             label: t("patient.hl7Configure"),
             href: "/hl7",
