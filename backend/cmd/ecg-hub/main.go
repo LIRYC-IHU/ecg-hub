@@ -717,12 +717,18 @@ const insecureDefaultAuthEncKey = "ecg-hub-dev-key-do-not-use-in-prod"
 const minAuthEncKeyLen = 32
 
 // isProduction reports whether the server is running in production mode.
-// Production is inferred from APP_ENV=production or from server.tls being enabled.
+// Fail-secure: production is the DEFAULT — only an explicit development-class
+// APP_ENV (development/dev/test/local) opts out, and bare-metal TLS
+// (server.tls=true) always forces production regardless.
+//
+// This matters because the standard deployment terminates TLS upstream
+// (Traefik/nginx) with server.tls=false, so production must NOT hinge on
+// remembering to set APP_ENV — otherwise the server could silently fall back to
+// the public dev encryption key (see resolveAuthEncKey) and skip secret checks.
 func isProduction(cfg *config.Config) bool {
-	if v := os.Getenv("APP_ENV"); v == "production" || v == "prod" {
-		return true
-	}
-	return cfg.Server.TLS
+	env := strings.ToLower(strings.TrimSpace(os.Getenv("APP_ENV")))
+	isDev := env == "development" || env == "dev" || env == "test" || env == "local"
+	return !isDev || cfg.Server.TLS
 }
 
 // buildConnectorsFromDB builds the outbound PACS connector runtime from the
