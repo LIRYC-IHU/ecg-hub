@@ -63,7 +63,7 @@ func NewORUService(settings oruSettingsProvider, ecgs ecgLoader, patients patien
 // Enabled reports whether outbound ORU is enabled with a destination configured.
 func (s *ORUService) Enabled() bool {
 	st, err := s.settings.Get()
-	return err == nil && st.ORUEnabled && st.ORUHost != ""
+	return err == nil && st.HL7Enabled && st.ORUEnabled && st.ORUHost != ""
 }
 
 // AutoMode reports whether the current ORU trigger mode is "auto".
@@ -81,6 +81,9 @@ func (s *ORUService) SendForECG(ctx context.Context, ecgID, triggeredBy string) 
 	settings, err := s.settings.Get()
 	if err != nil {
 		return nil, fmt.Errorf("hl7: read settings: %w", err)
+	}
+	if !settings.HL7Enabled {
+		return nil, ErrORUDisabled
 	}
 	if !settings.ORUEnabled {
 		return nil, ErrORUDisabled
