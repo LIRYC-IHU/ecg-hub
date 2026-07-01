@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"strings"
 	"time"
@@ -42,6 +43,7 @@ func NewSender(host string, port int, timeout time.Duration, msh MSHConfig) *Sen
 // HIS replied with a parseable MSA, even on rejection (so callers can record the code/message).
 func (s *Sender) SendResult(ctx context.Context, p ORUPatient, obs ORUObservation) (*MSAResult, error) {
 	msg := BuildORU(s.msh, p, obs)
+	slog.Debug("hl7: sending ORU", "host", s.host, "port", s.port, "message", msg)
 	return s.sendRaw(ctx, msg)
 }
 
