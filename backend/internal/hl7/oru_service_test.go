@@ -41,6 +41,7 @@ func (f *fakeRecorder) Insert(a *models.HL7ORUAttempt) error {
 
 func baseSettings(port int) *models.HL7Settings {
 	return &models.HL7Settings{
+		HL7Enabled:     true,
 		ORUEnabled:     true,
 		ORUTriggerMode: "auto",
 		ORUHost:        "127.0.0.1",
