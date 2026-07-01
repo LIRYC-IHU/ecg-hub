@@ -291,7 +291,9 @@ function HL7ORUForm({
   );
   const [host, setHost] = useState(settings.oru_host ?? "");
   const [port, setPort] = useState(settings.oru_port ?? 2575);
-  const [includePdf, setIncludePdf] = useState(settings.oru_include_pdf ?? true);
+  const [includePdf, setIncludePdf] = useState(
+    settings.oru_include_pdf ?? true,
+  );
   const [portError, setPortError] = useState("");
 
   const isDirty =
@@ -1467,9 +1469,6 @@ export function AdminHL7Page() {
           <h1 className="font-display text-2xl font-semibold tracking-tight text-foreground">
             {t("nav.hl7")}
           </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            {t("admin.hl7.subtitle")}
-          </p>
         </div>
       </div>
 
