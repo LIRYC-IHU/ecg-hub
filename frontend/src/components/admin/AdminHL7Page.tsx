@@ -12,6 +12,8 @@ import {
   Search,
   Send,
   Server,
+  Power,
+  AlertTriangle,
 } from "lucide-react";
 import {
   fetchHL7Settings,
@@ -1453,6 +1455,98 @@ function HL7ORUSection() {
   );
 }
 
+// ─── HL7 Master Switch Section ──────────────────────────────────────────────
+// Global on/off for the HL7 integration at this site. Enabled by default so the
+// "not configured" reminder surfaces for the DSI; a facility without HL7 can turn
+// it off to silence the reminder and disable every HL7 flow.
+
+function HL7MasterSwitchSection() {
+  const { t } = useTranslation();
+  const { notify } = useNotification();
+  const queryClient = useQueryClient();
+
+  const { data: settings, isLoading } = useQuery({
+    queryKey: ["admin", "hl7-settings"],
+    queryFn: fetchHL7Settings,
+    staleTime: 30_000,
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: (data: Parameters<typeof updateHL7Settings>[0]) =>
+      updateHL7Settings(data),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["admin", "hl7-settings"],
+      });
+      notify("success", t("admin.system.hl7.settingsSaved"));
+    },
+    onError: () => notify("error", t("admin.system.hl7.settingsError")),
+  });
+
+  const hl7Enabled = settings?.hl7_enabled ?? true;
+  const notConfigured = !!settings && !settings.host?.trim();
+
+  // Fire the reminder popup once per mount when HL7 is enabled but not configured,
+  // so the DSI is prompted to set it up (or disable HL7 if the site has none).
+  const warnedRef = useRef(false);
+  useEffect(() => {
+    if (!settings || warnedRef.current) return;
+    if (hl7Enabled && notConfigured) {
+      warnedRef.current = true;
+      notify("warn", t("admin.system.hl7.notConfiguredPopup"));
+    }
+  }, [settings, hl7Enabled, notConfigured, notify, t]);
+
+  if (isLoading || !settings) return null;
+
+  return (
+    <div className="bg-card rounded-lg border border-border p-5">
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-start gap-3">
+          <Power
+            className={`w-5 h-5 mt-0.5 ${hl7Enabled ? "text-success" : "text-muted-foreground"}`}
+          />
+          <div>
+            <h2 className="text-sm font-semibold text-foreground">
+              {t("admin.system.hl7.masterTitle")}
+            </h2>
+            <p className="text-xs text-muted-foreground mt-0.5 max-w-2xl">
+              {t("admin.system.hl7.masterSubtitle")}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="text-[11px] font-medium text-muted-foreground">
+            {hl7Enabled
+              ? t("admin.system.hl7.masterEnabled")
+              : t("admin.system.hl7.masterDisabled")}
+          </span>
+          <button
+            onClick={() => updateMutation.mutate({ hl7_enabled: !hl7Enabled })}
+            disabled={updateMutation.isPending}
+            className={`relative w-10 h-5 rounded-full transition-colors disabled:opacity-50 ${hl7Enabled ? "bg-primary" : "bg-muted-foreground/30"}`}
+            aria-label={t("admin.system.hl7.masterTitle")}
+          >
+            <span
+              className={`absolute left-0.5 top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${hl7Enabled ? "translate-x-5" : "translate-x-0"}`}
+            />
+          </button>
+        </div>
+      </div>
+
+      {/* Reminder banner: enabled but no connection configured yet */}
+      {hl7Enabled && notConfigured && (
+        <div className="mt-4 flex items-start gap-2.5 rounded-lg border border-warning/30 bg-warning/5 px-3 py-2.5">
+          <AlertTriangle className="w-4 h-4 text-warning mt-0.5 shrink-0" />
+          <p className="text-xs text-warning-foreground/90">
+            {t("admin.system.hl7.notConfiguredBanner")}
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── AdminHL7Page ─────────────────────────────────────────────────────────────
 
 export function AdminHL7Page() {
@@ -1471,6 +1565,9 @@ export function AdminHL7Page() {
           </h1>
         </div>
       </div>
+
+      {/* 0. Global HL7 master switch */}
+      <HL7MasterSwitchSection />
 
       {/* 1. Connection Settings */}
       <HL7ConnectionSection />
