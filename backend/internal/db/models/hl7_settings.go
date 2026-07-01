@@ -14,6 +14,12 @@ type HL7Settings struct {
 	Enabled        bool      `gorm:"not null;default:true" json:"enabled"`
 	UpdatedAt      time.Time `gorm:"autoUpdateTime" json:"updated_at"`
 
+	// HL7Enabled is the global master switch for the HL7 integration at this site.
+	// It defaults to true so the "not configured" reminder surfaces for the DSI; a
+	// facility without any HL7 interface can turn it off to silence the reminder and
+	// disable every HL7 flow (inbound query scheduler and outbound ORU).
+	HL7Enabled bool `gorm:"not null;default:true" json:"hl7_enabled"`
+
 	// Connection settings (moved from config.yaml)
 	Host                 string `gorm:"type:text;default:''" json:"host"`
 	Port                 int    `gorm:"default:2575" json:"port"`
