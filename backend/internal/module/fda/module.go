@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/LIRYC-IHU/ecg-hub/internal/module"
+	"github.com/LIRYC-IHU/ecg-hub/internal/xmlutil"
 )
 
 // Compile-time contract check.
@@ -98,16 +99,7 @@ func (m *Module) Validate(data []byte) error {
 // xmlRootElement returns the name (namespace + local) of the first XML start element,
 // without decoding the whole document.
 func xmlRootElement(data []byte) (xml.Name, error) {
-	dec := xml.NewDecoder(bytes.NewReader(data))
-	for {
-		tok, err := dec.Token()
-		if err != nil {
-			return xml.Name{}, err
-		}
-		if se, ok := tok.(xml.StartElement); ok {
-			return se.Name, nil
-		}
-	}
+	return xmlutil.RootElement(data)
 }
 
 // fdaMetadataJSON matches the flat JSON output of fda-to-dicom --metadata-json.
@@ -133,6 +125,13 @@ type fdaMetadataJSON struct {
 func (m *Module) Parse(ctx context.Context, data []byte) (*module.ECGMetadata, error) {
 	if len(data) == 0 {
 		return nil, fmt.Errorf("fda: parse: empty data")
+	}
+
+	// The converter binary assumes UTF-8; transcode non-UTF-8 vendor exports so it
+	// does not reject the declared encoding.
+	data, err := xmlutil.ToUTF8(data)
+	if err != nil {
+		return nil, fmt.Errorf("fda: parse: %w", err)
 	}
 
 	// The converter requires a file path, so spill to a temp file.
@@ -337,6 +336,13 @@ func applyUpdates(data []byte, fields map[string]string) ([]byte, error) {
 
 	if len(contentUpdates) == 0 && newGender == "" {
 		return data, nil
+	}
+
+	// Token streaming below uses the stdlib decoder/encoder; transcode non-UTF-8
+	// input to UTF-8 first so the rewritten file is valid and self-consistent.
+	data, err := xmlutil.ToUTF8(data)
+	if err != nil {
+		return nil, fmt.Errorf("fda: apply_updates: %w", err)
 	}
 
 	dec := xml.NewDecoder(bytes.NewReader(data))
