@@ -747,14 +747,12 @@ function PatientDetail({
     () => {
       gsap.from(".detail-band", {
         y: 10,
-        opacity: 0,
         duration: 0.4,
         ease: "",
         stagger: 0.08,
       });
       gsap.from(".ecg-row", {
         y: 12,
-        opacity: 0,
         duration: 0.45,
         ease: "",
         stagger: 0.03,
