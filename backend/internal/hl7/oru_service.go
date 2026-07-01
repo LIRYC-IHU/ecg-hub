@@ -44,8 +44,7 @@ type PDFRenderer interface {
 	RenderPDF(ctx context.Context, ecg *models.ECG, patient *models.Patient) ([]byte, error)
 }
 
-// ORUService orchestrates building and sending an outbound ORU^R01 result for an ECG:
-// it loads the ECG + patient, optionally renders the PDF report, sends the message over
+// ORUService orchestrates building and sending an outbound ORU^R01 result for an ECG: it loads the ECG + patient, optionally renders the PDF report, sends the message over
 // MLLP, and records the outcome as an HL7ORUAttempt. It is the shared core used by both
 // the automatic (on-ingest) trigger and the manual API endpoint.
 type ORUService struct {
