@@ -56,6 +56,13 @@ func formatLDAPUUID(raw []byte) string {
 // userStore (may be nil) registers the login in ecg_hub_users so LDAP users get
 // the same stable internal identity as local/OIDC users.
 func LoginWithLDAPFromDB(ctx context.Context, username, password, jwtSecret string, repo *repository.AuthConfigRepository, encKey string, userStore UserStore) (string, error) {
+	// Defence in depth: reject an empty password before any bind. Some LDAP servers
+	// treat a bind with an empty password as a successful "unauthenticated bind",
+	// which would let an existing DN authenticate without a real password. The HTTP
+	// login handler already rejects empty passwords; this guards other callers too.
+	if password == "" {
+		return "", fmt.Errorf("auth: ldap: empty password")
+	}
 	dbCfg, err := repo.Get("ldap")
 	if err != nil || dbCfg == nil {
 		slog.Debug("ldap: not configured", "error", err)

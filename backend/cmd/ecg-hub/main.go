@@ -139,9 +139,11 @@ func main() {
 		ReferrerPolicy:     "strict-origin-when-cross-origin",
 	}))
 
-	// Bound request body size to prevent memory-exhaustion DoS (covers JSON
-	// payloads and the branding/logo upload). Adjust if larger uploads are added.
-	e.Use(middleware.BodyLimit("10M"))
+	// Bound request body size to prevent memory-exhaustion DoS. Sized above the
+	// manual ECG upload cap (maxUploadFileBytes = 50 MiB) plus multipart overhead:
+	// this global limit runs before per-route middleware, so a smaller value would
+	// reject legitimate 10–50 MiB ECG uploads. JSON and logo endpoints stay far under it.
+	e.Use(middleware.BodyLimit("64M"))
 
 	// Global per-IP rate limit as a coarse DoS guard. Generous so it never trips
 	// on normal SPA usage; stricter per-route limits apply to /auth (see router).
