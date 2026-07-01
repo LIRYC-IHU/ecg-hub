@@ -71,7 +71,7 @@ func SaveBrandingHandler(repo *repository.ModuleSettingsRepository, db *gorm.DB)
 }
 
 // UploadLogoHandler handles POST /api/v1/admin/settings/branding/logo.
-// Accepts multipart/form-data field "logo" (PNG, JPEG, SVG, max 512 KB).
+// Accepts multipart/form-data field "logo" (PNG, JPEG or WebP, max 512 KB).
 // Stores as a base64 data URI in the singleton settings row.
 func UploadLogoHandler(repo *repository.ModuleSettingsRepository, db *gorm.DB) echo.HandlerFunc {
 	return func(c echo.Context) error {
@@ -85,15 +85,6 @@ func UploadLogoHandler(repo *repository.ModuleSettingsRepository, db *gorm.DB) e
 				fmt.Sprintf("logo must be under %d KB", maxLogoBytes/1024)))
 		}
 
-		ct := file.Header.Get("Content-Type")
-		if !isAllowedImageType(ct) {
-			// Sniff from filename if browser didn't set content-type.
-			ct = sniffFromFilename(file.Filename)
-		}
-		if ct == "" {
-			return c.JSON(http.StatusUnsupportedMediaType, mw.APIError("UNSUPPORTED_TYPE", "logo must be PNG, JPEG, or SVG"))
-		}
-
 		src, err := file.Open()
 		if err != nil {
 			return c.JSON(http.StatusInternalServerError, mw.APIError("INTERNAL", "cannot open upload"))
@@ -103,6 +94,15 @@ func UploadLogoHandler(repo *repository.ModuleSettingsRepository, db *gorm.DB) e
 		data, err := io.ReadAll(src)
 		if err != nil {
 			return c.JSON(http.StatusInternalServerError, mw.APIError("INTERNAL", "cannot read upload"))
+		}
+
+		// Detect the type from the file's magic bytes — never trust the client's
+		// Content-Type or filename. Only raster images are allowed; SVG is rejected
+		// because it can carry scripts and the logo is served on the pre-auth login
+		// page. DetectContentType reports SVG as text/*, so it fails this check.
+		ct := http.DetectContentType(data)
+		if !isAllowedImageType(ct) {
+			return c.JSON(http.StatusUnsupportedMediaType, mw.APIError("UNSUPPORTED_TYPE", "logo must be a PNG, JPEG or WebP image (SVG is not allowed)"))
 		}
 
 		dataURI := fmt.Sprintf("data:%s;base64,%s", ct, base64.StdEncoding.EncodeToString(data))
@@ -126,25 +126,11 @@ func UploadLogoHandler(repo *repository.ModuleSettingsRepository, db *gorm.DB) e
 	}
 }
 
+// isAllowedImageType reports whether ct (from http.DetectContentType) is a raster
+// image accepted as a logo. SVG is intentionally excluded — it can carry scripts
+// and the logo is rendered on the unauthenticated login page.
 func isAllowedImageType(ct string) bool {
-	switch ct {
-	case "image/png", "image/jpeg", "image/jpg", "image/svg+xml", "image/webp":
-		return true
-	}
-	return false
-}
-
-func sniffFromFilename(name string) string {
-	lower := strings.ToLower(name)
-	switch {
-	case strings.HasSuffix(lower, ".png"):
-		return "image/png"
-	case strings.HasSuffix(lower, ".jpg"), strings.HasSuffix(lower, ".jpeg"):
-		return "image/jpeg"
-	case strings.HasSuffix(lower, ".svg"):
-		return "image/svg+xml"
-	case strings.HasSuffix(lower, ".webp"):
-		return "image/webp"
-	}
-	return ""
+	return strings.HasPrefix(ct, "image/png") ||
+		strings.HasPrefix(ct, "image/jpeg") ||
+		strings.HasPrefix(ct, "image/webp")
 }
