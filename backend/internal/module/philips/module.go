@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/LIRYC-IHU/ecg-hub/internal/module"
+	"github.com/LIRYC-IHU/ecg-hub/internal/xmlutil"
 )
 
 // Compile-time contract check.
@@ -77,16 +78,7 @@ func (m *Module) Validate(data []byte) error {
 // xmlRootElement returns the name (namespace + local) of the first XML start element,
 // without decoding the whole document.
 func xmlRootElement(data []byte) (xml.Name, error) {
-	dec := xml.NewDecoder(bytes.NewReader(data))
-	for {
-		tok, err := dec.Token()
-		if err != nil {
-			return xml.Name{}, err
-		}
-		if se, ok := tok.(xml.StartElement); ok {
-			return se.Name, nil
-		}
-	}
+	return xmlutil.RootElement(data)
 }
 
 // Parse extracts ECGMetadata from a Philips SierraECG 1.03 XML file.
@@ -96,7 +88,7 @@ func (m *Module) Parse(_ context.Context, data []byte) (*module.ECGMetadata, err
 	}
 
 	var doc philipsDoc
-	if err := xml.Unmarshal(data, &doc); err != nil {
+	if err := xmlutil.Unmarshal(data, &doc); err != nil {
 		return nil, fmt.Errorf("philips: parse: xml unmarshal: %w", err)
 	}
 
@@ -281,6 +273,13 @@ func applyUpdates(data []byte, fields map[string]string) ([]byte, error) {
 		}
 	}
 	newDeviceModel := fields["device_model"]
+
+	// Token streaming below uses the stdlib decoder/encoder; transcode non-UTF-8
+	// input to UTF-8 first so the rewritten file is valid and self-consistent.
+	data, err := xmlutil.ToUTF8(data)
+	if err != nil {
+		return nil, fmt.Errorf("philips: apply_updates: %w", err)
+	}
 
 	dec := xml.NewDecoder(bytes.NewReader(data))
 	var buf bytes.Buffer
