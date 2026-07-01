@@ -228,6 +228,12 @@
         "open": "Open webhook configuration"
       },
       "hl7": {
+        "masterTitle": "HL7 integration",
+        "masterSubtitle": "Enable or disable the HL7 integration for this facility. Some sites have no HL7: turn it off to stop every flow and hide the configuration reminder.",
+        "masterEnabled": "HL7 enabled",
+        "masterDisabled": "HL7 disabled",
+        "notConfiguredBanner": "HL7 is enabled but no host is configured. Fill in the connection below, or disable HL7 if your facility does not have one.",
+        "notConfiguredPopup": "HL7 enabled but not configured — for the IT dept. to handle (or disable HL7).",
         "connectionTitle": "HL7 Connection",
         "host": "Host",
         "port": "Port",

@@ -228,6 +228,12 @@
         "open": "Ouvrir la configuration des webhooks"
       },
       "hl7": {
+        "masterTitle": "Intégration HL7",
+        "masterSubtitle": "Activez ou désactivez l'intégration HL7 pour cet établissement. Certains sites n'ont pas de HL7 : désactivez-la pour couper tous les flux et masquer le rappel de configuration.",
+        "masterEnabled": "HL7 activé",
+        "masterDisabled": "HL7 désactivé",
+        "notConfiguredBanner": "HL7 est activé mais aucun hôte n'est configuré. Renseignez la connexion ci-dessous, ou désactivez HL7 si votre établissement n'en dispose pas.",
+        "notConfiguredPopup": "HL7 activé mais non configuré — à traiter par la DSI (ou désactivez HL7).",
         "connectionTitle": "Connexion HL7",
         "host": "Hôte",
         "port": "Port",
