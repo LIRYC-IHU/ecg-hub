@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/LIRYC-IHU/ecg-hub/internal/module"
+	"github.com/LIRYC-IHU/ecg-hub/internal/xmlutil"
 )
 
 // Compile-time contract check.
@@ -94,7 +95,7 @@ func (m *Module) Validate(data []byte) error {
 		return fmt.Errorf("muse: validate: empty data")
 	}
 	var p museProbe
-	if err := xml.Unmarshal(data, &p); err != nil {
+	if err := xmlutil.Unmarshal(data, &p); err != nil {
 		return fmt.Errorf("muse: validate: not a valid MUSE RestingECG XML: %w", err)
 	}
 	return nil
@@ -141,6 +142,13 @@ const muStandardLeadCount = 12
 func (m *Module) Parse(ctx context.Context, data []byte) (*module.ECGMetadata, error) {
 	if len(data) == 0 {
 		return nil, fmt.Errorf("muse: parse: empty data")
+	}
+
+	// The converter binary assumes UTF-8; transcode non-UTF-8 vendor exports
+	// (e.g. Windows-1252 MUSE files) so it does not reject the declared encoding.
+	data, err := xmlutil.ToUTF8(data)
+	if err != nil {
+		return nil, fmt.Errorf("muse: parse: %w", err)
 	}
 
 	// The converter requires a file path, so spill to a temp file.
@@ -323,6 +331,13 @@ func applyUpdates(data []byte, fields map[string]string) ([]byte, error) {
 	}
 	if len(contentUpdates) == 0 {
 		return data, nil
+	}
+
+	// Token streaming below uses the stdlib decoder/encoder; transcode non-UTF-8
+	// input to UTF-8 first so the rewritten file is valid and self-consistent.
+	data, err := xmlutil.ToUTF8(data)
+	if err != nil {
+		return nil, fmt.Errorf("muse: apply_updates: %w", err)
 	}
 
 	dec := xml.NewDecoder(bytes.NewReader(data))
