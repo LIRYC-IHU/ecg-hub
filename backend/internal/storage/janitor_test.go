@@ -107,3 +107,59 @@ func TestJanitor_Start_DisabledWhenZero(t *testing.T) {
 	j.Start(0) // should not panic, done channel should be closed
 	j.Stop()   // should not block
 }
+
+func TestJanitor_RotateOnce_AlertOnlyByDefault(t *testing.T) {
+	dir := t.TempDir()
+	writeTestFile(t, dir, "a.xml", 2048)
+
+	// Over cap, but allow_rotation defaults to false — nothing may be deleted.
+	cfg := newStorage(t, dir, "1Ki")
+	cfg.QuarantinePath = t.TempDir()
+	j := NewJanitor(cfg)
+	j.rotateOnce()
+
+	if _, err := os.Stat(filepath.Join(dir, "a.xml")); err != nil {
+		t.Errorf("ECG file must not be deleted in alert-only mode: %v", err)
+	}
+}
+
+func TestJanitor_RotateOnce_QuarantineNeverRotated(t *testing.T) {
+	vol := t.TempDir()
+	quar := t.TempDir()
+	writeTestFile(t, quar, "q.xml", 2048)
+
+	// Rotation explicitly enabled and quarantine over the cap — quarantined
+	// files are pending operator review and must never be purged.
+	cfg := newStorage(t, vol, "1Ki")
+	cfg.QuarantinePath = quar
+	cfg.AllowRotation = true
+	j := NewJanitor(cfg)
+	j.rotateOnce()
+
+	if _, err := os.Stat(filepath.Join(quar, "q.xml")); err != nil {
+		t.Errorf("quarantine file must never be rotated: %v", err)
+	}
+}
+
+func TestJanitor_RotateOnce_RotatesWhenOptedIn(t *testing.T) {
+	dir := t.TempDir()
+	writeTestFile(t, dir, "old.xml", 600)
+	oldPath := filepath.Join(dir, "old.xml")
+	if err := os.Chtimes(oldPath, time.Now().Add(-2*time.Hour), time.Now().Add(-2*time.Hour)); err != nil {
+		t.Fatalf("chtimes: %v", err)
+	}
+	writeTestFile(t, dir, "new.xml", 600)
+
+	cfg := newStorage(t, dir, "1Ki")
+	cfg.QuarantinePath = t.TempDir()
+	cfg.AllowRotation = true
+	j := NewJanitor(cfg)
+	j.rotateOnce()
+
+	if _, err := os.Stat(oldPath); !os.IsNotExist(err) {
+		t.Error("old.xml should have been purged when allow_rotation=true")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "new.xml")); err != nil {
+		t.Errorf("new.xml should still exist: %v", err)
+	}
+}

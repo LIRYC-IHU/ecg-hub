@@ -28,6 +28,11 @@ var (
 		Name: "ingest_quarantine_total",
 		Help: "Total files sent to quarantine, by reason category.",
 	}, []string{"reason"})
+
+	IngestQueueFull = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "ingest_queue_full_total",
+		Help: "Times a push found an ingestion queue full (FTP upload rejected or pipeline backpressure engaged). Alert on it — it means the pipeline cannot keep up.",
+	}, []string{"queue"})
 )
 
 func init() {
@@ -37,5 +42,6 @@ func init() {
 		IngestQueueDepth,
 		IngestWorkersBusy,
 		IngestQuarantine,
+		IngestQueueFull,
 	)
 }

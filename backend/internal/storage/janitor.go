@@ -14,12 +14,16 @@ import (
 	"github.com/LIRYC-IHU/ecg-hub/internal/config"
 )
 
-// Janitor periodically enforces the storage soft cap defined by storage.max_size.
-// When the volume exceeds the cap, it deletes the oldest files (by modification time)
-// until the volume is within the limit.
+// Janitor periodically watches the storage soft cap defined by storage.max_size.
 //
-// ECG database records are never deleted — only the physical files on disk are removed.
-// A download request for a purged file will receive a 404.
+// Default (allow_rotation=false): when the volume exceeds the cap it only raises
+// an alert — an error log plus the storage_over_cap gauge — and never deletes
+// anything. ECG files are clinical records; freeing space is an operator decision.
+//
+// Opt-in (allow_rotation=true): the oldest files under volume_path (by
+// modification time) are deleted until the volume fits the cap. The quarantine
+// volume is NEVER rotated in either mode. ECG database records are never
+// deleted — a download request for a purged file will receive a 404.
 //
 // If max_size is empty or 0, the janitor is a no-op and does not start.
 type Janitor struct {
@@ -85,20 +89,40 @@ func (j *Janitor) run(ctx context.Context, interval time.Duration) {
 }
 
 func (j *Janitor) rotateOnce() {
-	var Paths = []string{j.cfg.VolumePath, j.cfg.QuarantinePath}
-	for _, path := range Paths {
-		n, freed, err := j.Rotate(path)
+	// Enforce the cap on the main volume only. The quarantine volume is never
+	// rotated — its files are pending operator review and must not disappear.
+	if j.cfg.AllowRotation {
+		n, freed, err := j.Rotate(j.cfg.VolumePath)
 		if err != nil {
 			slog.Error("janitor: rotation failed", "error", err)
+		} else if n > 0 {
+			slog.Warn("janitor: rotation complete — oldest ECG files were purged (allow_rotation=true)",
+				"files_deleted", n, "freed_bytes", freed)
+		}
+	}
+
+	// Update gauges for both volumes and raise the over-cap alert. In the
+	// default alert-only mode this is the operator's signal to free space
+	// (archive, extend the volume) before ingestion is impacted.
+	limit := j.cfg.GetBytesSize()
+	for _, path := range []string{j.cfg.VolumePath, j.cfg.QuarantinePath} {
+		total, files, walkErr := walkFiles(path)
+		if walkErr != nil {
 			continue
 		}
-		if n > 0 {
-			slog.Info("janitor: rotation complete", "files_deleted", n, "freed_bytes", freed)
+		appmetrics.StorageBytesUsed.WithLabelValues(path).Set(float64(total))
+		appmetrics.StorageFilesTotal.WithLabelValues(path).Set(float64(len(files)))
+		if path != j.cfg.VolumePath {
+			continue
 		}
-		// Update storage gauges after each rotation pass.
-		if total, files, walkErr := walkFiles(path); walkErr == nil {
-			appmetrics.StorageBytesUsed.WithLabelValues(path).Set(float64(total))
-			appmetrics.StorageFilesTotal.WithLabelValues(path).Set(float64(len(files)))
+		if limit > 0 && total > limit {
+			appmetrics.StorageOverCap.WithLabelValues(path).Set(1)
+			if !j.cfg.AllowRotation {
+				slog.Error("janitor: volume over max_size — no files are deleted (allow_rotation=false); free space or extend the volume",
+					"volume_path", path, "current_bytes", total, "limit", j.cfg.MaxSize, "limit_bytes", limit)
+			}
+		} else {
+			appmetrics.StorageOverCap.WithLabelValues(path).Set(0)
 		}
 	}
 }
