@@ -142,7 +142,7 @@
       "centerName": "Nom du centre",
       "centerNameHint": "Affiché en bas des pages de connexion et d'initialisation. Laisser vide pour utiliser la valeur par défaut.",
       "logo": "Logo",
-      "logoHint": "PNG, JPEG, SVG ou WebP — 512 Ko maximum. Affiché comme icône sur les pages de connexion et d'initialisation.",
+      "logoHint": "PNG, JPEG ou WebP — 512 Ko maximum. Affiché comme icône sur les pages de connexion et d'initialisation.",
       "uploadLogo": "Importer une image…",
       "removeLogo": "Supprimer le logo",
       "saved": "Identité visuelle enregistrée",
