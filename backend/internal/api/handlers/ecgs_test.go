@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -60,6 +61,10 @@ func (s *stubConverter) SupportedFormats(_ string) []string {
 
 func (s *stubConverter) ConvertToXMLFDA(_ context.Context, _, _ string, _ *models.Patient) ([]byte, error) {
 	return s.data, s.err
+}
+
+func (s *stubConverter) ConverterVersion(_ string) string {
+	return ""
 }
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
@@ -285,5 +290,42 @@ func TestDownloadECGHandler_XMLFDA_Success(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), "converted") {
 		t.Errorf("body missing converted XML content")
+	}
+}
+
+// uuidNameRe matches a "<uuid>.<ext>" download filename produced for anonymised exports.
+var uuidNameRe = regexp.MustCompile(`filename=[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\.xml`)
+
+// Anonymised converted downloads must not leak the patient identifier through the
+// filename — the base name is replaced by a random UUID.
+func TestDownloadECGHandler_XMLFDA_Anonymize_UUIDName(t *testing.T) {
+	f, err := os.CreateTemp(t.TempDir(), "ecg-*.xml")
+	if err != nil {
+		t.Fatalf("create temp file: %v", err)
+	}
+	_, _ = f.WriteString("<philips>raw</philips>")
+	_ = f.Close()
+
+	ecgStub := &stubECGFinder{ecg: &models.ECG{
+		ID:               "7",
+		FilePath:         f.Name(),
+		OriginalFilename: "bs1212.xml",
+		Vendor:           "philips",
+		PatientID:        "bs1212",
+	}}
+	bridge := &stubConverter{data: []byte("<FDAaECG>converted</FDAaECG>")}
+	c, rec := newDownloadContextWithQuery("7", "format=xmlfda&anonymize=1")
+	handler := downloadECGHandler(ecgStub, noopPatient(), bridge, nil)
+	if err := handler(c); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	assertCode(t, rec, http.StatusOK)
+
+	disp := rec.Header().Get("Content-Disposition")
+	if strings.Contains(disp, "bs1212") {
+		t.Errorf("Content-Disposition = %q, must not leak patient ID 'bs1212'", disp)
+	}
+	if !uuidNameRe.MatchString(disp) {
+		t.Errorf("Content-Disposition = %q, want a <uuid>.xml filename", disp)
 	}
 }
