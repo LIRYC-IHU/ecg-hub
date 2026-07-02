@@ -373,6 +373,7 @@ export interface ModuleStatus {
   name: string;
   extensions: string[];
   status: string; // "ok" or error message
+  version?: string; // converter binary version, when available
   formats: ExportFormat[];
 }
 
