@@ -584,6 +584,12 @@ func handleConvertDownload(
 	if base == "" {
 		base = "ecg"
 	}
+	if opts.Anonymize {
+		// The patient identifier is often the filename itself (e.g. bs1212.xml).
+		// An anonymised export must not leak it, so use a random, non-identifying
+		// base name.
+		base = uuid.New().String()
+	}
 	outName := base + outExt
 	slog.Debug("ecg-download: converting to format", "ecg_id", id, "format", format, "file", outName)
 	// Use mime.FormatMediaType so special characters in the filename are properly encoded.
@@ -618,8 +624,14 @@ func parseDownloadFormats(c echo.Context) []string {
 
 // convertedName derives the output filename for a converted format from the original
 // filename: the extension is swapped for the format's extension.
-func convertedName(originalFilename, format string) string {
+// When anonymize is set, the base name is replaced by a random UUID so the patient
+// identifier — often encoded in the original filename (e.g. bs1212.xml) — never
+// leaks through an anonymised export.
+func convertedName(originalFilename, format string, anonymize bool) string {
 	outExt := map[string]string{"xmlfda": ".xml", "dicom": ".dcm", "pdf": ".pdf"}[format]
+	if anonymize {
+		return uuid.New().String() + outExt
+	}
 	ext := filepath.Ext(originalFilename)
 	base := strings.TrimSuffix(originalFilename, ext)
 	if base == "" {
@@ -685,6 +697,13 @@ func handleZipDownload(
 
 		switch f {
 		case "original", "":
+			if opts.Anonymize {
+				// The verbatim original still contains patient data (and its
+				// filename often is the patient ID), so including it would defeat
+				// anonymisation. Skip it — mirrors the single-file path's refusal.
+				slog.Info("ecg-download: skipping original format in anonymised zip", "ecg_id", id)
+				continue
+			}
 			b, rerr := os.ReadFile(ecg.FilePath)
 			if rerr != nil {
 				slog.Warn("ecg-download: zip read original failed", "ecg_id", id, "error", rerr)
@@ -697,7 +716,7 @@ func handleZipDownload(
 				slog.Warn("ecg-download: zip convert failed", "ecg_id", id, "format", f, "error", cerr)
 				continue
 			}
-			data, name = out, convertedName(ecg.OriginalFilename, f)
+			data, name = out, convertedName(ecg.OriginalFilename, f, opts.Anonymize)
 		default:
 			slog.Warn("ecg-download: zip unknown format skipped", "ecg_id", id, "format", f)
 			continue
