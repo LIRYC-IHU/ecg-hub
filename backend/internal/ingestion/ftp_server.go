@@ -10,9 +10,12 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	ftpserver "github.com/fclairamb/ftpserverlib"
 	"github.com/spf13/afero"
+
+	appmetrics "github.com/LIRYC-IHU/ecg-hub/internal/metrics"
 )
 
 // FTPSettings holds the FTP server runtime configuration. Built from the
@@ -236,11 +239,23 @@ func (f *ingestFile) Close() error {
 		if f.onFileReceived != nil {
 			f.onFileReceived(item.Filename)
 		}
-	default:
-		slog.Error("ftp: ingest queue full, dropping file", "filename", item.Filename)
+	case <-time.After(queueFullTimeout):
+		// The pipeline is saturated and did not free a slot within the timeout.
+		// Fail the transfer back to the FTP client instead of silently dropping
+		// the file — the device believes a successful Close means the ECG was
+		// delivered and never re-sends it, so a drop here is clinical data loss.
+		appmetrics.IngestQueueFull.WithLabelValues("ingest").Inc()
+		slog.Error("ftp: ingest queue still full after timeout — rejecting upload so the device retries",
+			"filename", item.Filename, "timeout", queueFullTimeout)
+		return fmt.Errorf("ftp: ingest queue full, upload rejected: %s", item.Filename)
 	}
 	return nil
 }
+
+// queueFullTimeout bounds how long a completed upload waits for a free slot in
+// the ingest queue before the transfer is failed back to the FTP client.
+// Variable (not const) so tests can shorten it.
+var queueFullTimeout = 30 * time.Second
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 

@@ -5,9 +5,9 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/spf13/afero"
-
 )
 
 // ---- helpers ----------------------------------------------------------------
@@ -112,10 +112,15 @@ func TestClientDriver_FileUpload_PushesToQueue(t *testing.T) {
 	}
 }
 
-func TestClientDriver_QueueFull_DropsFile(t *testing.T) {
-	// Unbuffered channel — select default fires immediately (queue always full).
+func TestClientDriver_QueueFull_RejectsUpload(t *testing.T) {
+	// Unbuffered channel with no consumer — the queue never frees a slot.
 	queue := NewIngestQueue(0)
 	drv := &clientDriver{MemMapFs: &afero.MemMapFs{}, queue: queue}
+
+	// Shorten the saturation timeout so the test stays fast.
+	origTimeout := queueFullTimeout
+	queueFullTimeout = 20 * time.Millisecond
+	defer func() { queueFullTimeout = origTimeout }()
 
 	f, err := drv.Create("/ecg_overflow.xml")
 	if err != nil {
@@ -124,14 +129,15 @@ func TestClientDriver_QueueFull_DropsFile(t *testing.T) {
 	if _, err := f.Write([]byte("ecg data")); err != nil {
 		t.Fatalf("Write: %v", err)
 	}
-	// Close must not block and must not push to the full queue.
-	if err := f.Close(); err != nil {
-		t.Fatalf("Close: %v", err)
+	// Close must fail the transfer so the FTP client retries — a silent drop
+	// would make the device believe the ECG was delivered.
+	if err := f.Close(); err == nil {
+		t.Fatal("Close should return an error when the ingest queue stays full")
 	}
 
 	select {
 	case <-queue:
-		t.Error("queue should be empty — file should have been dropped when queue was full")
+		t.Error("queue should be empty — upload should have been rejected, not queued")
 	default:
 		// expected
 	}
