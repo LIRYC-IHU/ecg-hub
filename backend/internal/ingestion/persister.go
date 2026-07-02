@@ -84,12 +84,21 @@ type Persister struct {
 	dispatcherMu sync.RWMutex           // guards concurrent read (persist) / write (WithConnectorDispatcher)
 	oruTrigger   ecgORUTrigger          // nil when outbound ORU is disabled; guarded by oruMu
 	oruMu        sync.RWMutex           // guards concurrent read (persist) / write (WithORUTrigger)
-	publisher    events.Publisher       // nil when realtime events are disabled
-	ctx          context.Context
-	cancel       context.CancelFunc
-	startOnce    sync.Once
-	done         chan struct{}
+	publisher    events.Publisher // nil when realtime events are disabled
+	// postSem bounds concurrent post-persist tasks (HL7 enrichment/ORU send and
+	// connector forwarding). Without it, a burst of ingests spawns one goroutine
+	// per ECG and hammers the HIS/PACS with unbounded parallel connections.
+	// A full semaphore blocks persist(), propagating backpressure up the pipeline.
+	postSem   chan struct{}
+	ctx       context.Context
+	cancel    context.CancelFunc
+	startOnce sync.Once
+	done      chan struct{}
 }
+
+// maxConcurrentPostTasks caps the parallel HL7/connector goroutines spawned
+// after each successful persist.
+const maxConcurrentPostTasks = 8
 
 // NewPersister constructs a Persister. Call Start() to begin consuming the queue.
 func NewPersister(routed RoutedQueue, volume fileWriter, ecgRepo ecgInserter, patRepo patientUpserter) *Persister {
@@ -99,6 +108,7 @@ func NewPersister(routed RoutedQueue, volume fileWriter, ecgRepo ecgInserter, pa
 		volume:  volume,
 		ecgRepo: ecgRepo,
 		patRepo: patRepo,
+		postSem: make(chan struct{}, maxConcurrentPostTasks),
 		ctx:     ctx,
 		cancel:  cancel,
 		done:    make(chan struct{}),
@@ -392,7 +402,9 @@ func (p *Persister) persist(ri RoutedItem) error {
 	oru := p.oruTrigger
 	p.oruMu.RUnlock()
 	if e != nil || oru != nil {
+		p.postSem <- struct{}{} // bounded concurrency — blocks persist() when saturated
 		go func() {
+			defer func() { <-p.postSem }()
 			// Enrich first so the auto ORU result carries the HL7-enriched demographics.
 			if e != nil {
 				if err := e.Enrich(context.Background(), ecg.ID, ecg.PatientID); err != nil {
@@ -416,7 +428,11 @@ func (p *Persister) persist(ri RoutedItem) error {
 	d := p.dispatcher
 	p.dispatcherMu.RUnlock()
 	if d != nil {
-		go d.Dispatch(ecg, ecg.FilePath)
+		p.postSem <- struct{}{} // bounded concurrency — blocks persist() when saturated
+		go func() {
+			defer func() { <-p.postSem }()
+			d.Dispatch(ecg, ecg.FilePath)
+		}()
 	}
 
 	slog.Info("ingestion: ECG persisted",

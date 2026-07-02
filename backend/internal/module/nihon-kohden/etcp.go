@@ -25,17 +25,25 @@ func NewECTPServer(addr string, cfg *config.Config, repo *repository.NihonKohden
 	}
 }
 
-// Listen starts the ECTP server and handles incoming connections.
-// Need to run in a separate goroutine to avoid blocking the main thread.
+// Listen binds the ECTP listen address and returns any bind error synchronously,
+// so the caller can fail fast at startup (a taken port must not crash the process
+// from a goroutine). Connection handling then runs in a background goroutine.
 func (s *ECTPServer) Listen() error {
 	ln, err := net.Listen("tcp", s.addr)
 	if err != nil {
 		return err
 	}
+	go s.serve(ln)
+	return nil
+}
+
+// serve accepts ECTP connections until the listener is closed.
+func (s *ECTPServer) serve(ln net.Listener) {
 	for {
 		conn, err := ln.Accept()
 		if err != nil {
-			return err
+			slog.Error("[ECTP] accept failed — server stopped", "error", err)
+			return
 		}
 		go s.handle(conn)
 	}

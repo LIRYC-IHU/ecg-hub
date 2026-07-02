@@ -24,6 +24,23 @@ type Config struct {
 	JWTSecret string
 }
 
+// PublicOrigin normalises the HOST_URL environment value into an origin URL,
+// shared by the CORS allow-list and webhook callback links. A scheme present in
+// HOST_URL (http:// or https://) is preserved — deployments behind a
+// TLS-terminating proxy (Traefik/nginx) set "https://ecg-hub.chu.fr" so the
+// origin matches what browsers and webhook receivers actually see. Without a
+// scheme, http:// is assumed. Empty input falls back to http://localhost.
+func PublicOrigin(hostURL string) string {
+	hostURL = strings.TrimSpace(hostURL)
+	if hostURL == "" {
+		return "http://localhost"
+	}
+	if strings.HasPrefix(hostURL, "http://") || strings.HasPrefix(hostURL, "https://") {
+		return strings.TrimRight(hostURL, "/")
+	}
+	return "http://" + hostURL
+}
+
 // ServerConfig holds HTTP server settings.
 type ServerConfig struct {
 	// Port is the TCP port the Echo server listens on (e.g., 4444).
