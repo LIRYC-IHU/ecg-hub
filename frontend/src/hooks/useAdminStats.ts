@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { fetchAdminStats, fetchHealth } from '../lib/api'
 
 export function useAdminStats() {
@@ -14,6 +14,9 @@ export function useAdminStats() {
     queryFn: fetchHealth,
     staleTime: 30_000,
     refetchInterval: 30_000,
+    // Keep the previous health snapshot on screen during a refetch so the
+    // Infrastructure card never blanks out between polls.
+    placeholderData: keepPreviousData,
   })
 
   return { stats, health }
