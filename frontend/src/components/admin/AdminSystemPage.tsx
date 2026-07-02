@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import {
   CheckCircle,
@@ -110,6 +110,10 @@ export function AdminSystemPage() {
     queryKey: ["admin", "modules"],
     queryFn: fetchModules,
     staleTime: 60_000,
+    // Keep the last modules on screen during a refetch so the "Supported ECG
+    // formats" card never blanks out — only its rows swap to a skeleton on the
+    // very first (cold) load.
+    placeholderData: keepPreviousData,
   });
 
   // Health check from the running process (legacy config.yaml connectors)
@@ -283,9 +287,9 @@ export function AdminSystemPage() {
 
       {/* Infrastructure (70%) + Formats ECG (30%) — same height row */}
       <div className="grid grid-cols-1 lg:grid-cols-[7fr_3fr] gap-6 lg:items-stretch">
-        {/* Infrastructure — left */}
-        {health.data && (
-          <div className="flex flex-col">
+        {/* Infrastructure — left. Always mounted so the card never blanks out
+            on refetch; rows swap to a skeleton on the first (cold) load. */}
+        <div className="flex flex-col">
             <div className="bg-card rounded-lg border border-border p-5 flex-1">
               <p className="text-[14px] font-semibold uppercase tracking-wide text-foreground mb-3 px-1">
                 {t("admin.system.infrastructure")}
@@ -295,6 +299,22 @@ export function AdminSystemPage() {
                   count: services.length,
                 })}
               </p>
+              {health.isPending ? (
+                <div className="space-y-1">
+                  {Array.from({ length: services.length }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="flex items-center gap-3 px-3 py-2.5 rounded-lg"
+                    >
+                      <div className="w-4 h-4 rounded bg-muted animate-pulse shrink-0" />
+                      <div className="h-3 w-28 rounded bg-muted animate-pulse flex-1 max-w-[9rem]" />
+                      <div className="h-3 w-10 rounded bg-muted animate-pulse" />
+                      <div className="w-2 h-2 rounded-full bg-muted animate-pulse shrink-0" />
+                      <div className="h-3 w-6 rounded bg-muted animate-pulse" />
+                    </div>
+                  ))}
+                </div>
+              ) : (
               <div className="space-y-1">
                 {services.map((svc) => (
                   <div
@@ -321,14 +341,13 @@ export function AdminSystemPage() {
                   </div>
                 ))}
               </div>
+              )}
             </div>
           </div>
-        )}
 
-        {/* Formats ECG — right, same height, scroll if overflow */}
-        {!modulesQuery.isLoading &&
-          modulesQuery.data &&
-          modulesQuery.data.length > 0 && (
+        {/* Formats ECG — right, same height, scroll if overflow.
+            Always mounted so the card never blanks out on refetch; only the
+            inner rows swap to a skeleton during the first (cold) load. */}
             <div className="flex flex-col lg:h-full">
               <div className="bg-card rounded-lg border border-border p-5 flex-1 lg:overflow-y-auto">
                 <p className="text-[14px] font-semibold uppercase tracking-wide text-foreground mb-3 px-1">
@@ -337,8 +356,24 @@ export function AdminSystemPage() {
                 <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-3 px-1">
                   {t("admin.system.formatsSubtitle")}
                 </p>
+                {modulesQuery.isPending ? (
+                  <div className="space-y-1">
+                    {Array.from({ length: 6 }).map((_, i) => (
+                      <div
+                        key={i}
+                        className="flex items-center gap-3 px-3 py-2.5 rounded-lg"
+                      >
+                        <div className="w-4 h-4 rounded bg-muted animate-pulse shrink-0" />
+                        <div className="h-3 w-24 rounded bg-muted animate-pulse flex-1 max-w-[8rem]" />
+                        <div className="h-4 w-10 rounded bg-muted animate-pulse" />
+                        <div className="w-2 h-2 rounded-full bg-muted animate-pulse shrink-0" />
+                        <div className="h-3 w-6 rounded bg-muted animate-pulse" />
+                      </div>
+                    ))}
+                  </div>
+                ) : (
                 <div className="space-y-1">
-                  {modulesQuery.data.map((m) => (
+                  {modulesQuery.data?.map((m) => (
                     <div
                       key={m.name}
                       className="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-muted/30 transition-colors"
@@ -365,12 +400,20 @@ export function AdminSystemPage() {
                       >
                         {m.status === "ok" ? "OK" : "ERR"}
                       </span>
+                      {m.version && (
+                        <span
+                          className="text-[10px] font-mono text-muted-foreground shrink-0"
+                          title={t("admin.system.converterVersion")}
+                        >
+                          {m.version}
+                        </span>
+                      )}
                     </div>
                   ))}
                 </div>
+                )}
               </div>
             </div>
-          )}
       </div>
 
       {/* Connecteurs Proxy — from DB (all UI-configured connectors) */}
