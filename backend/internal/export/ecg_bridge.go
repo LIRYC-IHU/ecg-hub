@@ -9,6 +9,8 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
@@ -66,6 +68,7 @@ type Converter interface {
 	Convert(ctx context.Context, sourcePath, vendor, format string, patient *models.Patient, opts ConvertOptions) ([]byte, error)
 	SupportsFormat(vendor, format string) bool
 	SupportedFormats(vendor string) []string
+	ConverterVersion(vendor string) string
 	ConvertToXMLFDA(ctx context.Context, sourcePath, vendor string, patient *models.Patient) ([]byte, error)
 }
 
@@ -78,6 +81,10 @@ type ECGBridge struct {
 	// converting the source to FDA aECG XML, then rendering that — so any vendor
 	// that supports "xmlfda" also supports "pdf". Empty disables the pdf format.
 	pdfBinary string
+	// versionCache memoises `binary --version` output per vendor. Converter
+	// versions are fixed for the process lifetime, so we probe each binary at
+	// most once. Keys are vendor names, values are version strings ("" = none).
+	versionCache sync.Map
 }
 
 // NewECGBridge constructs an ECGBridge with the given vendor:format→binary map and per-conversion timeout.
@@ -120,6 +127,55 @@ func (b *ECGBridge) SupportedFormats(vendor string) []string {
 		}
 	}
 	return out
+}
+
+// ConverterVersion returns the version reported by the vendor's converter binary,
+// or "" if the vendor has no registered converter or the binary reports nothing.
+// The result is memoised — the binary is probed at most once per vendor.
+func (b *ECGBridge) ConverterVersion(vendor string) string {
+	if cached, ok := b.versionCache.Load(vendor); ok {
+		return cached.(string)
+	}
+	version := ""
+	if binary := b.converterBinary(vendor); binary != "" {
+		version = probeVersion(binary, b.timeout)
+	}
+	b.versionCache.Store(vendor, version)
+	return version
+}
+
+// converterBinary picks the representative converter binary for a vendor,
+// preferring the FDA aECG XML converter (the primary tool) and falling back to
+// any registered binary for that vendor. Returns "" when none is registered.
+func (b *ECGBridge) converterBinary(vendor string) string {
+	if bin, ok := b.binaries[vendor+":xmlfda"]; ok {
+		return bin
+	}
+	prefix := vendor + ":"
+	for key, bin := range b.binaries {
+		if strings.HasPrefix(key, prefix) {
+			return bin
+		}
+	}
+	return ""
+}
+
+// probeVersion runs `binary --version` and extracts the reported version.
+// Best-effort: any error (missing binary, timeout, non-zero exit) yields "" so
+// version reporting never blocks or fails the caller. Cobra prints the form
+// "<name> version <v>"; we keep just the version token when present.
+func probeVersion(binary string, timeout time.Duration) string {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, binary, "--version").Output()
+	if err != nil {
+		return ""
+	}
+	line := strings.TrimSpace(string(out))
+	if i := strings.LastIndex(line, " version "); i >= 0 {
+		return strings.TrimSpace(line[i+len(" version "):])
+	}
+	return line
 }
 
 // Convert converts the ECG file at sourcePath to the requested format.
