@@ -190,6 +190,7 @@
       "servicesMonitored": "{{count}} services monitored",
       "formatsTitle": "Supported ECG formats",
       "formatsSubtitle": "Auto-detection",
+      "converterVersion": "Converter version",
       "disabled": "Disabled",
       "service": {
         "database": "Database",
