@@ -43,6 +43,54 @@ func ListModuleStatusHandler(reg *module.Registry) echo.HandlerFunc {
 	}
 }
 
+// ResolveFTPPort returns the FTP listen port configured in the DB, falling back
+// to the module default (2121) when no record exists or the stored config cannot
+// be decoded. Used to populate the /healthz FTP status — the port lives in the
+// encrypted module config, not config.yaml.
+func ResolveFTPPort(repo *repository.ModuleConfigRepository, encKey string) int {
+	const defaultPort = 2121
+	if port, ok := storedModulePort(repo, encKey, ftpModuleType, func(c FTPStoredConfig) int { return c.Port }); ok {
+		return port
+	}
+	return defaultPort
+}
+
+// ResolveDICOMPort returns the DICOM SCP listen port configured in the DB,
+// falling back to the module default (4242) when no record exists or the stored
+// config cannot be decoded.
+func ResolveDICOMPort(repo *repository.ModuleConfigRepository, encKey string) int {
+	const defaultPort = 4242
+	if port, ok := storedModulePort(repo, encKey, dicomModuleType, func(c DICOMStoredConfig) int { return c.Port }); ok {
+		return port
+	}
+	return defaultPort
+}
+
+// storedModulePort decrypts the module's stored config and extracts its port via
+// getPort. Returns ok=false (so the caller uses its default) when the record is
+// absent, undecryptable, malformed, or the stored port is 0.
+func storedModulePort[T any](repo *repository.ModuleConfigRepository, encKey, moduleType string, getPort func(T) int) (int, bool) {
+	record, err := repo.Get(moduleType)
+	if err != nil || record == nil {
+		return 0, false
+	}
+	decrypted, err := auth.DecryptString(record.ConfigEncrypted, encKey)
+	if err != nil {
+		slog.Warn("module_control: failed to decrypt config for port resolution", "module", moduleType, "error", err)
+		return 0, false
+	}
+	var stored T
+	if err := json.Unmarshal([]byte(decrypted), &stored); err != nil {
+		slog.Warn("module_control: failed to parse config for port resolution", "module", moduleType, "error", err)
+		return 0, false
+	}
+	port := getPort(stored)
+	if port == 0 {
+		return 0, false
+	}
+	return port, true
+}
+
 // StopModuleHandler stops the named module via the Registry and persists
 // enabled=false in the DB so the module stays stopped across restarts.
 //
