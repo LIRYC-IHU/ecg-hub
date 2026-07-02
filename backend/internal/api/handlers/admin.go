@@ -125,6 +125,12 @@ type ModuleListProvider interface {
 	GetModules() []module.Module
 }
 
+// ConverterVersionProvider reports the version of a vendor's converter binary.
+// Implemented by export.ECGBridge; may be nil when no converter is wired.
+type ConverterVersionProvider interface {
+	ConverterVersion(vendor string) string
+}
+
 // ModulesHandler handles GET /api/v1/modules.
 // Returns the active module list with their health status and accepted extensions.
 // Uses the ingest router's live module list so it reflects hot-reload changes.
@@ -137,13 +143,14 @@ type ModuleListProvider interface {
 // @Success 200 {array} map[string]interface{}
 // @Security BearerAuth
 // @Router /api/v1/modules [get]
-func ModulesHandler(provider ModuleListProvider) echo.HandlerFunc {
+func ModulesHandler(provider ModuleListProvider, versions ConverterVersionProvider) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		activeModules := provider.GetModules()
 		type moduleStatus struct {
 			Name       string                `json:"name"`
 			Extensions []string              `json:"extensions"`
-			Status     string                `json:"status"` // "ok" or error message
+			Status     string                `json:"status"`            // "ok" or error message
+			Version    string                `json:"version,omitempty"` // converter binary version, when available
 			Formats    []module.ExportFormat `json:"formats"`
 		}
 		result := make([]moduleStatus, 0, len(activeModules))
@@ -152,10 +159,15 @@ func ModulesHandler(provider ModuleListProvider) echo.HandlerFunc {
 			if err := m.Health(); err != nil {
 				status = err.Error()
 			}
+			version := ""
+			if versions != nil {
+				version = versions.ConverterVersion(m.Name())
+			}
 			result = append(result, moduleStatus{
 				Name:       m.Name(),
 				Extensions: m.AcceptedExtensions(),
 				Status:     status,
+				Version:    version,
 				Formats:    m.SupportedFormats(),
 			})
 		}
