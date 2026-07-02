@@ -223,7 +223,7 @@ func (r *RouterConfig) RegisterRoutes() {
 
 	// Setup (public — system initialization)
 	localUserRepo := repository.NewLocalUserRepository(r.gormDB)
-	publicV1.GET("/setup/status", handlers.SetupStatusHandler(localUserRepo))
+	publicV1.GET("/setup/status", handlers.SetupStatusHandler(r.gormDB))
 	publicV1.POST("/setup", handlers.SetupHandler(localUserRepo, r.gormDB))
 
 	// Strict rate limiter shared by the credential-accepting auth endpoints.

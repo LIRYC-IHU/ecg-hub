@@ -154,7 +154,7 @@ func CreateUserWebhookHandler(repo *repository.UserWebhookRepository, encKey str
 			return c.JSON(http.StatusInternalServerError, mw.APIError("DB_ERROR", "failed to create webhook"))
 		}
 		_ = mw.WriteAuditLog(c.Request().Context(), db, userID, "webhook_created", hook.ID,
-			map[string]any{"url": hook.URL})
+			map[string]any{"url": hook.URL, "insecure_skip_verify": hook.InsecureSkipVerify})
 		return c.JSON(http.StatusCreated, toWebhookResponse(*hook))
 	}
 }
@@ -224,7 +224,7 @@ func UpdateUserWebhookHandler(repo *repository.UserWebhookRepository, encKey str
 			return c.JSON(http.StatusInternalServerError, mw.APIError("DB_ERROR", "failed to update webhook"))
 		}
 		_ = mw.WriteAuditLog(c.Request().Context(), db, userID, "webhook_updated", hook.ID,
-			map[string]any{"url": hook.URL})
+			map[string]any{"url": hook.URL, "insecure_skip_verify": hook.InsecureSkipVerify})
 		return c.JSON(http.StatusOK, toWebhookResponse(*hook))
 	}
 }

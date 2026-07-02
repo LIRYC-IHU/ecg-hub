@@ -223,6 +223,29 @@ func RunMigrations(db *gorm.DB) error {
 	// fresh installs. Idempotent.
 	migrateUserIdentity(db)
 
+	// Trigram indexes for substring search. Patient/ECG search uses ILIKE '%term%'
+	// (leading wildcard), which a B-tree index cannot serve — every search is a
+	// sequential scan. pg_trgm GIN indexes make these index-assisted. Idempotent;
+	// warnings (not fatals) keep startup resilient if the DB role cannot CREATE
+	// EXTENSION (search still works, just without the index).
+	if err := db.Exec(`CREATE EXTENSION IF NOT EXISTS pg_trgm`).Error; err != nil {
+		slog.Warn("db: pg_trgm extension unavailable — patient search will fall back to sequential scans", "error", err)
+	} else {
+		trgmIndexes := []string{
+			`CREATE INDEX IF NOT EXISTS idx_patients_last_name_trgm ON patients USING gin (last_name gin_trgm_ops)`,
+			`CREATE INDEX IF NOT EXISTS idx_patients_first_name_trgm ON patients USING gin (first_name gin_trgm_ops)`,
+			`CREATE INDEX IF NOT EXISTS idx_patients_patient_id_trgm ON patients USING gin (patient_id gin_trgm_ops)`,
+			`CREATE INDEX IF NOT EXISTS idx_patients_nda_trgm ON patients USING gin (nda gin_trgm_ops)`,
+			`CREATE INDEX IF NOT EXISTS idx_ecgs_patient_id_trgm ON ecgs USING gin (patient_id gin_trgm_ops)`,
+			`CREATE INDEX IF NOT EXISTS idx_ecgs_original_filename_trgm ON ecgs USING gin (original_filename gin_trgm_ops)`,
+		}
+		for _, ddl := range trgmIndexes {
+			if err := db.Exec(ddl).Error; err != nil {
+				slog.Warn("db: create trigram index failed", "error", err)
+			}
+		}
+	}
+
 	return nil
 }
 

@@ -50,6 +50,7 @@ export function Header({
   language,
   onToggleLang,
   canManageWebhooks = false,
+  canManageApiKeys = false,
 }: HeaderProps) {
   const { t } = useTranslation();
   const location = useLocation();
@@ -161,16 +162,18 @@ export function Header({
                     {userId}
                   </p>
                 </div>
-                <button
-                  onClick={() => {
-                    setOpen(false);
-                    navigate("/api-keys");
-                  }}
-                  className="w-full flex items-center gap-2 px-3 py-2 text-xs text-foreground hover:bg-muted transition-colors cursor-pointer"
-                >
-                  <KeyRound className="w-3.5 h-3.5" />
-                  {t("nav.apiKeys")}
-                </button>
+                {canManageApiKeys && (
+                  <button
+                    onClick={() => {
+                      setOpen(false);
+                      navigate("/api-keys");
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-foreground hover:bg-muted transition-colors cursor-pointer"
+                  >
+                    <KeyRound className="w-3.5 h-3.5" />
+                    {t("nav.apiKeys")}
+                  </button>
+                )}
                 {canManageWebhooks && (
                   <button
                     onClick={() => {

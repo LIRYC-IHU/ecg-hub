@@ -79,6 +79,10 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Fail-fast: reject a weak or placeholder JWT_SECRET in production. It signs
+	// every session token, so a weak key means forgeable admin tokens.
+	validateJWTSecret(cfg)
+
 	// Step 2: Connect to PostgreSQL (Story 1.3).
 	// The server must not start if the database is unreachable (AC#4).
 	gormDB, err := dbpkg.Open(cfg)
@@ -135,9 +139,11 @@ func main() {
 		ReferrerPolicy:     "strict-origin-when-cross-origin",
 	}))
 
-	// Bound request body size to prevent memory-exhaustion DoS (covers JSON
-	// payloads and the branding/logo upload). Adjust if larger uploads are added.
-	e.Use(middleware.BodyLimit("10M"))
+	// Bound request body size to prevent memory-exhaustion DoS. Sized above the
+	// manual ECG upload cap (maxUploadFileBytes = 50 MiB) plus multipart overhead:
+	// this global limit runs before per-route middleware, so a smaller value would
+	// reject legitimate 10–50 MiB ECG uploads. JSON and logo endpoints stay far under it.
+	e.Use(middleware.BodyLimit("64M"))
 
 	// Global per-IP rate limit as a coarse DoS guard. Generous so it never trips
 	// on normal SPA usage; stricter per-route limits apply to /auth (see router).
@@ -716,13 +722,27 @@ const insecureDefaultAuthEncKey = "ecg-hub-dev-key-do-not-use-in-prod"
 // minAuthEncKeyLen is the minimum acceptable length for AUTH_ENCRYPTION_KEY in production.
 const minAuthEncKeyLen = 32
 
+// placeholderJWTSecret is the example value shipped in .env.example. It is public,
+// so the server refuses to start with it in production.
+const placeholderJWTSecret = "replace-with-a-long-random-secret"
+
+// minJWTSecretLen is the minimum acceptable JWT_SECRET length in production. A short
+// HMAC key is brute-forceable, which would let an attacker forge tokens for any role.
+const minJWTSecretLen = 32
+
 // isProduction reports whether the server is running in production mode.
-// Production is inferred from APP_ENV=production or from server.tls being enabled.
+// Fail-secure: production is the DEFAULT — only an explicit development-class
+// APP_ENV (development/dev/test/local) opts out, and bare-metal TLS
+// (server.tls=true) always forces production regardless.
+//
+// This matters because the standard deployment terminates TLS upstream
+// (Traefik/nginx) with server.tls=false, so production must NOT hinge on
+// remembering to set APP_ENV — otherwise the server could silently fall back to
+// the public dev encryption key (see resolveAuthEncKey) and skip secret checks.
 func isProduction(cfg *config.Config) bool {
-	if v := os.Getenv("APP_ENV"); v == "production" || v == "prod" {
-		return true
-	}
-	return cfg.Server.TLS
+	env := strings.ToLower(strings.TrimSpace(os.Getenv("APP_ENV")))
+	isDev := env == "development" || env == "dev" || env == "test" || env == "local"
+	return !isDev || cfg.Server.TLS
 }
 
 // buildConnectorsFromDB builds the outbound PACS connector runtime from the
@@ -849,6 +869,24 @@ func resolveAuthEncKey(cfg *config.Config) string {
 		return insecureDefaultAuthEncKey
 	}
 	return key
+}
+
+// validateJWTSecret enforces a strong JWT_SECRET in production. JWT_SECRET signs
+// every session token (HMAC-SHA256), so a weak or placeholder value would let an
+// attacker forge tokens for any role. In development the check is skipped (a
+// non-empty secret is still required by config.Load). Calls os.Exit(1) on failure.
+func validateJWTSecret(cfg *config.Config) {
+	if !isProduction(cfg) {
+		return
+	}
+	switch {
+	case cfg.JWTSecret == placeholderJWTSecret:
+		slog.Error("FATAL: JWT_SECRET is set to the example placeholder — set a strong, unique value in production")
+		os.Exit(1)
+	case len(cfg.JWTSecret) < minJWTSecretLen:
+		slog.Error("FATAL: JWT_SECRET is too short", "min_length", minJWTSecretLen, "got", len(cfg.JWTSecret))
+		os.Exit(1)
+	}
 }
 
 // envOr returns the value of the environment variable key, or fallback if unset or empty.

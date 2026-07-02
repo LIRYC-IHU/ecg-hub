@@ -11,17 +11,93 @@ import (
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
 )
 
+// oidcVerifierCookie holds the PKCE code verifier between the login redirect and
+// the callback. Being HttpOnly and per-browser, it also binds the callback to the
+// browser that started the flow — mitigating login CSRF.
+const oidcVerifierCookie = "oidc_verifier"
+
+// setOIDCVerifierCookie stores the PKCE verifier for the redirect round-trip.
+func setOIDCVerifierCookie(c echo.Context, verifier string) {
+	c.SetCookie(&http.Cookie{
+		Name:     oidcVerifierCookie,
+		Value:    verifier,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   c.Scheme() == "https",
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   300, // the redirect round-trip takes seconds; expire fast
+	})
+}
+
+// clearOIDCVerifierCookie removes the PKCE verifier cookie after the exchange.
+func clearOIDCVerifierCookie(c echo.Context) {
+	c.SetCookie(&http.Cookie{
+		Name:     oidcVerifierCookie,
+		Value:    "",
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   c.Scheme() == "https",
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   -1,
+	})
+}
+
+// startOIDCAuth generates the signed state and a PKCE verifier, stores the verifier
+// in a cookie, and returns the provider authorization URL to redirect to.
+func startOIDCAuth(c echo.Context, flow auth.OIDCFlow) (string, error) {
+	state, err := flow.GenerateSignedState()
+	if err != nil {
+		return "", echo.NewHTTPError(http.StatusInternalServerError, "failed to generate state")
+	}
+	verifier, err := auth.GeneratePKCEVerifier()
+	if err != nil {
+		return "", echo.NewHTTPError(http.StatusInternalServerError, "failed to generate PKCE verifier")
+	}
+	setOIDCVerifierCookie(c, verifier)
+	return flow.AuthCodeURL(state, auth.PKCEChallenge(verifier)), nil
+}
+
+// finishOIDCAuth validates the state, consumes the PKCE verifier cookie (proving
+// the callback belongs to the browser that started the flow), and exchanges the
+// code for an ECG Hub JWT.
+func finishOIDCAuth(c echo.Context, flow auth.OIDCFlow) (string, error) {
+	state := c.QueryParam("state")
+	if state == "" {
+		return "", echo.NewHTTPError(http.StatusBadRequest, "missing state")
+	}
+	if err := flow.VerifyState(state); err != nil {
+		slog.Warn("oidc callback: invalid state", "error", err)
+		return "", echo.NewHTTPError(http.StatusBadRequest, "invalid state")
+	}
+	verifierCookie, err := c.Cookie(oidcVerifierCookie)
+	if err != nil || verifierCookie.Value == "" {
+		return "", echo.NewHTTPError(http.StatusBadRequest, "missing PKCE verifier — please restart the login")
+	}
+	clearOIDCVerifierCookie(c)
+	code := c.QueryParam("code")
+	if code == "" {
+		return "", echo.NewHTTPError(http.StatusBadRequest, "missing authorization code")
+	}
+	jwtToken, err := flow.ExchangeAndIssue(c.Request().Context(), code, verifierCookie.Value)
+	if err != nil {
+		slog.Error("oidc callback: exchange failed", "error", err)
+		return "", echo.NewHTTPError(http.StatusUnauthorized, "authentication failed")
+	}
+	return jwtToken, nil
+}
+
 // OIDCLoginHandler redirects the browser to the Keycloak authorization endpoint.
-// The state is HMAC-signed so it can be verified in the callback without a cookie or session.
+// The state is HMAC-signed and a PKCE verifier is stored in a short-lived cookie,
+// so the callback can be verified without server-side session storage.
 //
 // GET /api/v1/auth/oidc/login
 func OIDCLoginHandler(flow auth.OIDCFlow) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		state, err := flow.GenerateSignedState()
+		url, err := startOIDCAuth(c, flow)
 		if err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, "failed to generate state")
+			return err
 		}
-		return c.Redirect(http.StatusFound, flow.AuthCodeURL(state))
+		return c.Redirect(http.StatusFound, url)
 	}
 }
 
@@ -32,26 +108,10 @@ func OIDCLoginHandler(flow auth.OIDCFlow) echo.HandlerFunc {
 // GET /api/v1/auth/oidc/callback?code=...&state=...
 func OIDCCallbackHandler(flow auth.OIDCFlow) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		state := c.QueryParam("state")
-		if state == "" {
-			return echo.NewHTTPError(http.StatusBadRequest, "missing state")
-		}
-		if err := flow.VerifyState(state); err != nil {
-			slog.Warn("oidc callback: invalid state", "error", err)
-			return echo.NewHTTPError(http.StatusBadRequest, "invalid state")
-		}
-
-		code := c.QueryParam("code")
-		if code == "" {
-			return echo.NewHTTPError(http.StatusBadRequest, "missing authorization code")
-		}
-
-		jwtToken, err := flow.ExchangeAndIssue(c.Request().Context(), code)
+		jwtToken, err := finishOIDCAuth(c, flow)
 		if err != nil {
-			slog.Error("oidc callback: exchange failed", "error", err)
-			return echo.NewHTTPError(http.StatusUnauthorized, "authentication failed")
+			return err
 		}
-
 		setJWTCookie(c, jwtToken)
 		return c.Redirect(http.StatusFound, "/")
 	}
@@ -116,11 +176,11 @@ func OIDCLoginHandlerDynamic(staticFlow auth.OIDCFlow, repo *repository.AuthConf
 		if err != nil {
 			return err
 		}
-		state, err := flow.GenerateSignedState()
+		url, err := startOIDCAuth(c, flow)
 		if err != nil {
-			return echo.NewHTTPError(http.StatusInternalServerError, "failed to generate state")
+			return err
 		}
-		return c.Redirect(http.StatusFound, flow.AuthCodeURL(state))
+		return c.Redirect(http.StatusFound, url)
 	}
 }
 
@@ -131,27 +191,10 @@ func OIDCCallbackHandlerDynamic(staticFlow auth.OIDCFlow, repo *repository.AuthC
 		if err != nil {
 			return err
 		}
-
-		state := c.QueryParam("state")
-		if state == "" {
-			return echo.NewHTTPError(http.StatusBadRequest, "missing state")
-		}
-		if err := flow.VerifyState(state); err != nil {
-			slog.Warn("oidc callback: invalid state", "error", err)
-			return echo.NewHTTPError(http.StatusBadRequest, "invalid state")
-		}
-
-		code := c.QueryParam("code")
-		if code == "" {
-			return echo.NewHTTPError(http.StatusBadRequest, "missing authorization code")
-		}
-
-		jwtToken, err := flow.ExchangeAndIssue(c.Request().Context(), code)
+		jwtToken, err := finishOIDCAuth(c, flow)
 		if err != nil {
-			slog.Error("oidc callback: exchange failed", "error", err)
-			return echo.NewHTTPError(http.StatusUnauthorized, "authentication failed")
+			return err
 		}
-
 		setJWTCookie(c, jwtToken)
 		return c.Redirect(http.StatusFound, "/")
 	}

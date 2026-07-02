@@ -84,5 +84,11 @@ func sanitisePath(s string) string {
 			out = append(out, c)
 		}
 	}
-	return string(out)
+	result := string(out)
+	// A value of exactly "." or ".." is a path-traversal component once joined
+	// (filepath.Join treats it specially); prefix it so it stays a literal name.
+	if result == "." || result == ".." {
+		return "_" + result
+	}
+	return result
 }

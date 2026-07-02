@@ -17,18 +17,35 @@ import (
 // digitRegex checks for at least one digit in the password.
 var digitRegex = regexp.MustCompile(`[0-9]`)
 
-// SetupStatusHandler returns whether the system has been initialized (at least 1 local user exists).
+// countIdentities returns local users plus unified-identity rows (ecg_hub_users).
+// The setup endpoint treats the system as initialised when either is non-zero, so
+// an OIDC/LDAP-only deployment (no local user) still locks /setup as soon as any
+// identity has logged in — closing the window where an unauthenticated caller
+// could otherwise create a local admin.
+func countIdentities(db *gorm.DB) (int64, error) {
+	var local, hub int64
+	if err := db.Model(&models.LocalUser{}).Count(&local).Error; err != nil {
+		return 0, err
+	}
+	if err := db.Table("ecg_hub_users").Count(&hub).Error; err != nil {
+		return 0, err
+	}
+	return local + hub, nil
+}
+
+// SetupStatusHandler returns whether the system has been initialized — a local
+// admin exists, or any identity (local/OIDC/LDAP) has already logged in.
 // Public endpoint — no authentication required.
 //
 //	@Summary		Setup status
-//	@Description	Returns whether the system has been initialized with at least one local admin user.
+//	@Description	Returns whether the system has been initialized (a local admin exists, or any identity has logged in).
 //	@Tags			setup
 //	@Produce		json
 //	@Success		200	{object}	map[string]bool
 //	@Router			/api/v1/setup/status [get]
-func SetupStatusHandler(repo *repository.LocalUserRepository) echo.HandlerFunc {
+func SetupStatusHandler(db *gorm.DB) echo.HandlerFunc {
 	return func(c echo.Context) error {
-		count, err := repo.Count()
+		count, err := countIdentities(db)
 		if err != nil {
 			return c.JSON(http.StatusInternalServerError, mw.APIError("INTERNAL_ERROR", "failed to check setup status"))
 		}
@@ -92,8 +109,8 @@ func SetupHandler(repo *repository.LocalUserRepository, db *gorm.DB) echo.Handle
 			if err := tx.Exec("SELECT pg_advisory_xact_lock(42)").Error; err != nil {
 				return err
 			}
-			var count int64
-			if err := tx.Model(&models.LocalUser{}).Count(&count).Error; err != nil {
+			count, err := countIdentities(tx)
+			if err != nil {
 				return err
 			}
 			if count > 0 {

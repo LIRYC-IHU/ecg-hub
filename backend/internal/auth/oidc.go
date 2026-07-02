@@ -188,16 +188,37 @@ func (p *OIDCProvider) VerifyState(signed string) error {
 	return nil
 }
 
-// AuthCodeURL returns the Keycloak authorization URL for the given state parameter.
-func (p *OIDCProvider) AuthCodeURL(state string) string {
-	return p.oauth2Cfg.AuthCodeURL(state)
+// GeneratePKCEVerifier returns a high-entropy PKCE code verifier (RFC 7636):
+// 32 random bytes, base64url-encoded without padding (43 chars).
+func GeneratePKCEVerifier() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("auth: oidc: generate pkce verifier: %w", err)
+	}
+	return base64.RawURLEncoding.EncodeToString(b), nil
+}
+
+// PKCEChallenge returns the S256 code challenge for verifier:
+// base64url(sha256(verifier)), without padding.
+func PKCEChallenge(verifier string) string {
+	sum := sha256.Sum256([]byte(verifier))
+	return base64.RawURLEncoding.EncodeToString(sum[:])
+}
+
+// AuthCodeURL returns the Keycloak authorization URL for the given state and PKCE
+// code challenge (S256 method).
+func (p *OIDCProvider) AuthCodeURL(state, codeChallenge string) string {
+	return p.oauth2Cfg.AuthCodeURL(state,
+		oauth2.SetAuthURLParam("code_challenge", codeChallenge),
+		oauth2.SetAuthURLParam("code_challenge_method", "S256"),
+	)
 }
 
 // ExchangeAndIssue exchanges the authorization code for Keycloak tokens, verifies the ID
 // token, extracts the ECG Hub role from realm_access.roles, and issues an ECG Hub JWT.
 // Returns the signed ECG Hub JWT on success.
-func (p *OIDCProvider) ExchangeAndIssue(ctx context.Context, code string) (string, error) {
-	oauth2Token, err := p.oauth2Cfg.Exchange(ctx, code)
+func (p *OIDCProvider) ExchangeAndIssue(ctx context.Context, code, codeVerifier string) (string, error) {
+	oauth2Token, err := p.oauth2Cfg.Exchange(ctx, code, oauth2.SetAuthURLParam("code_verifier", codeVerifier))
 	if err != nil {
 		return "", fmt.Errorf("auth: oidc: exchange code: %w", err)
 	}

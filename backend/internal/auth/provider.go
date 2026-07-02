@@ -36,10 +36,12 @@ type OIDCFlow interface {
 	GenerateSignedState() (string, error)
 	// VerifyState verifies that the state was issued by this server.
 	VerifyState(signed string) error
-	// AuthCodeURL returns the Keycloak authorization redirect URL for the given state.
-	AuthCodeURL(state string) string
-	// ExchangeAndIssue exchanges the authorization code and returns a signed ECG Hub JWT.
-	ExchangeAndIssue(ctx context.Context, code string) (jwtToken string, err error)
+	// AuthCodeURL returns the Keycloak authorization redirect URL for the given
+	// state and PKCE code challenge (S256).
+	AuthCodeURL(state, codeChallenge string) string
+	// ExchangeAndIssue exchanges the authorization code — with its PKCE code
+	// verifier — and returns a signed ECG Hub JWT.
+	ExchangeAndIssue(ctx context.Context, code, codeVerifier string) (jwtToken string, err error)
 }
 
 // Claims holds the validated identity and role extracted from a token.
