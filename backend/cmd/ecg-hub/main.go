@@ -421,11 +421,11 @@ func main() {
 	}
 
 	// Module statuses for /healthz reflect the DB module configs (UI-managed).
-	ftpStatus := apihandlers.FTPStatus{}
+	ftpStatus := apihandlers.FTPStatus{Port: apihandlers.ResolveFTPPort(moduleConfigRepo, authEncKey)}
 	if rec, err := moduleConfigRepo.Get("ftp"); err == nil && rec != nil {
 		ftpStatus.Enabled = rec.Enabled
 	}
-	dicomStatus := apihandlers.DICOMStatus{}
+	dicomStatus := apihandlers.DICOMStatus{Port: apihandlers.ResolveDICOMPort(moduleConfigRepo, authEncKey)}
 	if rec, err := moduleConfigRepo.Get("dicom"); err == nil && rec != nil {
 		dicomStatus.Enabled = rec.Enabled
 	}
