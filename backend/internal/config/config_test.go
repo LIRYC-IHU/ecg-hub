@@ -9,6 +9,7 @@ func TestPublicOrigin(t *testing.T) {
 		{"", "http://localhost"},
 		{"   ", "http://localhost"},
 		{"ecg-hub.chu.fr", "http://ecg-hub.chu.fr"},
+		{"ecg-hub.chu.fr/", "http://ecg-hub.chu.fr"},
 		{"http://10.0.0.5", "http://10.0.0.5"},
 		{"https://ecg-hub.chu.fr", "https://ecg-hub.chu.fr"},
 		{"https://ecg-hub.chu.fr/", "https://ecg-hub.chu.fr"},
