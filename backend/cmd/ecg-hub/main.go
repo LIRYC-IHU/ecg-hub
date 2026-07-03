@@ -641,7 +641,14 @@ func main() {
 	// of losing them with the process. shutdownCtx is created near the top of main.
 	go func() {
 		<-shutdownCtx.Done()
-		slog.Info("shutdown: signal received — draining HTTP server")
+		slog.Info("shutdown: signal received — stopping ingestion modules and draining HTTP server")
+
+		for _, name := range []string{"ftp", "dicom"} {
+			if err := module.GlobalRegistry.Stop(name); err != nil {
+				slog.Warn("shutdown: failed to stop module", "module", name, "error", err)
+			}
+		}
+
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 		if err := e.Shutdown(ctx); err != nil {
