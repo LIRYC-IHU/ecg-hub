@@ -134,11 +134,9 @@ func (d *Dispatcher) run() {
 	for {
 		select {
 		case <-d.ctx.Done():
-			// Log any items left in the ingest queue that will not be processed.
-			if n := len(d.ingest); n > 0 {
-				slog.Warn("ingestion: dispatcher stopped with unprocessed items",
-					"count", n)
-			}
+			// Shutdown: quarantine any items left in the ingest queue so no
+			// received file is ever lost — quarantined files can be re-ingested.
+			d.drainToQuarantine()
 			return
 		case item := <-d.ingest:
 			appmetrics.IngestQueueDepth.Set(float64(len(d.ingest)))
@@ -185,9 +183,59 @@ func (d *Dispatcher) run() {
 					"filename", ri.IngestItem.Filename,
 					"module", ri.ModuleName)
 			default:
-				slog.Error("ingestion: routed queue full, dropping item",
+				// Persister is behind: block until a slot frees instead of
+				// dropping the ECG. Backpressure propagates to the FTP layer,
+				// which rejects new uploads (devices retry) rather than losing
+				// files that were already acknowledged.
+				appmetrics.IngestQueueFull.WithLabelValues("routed").Inc()
+				slog.Warn("ingestion: routed queue full — waiting for persister (backpressure)",
 					"filename", ri.IngestItem.Filename)
+				select {
+				case d.routed <- ri:
+					slog.Info("ingestion: item routed after backpressure wait",
+						"filename", ri.IngestItem.Filename,
+						"module", ri.ModuleName)
+				case <-d.ctx.Done():
+					// Shutdown while blocked: quarantine the file so it survives
+					// the restart, then drain the rest of the ingest queue.
+					d.quarantineItem(ri.IngestItem, "shutdown_while_routed_queue_full")
+					d.drainToQuarantine()
+					return
+				}
 			}
 		}
 	}
+}
+
+// drainToQuarantine empties the ingest queue at shutdown, recording every
+// pending file in quarantine so it can be re-ingested after restart. Without
+// this, files acknowledged to the sending device would vanish on stop.
+func (d *Dispatcher) drainToQuarantine() {
+	for {
+		select {
+		case item := <-d.ingest:
+			d.quarantineItem(item, "shutdown_unprocessed")
+		default:
+			return
+		}
+	}
+}
+
+// quarantineItem records item in quarantine with the given reason. When no
+// recorder is attached (tests), the loss is at least logged loudly.
+func (d *Dispatcher) quarantineItem(item IngestItem, reason string) {
+	if d.quarantine == nil {
+		slog.Error("ingestion: no quarantine recorder — item lost at shutdown",
+			"filename", item.Filename, "reason", reason)
+		return
+	}
+	// d.ctx is already cancelled here; use a fresh context so the write succeeds.
+	if _, err := d.quarantine.Record(context.Background(), item.Filename, item.Data, reason); err != nil {
+		slog.Error("ingestion: shutdown quarantine failed — item lost",
+			"filename", item.Filename, "reason", reason, "error", err)
+		return
+	}
+	appmetrics.IngestQuarantine.WithLabelValues("shutdown").Inc()
+	slog.Warn("ingestion: item quarantined at shutdown — re-ingest from the quarantine UI",
+		"filename", item.Filename, "reason", reason)
 }

@@ -183,10 +183,19 @@ func (p *Persister) run() {
 	for {
 		select {
 		case <-p.ctx.Done():
-			if n := len(p.routed); n > 0 {
-				slog.Warn("ingestion: persister stopped with unprocessed items", "count", n)
+			// Shutdown: drain the routed queue before exiting — every item here
+			// was already acknowledged upstream, so dropping it would lose an ECG.
+			for {
+				select {
+				case ri := <-p.routed:
+					if err := p.persist(ri); err != nil {
+						slog.Error("ingestion: shutdown drain persist failed",
+							"filename", ri.IngestItem.Filename, "error", err)
+					}
+				default:
+					return
+				}
 			}
-			return
 		case ri := <-p.routed:
 			appmetrics.IngestWorkersBusy.Add(1)
 			start := time.Now()

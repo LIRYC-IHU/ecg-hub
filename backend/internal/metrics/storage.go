@@ -18,6 +18,11 @@ var (
 		Help:    "Duration of storage operations (write, read, delete).",
 		Buckets: []float64{.001, .005, .01, .05, .1, .5, 1, 2.5},
 	}, []string{"op"})
+
+	StorageOverCap = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "storage_over_cap",
+		Help: "1 when the volume exceeds storage.max_size, 0 otherwise. Alert on it — files are never purged unless allow_rotation is set.",
+	}, []string{"volume"})
 )
 
 func init() {
@@ -25,5 +30,6 @@ func init() {
 		StorageBytesUsed,
 		StorageFilesTotal,
 		StorageOpDuration,
+		StorageOverCap,
 	)
 }

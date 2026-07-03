@@ -231,7 +231,7 @@ func TestDispatcher_RoutesItemToQueue(t *testing.T) {
 	}
 }
 
-func TestDispatcher_RoutedQueueFull_DropsItem(t *testing.T) {
+func TestDispatcher_RoutedQueueFull_BackpressuresInsteadOfDropping(t *testing.T) {
 	parsed := make(chan struct{}, 1)
 	meta := &module.ECGMetadata{PatientID: "P001", VendorName: "xml-vendor"}
 	m := &notifyModule{
@@ -255,10 +255,16 @@ func TestDispatcher_RoutedQueueFull_DropsItem(t *testing.T) {
 	}
 	runtime.Gosched()
 
+	// The dispatcher is now blocked pushing onto the full routed queue
+	// (backpressure). Receiving from the queue must deliver the item —
+	// nothing may be dropped.
 	select {
-	case <-routed:
-		t.Error("routed queue should be empty — item should have been dropped when queue was full")
-	default:
+	case ri := <-routed:
+		if ri.IngestItem.Filename != "ecg.xml" {
+			t.Errorf("Filename = %q, want %q", ri.IngestItem.Filename, "ecg.xml")
+		}
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("expected the routed item to be delivered under backpressure, got none")
 	}
 }
 

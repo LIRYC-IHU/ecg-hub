@@ -24,8 +24,10 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	_ "github.com/LIRYC-IHU/ecg-hub/docs"
@@ -118,6 +120,15 @@ func main() {
 	}
 	e := echo.New()
 	e.HideBanner = true
+
+	// Harden the HTTP server against slow/stuck clients (slowloris, dead
+	// connections). Intentionally no global Read/WriteTimeout: the WebSocket
+	// streams (/events/ws, /exports/:id/ws) are long-lived, and large ECG
+	// uploads / ZIP export downloads can legitimately take minutes.
+	for _, srv := range []*http.Server{e.Server, e.TLSServer} {
+		srv.ReadHeaderTimeout = 10 * time.Second
+		srv.IdleTimeout = 120 * time.Second
+	}
 
 	// Resolve the real client IP from X-Forwarded-For set by the nginx reverse
 	// proxy — login rate limiting and brute-force lockout are keyed per IP, so
@@ -510,7 +521,10 @@ func main() {
 	// Modules are used in the order defined in cfg.Modules.Active for deterministic routing.
 	dispatcher := ingestion.NewDispatcher(ftpQueue, routedQueue, ingestRouter)
 	dispatcher.Start()
-	defer dispatcher.Stop()
+	defer func() {
+		dispatcher.Stop()
+		<-dispatcher.Done() // wait for the shutdown drain (pending files → quarantine)
+	}()
 
 	// Step 7: persistence worker `persister` was created before RegisterRoutes (above),
 	// so it can be shared with the quarantine "assign" route. It is started below.
@@ -587,7 +601,10 @@ func main() {
 	}()
 
 	persister.Start()
-	defer persister.Stop()
+	defer func() {
+		persister.Stop()
+		<-persister.Done() // wait for the shutdown drain (routed queue → DB)
+	}()
 
 	// Step 9: Start storage janitor — enforces storage.max_size soft cap by rotating oldest files.
 	janitor := storage.NewJanitor(cfg.Storage)
@@ -609,6 +626,22 @@ func main() {
 		}()
 		defer srv.Close()
 	}
+
+	// Graceful shutdown: on SIGTERM/SIGINT (docker stop, systemd) drain the HTTP
+	// server, then let main return so every deferred Stop() above actually runs —
+	// the ingestion pipeline persists or quarantines all in-flight files instead
+	// of losing them with the process.
+	shutdownCtx, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stopSignals()
+	go func() {
+		<-shutdownCtx.Done()
+		slog.Info("shutdown: signal received — draining HTTP server")
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		if err := e.Shutdown(ctx); err != nil {
+			slog.Error("shutdown: HTTP drain incomplete", "error", err)
+		}
+	}()
 
 	// Resolve the listen port: config-driven with a 4444 fallback so existing
 	// nginx/docker infrastructure (which targets backend:4444) keeps working.

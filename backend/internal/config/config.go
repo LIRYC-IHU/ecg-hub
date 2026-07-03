@@ -56,10 +56,16 @@ type StorageConfig struct {
 	QuarantinePath string `mapstructure:"quarantine_path"`
 	// MaxSize is the soft cap for VolumePath, expressed as a Kubernetes resource
 	// quantity (e.g. "500Mi", "50Gi", "1.5Ti"). Parsed via k8s.io/apimachinery/pkg/api/resource.
-	// When the volume exceeds this limit, the oldest files are rotated out.
-	// Empty or "0" means unlimited (not recommended for production).
-	MaxSize   string `mapstructure:"max_size"`
-	bytesSize int64  // parsed from MaxSize, used internally for size checks
+	// When the volume exceeds this limit the janitor raises an alert (log +
+	// storage_over_cap metric). Files are only deleted when AllowRotation is
+	// explicitly enabled. Empty or "0" disables the check.
+	MaxSize string `mapstructure:"max_size"`
+	// AllowRotation opts in to deleting the oldest files under VolumePath when
+	// MaxSize is exceeded. Off by default: ECG files are clinical records, so
+	// automatic purging must be an explicit operator decision. The quarantine
+	// volume is never rotated regardless of this flag.
+	AllowRotation bool  `mapstructure:"allow_rotation"`
+	bytesSize     int64 // parsed from MaxSize, used internally for size checks
 }
 
 // GetBytesSize returns the parsed MaxSize in bytes. 0 means rotation is disabled.
