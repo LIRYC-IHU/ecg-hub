@@ -38,7 +38,7 @@ func PublicOrigin(hostURL string) string {
 	if strings.HasPrefix(hostURL, "http://") || strings.HasPrefix(hostURL, "https://") {
 		return strings.TrimRight(hostURL, "/")
 	}
-	return "http://" + hostURL
+	return "http://" + strings.TrimRight(hostURL, "/")
 }
 
 // ServerConfig holds HTTP server settings.
