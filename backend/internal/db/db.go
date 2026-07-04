@@ -15,6 +15,9 @@ const (
 	defaultMaxOpenConns    = 10
 	defaultMaxIdleConns    = 5
 	defaultConnMaxLifetime = 30 * time.Minute
+	// defaultConnMaxIdleTime closes connections idle beyond this, so the pool
+	// never holds sockets a hospital firewall may have silently dropped.
+	defaultConnMaxIdleTime = 5 * time.Minute
 )
 
 // Open creates and validates a GORM database connection using the provided config.
@@ -45,6 +48,7 @@ func Open(cfg *config.Config) (*gorm.DB, error) {
 	sqlDB.SetMaxOpenConns(maxOpen)
 	sqlDB.SetMaxIdleConns(maxIdle)
 	sqlDB.SetConnMaxLifetime(defaultConnMaxLifetime)
+	sqlDB.SetConnMaxIdleTime(defaultConnMaxIdleTime)
 
 	// Verify the database is actually reachable.
 	if err := sqlDB.Ping(); err != nil {

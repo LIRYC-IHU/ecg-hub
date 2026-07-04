@@ -217,11 +217,11 @@ func (m *Module) RegisterFTPFile(filename string) error {
 
 func (m *Module) Start(cfg *config.Config) error {
 	m.server = NewECTPServer(fmt.Sprintf(":%d", ECTPPort), cfg, m.transferRepo)
-	go func() {
-		if err := m.server.Listen(); err != nil {
-			slog.Error("nihon-kohden: failed to start ECTP server", "error", err)
-			panic(err)
-		}
-	}()
+	// Bind synchronously so a taken port surfaces as a clean fatal startup
+	// error in main (module start failure) instead of a goroutine panic that
+	// crashes the whole process with a stack trace.
+	if err := m.server.Listen(); err != nil {
+		return fmt.Errorf("nihon-kohden: start ECTP server: %w", err)
+	}
 	return nil
 }

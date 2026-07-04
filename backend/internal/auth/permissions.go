@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -68,7 +69,7 @@ var AllPermissions = []string{
 
 // PermissionChecker resolves a role name → set of permissions.
 // The admin role (by name, from config) bypasses DB and gets every permission.
-// Results are cached for 60 s to avoid a DB round-trip on every request.
+// Results are cached (see permCacheTTL) to avoid a DB round-trip on every request.
 type PermissionChecker struct {
 	db        *gorm.DB
 	adminRole string
@@ -136,12 +137,19 @@ func (p *PermissionChecker) load(ctx context.Context, role string) map[string]bo
 	}
 
 	var rows []struct{ Permission string }
-	p.db.WithContext(ctx).
+	res := p.db.WithContext(ctx).
 		Table("role_permissions").
 		Select("role_permissions.permission").
 		Joins("JOIN roles ON roles.id = role_permissions.role_id").
 		Where("roles.name = ?", role).
 		Find(&rows)
+	if res.Error != nil {
+		// Fail-closed: a lookup failure denies every non-admin permission for
+		// permCacheTTL. Log it — otherwise a DB outage looks like a mass 403
+		// with no explanation anywhere.
+		slog.Error("permissions: role permission lookup failed — denying non-admin permissions",
+			"role", role, "error", res.Error)
+	}
 
 	perms := make(map[string]bool, len(rows))
 	for _, r := range rows {
@@ -149,7 +157,11 @@ func (p *PermissionChecker) load(ctx context.Context, role string) map[string]bo
 	}
 
 	p.mu.Lock()
-	p.cache[role] = permEntry{perms: perms, expiresAt: time.Now().Add(10 * time.Second)}
+	p.cache[role] = permEntry{perms: perms, expiresAt: time.Now().Add(permCacheTTL)}
 	p.mu.Unlock()
 	return perms
 }
+
+// permCacheTTL is how long a role's permission set is cached before the next
+// request re-reads it from the DB. Short, so admin role edits apply quickly.
+const permCacheTTL = 10 * time.Second

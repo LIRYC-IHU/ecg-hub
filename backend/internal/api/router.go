@@ -181,13 +181,10 @@ func (r *RouterConfig) RegisterRoutes() {
 	// protected route — resolved by the auth middleware via the ecghub_ prefix.
 	apiKeyRepo := repository.NewAPIKeyRepository(r.gormDB)
 
-	host := os.Getenv("HOST_URL")
-
-	if host != "" {
-		host = "http://" + host
-	} else {
-		host = "http://localhost"
-	}
+	// Public origin for CORS. PublicOrigin preserves a scheme included in
+	// HOST_URL, so an https deployment behind Traefik/nginx allows the real
+	// browser origin instead of a hardcoded http:// one.
+	host := config.PublicOrigin(os.Getenv("HOST_URL"))
 
 	r.e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
 		AllowOrigins: []string{host},

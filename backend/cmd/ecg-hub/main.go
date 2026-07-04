@@ -85,6 +85,11 @@ func main() {
 	// every session token, so a weak key means forgeable admin tokens.
 	validateJWTSecret(cfg)
 
+	// Shutdown signal context — created early so every long-lived goroutine
+	// (module health pollers, HTTP drain below) ties its lifetime to it.
+	shutdownCtx, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stopSignals()
+
 	// Step 2: Connect to PostgreSQL (Story 1.3).
 	// The server must not start if the database is unreachable (AC#4).
 	gormDB, err := dbpkg.Open(cfg)
@@ -267,6 +272,7 @@ func main() {
 				appmetrics.Registry.MustRegister(mp.Collectors()...)
 			}
 			// Poll Health() every 30s and update ModuleHealth gauge.
+			// Stops on shutdown so the goroutine never outlives the drain.
 			go func(mod module.Module, name string) {
 				t := time.NewTicker(30 * time.Second)
 				defer t.Stop()
@@ -278,6 +284,8 @@ func main() {
 						} else {
 							appmetrics.ModuleHealth.WithLabelValues(name).Set(0)
 						}
+					case <-shutdownCtx.Done():
+						return
 					}
 				}
 			}(m, vendor)
@@ -630,12 +638,17 @@ func main() {
 	// Graceful shutdown: on SIGTERM/SIGINT (docker stop, systemd) drain the HTTP
 	// server, then let main return so every deferred Stop() above actually runs —
 	// the ingestion pipeline persists or quarantines all in-flight files instead
-	// of losing them with the process.
-	shutdownCtx, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stopSignals()
+	// of losing them with the process. shutdownCtx is created near the top of main.
 	go func() {
 		<-shutdownCtx.Done()
-		slog.Info("shutdown: signal received — draining HTTP server")
+		slog.Info("shutdown: signal received — stopping ingestion modules and draining HTTP server")
+
+		for _, name := range []string{"ftp", "dicom"} {
+			if err := module.GlobalRegistry.Stop(name); err != nil {
+				slog.Warn("shutdown: failed to stop module", "module", name, "error", err)
+			}
+		}
+
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 		if err := e.Shutdown(ctx); err != nil {
@@ -867,12 +880,10 @@ func buildConnectorsFromDB(repo *repository.ModuleConfigRepository, encKey strin
 
 // publicBaseURL returns the public origin of this server used to build
 // absolute callback links in webhook payloads. Mirrors the HOST_URL logic
-// used for CORS in the router.
+// used for CORS in the router (config.PublicOrigin): a scheme included in
+// HOST_URL is preserved, so links are https behind a TLS-terminating proxy.
 func publicBaseURL() string {
-	if host := os.Getenv("HOST_URL"); host != "" {
-		return "http://" + host
-	}
-	return "http://localhost"
+	return config.PublicOrigin(os.Getenv("HOST_URL"))
 }
 
 // resolveAuthEncKey returns the auth-config encryption key, enforcing a strong
