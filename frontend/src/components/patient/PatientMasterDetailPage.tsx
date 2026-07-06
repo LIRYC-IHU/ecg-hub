@@ -960,7 +960,10 @@ function PatientDetail({
             return (
               <div
                 key={ecg.id}
-                onClick={() => onToggleECG(ecg.id)}
+                onClick={() => {
+                  onToggleECG(ecg.id);
+                  if (!ecg.viewed) markViewedMutation.mutate(String(ecg.id));
+                }}
                 className={`ecg-row flex items-center gap-3 p-3.5 rounded-xl border cursor-pointer transition-all duration-200 ease-out hover:-translate-y-0.5 hover:shadow-md hover:shadow-black/5 ${
                   isSelected
                     ? "border-primary/40 bg-primary/5"
@@ -1198,10 +1201,7 @@ function BulkECGFooter({
                 if (failed === 0) {
                   notify("success", t("ecg.oruSentBulk", { count: ok }));
                 } else {
-                  notify(
-                    "warn",
-                    t("ecg.oruSentBulkPartial", { ok, failed }),
-                  );
+                  notify("warn", t("ecg.oruSentBulkPartial", { ok, failed }));
                 }
                 void queryClient.invalidateQueries({
                   queryKey: ["oru-status"],
