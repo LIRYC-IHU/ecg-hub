@@ -22,6 +22,10 @@ import (
 func Load(cfgPath string) (*Config, error) {
 	v := viper.New()
 	v.SetConfigFile(cfgPath)
+	// Metrics defaults: enabled on the dedicated scrape port. A config.yaml
+	// without a metrics section keeps the historical behaviour (server on :9091).
+	v.SetDefault("metrics.enabled", true)
+	v.SetDefault("metrics.port", 9091)
 	// Note: AutomaticEnv is intentionally omitted. Without SetEnvKeyReplacer("." → "_"),
 	// Viper cannot map env vars like SERVER_PORT to nested YAML keys like server.port.
 	// All secrets are read explicitly via os.Getenv after unmarshal (see below).
@@ -72,6 +76,13 @@ func validate(cfg *Config) error {
 
 	if cfg.Storage.VolumePath == "" {
 		errs = append(errs, "storage.volume_path is required")
+	}
+
+	if cfg.Metrics.Port < 0 || cfg.Metrics.Port > 65535 {
+		errs = append(errs, "metrics.port must be between 0 and 65535")
+	}
+	if cfg.Metrics.Enabled && cfg.Metrics.Port != 0 && cfg.Metrics.Port == cfg.Server.Port {
+		errs = append(errs, "metrics.port must differ from server.port")
 	}
 
 	if len(errs) > 0 {

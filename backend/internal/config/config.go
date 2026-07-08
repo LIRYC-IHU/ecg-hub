@@ -16,6 +16,7 @@ type Config struct {
 	Database DatabaseConfig `mapstructure:"database"`
 	Storage  StorageConfig  `mapstructure:"storage"`
 	Export   ExportConfig   `mapstructure:"export"`
+	Metrics  MetricsConfig  `mapstructure:"metrics"`
 	// Secrets — populated via os.Getenv after Viper unmarshal. Never from config.yaml.
 
 	// DatabaseURL is the PostgreSQL connection string. Set via DATABASE_URL env var.
@@ -109,6 +110,18 @@ func (s *StorageConfig) SetMaxSize(raw string) error {
 	}
 	s.bytesSize = q.Value()
 	return nil
+}
+
+// MetricsConfig holds the Prometheus metrics endpoint settings.
+// The endpoint is unauthenticated, so it must only be reachable on the
+// internal Docker network (never exposed via nginx) — see prometheus.yml.
+type MetricsConfig struct {
+	// Enabled starts the dedicated /metrics HTTP server. Defaults to true.
+	Enabled bool `mapstructure:"enabled"`
+	// Port is the TCP port of the dedicated Prometheus scrape server.
+	// When 0, the default port 9091 is used (matches prometheus.yml and the
+	// docker-compose expose directive).
+	Port int `mapstructure:"port"`
 }
 
 // ExportConfig holds batch export worker settings (FR19, NFR-SC3).

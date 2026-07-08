@@ -619,10 +619,15 @@ func main() {
 	janitor.Start(time.Minute)
 	defer janitor.Stop()
 
-	// Dedicated metrics server — always on, scraped by Prometheus on the
-	// internal Docker network (never exposed via nginx).
-	{
-		metricsAddr := fmt.Sprintf(":%d", metricsPort)
+	// Dedicated metrics server — controlled by metrics.enabled / metrics.port
+	// in config.yaml, scraped by Prometheus on the internal Docker network
+	// (never exposed via nginx).
+	if cfg.Metrics.Enabled {
+		port := cfg.Metrics.Port
+		if port == 0 {
+			port = defaultMetricsPort
+		}
+		metricsAddr := fmt.Sprintf(":%d", port)
 		mux := http.NewServeMux()
 		mux.Handle("/metrics", appmetrics.Handler())
 		srv := &http.Server{Addr: metricsAddr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
@@ -633,6 +638,8 @@ func main() {
 			}
 		}()
 		defer srv.Close()
+	} else {
+		slog.Info("metrics: disabled by config (metrics.enabled: false)")
 	}
 
 	// Graceful shutdown: on SIGTERM/SIGINT (docker stop, systemd) drain the HTTP
@@ -756,9 +763,10 @@ func (w *dicomModuleWrapper) Status() module.ModuleStatus {
 	return w.status
 }
 
-// metricsPort is the dedicated Prometheus scrape port (internal Docker
-// network only — see prometheus.yml and docker-compose).
-const metricsPort = 9091
+// defaultMetricsPort is the dedicated Prometheus scrape port used when
+// metrics.port is omitted or 0 (internal Docker network only — see
+// prometheus.yml and docker-compose).
+const defaultMetricsPort = 9091
 
 // insecureDefaultAuthEncKey is the well-known dev fallback for AUTH_ENCRYPTION_KEY.
 // It is public, so it provides NO protection — the server refuses to start with it
