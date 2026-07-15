@@ -8,6 +8,8 @@ import (
 	"os"
 	"time"
 
+	"connectrpc.com/connect"
+	"connectrpc.com/validate"
 	echoSwagger "github.com/swaggo/echo-swagger"
 	"golang.org/x/time/rate"
 	"gorm.io/gorm"
@@ -18,6 +20,7 @@ import (
 
 	"github.com/LIRYC-IHU/ecg-hub/internal/api/handlers"
 	mw "github.com/LIRYC-IHU/ecg-hub/internal/api/middleware"
+	"github.com/LIRYC-IHU/ecg-hub/internal/api/v1/apiv1connect"
 	"github.com/LIRYC-IHU/ecg-hub/internal/auth"
 	"github.com/LIRYC-IHU/ecg-hub/internal/config"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
@@ -161,6 +164,19 @@ func NewRouterConfig(e *echo.Echo, gormDB *gorm.DB, authProvider auth.Provider, 
 	}
 }
 
+// mountConnect mounts a connect-go handler on both entrypoints the reverse
+// proxy uses:
+//   - "/api"+path with StripPrefix: Connect/gRPC-Web from the browser go
+//     through nginx `location /api/`, which keeps the /api prefix.
+//   - path at the root: real gRPC clients reach nginx `grpc_pass`, which
+//     forwards the bare /grpc.api.v1.<Service>/<Method> path unchanged.
+//
+// The same connect-go handler multiplexes Connect, gRPC-Web and gRPC.
+func mountConnect(e *echo.Echo, path string, h http.Handler) {
+	e.Any("/api"+path+"*", echo.WrapHandler(http.StripPrefix("/api", h)))
+	e.Any(path+"*", echo.WrapHandler(h))
+}
+
 // RegisterRoutes mounts all HTTP routes onto e.
 // Route security model (NFR-S3):
 //   - Public:    /healthz, /swagger/*
@@ -198,9 +214,60 @@ func (r *RouterConfig) RegisterRoutes() {
 	// the internal Docker network), never on the public API port. ===
 	r.e.Use(appmetrics.Middleware())
 
-	// === Public routes ===
-	api := r.e.Group("", mw.HealthzMiddleware(r.authProvider, r.userRepo))
-	api.GET("/healthz", handlers.HealthHandler(pinger, r.dicomStatus, r.ftpStatus, r.ectpStatus, r.connCheckers))
+	// === gRPC/Connect services (API migration) ===
+	// protovalidate enforces .proto request constraints (InvalidArgument on
+	// violation) — the API's uniform validation/error layer. Shared by all
+	// services; auth interceptors are added per-service.
+	validateInterceptor := validate.NewInterceptor()
+
+	// Healthz — public payload, richer when authenticated (optional JWT).
+	healthzPath, healthzHandler := apiv1connect.NewHealthzServiceHandler(
+		&handlers.HealthzServiceHandler{
+			Pinger:       pinger,
+			Dicom:        r.dicomStatus,
+			FTP:          r.ftpStatus,
+			ECTP:         r.ectpStatus,
+			ConnCheckers: r.connCheckers,
+		},
+		connect.WithInterceptors(validateInterceptor, mw.ConnectOptionalAuth(r.authProvider, r.userRepo)),
+	)
+	mountConnect(r.e, healthzPath, healthzHandler)
+
+	// Branding — public (login/setup pages).
+	brandingPath, brandingHandler := apiv1connect.NewBrandingServiceHandler(
+		&handlers.BrandingServiceHandler{Settings: r.moduleSettingsRepo},
+		connect.WithInterceptors(validateInterceptor),
+	)
+	mountConnect(r.e, brandingPath, brandingHandler)
+
+	// Setup status — public (bootstrap page before any account exists).
+	setupPath, setupHandler := apiv1connect.NewSetupServiceHandler(
+		&handlers.SetupServiceHandler{DB: r.gormDB},
+		connect.WithInterceptors(validateInterceptor),
+	)
+	mountConnect(r.e, setupPath, setupHandler)
+
+	// Auth provider discovery — public (login page renders the right options).
+	authPath, authHandler := apiv1connect.NewAuthServiceHandler(
+		&handlers.AuthServiceHandler{
+			Provider:       r.authProvider,
+			AuthConfigRepo: repository.NewAuthConfigRepository(r.gormDB),
+		},
+		connect.WithInterceptors(validateInterceptor),
+	)
+	mountConnect(r.e, authPath, authHandler)
+
+	// Current user (me) — protected. ConnectRequireAuth is the reusable blocking
+	// auth interceptor (JWT cookie/Bearer + API key) shared by every protected
+	// gRPC service as the migration proceeds.
+	sessionPath, sessionHandler := apiv1connect.NewSessionServiceHandler(
+		&handlers.SessionServiceHandler{Perms: r.checker},
+		connect.WithInterceptors(
+			validateInterceptor,
+			mw.ConnectRequireAuth(r.authProvider, r.userRepo, apiKeyRepo),
+		),
+	)
+	mountConnect(r.e, sessionPath, sessionHandler)
 
 	// Swagger UI — requires authentication + swagger.read permission.
 	// The spec itself is generated restricted to the Patients, ECG and health
@@ -215,20 +282,16 @@ func (r *RouterConfig) RegisterRoutes() {
 	// === Public API group (no auth required) ===
 	publicV1 := r.e.Group("/api/v1")
 
-	// Branding (public — displayed on login and setup pages)
-	publicV1.GET("/branding", handlers.GetBrandingHandler(r.moduleSettingsRepo))
-
-	// Setup (public — system initialization)
+	// Setup (public — system initialization). GET /setup/status is now served
+	// over gRPC by SetupService (wired above); the POST stays REST for now.
 	localUserRepo := repository.NewLocalUserRepository(r.gormDB)
-	publicV1.GET("/setup/status", handlers.SetupStatusHandler(r.gormDB))
 	publicV1.POST("/setup", handlers.SetupHandler(localUserRepo, r.gormDB))
 
 	// Strict rate limiter shared by the credential-accepting auth endpoints.
 	loginRateLimiter := newLoginRateLimiter()
 
-	// Authentication (public — these endpoints issue JWTs)
-	authConfigRepoForProvider := repository.NewAuthConfigRepository(r.gormDB)
-	publicV1.GET("/auth/provider", handlers.AuthProviderHandler(r.authProvider, authConfigRepoForProvider))
+	// Authentication (public — these endpoints issue JWTs). GET /auth/provider is
+	// now served over gRPC by AuthService (wired above).
 	loginAuthConfigRepo := repository.NewAuthConfigRepository(r.gormDB)
 	publicV1.POST("/auth/login", handlers.LoginHandlerWithDB(r.authProvider, loginAuthConfigRepo, r.authEncKey, r.cfg.JWTSecret, r.userRepo, r.gormDB), loginRateLimiter)
 
@@ -246,8 +309,8 @@ func (r *RouterConfig) RegisterRoutes() {
 	// === Protected API group ===
 	apiV1 := r.e.Group("/api/v1", mw.AuthMiddleware(r.authProvider, r.userRepo, apiKeyRepo))
 
-	// Returns current user identity + permissions — used by the frontend on page load.
-	apiV1.GET("/auth/me", handlers.MeHandler(r.checker))
+	// Current user identity + permissions is now served over gRPC by
+	// SessionService.GetCurrentUser (wired above).
 
 	// Patient search and ECG listing — requires patient.read
 	apiV1.GET("/patients", handlers.SearchPatientsHandler(r.gormDB), mw.RequirePermission(r.checker, auth.PermPatientRead))
