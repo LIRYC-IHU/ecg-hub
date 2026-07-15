@@ -1,0 +1,14 @@
+syntax = "proto3";
+package grpc.api.v1;
+
+// System bootstrap status — public, used by the setup page before any account
+// exists.
+message GetSetupStatusRequest {}
+
+message GetSetupStatusResponse {
+  bool initialized = 1; // true once at least one local/identity account exists
+}
+
+service SetupService {
+  rpc GetStatus(GetSetupStatusRequest) returns (GetSetupStatusResponse) {}
+}
