@@ -146,6 +146,38 @@
     "@babel/helper-string-parser" "^7.27.1"
     "@babel/helper-validator-identifier" "^7.28.5"
 
+"@bufbuild/protobuf@2.12.1", "@bufbuild/protobuf@^2.12.1":
+  version "2.12.1"
+  resolved "https://registry.yarnpkg.com/@bufbuild/protobuf/-/protobuf-2.12.1.tgz#89b0a4ad6412ba55a971e107a46b6c6326ff1b8a"
+  integrity sha512-BvAMfS6LrgZiryOAZ4pBYucu4wG/Ei/9o9DZ9akbREnMLbPJiom2i8b9C8IsKErQoiKqVhrerzt3kOT/RrzLHg==
+
+"@bufbuild/protoc-gen-es@^2.12.1":
+  version "2.12.1"
+  resolved "https://registry.yarnpkg.com/@bufbuild/protoc-gen-es/-/protoc-gen-es-2.12.1.tgz#eb1fe2030d16650850c477930e3776c110f1dd59"
+  integrity sha512-SWa7XvRYRouMo+vBQmpNFZ+ZEqQ8AC0LpL4QWAo1gvstLhFh/Y7Nf/a+MK7ZxDq5LZSThwfk974L1sFxO3OaGw==
+  dependencies:
+    "@bufbuild/protobuf" "2.12.1"
+    "@bufbuild/protoplugin" "2.12.1"
+
+"@bufbuild/protoplugin@2.12.1":
+  version "2.12.1"
+  resolved "https://registry.yarnpkg.com/@bufbuild/protoplugin/-/protoplugin-2.12.1.tgz#899062551b05a555788084158a627d1dd9741bb2"
+  integrity sha512-PY58KxQVAD1BnnKtStOctsMoegEVGfBnY5AOqVQOIu711nA13oYtTqJM8df5lUQg2J1DR3XxUXptE+fWX5oLdA==
+  dependencies:
+    "@bufbuild/protobuf" "2.12.1"
+    "@typescript/vfs" "^1.6.2"
+    typescript "5.4.5"
+
+"@connectrpc/connect-web@^2.1.2":
+  version "2.1.2"
+  resolved "https://registry.yarnpkg.com/@connectrpc/connect-web/-/connect-web-2.1.2.tgz#888e91654bbd7d0c7a9ccdd753b3908343a7f3e1"
+  integrity sha512-1tfaK85MU+gJjwwmL31d2rzdf0XCYX99chZf63uG89SGBUd4XuZ4ZzhGo2u79TPXOE6nLIZQ2okrpyey42PYdg==
+
+"@connectrpc/connect@^2.1.2":
+  version "2.1.2"
+  resolved "https://registry.yarnpkg.com/@connectrpc/connect/-/connect-2.1.2.tgz#75c0fc60680b2cfe95bf97c5c69961b315ca2f46"
+  integrity sha512-MXkBijtcX09R10Eb6sFeIetc6w6746eio6xtfuyVOH7oQAacT1X0GzMIQFux6Qy8cq3W/T5qX5Bei8YbFtmRGA==
+
 "@emnapi/core@^1.7.1", "@emnapi/core@^1.8.1":
   version "1.9.1"
   resolved "https://registry.yarnpkg.com/@emnapi/core/-/core-1.9.1.tgz#2143069c744ca2442074f8078462e51edd63c7bd"
@@ -661,6 +693,13 @@
   dependencies:
     "@typescript-eslint/types" "8.57.2"
     eslint-visitor-keys "^5.0.0"
+
+"@typescript/vfs@^1.6.2":
+  version "1.6.4"
+  resolved "https://registry.yarnpkg.com/@typescript/vfs/-/vfs-1.6.4.tgz#7543a3bd961727eb51c8bdafc3ed5e0fb5f56dff"
+  integrity sha512-PJFXFS4ZJKiJ9Qiuix6Dz/OwEIqHD7Dme1UwZhTK11vR+5dqW2ACbdndWQexBzCx+CPuMe5WBYQWCsFyGlQLlQ==
+  dependencies:
+    debug "^4.4.3"
 
 "@vitejs/plugin-react@^6.0.0":
   version "6.0.1"
@@ -1552,6 +1591,11 @@ typescript-eslint@^8.56.1:
     "@typescript-eslint/parser" "8.57.2"
     "@typescript-eslint/typescript-estree" "8.57.2"
     "@typescript-eslint/utils" "8.57.2"
+
+typescript@5.4.5:
+  version "5.4.5"
+  resolved "https://registry.yarnpkg.com/typescript/-/typescript-5.4.5.tgz#42ccef2c571fdbd0f6718b1d1f5e6e5ef006f611"
+  integrity sha512-vcI4UpRgg81oIRUFwR0WSIHKt11nJ7SAVlYNIu+QpqeyXP+gpQJy/Z4+F0aGxSE4MqwjyXvW/TzgkLAx2AGHwQ==
 
 typescript@~5.9.3:
   version "5.9.3"
