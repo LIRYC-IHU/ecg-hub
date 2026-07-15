@@ -45,7 +45,7 @@ func ListModuleStatusHandler(reg *module.Registry) echo.HandlerFunc {
 
 // ResolveFTPPort returns the FTP listen port configured in the DB, falling back
 // to the module default (2121) when no record exists or the stored config cannot
-// be decoded. Used to populate the /healthz FTP status — the port lives in the
+// be decoded. Used to populate the health service FTP status — the port lives in the
 // encrypted module config, not config.yaml.
 func ResolveFTPPort(repo *repository.ModuleConfigRepository, encKey string) int {
 	const defaultPort = 2121
