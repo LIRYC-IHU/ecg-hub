@@ -34,6 +34,7 @@ import (
 	"github.com/LIRYC-IHU/ecg-hub/internal/api"
 	apihandlers "github.com/LIRYC-IHU/ecg-hub/internal/api/handlers"
 	"github.com/LIRYC-IHU/ecg-hub/internal/auth"
+	"github.com/LIRYC-IHU/ecg-hub/internal/bridgeutil"
 	config "github.com/LIRYC-IHU/ecg-hub/internal/config"
 	"github.com/LIRYC-IHU/ecg-hub/internal/connector"
 	dicomconn "github.com/LIRYC-IHU/ecg-hub/internal/connector/dicom"
@@ -949,15 +950,9 @@ func envOr(key, fallback string) string {
 	return fallback
 }
 
-// bridgeBin resolves a converter binary path.
-// Per-binary env var (e.g. BRIDGE_PHILIPS_TO_FDA) takes precedence.
-// Otherwise: BRIDGE_BIN_DIR/name if BRIDGE_BIN_DIR is set, else bare name (relies on $PATH).
+// bridgeBin resolves a converter binary path via bridgeutil.ResolveBin:
+// per-binary env var (absolute path only, e.g. BRIDGE_PHILIPS_TO_FDA) takes
+// precedence, then BRIDGE_BIN_DIR/name, else bare name (relies on $PATH).
 func bridgeBin(envKey, name string) string {
-	if v := os.Getenv(envKey); v != "" {
-		return v
-	}
-	if dir := os.Getenv("BRIDGE_BIN_DIR"); dir != "" {
-		return dir + "/" + name
-	}
-	return name
+	return bridgeutil.ResolveBin(envKey, name)
 }
