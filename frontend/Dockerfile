@@ -13,6 +13,13 @@ COPY . .
 RUN yarn build
 
 # Stage 2: Serve with Nginx
+#
+# No USER directive by design: the nginx master must start as root to bind :80
+# (prod runs network_mode: host behind Traefik, and no-new-privileges blocks a
+# setcap workaround) and then drops its workers to the unprivileged `nginx`
+# user. The container is hardened in docker-compose.yml instead: cap_drop ALL
+# with only NET_BIND_SERVICE/CHOWN/SETUID/SETGID/DAC_OVERRIDE added back, plus
+# no-new-privileges:true.
 FROM nginx:alpine
 
 COPY --from=builder /app/dist /usr/share/nginx/html
