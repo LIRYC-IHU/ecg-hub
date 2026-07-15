@@ -33,27 +33,8 @@ func countIdentities(db *gorm.DB) (int64, error) {
 	return local + hub, nil
 }
 
-// SetupStatusHandler returns whether the system has been initialized — a local
-// admin exists, or any identity (local/OIDC/LDAP) has already logged in.
-// Public endpoint — no authentication required.
-//
-//	@Summary		Setup status
-//	@Description	Returns whether the system has been initialized (a local admin exists, or any identity has logged in).
-//	@Tags			setup
-//	@Produce		json
-//	@Success		200	{object}	map[string]bool
-//	@Router			/api/v1/setup/status [get]
-func SetupStatusHandler(db *gorm.DB) echo.HandlerFunc {
-	return func(c echo.Context) error {
-		count, err := countIdentities(db)
-		if err != nil {
-			return c.JSON(http.StatusInternalServerError, mw.APIError("INTERNAL_ERROR", "failed to check setup status"))
-		}
-		return c.JSON(http.StatusOK, map[string]bool{
-			"initialized": count > 0,
-		})
-	}
-}
+// GetStatus is now served over gRPC/Connect by SetupServiceHandler
+// (setup_service.go); countIdentities above is shared with it.
 
 // SetupRequest is the JSON body for POST /api/v1/setup.
 type SetupRequest struct {
