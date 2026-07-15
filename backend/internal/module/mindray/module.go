@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/LIRYC-IHU/ecg-hub/internal/bridgeutil"
 	"github.com/LIRYC-IHU/ecg-hub/internal/module"
 )
 
@@ -32,13 +33,7 @@ var mindrayToFDABin = bridgeBin("BRIDGE_MINDRAY_TO_FDA", "mindray-to-fda")
 var mindrayToDICOMBin = bridgeBin("BRIDGE_MINDRAY_TO_DICOM", "mindray-to-dicom")
 
 func bridgeBin(envKey, name string) string {
-	if v := os.Getenv(envKey); v != "" {
-		return v
-	}
-	if dir := os.Getenv("BRIDGE_BIN_DIR"); dir != "" {
-		return dir + "/" + name
-	}
-	return name
+	return bridgeutil.ResolveBin(envKey, name)
 }
 
 // Module implements module.Module for Mindray BeneHeart binary files.

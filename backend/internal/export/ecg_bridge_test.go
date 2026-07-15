@@ -52,11 +52,22 @@ func writeEchoScript(t *testing.T) string {
 	return path
 }
 
+// writeInputFile creates a real source file: Convert validates that the input
+// path names an existing regular file before invoking the converter.
+func writeInputFile(t *testing.T) string {
+	t.Helper()
+	path := t.TempDir() + "/in.xml"
+	if err := os.WriteFile(path, []byte("<xml/>"), 0o644); err != nil {
+		t.Fatalf("write input: %v", err)
+	}
+	return path
+}
+
 func TestConvert_AnonymizeFlagPassed(t *testing.T) {
 	bin := writeEchoScript(t)
 	bridge := NewECGBridge(map[string]string{"philips:xmlfda": bin}, 5*time.Second)
 
-	out, err := bridge.Convert(context.Background(), "/in.xml", "philips", "xmlfda", nil,
+	out, err := bridge.Convert(context.Background(), writeInputFile(t), "philips", "xmlfda", nil,
 		ConvertOptions{Anonymize: true})
 	if err != nil {
 		t.Fatalf("Convert: %v", err)
@@ -71,7 +82,7 @@ func TestConvert_InjectPatientStdin(t *testing.T) {
 	bridge := NewECGBridge(map[string]string{"philips:xmlfda": bin}, 5*time.Second)
 
 	patient := &models.Patient{PatientID: "P42", FirstName: "John", LastName: "DOE", Gender: "M"}
-	out, err := bridge.Convert(context.Background(), "/in.xml", "philips", "xmlfda", patient,
+	out, err := bridge.Convert(context.Background(), writeInputFile(t), "philips", "xmlfda", patient,
 		ConvertOptions{InjectPatient: true})
 	if err != nil {
 		t.Fatalf("Convert: %v", err)
@@ -90,7 +101,7 @@ func TestConvert_NoOptions_NoExtraArgsNoStdin(t *testing.T) {
 	bin := writeEchoScript(t)
 	bridge := NewECGBridge(map[string]string{"philips:xmlfda": bin}, 5*time.Second)
 
-	out, err := bridge.Convert(context.Background(), "/in.xml", "philips", "xmlfda",
+	out, err := bridge.Convert(context.Background(), writeInputFile(t), "philips", "xmlfda",
 		&models.Patient{PatientID: "P1"}, ConvertOptions{})
 	if err != nil {
 		t.Fatalf("Convert: %v", err)

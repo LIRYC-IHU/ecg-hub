@@ -16,6 +16,7 @@ import (
 
 	"gorm.io/gorm"
 
+	"github.com/LIRYC-IHU/ecg-hub/internal/bridgeutil"
 	"github.com/LIRYC-IHU/ecg-hub/internal/config"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
 	"github.com/LIRYC-IHU/ecg-hub/internal/module"
@@ -52,13 +53,7 @@ type nkMetadataJSON struct {
 }
 
 func bridgeBin(envKey, name string) string {
-	if v := os.Getenv(envKey); v != "" {
-		return v
-	}
-	if dir := os.Getenv("BRIDGE_BIN_DIR"); dir != "" {
-		return dir + "/" + name
-	}
-	return name
+	return bridgeutil.ResolveBin(envKey, name)
 }
 
 func init() {
