@@ -1,53 +1,4 @@
 basePath: /api/v1
-definitions:
-  handlers.ConnectorHealthEntry:
-    properties:
-      ae_title:
-        type: string
-      host:
-        type: string
-      name:
-        type: string
-      port:
-        type: integer
-      protocol:
-        type: string
-      status:
-        description: '"ok" or error message'
-        type: string
-    type: object
-  handlers.HealthResponse:
-    properties:
-      connectors:
-        description: outbound PACS connectors (empty when none configured)
-        items:
-          $ref: '#/definitions/handlers.ConnectorHealthEntry'
-        type: array
-      database:
-        description: '"ok" or "error"'
-        type: string
-      dicom_enabled:
-        description: 'true when dicom.enabled: true in config'
-        type: boolean
-      dicom_port:
-        description: configured port (0 when disabled)
-        type: integer
-      ectp_enabled:
-        description: true when nihon-kohden module is active
-        type: boolean
-      ectp_port:
-        description: ECTP TCP port (0 when disabled)
-        type: integer
-      ftp_enabled:
-        description: 'true when ftp.enabled: true in config'
-        type: boolean
-      ftp_port:
-        description: configured port (0 when disabled)
-        type: integer
-      status:
-        description: '"ok" or "degraded"'
-        type: string
-    type: object
 host: localhost
 info:
   contact:
@@ -517,24 +468,6 @@ paths:
       summary: Upload ECG files manually (offline/isolated devices)
       tags:
       - uploads
-  /healthz:
-    get:
-      description: Returns system health including database connectivity, FTP and
-        DICOM server status
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/handlers.HealthResponse'
-        "503":
-          description: Service Unavailable
-          schema:
-            $ref: '#/definitions/handlers.HealthResponse'
-      summary: Health check
-      tags:
-      - health
 securityDefinitions:
   ApiKeyAuth:
     description: Per-user API key ("ecghub_…") created from the API Keys page. Inherits
