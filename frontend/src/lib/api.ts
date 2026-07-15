@@ -5,6 +5,13 @@ import type {
   ListResponse,
   Patient,
 } from "../types";
+import {
+  authClient,
+  brandingClient,
+  healthClient,
+  sessionClient,
+  setupClient,
+} from "./grpc";
 
 const BASE_URL = (import.meta.env as Record<string, string>).VITE_API_URL ?? "";
 
@@ -16,8 +23,8 @@ export interface MeResponse {
 }
 
 export async function fetchSetupStatus(): Promise<{ initialized: boolean }> {
-  const res = await fetch(`${BASE_URL}/api/v1/setup/status`);
-  return res.json();
+  const res = await setupClient.getStatus({});
+  return { initialized: res.initialized };
 }
 
 export async function setupAdmin(
@@ -36,9 +43,8 @@ export async function setupAdmin(
 }
 
 export async function fetchAuthProviders(): Promise<string[]> {
-  const res = await fetch(`${BASE_URL}/api/v1/auth/provider`);
-  const data: { providers: string[] } = await res.json();
-  return data.providers ?? [];
+  const res = await authClient.getProviders({});
+  return res.providers ?? [];
 }
 
 export async function loginWithLDAP(
@@ -72,9 +78,16 @@ export async function loginWithLocal(
 }
 
 export async function fetchMe(): Promise<MeResponse> {
-  const res = await fetch(`${BASE_URL}/api/v1/auth/me`);
-  if (!res.ok) throw new Error("unauthenticated");
-  return res.json();
+  // gRPC/Connect; the ConnectRequireAuth interceptor throws a ConnectError with
+  // code=unauthenticated when the session is missing/invalid (callers catch it
+  // exactly as they did the previous throw).
+  const res = await sessionClient.getCurrentUser({});
+  return {
+    user_id: res.userId,
+    username: res.username,
+    role: res.role,
+    permissions: res.permissions,
+  };
 }
 
 export interface AllECGFilters {
@@ -304,8 +317,29 @@ export async function fetchHealth(): Promise<{
   ectp_port?: number;
   connectors?: ConnectorHealthEntry[];
 }> {
-  const res = await fetch(`${BASE_URL}/healthz`);
-  return res.json();
+  // gRPC/Connect call via the generated client. The wire type is camelCase
+  // (Connect's default JSON), mapped here to the app's snake_case shape so
+  // consumers (AdminSystemPage) stay unchanged. The JWT cookie is carried by
+  // the transport, so an authenticated caller gets the full payload.
+  const res = await healthClient.checkHealth({});
+  return {
+    status: res.status,
+    database: res.database,
+    dicom_enabled: res.dicomEnabled,
+    dicom_port: res.dicomPort,
+    ftp_enabled: res.ftpEnabled,
+    ftp_port: res.ftpPort,
+    ectp_enabled: res.ectpEnabled,
+    ectp_port: res.ectpPort,
+    connectors: res.connectors.map((c) => ({
+      name: c.name,
+      protocol: c.protocol,
+      status: c.status,
+      host: c.host,
+      port: c.port,
+      ae_title: c.aeTitle,
+    })),
+  };
 }
 
 export interface WebhookStatus {
@@ -882,10 +916,14 @@ export interface Branding {
 }
 
 export async function fetchBranding(): Promise<Branding> {
-  const res = await fetch(`${BASE_URL}/api/v1/branding`);
-  if (!res.ok) return { center_name: "", logo_base64: "" };
-  const json: { data: Branding } = await res.json();
-  return json.data ?? { center_name: "", logo_base64: "" };
+  // gRPC/Connect call; branding is non-critical (pre-auth login/setup pages),
+  // so any transport error degrades to empty branding rather than throwing.
+  try {
+    const res = await brandingClient.getBranding({});
+    return { center_name: res.centerName, logo_base64: res.logoBase64 };
+  } catch {
+    return { center_name: "", logo_base64: "" };
+  }
 }
 
 export async function saveBranding(
