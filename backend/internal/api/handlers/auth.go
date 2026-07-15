@@ -55,40 +55,8 @@ func clearJWTCookie(c echo.Context) {
 	})
 }
 
-// AuthProviderHandler returns the configured authentication provider type.
-// Used by the frontend to show the appropriate login UI (OIDC button vs LDAP form).
-// Public endpoint — no Bearer token required.
-//
-//	@Summary		Auth provider type
-//	@Description	Returns "oidc" or "ldap" so the frontend can render the correct login UI.
-//	@Tags			auth
-//	@Produce		json
-//	@Success		200	{object}	map[string]string
-//	@Router			/api/v1/auth/provider [get]
-func AuthProviderHandler(provider auth.Provider, authConfigRepo *repository.AuthConfigRepository) echo.HandlerFunc {
-	return func(c echo.Context) error {
-		names := auth.GetProviderNames(provider)
-		// Also include providers configured in DB (even if not yet loaded at startup).
-		if authConfigRepo != nil {
-			active, _ := authConfigRepo.ListActive()
-			for _, cfg := range active {
-				found := false
-				for _, n := range names {
-					if n == cfg.ProviderType {
-						found = true
-						break
-					}
-				}
-				if !found {
-					names = append(names, cfg.ProviderType)
-				}
-			}
-		}
-		return c.JSON(http.StatusOK, map[string][]string{
-			"providers": names,
-		})
-	}
-}
+// GetProviders is now served over gRPC/Connect by AuthServiceHandler
+// (auth_service.go).
 
 // LoginHandler handles LDAP credential exchange for an ECG Hub-signed JWT.
 // Only available when auth.provider == "ldap" — returns 400 for OIDC mode.
@@ -174,34 +142,11 @@ type permissionResolver interface {
 	GetPermissions(ctx context.Context, role string) []string
 }
 
-// MeHandler returns the authenticated user's identity, role, and resolved permissions.
-// Protected — requires a valid JWT cookie or Bearer token (enforced by AuthMiddleware).
-//
-//	@Summary		Current user info
-//	@Description	Returns the authenticated user's ID, role, and resolved permissions.
-//	@Tags			auth
-//	@Produce		json
-//	@Success		200	{object}	map[string]interface{}
-//	@Failure		401	{object}	map[string]string	"UNAUTHENTICATED"
-//	@Security		BearerAuth
-//	@Router			/api/v1/auth/me [get]
-func MeHandler(checker permissionResolver) echo.HandlerFunc {
-	return func(c echo.Context) error {
-		userID, _ := c.Get(mw.CtxKeyUserID).(string)
-		username, _ := c.Get(mw.CtxKeyUsername).(string)
-		role, _ := c.Get(mw.CtxKeyRole).(string)
-		permissions := checker.GetPermissions(c.Request().Context(), role)
-		if permissions == nil {
-			permissions = []string{}
-		}
-		return c.JSON(http.StatusOK, map[string]any{
-			"user_id":     userID,   // stable internal uuid — keys per-user resources
-			"username":    username, // human-readable identifier for display
-			"role":        role,
-			"permissions": permissions,
-		})
-	}
-}
+// permissionResolver is implemented by *auth.PermissionChecker and consumed by
+// SessionServiceHandler (session_service.go), which replaced the REST MeHandler.
+
+// GetCurrentUser (the former /auth/me) is now served over gRPC/Connect by
+// SessionServiceHandler.
 
 // LogoutHandler clears the JWT cookie and redirects the browser.
 // For OIDC sessions it redirects to the Keycloak end-session URL so the Keycloak
