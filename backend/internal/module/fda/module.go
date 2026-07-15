@@ -29,6 +29,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/LIRYC-IHU/ecg-hub/internal/bridgeutil"
 	"github.com/LIRYC-IHU/ecg-hub/internal/module"
 	"github.com/LIRYC-IHU/ecg-hub/internal/xmlutil"
 )
@@ -43,15 +44,10 @@ func init() {
 var fdaToDICOMBin = bridgeBin("BRIDGE_FDA_TO_DICOM", "fda-to-dicom")
 
 // bridgeBin resolves the converter binary path used for metadata extraction.
-// Per-binary env var takes precedence, then BRIDGE_BIN_DIR/name, else bare name ($PATH).
+// Per-binary env var (absolute path only) takes precedence, then
+// BRIDGE_BIN_DIR/name, else bare name ($PATH).
 func bridgeBin(envKey, name string) string {
-	if v := os.Getenv(envKey); v != "" {
-		return v
-	}
-	if dir := os.Getenv("BRIDGE_BIN_DIR"); dir != "" {
-		return dir + "/" + name
-	}
-	return name
+	return bridgeutil.ResolveBin(envKey, name)
 }
 
 // Module implements module.Module for FDA HL7 v3 aECG XML files.
