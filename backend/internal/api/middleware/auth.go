@@ -81,39 +81,6 @@ func extractAPIKey(c echo.Context) string {
 	return ""
 }
 
-// Healthz Midleware validates the JWT on the /healthz endpoint
-func HealthzMiddleware(provider auth.Provider, roleResolver RoleResolver) echo.MiddlewareFunc {
-	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
-			rawToken := extractToken(c)
-			if rawToken == "" {
-				return next(c)
-			}
-
-			claims, err := provider.ValidateToken(c.Request().Context(), rawToken)
-			if err != nil {
-				return next(c)
-			}
-
-			// Resolve identity + role from DB so admin changes take effect
-			// immediately, without requiring the user to log out and back in.
-			role := claims.Role
-			userID := claims.Sub
-			if id, dbRole, err := roleResolver.ResolveIdentity(c.Request().Context(), claims.Sub); err == nil && id != "" {
-				userID = id
-				if dbRole != "" {
-					role = dbRole
-				}
-			}
-
-			c.Set(CtxKeyUserID, userID)
-			c.Set(CtxKeyUsername, claims.Sub)
-			c.Set(CtxKeyRole, role)
-			return next(c)
-		}
-	}
-}
-
 // AuthMiddleware validates the caller's credentials on every request.
 // Two authentication paths:
 //   - API key ("ecghub_…" via X-API-Key or Authorization: Bearer): machine
