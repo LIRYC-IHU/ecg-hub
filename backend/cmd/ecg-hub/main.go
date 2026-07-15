@@ -58,6 +58,8 @@ import (
 	"github.com/LIRYC-IHU/ecg-hub/internal/webhook"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
 	"golang.org/x/time/rate"
 )
 
@@ -440,7 +442,7 @@ func main() {
 		connRetryJob.UpdateSettings(s)
 	}
 
-	// Module statuses for /healthz reflect the DB module configs (UI-managed).
+	// Module statuses for the health service reflect the DB module configs (UI-managed).
 	ftpStatus := apihandlers.FTPStatus{Port: apihandlers.ResolveFTPPort(moduleConfigRepo, authEncKey)}
 	if rec, err := moduleConfigRepo.Get("ftp"); err == nil && rec != nil {
 		ftpStatus.Enabled = rec.Enabled
@@ -687,8 +689,16 @@ func main() {
 		return
 	}
 
-	slog.Info("starting ECG Hub", "addr", addr)
-	if err := e.Start(addr); err != nil && err != http.ErrServerClosed {
+	// Behind nginx (TLS terminates at the proxy) we serve h2c — HTTP/2 cleartext.
+	// h2c.NewHandler multiplexes on the same port: HTTP/1.1 clients (REST,
+	// Connect-over-HTTP, WebSockets) keep working, while HTTP/2-prior-knowledge
+	// clients (real gRPC via nginx grpc_pass) get an HTTP/2 connection.
+	// We bypass e.Start here because Echo's configureServer would overwrite
+	// e.Server.Handler and drop the h2c wrapper.
+	slog.Info("starting ECG Hub (h2c)", "addr", addr)
+	e.Server.Addr = addr
+	e.Server.Handler = h2c.NewHandler(e, &http2.Server{})
+	if err := e.Server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		slog.Error("server failed", "error", err)
 		os.Exit(1)
 	}
