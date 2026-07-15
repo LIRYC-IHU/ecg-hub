@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/LIRYC-IHU/ecg-hub/internal/bridgeutil"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 	appmetrics "github.com/LIRYC-IHU/ecg-hub/internal/metrics"
 )
@@ -195,6 +196,13 @@ func (b *ECGBridge) Convert(ctx context.Context, sourcePath, vendor, format stri
 	binary, ok := b.binaries[key]
 	if !ok {
 		return nil, fmt.Errorf("%w: %s", ErrFormatNotSupported, key)
+	}
+
+	// Defense in depth: the binary is pinned by deployment config, but the
+	// source path comes from the storage layer — make sure it names a real
+	// file and cannot be mistaken for a flag by the converter's CLI parser.
+	if err := bridgeutil.CheckInputFile(sourcePath); err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrConversionFailed, err)
 	}
 
 	start := time.Now()
