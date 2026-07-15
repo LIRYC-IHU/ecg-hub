@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	mw "github.com/LIRYC-IHU/ecg-hub/internal/api/middleware"
+	apiv1 "github.com/LIRYC-IHU/ecg-hub/internal/api/v1"
 	"github.com/labstack/echo/v4"
 )
 
@@ -27,192 +28,131 @@ type mockConnector struct {
 	err      error
 }
 
-func (m *mockConnector) Name() string              { return m.name }
-func (m *mockConnector) Health() error             { return m.err }
-func (m *mockConnector) Protocol() string          { return m.protocol }
-func (m *mockConnector) Endpoint() (string, int)   { return m.host, m.port }
-func (m *mockConnector) AETitle() string           { return m.aeTitle }
+func (m *mockConnector) Name() string            { return m.name }
+func (m *mockConnector) Health() error           { return m.err }
+func (m *mockConnector) Protocol() string        { return m.protocol }
+func (m *mockConnector) Endpoint() (string, int) { return m.host, m.port }
+func (m *mockConnector) AETitle() string         { return m.aeTitle }
 
-func TestHealthHandler_Healthy(t *testing.T) {
-	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.Set(mw.CtxKeyRole, "admin")
+// --- HealthzServiceHandler (gRPC/Connect) ---
 
-	handler := HealthHandler(&mockPinger{err: nil}, DICOMStatus{}, FTPStatus{}, ECTPStatus{}, nil)
-	if err := handler(c); err != nil {
+// TestCheckHealth_PublicHealthy: no role in context → status only, no leak of
+// database/module/connector detail.
+func TestCheckHealth_PublicHealthy(t *testing.T) {
+	h := &HealthzServiceHandler{Pinger: &mockPinger{}}
+	resp, err := h.CheckHealth(context.Background(), &apiv1.CheckHealthRequest{})
+	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if rec.Code != http.StatusOK {
-		t.Errorf("status: want 200, got %d", rec.Code)
+	if resp.Status != "ok" {
+		t.Errorf("status: want ok, got %q", resp.Status)
 	}
-	body := rec.Body.String()
-	if !strings.Contains(body, `"ok"`) {
-		t.Errorf("body should contain ok, got: %s", body)
-	}
-	if !strings.Contains(body, `"database"`) {
-		t.Errorf("body should contain database key, got: %s", body)
+	if resp.Database != "" {
+		t.Errorf("public caller must not see database detail, got %q", resp.Database)
 	}
 }
 
-func TestHealthHandler_Degraded(t *testing.T) {
-	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.Set(mw.CtxKeyRole, "admin")
-
-	handler := HealthHandler(&mockPinger{err: fmt.Errorf("connection refused")}, DICOMStatus{}, FTPStatus{}, ECTPStatus{}, nil)
-	if err := handler(c); err != nil {
+// TestCheckHealth_PublicDegraded: DB ping fails, unauthenticated → degraded.
+func TestCheckHealth_PublicDegraded(t *testing.T) {
+	h := &HealthzServiceHandler{Pinger: &mockPinger{err: fmt.Errorf("connection refused")}}
+	resp, err := h.CheckHealth(context.Background(), &apiv1.CheckHealthRequest{})
+	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if rec.Code != http.StatusServiceUnavailable {
-		t.Errorf("status: want 503, got %d", rec.Code)
-	}
-	body := rec.Body.String()
-	if !strings.Contains(body, `"degraded"`) {
-		t.Errorf("body should contain degraded, got: %s", body)
-	}
-	if !strings.Contains(body, `"error"`) {
-		t.Errorf("body should contain error value, got: %s", body)
+	if resp.Status != "degraded" {
+		t.Errorf("status: want degraded, got %q", resp.Status)
 	}
 }
 
-func TestHealthHandler_DICOMFields(t *testing.T) {
-	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.Set(mw.CtxKeyRole, "admin")
-
-	handler := HealthHandler(&mockPinger{err: nil}, DICOMStatus{Enabled: true, Port: 11112}, FTPStatus{}, ECTPStatus{}, nil)
-	if err := handler(c); err != nil {
+// TestCheckHealth_PublicNoConnectorLeak: a public caller must never receive the
+// connector detail even when connectors are configured.
+func TestCheckHealth_PublicNoConnectorLeak(t *testing.T) {
+	checkers := []ConnectorHealthChecker{&mockConnector{name: "secret", host: "internal.local"}}
+	h := &HealthzServiceHandler{Pinger: &mockPinger{}, ConnCheckers: checkers}
+	resp, err := h.CheckHealth(context.Background(), &apiv1.CheckHealthRequest{})
+	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	body := rec.Body.String()
-	if !strings.Contains(body, `"dicom_enabled":true`) {
-		t.Errorf("body should contain dicom_enabled:true, got: %s", body)
-	}
-	if !strings.Contains(body, `"dicom_port":11112`) {
-		t.Errorf("body should contain dicom_port:11112, got: %s", body)
+	if len(resp.Connectors) != 0 {
+		t.Errorf("public caller leaked connectors: %+v", resp.Connectors)
 	}
 }
 
-func TestHealthHandler_DICOMDisabled(t *testing.T) {
-	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.Set(mw.CtxKeyRole, "admin")
-
-	handler := HealthHandler(&mockPinger{err: nil}, DICOMStatus{Enabled: false, Port: 0}, FTPStatus{}, ECTPStatus{}, nil)
-	if err := handler(c); err != nil {
+// TestCheckHealth_AuthedHealthy: role in context → full payload with database ok.
+func TestCheckHealth_AuthedHealthy(t *testing.T) {
+	h := &HealthzServiceHandler{Pinger: &mockPinger{}}
+	ctx := mw.ContextWithRole(context.Background(), "admin")
+	resp, err := h.CheckHealth(ctx, &apiv1.CheckHealthRequest{})
+	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	body := rec.Body.String()
-	if !strings.Contains(body, `"dicom_enabled":false`) {
-		t.Errorf("body should contain dicom_enabled:false, got: %s", body)
+	if resp.Status != "ok" || resp.Database != "ok" {
+		t.Errorf("want status=ok database=ok, got status=%q database=%q", resp.Status, resp.Database)
 	}
 }
 
-func TestHealthHandler_FTPFields(t *testing.T) {
-	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.Set(mw.CtxKeyRole, "admin")
-
-	handler := HealthHandler(&mockPinger{err: nil}, DICOMStatus{}, FTPStatus{Enabled: true, Port: 2121}, ECTPStatus{}, nil)
-	if err := handler(c); err != nil {
+// TestCheckHealth_AuthedDegraded: authenticated + DB down → degraded/error, still
+// returned as a normal message (not a Connect error) so the client reads it.
+func TestCheckHealth_AuthedDegraded(t *testing.T) {
+	h := &HealthzServiceHandler{Pinger: &mockPinger{err: fmt.Errorf("connection refused")}}
+	ctx := mw.ContextWithRole(context.Background(), "admin")
+	resp, err := h.CheckHealth(ctx, &apiv1.CheckHealthRequest{})
+	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	body := rec.Body.String()
-	if !strings.Contains(body, `"ftp_enabled":true`) {
-		t.Errorf("body should contain ftp_enabled:true, got: %s", body)
-	}
-	if !strings.Contains(body, `"ftp_port":2121`) {
-		t.Errorf("body should contain ftp_port:2121, got: %s", body)
+	if resp.Status != "degraded" || resp.Database != "error" {
+		t.Errorf("want status=degraded database=error, got status=%q database=%q", resp.Status, resp.Database)
 	}
 }
 
-func TestHealthHandler_FTPDisabled(t *testing.T) {
-	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.Set(mw.CtxKeyRole, "admin")
-
-	handler := HealthHandler(&mockPinger{err: nil}, DICOMStatus{}, FTPStatus{Enabled: false, Port: 0}, ECTPStatus{}, nil)
-	if err := handler(c); err != nil {
+// TestCheckHealth_AuthedDICOMFields: DICOM config surfaces when authenticated.
+func TestCheckHealth_AuthedDICOMFields(t *testing.T) {
+	h := &HealthzServiceHandler{Pinger: &mockPinger{}, Dicom: DICOMStatus{Enabled: true, Port: 11112}}
+	ctx := mw.ContextWithRole(context.Background(), "admin")
+	resp, err := h.CheckHealth(ctx, &apiv1.CheckHealthRequest{})
+	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	body := rec.Body.String()
-	if !strings.Contains(body, `"ftp_enabled":false`) {
-		t.Errorf("body should contain ftp_enabled:false, got: %s", body)
+	if !resp.DicomEnabled || resp.DicomPort != 11112 {
+		t.Errorf("want dicom enabled/11112, got enabled=%v port=%d", resp.DicomEnabled, resp.DicomPort)
 	}
 }
 
-func TestHealthHandler_NoAuthRequired(t *testing.T) {
-	// Healthz must be accessible without Authorization header.
-	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
-	// Deliberately no Authorization header
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-
-	handler := HealthHandler(&mockPinger{err: nil}, DICOMStatus{}, FTPStatus{}, ECTPStatus{}, nil)
-	if err := handler(c); err != nil {
+// TestCheckHealth_AuthedFTPFields: FTP config surfaces when authenticated.
+func TestCheckHealth_AuthedFTPFields(t *testing.T) {
+	h := &HealthzServiceHandler{Pinger: &mockPinger{}, FTP: FTPStatus{Enabled: true, Port: 2121}}
+	ctx := mw.ContextWithRole(context.Background(), "admin")
+	resp, err := h.CheckHealth(ctx, &apiv1.CheckHealthRequest{})
+	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if rec.Code != http.StatusOK {
-		t.Errorf("want 200 without auth, got %d", rec.Code)
+	if !resp.FtpEnabled || resp.FtpPort != 2121 {
+		t.Errorf("want ftp enabled/2121, got enabled=%v port=%d", resp.FtpEnabled, resp.FtpPort)
 	}
 }
 
-func TestHealthHandler_ConnectorEndpointFields(t *testing.T) {
-	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.Set(mw.CtxKeyRole, "admin")
-
+// TestCheckHealth_AuthedConnectors: connector endpoint detail is mapped into the
+// response for authenticated callers.
+func TestCheckHealth_AuthedConnectors(t *testing.T) {
 	checkers := []ConnectorHealthChecker{
-		&mockConnector{
-			name:     "orthanc",
-			protocol: "dicom_cstore",
-			host:     "pacs.local",
-			port:     4242,
-			aeTitle:  "ORTHANC",
-		},
-		&mockConnector{
-			name:     "polaris",
-			protocol: "ectp_ftp",
-			host:     "polaris.local",
-			port:     9100,
-		},
+		&mockConnector{name: "orthanc", protocol: "dicom_cstore", host: "pacs.local", port: 4242, aeTitle: "ORTHANC"},
 	}
-
-	handler := HealthHandler(&mockPinger{err: nil}, DICOMStatus{}, FTPStatus{}, ECTPStatus{}, checkers)
-	if err := handler(c); err != nil {
+	h := &HealthzServiceHandler{Pinger: &mockPinger{}, ConnCheckers: checkers}
+	ctx := mw.ContextWithRole(context.Background(), "admin")
+	resp, err := h.CheckHealth(ctx, &apiv1.CheckHealthRequest{})
+	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	body := rec.Body.String()
-
-	for _, want := range []string{
-		`"host":"pacs.local"`,
-		`"port":4242`,
-		`"ae_title":"ORTHANC"`,
-		`"protocol":"dicom_cstore"`,
-		`"host":"polaris.local"`,
-		`"port":9100`,
-		`"protocol":"ectp_ftp"`,
-	} {
-		if !strings.Contains(body, want) {
-			t.Errorf("body should contain %s, got: %s", want, body)
-		}
+	if len(resp.Connectors) != 1 {
+		t.Fatalf("want 1 connector, got %d", len(resp.Connectors))
+	}
+	c := resp.Connectors[0]
+	if c.Host != "pacs.local" || c.Port != 4242 || c.AeTitle != "ORTHANC" || c.Protocol != "dicom_cstore" {
+		t.Errorf("connector mapping wrong: %+v", c)
 	}
 }
+
+// --- ConnectorsHandler (REST, unchanged) ---
 
 func TestConnectorsHandler_EndpointFields(t *testing.T) {
 	e := echo.New()

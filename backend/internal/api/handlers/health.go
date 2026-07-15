@@ -2,15 +2,15 @@ package handlers
 
 import (
 	"context"
-	"log/slog"
-	"net/http"
-	"time"
 
-	mw "github.com/LIRYC-IHU/ecg-hub/internal/api/middleware"
 	appmetrics "github.com/LIRYC-IHU/ecg-hub/internal/metrics"
-	"github.com/LIRYC-IHU/ecg-hub/internal/module"
-	"github.com/labstack/echo/v4"
 )
+
+// This file holds the shared health-check building blocks (DB pinger, module
+// status carriers, connector health interfaces). The health snapshot itself is
+// served over gRPC/Connect by HealthzServiceHandler (healthz_service.go); the
+// former REST GET /healthz handler was retired once the frontend moved to the
+// gRPC client.
 
 // DBPinger abstracts database connectivity check to allow unit testing without a real DB.
 type DBPinger interface {
@@ -19,13 +19,13 @@ type DBPinger interface {
 
 // ErrorPinger always returns its Err, satisfying DBPinger.
 // Used in RegisterRoutes when gorm cannot provide a *sql.DB at startup,
-// so HealthHandler degrades gracefully instead of panicking on a nil receiver.
+// so the health handler degrades gracefully instead of panicking on a nil receiver.
 type ErrorPinger struct{ Err error }
 
 func (e *ErrorPinger) PingContext(_ context.Context) error { return e.Err }
 
 // DICOMStatus carries the DICOM SCP server configuration for the health response.
-// Passed by RegisterRoutes so HealthHandler stays config-agnostic.
+// Passed by RegisterRoutes so the health handler stays config-agnostic.
 type DICOMStatus struct {
 	Enabled bool
 	Port    int
@@ -44,7 +44,7 @@ type ECTPStatus struct {
 	Port    int
 }
 
-// ConnectorHealthChecker is the subset of connector.Connector used by HealthHandler.
+// ConnectorHealthChecker is the subset of connector.Connector used by the health handler.
 // Extracted as a local interface to avoid an import cycle with the connector package.
 type ConnectorHealthChecker interface {
 	Name() string
@@ -69,110 +69,19 @@ type ConnectorAETitler interface {
 	AETitle() string
 }
 
-// ConnectorHealthEntry carries a single connector's health state in the response.
+// ConnectorHealthEntry carries a single connector's health state. Still used by
+// the admin connectors endpoint and mapped into the gRPC health response.
 type ConnectorHealthEntry struct {
 	Name     string `json:"name"`
 	Protocol string `json:"protocol,omitempty"`
-	Status   string `json:"status"`              // "ok" or error message
+	Status   string `json:"status"` // "ok" or error message
 	Host     string `json:"host,omitempty"`
 	Port     int    `json:"port,omitempty"`
 	AETitle  string `json:"ae_title,omitempty"`
 }
 
-// HealthResponse is the JSON body returned by GET /healthz.
-type HealthResponse struct {
-	Status       string                 `json:"status"`        // "ok" or "degraded"
-	Database     string                 `json:"database"`      // "ok" or "error"
-	DicomEnabled bool                   `json:"dicom_enabled"` // true when dicom.enabled: true in config
-	DicomPort    int                    `json:"dicom_port"`    // configured port (0 when disabled)
-	FTPEnabled   bool                   `json:"ftp_enabled"`   // true when ftp.enabled: true in config
-	FTPPort      int                    `json:"ftp_port"`      // configured port (0 when disabled)
-	ECTPEnabled  bool                   `json:"ectp_enabled"`  // true when nihon-kohden module is active
-	ECTPPort     int                    `json:"ectp_port"`     // ECTP TCP port (0 when disabled)
-	Connectors   []ConnectorHealthEntry `json:"connectors"`    // outbound PACS connectors (empty when none configured)
-}
-
-type HealthResp struct {
-	Status string `json:"status"` // "ok" or "degraded"
-}
-
-// HealthHandler returns an Echo handler that checks database connectivity.
-// Public endpoint — no authentication required (NFR-S3).
-//
-//	@Summary		Health check
-//	@Description	Returns system health including database connectivity, FTP and DICOM server status
-//	@Tags			health
-//	@Produce		json
-//	@Success		200	{object}	HealthResponse
-//	@Failure		503	{object}	HealthResponse
-//	@Router			/healthz [get]
-func HealthHandler(pinger DBPinger, dicom DICOMStatus, ftp FTPStatus, ectp ECTPStatus, connCheckers []ConnectorHealthChecker) echo.HandlerFunc {
-	return func(c echo.Context) error {
-		ctx, cancel := context.WithTimeout(c.Request().Context(), 3*time.Second)
-		defer cancel()
-
-		// Ping the database FIRST — connector health checks below dial remote
-		// PACS endpoints with multi-second timeouts; running them first used to
-		// consume the ping's context budget and report a false "database
-		// unreachable" whenever a connector target was down.
-		dbErr := pinger.PingContext(ctx)
-		if dbErr != nil {
-			slog.Warn("health check: database unreachable", "error", dbErr)
-		}
-
-		role, _ := c.Get(mw.CtxKeyRole).(string)
-
-		// Public (unauthenticated) callers only get the DB-backed status —
-		// skip the slow connector dials entirely.
-		if role == "" {
-			if dbErr != nil {
-				return c.JSON(http.StatusServiceUnavailable, HealthResp{Status: "degraded"})
-			}
-			return c.JSON(http.StatusOK, HealthResp{Status: "ok"})
-		}
-
-		connEntries := buildConnectorEntries(connCheckers)
-
-		// Override DICOM status from registry — reflects actual runtime state.
-		liveDICOM := dicom
-		if dicomMod, ok := module.GlobalRegistry.Get("dicom"); ok {
-			liveDICOM.Enabled = dicomMod.Status() == module.StatusRunning
-		}
-
-		// Override FTP status from registry — reflects actual runtime state.
-		liveFTP := ftp
-		if ftpMod, ok := module.GlobalRegistry.Get("ftp"); ok {
-			liveFTP.Enabled = ftpMod.Status() == module.StatusRunning
-		}
-
-		if dbErr != nil {
-			return c.JSON(http.StatusServiceUnavailable, HealthResponse{
-				Status:       "degraded",
-				Database:     "error",
-				DicomEnabled: liveDICOM.Enabled,
-				DicomPort:    liveDICOM.Port,
-				FTPEnabled:   liveFTP.Enabled,
-				FTPPort:      liveFTP.Port,
-				ECTPEnabled:  ectp.Enabled,
-				ECTPPort:     ectp.Port,
-				Connectors:   connEntries,
-			})
-		}
-
-		return c.JSON(http.StatusOK, HealthResponse{
-			Status:       "ok",
-			Database:     "ok",
-			DicomEnabled: liveDICOM.Enabled,
-			DicomPort:    liveDICOM.Port,
-			FTPEnabled:   liveFTP.Enabled,
-			FTPPort:      liveFTP.Port,
-			ECTPEnabled:  ectp.Enabled,
-			ECTPPort:     ectp.Port,
-			Connectors:   connEntries,
-		})
-	}
-}
-
+// buildConnectorEntries probes each connector and, as a side effect, updates the
+// ConnectorHealthStatus Prometheus gauge. Consumed by HealthzServiceHandler.
 func buildConnectorEntries(checkers []ConnectorHealthChecker) []ConnectorHealthEntry {
 	entries := make([]ConnectorHealthEntry, 0, len(checkers))
 	for _, ch := range checkers {
