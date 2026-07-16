@@ -10,7 +10,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file v1/ecg.proto.
  */
 export const file_v1_ecg: GenFile = /*@__PURE__*/
-  fileDesc("Cgx2MS9lY2cucHJvdG8SC2dycGMuYXBpLnYxIrIBCgNFY2cSCgoCaWQYASABKAkSEgoKcGF0aWVudF9pZBgCIAEoCRIOCgZ2ZW5kb3IYAyABKAkSGQoRb3JpZ2luYWxfZmlsZW5hbWUYBCABKAkSEwoLcmVjb3JkZWRfYXQYBSABKAkSEwoLaW5nZXN0ZWRfYXQYBiABKAkSEgoKaGw3X3N0YXR1cxgHIAEoCRIOCgZ2aWV3ZWQYCCABKAgSEgoKZXh0cmFfanNvbhgJIAEoCSKTAQoORWNnV2l0aFBhdGllbnQSHQoDZWNnGAEgASgLMhAuZ3JwYy5hcGkudjEuRWNnEhoKEnBhdGllbnRfZmlyc3RfbmFtZRgCIAEoCRIZChFwYXRpZW50X2xhc3RfbmFtZRgDIAEoCRIWCg5wYXRpZW50X2dlbmRlchgEIAEoCRITCgtwYXRpZW50X2RvYhgFIAEoCSITChFHZXRGaWx0ZXJzUmVxdWVzdCJSChJHZXRGaWx0ZXJzUmVzcG9uc2USDwoHdmVuZG9ycxgBIAMoCRIVCg1kZXZpY2VfbW9kZWxzGAIgAygJEhQKDGZpbGVfZm9ybWF0cxgDIAMoCSKkAQoOTGlzdEFsbFJlcXVlc3QSCQoBcRgBIAEoCRISCgpobDdfc3RhdHVzGAIgASgJEg4KBnZlbmRvchgDIAEoCRIUCgxkZXZpY2VfbW9kZWwYBCABKAkSEwoLZmlsZV9mb3JtYXQYBSABKAkSDAoEZnJvbRgGIAEoCRIKCgJ0bxgHIAEoCRIMCgRwYWdlGAggASgFEhAKCHBlcl9wYWdlGAkgASgFImsKD0xpc3RBbGxSZXNwb25zZRIpCgRkYXRhGAEgAygLMhsuZ3JwYy5hcGkudjEuRWNnV2l0aFBhdGllbnQSDQoFdG90YWwYAiABKAMSDAoEcGFnZRgDIAEoBRIQCghwZXJfcGFnZRgEIAEoBSJFCghFY2dGaWVsZBILCgNrZXkYASABKAkSDQoFbGFiZWwYAiABKAkSDAoEdHlwZRgDIAEoCRIPCgdvcHRpb25zGAQgAygJIiAKEkdldE1ldGFkYXRhUmVxdWVzdBIKCgJpZBgBIAEoCSJRChNHZXRNZXRhZGF0YVJlc3BvbnNlEiUKBmZpZWxkcxgBIAMoCzIVLmdycGMuYXBpLnYxLkVjZ0ZpZWxkEhMKC3ZhbHVlc19qc29uGAIgASgJIjgKFVVwZGF0ZU1ldGFkYXRhUmVxdWVzdBIKCgJpZBgBIAEoCRITCgt2YWx1ZXNfanNvbhgCIAEoCSItChZVcGRhdGVNZXRhZGF0YVJlc3BvbnNlEhMKC3ZhbHVlc19qc29uGAEgASgJMtYCCgpFQ0dTZXJ2aWNlEk8KCkdldEZpbHRlcnMSHi5ncnBjLmFwaS52MS5HZXRGaWx0ZXJzUmVxdWVzdBofLmdycGMuYXBpLnYxLkdldEZpbHRlcnNSZXNwb25zZSIAEkYKB0xpc3RBbGwSGy5ncnBjLmFwaS52MS5MaXN0QWxsUmVxdWVzdBocLmdycGMuYXBpLnYxLkxpc3RBbGxSZXNwb25zZSIAElIKC0dldE1ldGFkYXRhEh8uZ3JwYy5hcGkudjEuR2V0TWV0YWRhdGFSZXF1ZXN0GiAuZ3JwYy5hcGkudjEuR2V0TWV0YWRhdGFSZXNwb25zZSIAElsKDlVwZGF0ZU1ldGFkYXRhEiIuZ3JwYy5hcGkudjEuVXBkYXRlTWV0YWRhdGFSZXF1ZXN0GiMuZ3JwYy5hcGkudjEuVXBkYXRlTWV0YWRhdGFSZXNwb25zZSIAQp0BCg9jb20uZ3JwYy5hcGkudjFCCEVjZ1Byb3RvUAFaMmdpdGh1Yi5jb20vTElSWUMtSUhVL2VjZy1odWIvaW50ZXJuYWwvYXBpL3YxO2FwaXYxogIDR0FYqgILR3JwYy5BcGkuVjHKAgtHcnBjXEFwaVxWMeICF0dycGNcQXBpXFYxXEdQQk1ldGFkYXRh6gINR3JwYzo6QXBpOjpWMWIGcHJvdG8z");
+  fileDesc("Cgx2MS9lY2cucHJvdG8SC2dycGMuYXBpLnYxIrIBCgNFY2cSCgoCaWQYASABKAkSEgoKcGF0aWVudF9pZBgCIAEoCRIOCgZ2ZW5kb3IYAyABKAkSGQoRb3JpZ2luYWxfZmlsZW5hbWUYBCABKAkSEwoLcmVjb3JkZWRfYXQYBSABKAkSEwoLaW5nZXN0ZWRfYXQYBiABKAkSEgoKaGw3X3N0YXR1cxgHIAEoCRIOCgZ2aWV3ZWQYCCABKAgSEgoKZXh0cmFfanNvbhgJIAEoCSKTAQoORWNnV2l0aFBhdGllbnQSHQoDZWNnGAEgASgLMhAuZ3JwYy5hcGkudjEuRWNnEhoKEnBhdGllbnRfZmlyc3RfbmFtZRgCIAEoCRIZChFwYXRpZW50X2xhc3RfbmFtZRgDIAEoCRIWCg5wYXRpZW50X2dlbmRlchgEIAEoCRITCgtwYXRpZW50X2RvYhgFIAEoCSITChFHZXRGaWx0ZXJzUmVxdWVzdCJSChJHZXRGaWx0ZXJzUmVzcG9uc2USDwoHdmVuZG9ycxgBIAMoCRIVCg1kZXZpY2VfbW9kZWxzGAIgAygJEhQKDGZpbGVfZm9ybWF0cxgDIAMoCSKkAQoOTGlzdEFsbFJlcXVlc3QSCQoBcRgBIAEoCRISCgpobDdfc3RhdHVzGAIgASgJEg4KBnZlbmRvchgDIAEoCRIUCgxkZXZpY2VfbW9kZWwYBCABKAkSEwoLZmlsZV9mb3JtYXQYBSABKAkSDAoEZnJvbRgGIAEoCRIKCgJ0bxgHIAEoCRIMCgRwYWdlGAggASgFEhAKCHBlcl9wYWdlGAkgASgFImsKD0xpc3RBbGxSZXNwb25zZRIpCgRkYXRhGAEgAygLMhsuZ3JwYy5hcGkudjEuRWNnV2l0aFBhdGllbnQSDQoFdG90YWwYAiABKAMSDAoEcGFnZRgDIAEoBRIQCghwZXJfcGFnZRgEIAEoBSJFCghFY2dGaWVsZBILCgNrZXkYASABKAkSDQoFbGFiZWwYAiABKAkSDAoEdHlwZRgDIAEoCRIPCgdvcHRpb25zGAQgAygJIiAKEkdldE1ldGFkYXRhUmVxdWVzdBIKCgJpZBgBIAEoCSJRChNHZXRNZXRhZGF0YVJlc3BvbnNlEiUKBmZpZWxkcxgBIAMoCzIVLmdycGMuYXBpLnYxLkVjZ0ZpZWxkEhMKC3ZhbHVlc19qc29uGAIgASgJIjgKFVVwZGF0ZU1ldGFkYXRhUmVxdWVzdBIKCgJpZBgBIAEoCRITCgt2YWx1ZXNfanNvbhgCIAEoCSItChZVcGRhdGVNZXRhZGF0YVJlc3BvbnNlEhMKC3ZhbHVlc19qc29uGAEgASgJIh8KEU1hcmtWaWV3ZWRSZXF1ZXN0EgoKAmlkGAEgASgJIjAKEk1hcmtWaWV3ZWRSZXNwb25zZRIKCgJpZBgBIAEoCRIOCgZ2aWV3ZWQYAiABKAgypwMKCkVDR1NlcnZpY2USTwoKR2V0RmlsdGVycxIeLmdycGMuYXBpLnYxLkdldEZpbHRlcnNSZXF1ZXN0Gh8uZ3JwYy5hcGkudjEuR2V0RmlsdGVyc1Jlc3BvbnNlIgASRgoHTGlzdEFsbBIbLmdycGMuYXBpLnYxLkxpc3RBbGxSZXF1ZXN0GhwuZ3JwYy5hcGkudjEuTGlzdEFsbFJlc3BvbnNlIgASUgoLR2V0TWV0YWRhdGESHy5ncnBjLmFwaS52MS5HZXRNZXRhZGF0YVJlcXVlc3QaIC5ncnBjLmFwaS52MS5HZXRNZXRhZGF0YVJlc3BvbnNlIgASWwoOVXBkYXRlTWV0YWRhdGESIi5ncnBjLmFwaS52MS5VcGRhdGVNZXRhZGF0YVJlcXVlc3QaIy5ncnBjLmFwaS52MS5VcGRhdGVNZXRhZGF0YVJlc3BvbnNlIgASTwoKTWFya1ZpZXdlZBIeLmdycGMuYXBpLnYxLk1hcmtWaWV3ZWRSZXF1ZXN0Gh8uZ3JwYy5hcGkudjEuTWFya1ZpZXdlZFJlc3BvbnNlIgBCnQEKD2NvbS5ncnBjLmFwaS52MUIIRWNnUHJvdG9QAVoyZ2l0aHViLmNvbS9MSVJZQy1JSFUvZWNnLWh1Yi9pbnRlcm5hbC9hcGkvdjE7YXBpdjGiAgNHQViqAgtHcnBjLkFwaS5WMcoCC0dycGNcQXBpXFYx4gIXR3JwY1xBcGlcVjFcR1BCTWV0YWRhdGHqAg1HcnBjOjpBcGk6OlYxYgZwcm90bzM");
 
 /**
  * Ecg mirrors dto.EcgDTO (the API representation, not the DB model). file_path is
@@ -390,6 +390,49 @@ export const UpdateMetadataResponseSchema: GenMessage<UpdateMetadataResponse> = 
   messageDesc(file_v1_ecg, 10);
 
 /**
+ * MarkViewedRequest stamps viewed_at on first view (clears the "new" indicator).
+ *
+ * @generated from message grpc.api.v1.MarkViewedRequest
+ */
+export type MarkViewedRequest = Message<"grpc.api.v1.MarkViewedRequest"> & {
+  /**
+   * ECG id
+   *
+   * @generated from field: string id = 1;
+   */
+  id: string;
+};
+
+/**
+ * Describes the message grpc.api.v1.MarkViewedRequest.
+ * Use `create(MarkViewedRequestSchema)` to create a new message.
+ */
+export const MarkViewedRequestSchema: GenMessage<MarkViewedRequest> = /*@__PURE__*/
+  messageDesc(file_v1_ecg, 11);
+
+/**
+ * @generated from message grpc.api.v1.MarkViewedResponse
+ */
+export type MarkViewedResponse = Message<"grpc.api.v1.MarkViewedResponse"> & {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * @generated from field: bool viewed = 2;
+   */
+  viewed: boolean;
+};
+
+/**
+ * Describes the message grpc.api.v1.MarkViewedResponse.
+ * Use `create(MarkViewedResponseSchema)` to create a new message.
+ */
+export const MarkViewedResponseSchema: GenMessage<MarkViewedResponse> = /*@__PURE__*/
+  messageDesc(file_v1_ecg, 12);
+
+/**
  * @generated from service grpc.api.v1.ECGService
  */
 export const ECGService: GenService<{
@@ -424,6 +467,14 @@ export const ECGService: GenService<{
     methodKind: "unary";
     input: typeof UpdateMetadataRequestSchema;
     output: typeof UpdateMetadataResponseSchema;
+  },
+  /**
+   * @generated from rpc grpc.api.v1.ECGService.MarkViewed
+   */
+  markViewed: {
+    methodKind: "unary";
+    input: typeof MarkViewedRequestSchema;
+    output: typeof MarkViewedResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_v1_ecg, 0);
