@@ -36,9 +36,10 @@ import {
   pinPatient,
   unpinPatient,
   fetchPatientTags,
+  fetchPatientTagsBatch,
+  fetchECGTagsBatch,
   fetchTags,
   untagPatient,
-  fetchECGTags,
   untagECG,
   forceHL7,
   sendECGResult,
@@ -224,6 +225,15 @@ function PatientGrid({
   const { notify } = useNotification();
   const gridRef = useRef<HTMLDivElement>(null);
 
+  // One batch request resolves tags for every visible patient (was N per-row).
+  const patientIds = patients.map((p) => p.patient_id);
+  const { data: patientTagsMap = {} } = useQuery({
+    queryKey: ["patient-tags-batch", patientIds],
+    queryFn: () => fetchPatientTagsBatch(patientIds),
+    enabled: patientIds.length > 0,
+    staleTime: 30_000,
+  });
+
   if (isLoading) {
     return (
       <div className="flex justify-center py-16">
@@ -301,7 +311,7 @@ function PatientGrid({
               {patient.last_activity && (
                 <span>{formatDate(patient.last_activity)}</span>
               )}
-              <PatientTagDots patientId={patient.patient_id} />
+              <PatientTagDots tags={patientTagsMap[patient.patient_id] ?? []} />
             </div>
             {(selectedEcgCounts.get(patient.id) ?? 0) > 0 && (
               <span className="text-[10px] font-medium text-primary tabular-nums">
@@ -526,13 +536,19 @@ function PatientHL7History({ patientId }: { patientId: string }) {
 
 // ─── ECG tags (inline dots on ECG rows) ─────────────────────────────────────
 
-function ECGTagDots({ ecgId, canApply }: { ecgId: string; canApply: boolean }) {
+// ECGTagDots is display-only: it receives tags from the parent's single batch
+// query (fetchECGTagsBatch) — no per-row request. Mutations invalidate the
+// batch key so the whole page refreshes in one shot.
+function ECGTagDots({
+  ecgId,
+  tags,
+  canApply,
+}: {
+  ecgId: string;
+  tags: TagDTO[];
+  canApply: boolean;
+}) {
   const queryClient = useQueryClient();
-  const { data: tags = [] } = useQuery({
-    queryKey: ["ecg-tags", ecgId],
-    queryFn: () => fetchECGTags(ecgId),
-    staleTime: 30_000,
-  });
 
   if (tags.length === 0 && !canApply) return null;
 
@@ -548,7 +564,7 @@ function ECGTagDots({ ecgId, canApply }: { ecgId: string; canApply: boolean }) {
               ? () => {
                   void untagECG(ecgId, tag.id);
                   void queryClient.invalidateQueries({
-                    queryKey: ["ecg-tags", ecgId],
+                    queryKey: ["ecg-tags-batch"],
                   });
                 }
               : undefined
@@ -569,14 +585,9 @@ function ECGTagDots({ ecgId, canApply }: { ecgId: string; canApply: boolean }) {
 
 // ─── Patient tags dots (compact, for grid rows) ─────────────────────────────
 
-function PatientTagDots({ patientId }: { patientId: string }) {
-  const { data: tags = [] } = useQuery({
-    queryKey: ["patient-tags", patientId],
-    queryFn: () => fetchPatientTags(patientId),
-    staleTime: 30_000,
-    enabled: !!patientId,
-  });
-
+// PatientTagDots is display-only: tags come from the parent's single batch
+// query (fetchPatientTagsBatch) — no per-row request.
+function PatientTagDots({ tags }: { tags: TagDTO[] }) {
   if (tags.length === 0) return null;
 
   return (
@@ -728,6 +739,14 @@ function PatientDetail({
   const age = ageFromDOB(patient.date_of_birth);
 
   const ecgIdsOnPage = ecgs.map((e) => e.id);
+  // One batch request resolves tags for every ECG on the page (was N per-row).
+  const ecgIdStrings = ecgIdsOnPage.map(String);
+  const { data: ecgTagsMap = {} } = useQuery({
+    queryKey: ["ecg-tags-batch", ecgIdStrings],
+    queryFn: () => fetchECGTagsBatch(ecgIdStrings),
+    enabled: ecgIdStrings.length > 0,
+    staleTime: 30_000,
+  });
   const selectedOnPage = ecgIdsOnPage.filter((id) => selectedECGs.has(id));
   const allChecked = ecgs.length > 0 && selectedOnPage.length === ecgs.length;
   const someChecked = selectedOnPage.length > 0 && !allChecked;
@@ -1001,7 +1020,11 @@ function PatientDetail({
                   >
                     {ecg.original_filename}
                   </div>
-                  <ECGTagDots ecgId={String(ecg.id)} canApply={canForceHL7} />
+                  <ECGTagDots
+                    ecgId={String(ecg.id)}
+                    tags={ecgTagsMap[String(ecg.id)] ?? []}
+                    canApply={canForceHL7}
+                  />
                 </div>
 
                 <div
