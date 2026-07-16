@@ -750,6 +750,103 @@ func (x *UpdateMetadataResponse) GetValuesJson() string {
 	return ""
 }
 
+// MarkViewedRequest stamps viewed_at on first view (clears the "new" indicator).
+type MarkViewedRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"` // ECG id
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MarkViewedRequest) Reset() {
+	*x = MarkViewedRequest{}
+	mi := &file_v1_ecg_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MarkViewedRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MarkViewedRequest) ProtoMessage() {}
+
+func (x *MarkViewedRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_ecg_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MarkViewedRequest.ProtoReflect.Descriptor instead.
+func (*MarkViewedRequest) Descriptor() ([]byte, []int) {
+	return file_v1_ecg_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *MarkViewedRequest) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+type MarkViewedResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Viewed        bool                   `protobuf:"varint,2,opt,name=viewed,proto3" json:"viewed,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *MarkViewedResponse) Reset() {
+	*x = MarkViewedResponse{}
+	mi := &file_v1_ecg_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *MarkViewedResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MarkViewedResponse) ProtoMessage() {}
+
+func (x *MarkViewedResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_ecg_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MarkViewedResponse.ProtoReflect.Descriptor instead.
+func (*MarkViewedResponse) Descriptor() ([]byte, []int) {
+	return file_v1_ecg_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *MarkViewedResponse) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *MarkViewedResponse) GetViewed() bool {
+	if x != nil {
+		return x.Viewed
+	}
+	return false
+}
+
 var File_v1_ecg_proto protoreflect.FileDescriptor
 
 const file_v1_ecg_proto_rawDesc = "" +
@@ -816,14 +913,21 @@ const file_v1_ecg_proto_rawDesc = "" +
 	"valuesJson\"9\n" +
 	"\x16UpdateMetadataResponse\x12\x1f\n" +
 	"\vvalues_json\x18\x01 \x01(\tR\n" +
-	"valuesJson2\xd6\x02\n" +
+	"valuesJson\"#\n" +
+	"\x11MarkViewedRequest\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"<\n" +
+	"\x12MarkViewedResponse\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x16\n" +
+	"\x06viewed\x18\x02 \x01(\bR\x06viewed2\xa7\x03\n" +
 	"\n" +
 	"ECGService\x12O\n" +
 	"\n" +
 	"GetFilters\x12\x1e.grpc.api.v1.GetFiltersRequest\x1a\x1f.grpc.api.v1.GetFiltersResponse\"\x00\x12F\n" +
 	"\aListAll\x12\x1b.grpc.api.v1.ListAllRequest\x1a\x1c.grpc.api.v1.ListAllResponse\"\x00\x12R\n" +
 	"\vGetMetadata\x12\x1f.grpc.api.v1.GetMetadataRequest\x1a .grpc.api.v1.GetMetadataResponse\"\x00\x12[\n" +
-	"\x0eUpdateMetadata\x12\".grpc.api.v1.UpdateMetadataRequest\x1a#.grpc.api.v1.UpdateMetadataResponse\"\x00B\x9d\x01\n" +
+	"\x0eUpdateMetadata\x12\".grpc.api.v1.UpdateMetadataRequest\x1a#.grpc.api.v1.UpdateMetadataResponse\"\x00\x12O\n" +
+	"\n" +
+	"MarkViewed\x12\x1e.grpc.api.v1.MarkViewedRequest\x1a\x1f.grpc.api.v1.MarkViewedResponse\"\x00B\x9d\x01\n" +
 	"\x0fcom.grpc.api.v1B\bEcgProtoP\x01Z2github.com/LIRYC-IHU/ecg-hub/internal/api/v1;apiv1\xa2\x02\x03GAX\xaa\x02\vGrpc.Api.V1\xca\x02\vGrpc\\Api\\V1\xe2\x02\x17Grpc\\Api\\V1\\GPBMetadata\xea\x02\rGrpc::Api::V1b\x06proto3"
 
 var (
@@ -838,7 +942,7 @@ func file_v1_ecg_proto_rawDescGZIP() []byte {
 	return file_v1_ecg_proto_rawDescData
 }
 
-var file_v1_ecg_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_v1_ecg_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_v1_ecg_proto_goTypes = []any{
 	(*Ecg)(nil),                    // 0: grpc.api.v1.Ecg
 	(*EcgWithPatient)(nil),         // 1: grpc.api.v1.EcgWithPatient
@@ -851,6 +955,8 @@ var file_v1_ecg_proto_goTypes = []any{
 	(*GetMetadataResponse)(nil),    // 8: grpc.api.v1.GetMetadataResponse
 	(*UpdateMetadataRequest)(nil),  // 9: grpc.api.v1.UpdateMetadataRequest
 	(*UpdateMetadataResponse)(nil), // 10: grpc.api.v1.UpdateMetadataResponse
+	(*MarkViewedRequest)(nil),      // 11: grpc.api.v1.MarkViewedRequest
+	(*MarkViewedResponse)(nil),     // 12: grpc.api.v1.MarkViewedResponse
 }
 var file_v1_ecg_proto_depIdxs = []int32{
 	0,  // 0: grpc.api.v1.EcgWithPatient.ecg:type_name -> grpc.api.v1.Ecg
@@ -860,12 +966,14 @@ var file_v1_ecg_proto_depIdxs = []int32{
 	4,  // 4: grpc.api.v1.ECGService.ListAll:input_type -> grpc.api.v1.ListAllRequest
 	7,  // 5: grpc.api.v1.ECGService.GetMetadata:input_type -> grpc.api.v1.GetMetadataRequest
 	9,  // 6: grpc.api.v1.ECGService.UpdateMetadata:input_type -> grpc.api.v1.UpdateMetadataRequest
-	3,  // 7: grpc.api.v1.ECGService.GetFilters:output_type -> grpc.api.v1.GetFiltersResponse
-	5,  // 8: grpc.api.v1.ECGService.ListAll:output_type -> grpc.api.v1.ListAllResponse
-	8,  // 9: grpc.api.v1.ECGService.GetMetadata:output_type -> grpc.api.v1.GetMetadataResponse
-	10, // 10: grpc.api.v1.ECGService.UpdateMetadata:output_type -> grpc.api.v1.UpdateMetadataResponse
-	7,  // [7:11] is the sub-list for method output_type
-	3,  // [3:7] is the sub-list for method input_type
+	11, // 7: grpc.api.v1.ECGService.MarkViewed:input_type -> grpc.api.v1.MarkViewedRequest
+	3,  // 8: grpc.api.v1.ECGService.GetFilters:output_type -> grpc.api.v1.GetFiltersResponse
+	5,  // 9: grpc.api.v1.ECGService.ListAll:output_type -> grpc.api.v1.ListAllResponse
+	8,  // 10: grpc.api.v1.ECGService.GetMetadata:output_type -> grpc.api.v1.GetMetadataResponse
+	10, // 11: grpc.api.v1.ECGService.UpdateMetadata:output_type -> grpc.api.v1.UpdateMetadataResponse
+	12, // 12: grpc.api.v1.ECGService.MarkViewed:output_type -> grpc.api.v1.MarkViewedResponse
+	8,  // [8:13] is the sub-list for method output_type
+	3,  // [3:8] is the sub-list for method input_type
 	3,  // [3:3] is the sub-list for extension type_name
 	3,  // [3:3] is the sub-list for extension extendee
 	0,  // [0:3] is the sub-list for field type_name
@@ -882,7 +990,7 @@ func file_v1_ecg_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_ecg_proto_rawDesc), len(file_v1_ecg_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   11,
+			NumMessages:   13,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
