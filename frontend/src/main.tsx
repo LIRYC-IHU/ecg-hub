@@ -7,6 +7,7 @@ import './index.css'
 import App from './App.tsx'
 import { NotificationProvider } from './context/NotificationContext'
 import { NotificationContainer } from './components/ui/NotificationContainer'
+import { ConfirmProvider } from './context/ConfirmContext'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -31,8 +32,10 @@ createRoot(document.getElementById('root')!).render(
     <BrowserRouter>
       <QueryClientProvider client={queryClient}>
         <NotificationProvider>
-          <App />
-          <NotificationContainer />
+          <ConfirmProvider>
+            <App />
+            <NotificationContainer />
+          </ConfirmProvider>
         </NotificationProvider>
       </QueryClientProvider>
     </BrowserRouter>
