@@ -346,6 +346,87 @@ func (r *RouterConfig) RegisterRoutes() {
 	)
 	mountConnect(r.e, pinPath, pinHandler)
 
+	// Admin service — protected admin console (étape 8). One service exposing
+	// roles / app-users / audit / stats / storage / errors / user-defaults /
+	// quarantine, each guarded by its own permission via the per-procedure map.
+	adminPath, adminHandler := apiv1connect.NewAdminServiceHandler(
+		&handlers.AdminServiceHandler{
+			DB:           r.gormDB,
+			Checker:      r.checker,
+			Cfg:          r.cfg,
+			RoleRepo:     roleRepo,
+			UserRepo:     r.userRepo,
+			LocalRepo:    repository.NewLocalUserRepository(r.gormDB),
+			SettingsRepo: r.moduleSettingsRepo,
+			Persister:    r.persister,
+		},
+		connect.WithInterceptors(
+			validateInterceptor,
+			mw.ConnectRequireAuth(r.authProvider, r.userRepo, apiKeyRepo),
+			mw.ConnectRequirePermission(r.checker, map[string]string{
+				apiv1connect.AdminServiceGetStatsProcedure:          auth.PermAdminSystem,
+				apiv1connect.AdminServiceGetStorageMetricsProcedure: auth.PermAdminSystem,
+				apiv1connect.AdminServiceGetRecentErrorsProcedure:   auth.PermAdminSystem,
+				apiv1connect.AdminServiceListAuditLogsProcedure:     auth.PermAdminAudit,
+				apiv1connect.AdminServiceGetUserDefaultsProcedure:   auth.PermAdminRoles,
+				apiv1connect.AdminServiceSetUserDefaultsProcedure:   auth.PermAdminRoles,
+				apiv1connect.AdminServiceListRolesProcedure:         auth.PermAdminRoles,
+				apiv1connect.AdminServiceCreateRoleProcedure:        auth.PermAdminRoles,
+				apiv1connect.AdminServiceUpdateRoleProcedure:        auth.PermAdminRoles,
+				apiv1connect.AdminServiceDeleteRoleProcedure:        auth.PermAdminRoles,
+				apiv1connect.AdminServiceListAppUsersProcedure:      auth.PermAdminUsers,
+				apiv1connect.AdminServiceSetAppUserRoleProcedure:    auth.PermAdminUsers,
+				apiv1connect.AdminServiceDeleteAppUserProcedure:     auth.PermAdminUsers,
+				apiv1connect.AdminServiceListQuarantineProcedure:    auth.PermQuarantineRead,
+				apiv1connect.AdminServiceDeleteQuarantineProcedure:  auth.PermQuarantineDelete,
+				apiv1connect.AdminServiceAssignQuarantineProcedure:  auth.PermQuarantineAssign,
+			}),
+		),
+	)
+	mountConnect(r.e, adminPath, adminHandler)
+
+	// Module service — protected module & connector hot-control (étape 9). All
+	// procedures require admin.system.
+	modulePath, moduleHandler := apiv1connect.NewModuleServiceHandler(
+		&handlers.ModuleServiceHandler{
+			DB:              r.gormDB,
+			Registry:        module.GlobalRegistry,
+			ModuleProvider:  r.ingestRouter,
+			Versions:        r.bridge,
+			ConfigRepo:      r.moduleConfigRepo,
+			SettingsRepo:    r.moduleSettingsRepo,
+			Router:          r.ingestRouter,
+			ActiveModules:   r.activeModules,
+			EncKey:          r.authEncKey,
+			Cfg:             r.cfg,
+			FtpQueue:        r.ftpQueue,
+			ConnectorReload: r.connectorReload,
+			ConnCheckers:    r.connCheckers,
+		},
+		connect.WithInterceptors(
+			validateInterceptor,
+			mw.ConnectRequireAuth(r.authProvider, r.userRepo, apiKeyRepo),
+			mw.ConnectRequirePermission(r.checker, map[string]string{
+				apiv1connect.ModuleServiceListModulesProcedure:         auth.PermAdminSystem,
+				apiv1connect.ModuleServiceListModuleStatusProcedure:    auth.PermAdminSystem,
+				apiv1connect.ModuleServiceStartModuleProcedure:         auth.PermAdminSystem,
+				apiv1connect.ModuleServiceStopModuleProcedure:          auth.PermAdminSystem,
+				apiv1connect.ModuleServiceGetFTPConfigProcedure:        auth.PermAdminSystem,
+				apiv1connect.ModuleServiceSaveFTPConfigProcedure:       auth.PermAdminSystem,
+				apiv1connect.ModuleServiceGetDICOMConfigProcedure:      auth.PermAdminSystem,
+				apiv1connect.ModuleServiceSaveDICOMConfigProcedure:     auth.PermAdminSystem,
+				apiv1connect.ModuleServiceGetModuleSettingsProcedure:   auth.PermAdminSystem,
+				apiv1connect.ModuleServiceSaveModuleSettingsProcedure:  auth.PermAdminSystem,
+				apiv1connect.ModuleServiceListConnectorConfigsProcedure: auth.PermAdminSystem,
+				apiv1connect.ModuleServiceSaveConnectorConfigProcedure: auth.PermAdminSystem,
+				apiv1connect.ModuleServiceDeleteConnectorProcedure:     auth.PermAdminSystem,
+				apiv1connect.ModuleServiceTestConnectorProcedure:       auth.PermAdminSystem,
+				apiv1connect.ModuleServiceListConnectorsProcedure:      auth.PermAdminSystem,
+			}),
+		),
+	)
+	mountConnect(r.e, modulePath, moduleHandler)
+
 	// Event service — protected server-stream (replaces the /events/ws WebSocket).
 	// Streaming handlers are NOT covered by the unary auth interceptors, so it uses
 	// the streaming-capable mw.ConnectStreamAuth (auth + patient.read). Only wired
@@ -418,6 +499,49 @@ func (r *RouterConfig) RegisterRoutes() {
 	)
 	mountConnect(r.e, hl7Path, hl7Handler)
 
+	// API key service — protected (apikey.manage). Per-user keys; plaintext
+	// returned only at creation.
+	apiKeyPath, apiKeyHandler := apiv1connect.NewAPIKeyServiceHandler(
+		&handlers.APIKeyServiceHandler{Repo: apiKeyRepo, DB: r.gormDB},
+		connect.WithInterceptors(
+			validateInterceptor,
+			mw.ConnectRequireAuth(r.authProvider, r.userRepo, apiKeyRepo),
+			mw.ConnectRequirePermission(r.checker, map[string]string{
+				apiv1connect.APIKeyServiceListApiKeysProcedure:  auth.PermAPIKeyManage,
+				apiv1connect.APIKeyServiceCreateApiKeyProcedure: auth.PermAPIKeyManage,
+				apiv1connect.APIKeyServiceDeleteApiKeyProcedure: auth.PermAPIKeyManage,
+			}),
+		),
+	)
+	mountConnect(r.e, apiKeyPath, apiKeyHandler)
+
+	// Webhook service — protected (webhook.manage). Per-user endpoints; secrets
+	// encrypted at rest, never returned. Only wired when the webhook deps are set.
+	if r.userWebhookRepo != nil && r.webhookDispatcher != nil {
+		webhookPath, webhookHandler := apiv1connect.NewWebhookServiceHandler(
+			&handlers.WebhookServiceHandler{
+				Repo:       r.userWebhookRepo,
+				EncKey:     r.authEncKey,
+				DB:         r.gormDB,
+				Dispatcher: r.webhookDispatcher,
+				Modules:    r.ingestRouter,
+			},
+			connect.WithInterceptors(
+				validateInterceptor,
+				mw.ConnectRequireAuth(r.authProvider, r.userRepo, apiKeyRepo),
+				mw.ConnectRequirePermission(r.checker, map[string]string{
+					apiv1connect.WebhookServiceGetOptionsProcedure:    auth.PermWebhookManage,
+					apiv1connect.WebhookServiceListWebhooksProcedure:  auth.PermWebhookManage,
+					apiv1connect.WebhookServiceCreateWebhookProcedure: auth.PermWebhookManage,
+					apiv1connect.WebhookServiceUpdateWebhookProcedure: auth.PermWebhookManage,
+					apiv1connect.WebhookServiceDeleteWebhookProcedure: auth.PermWebhookManage,
+					apiv1connect.WebhookServiceTestWebhookProcedure:   auth.PermWebhookManage,
+				}),
+			),
+		)
+		mountConnect(r.e, webhookPath, webhookHandler)
+	}
+
 	// Swagger UI — requires authentication + swagger.read permission.
 	// The spec itself is generated restricted to the Patients, ECG and health
 	// tags (swag init --tags) — the endpoints a machine client (webhook
@@ -431,10 +555,8 @@ func (r *RouterConfig) RegisterRoutes() {
 	// === Public API group (no auth required) ===
 	publicV1 := r.e.Group("/api/v1")
 
-	// Setup (public — system initialization). GET /setup/status is now served
-	// over gRPC by SetupService (wired above); the POST stays REST for now.
-	localUserRepo := repository.NewLocalUserRepository(r.gormDB)
-	publicV1.POST("/setup", handlers.SetupHandler(localUserRepo, r.gormDB))
+	// Setup (public — system initialization) is now fully served over gRPC by
+	// SetupService (GetStatus + Initialize, wired above); no REST route remains.
 
 	// Strict rate limiter shared by the credential-accepting auth endpoints.
 	loginRateLimiter := newLoginRateLimiter()
@@ -497,80 +619,29 @@ func (r *RouterConfig) RegisterRoutes() {
 	// pipeline; live per-file status streams over /events/ws. Requires ecg.upload.
 	apiV1.POST("/uploads", handlers.UploadECGsHandler(r.ftpQueue, r.gormDB), mw.RequirePermission(r.checker, auth.PermECGUpload))
 
-	// Audit log — requires admin.audit
-	apiV1.GET("/audit-logs", handlers.ListAuditLogsHandler(r.gormDB), mw.RequirePermission(r.checker, auth.PermAdminAudit))
-
-	// System stats — requires admin.system
-	apiV1.GET("/admin/stats", handlers.AdminStatsHandler(r.gormDB), mw.RequirePermission(r.checker, auth.PermAdminSystem))
+	// Audit log, system stats, storage metrics, recent errors, role CRUD,
+	// app-users, quarantine and global user-defaults are now served over gRPC by
+	// AdminService (étape 8, wired near the other Connect services above).
 
 	// User management (Keycloak) — requires admin.users
 	apiV1.GET("/admin/users", handlers.ListUsersHandler(r.keycloakAdmin), mw.RequirePermission(r.checker, auth.PermAdminUsers))
 	apiV1.PUT("/admin/users/:id/role", handlers.SetUserRoleHandler(r.keycloakAdmin, r.gormDB), mw.RequirePermission(r.checker, auth.PermAdminUsers))
 
-	// Role CRUD — requires admin.roles
-	apiV1.GET("/admin/roles", handlers.ListRolesHandler(roleRepo), mw.RequirePermission(r.checker, auth.PermAdminRoles))
-	apiV1.POST("/admin/roles", handlers.CreateRoleHandler(roleRepo, r.checker, r.gormDB), mw.RequirePermission(r.checker, auth.PermAdminRoles))
-	apiV1.PUT("/admin/roles/:id", handlers.UpdateRoleHandler(roleRepo, r.checker, r.gormDB), mw.RequirePermission(r.checker, auth.PermAdminRoles))
-	apiV1.DELETE("/admin/roles/:id", handlers.DeleteRoleHandler(roleRepo, r.checker, r.gormDB), mw.RequirePermission(r.checker, auth.PermAdminRoles))
-
-	// DB user registry — users who have logged in + their roles
-	apiV1.GET("/admin/app-users", handlers.ListAppUsersHandler(r.userRepo), mw.RequirePermission(r.checker, auth.PermAdminUsers))
-	apiV1.PUT("/admin/app-users/:id/role", handlers.SetAppUserRoleHandler(r.userRepo, r.gormDB), mw.RequirePermission(r.checker, auth.PermAdminUsers))
-	apiV1.DELETE("/admin/app-users/:id", handlers.DeleteAppUserHandler(r.userRepo, localUserRepo, r.gormDB), mw.RequirePermission(r.checker, auth.PermAdminUsers))
-
-	// Quarantine — list requires quarantine.read, delete requires quarantine.delete,
-	// assign (re-ingest an unidentified ECG under a patient) requires quarantine.assign.
-	apiV1.GET("/admin/quarantine", handlers.ListQuarantineHandler(r.gormDB), mw.RequirePermission(r.checker, auth.PermQuarantineRead))
-	apiV1.DELETE("/admin/quarantine/:id", handlers.DeleteQuarantineHandler(r.gormDB), mw.RequirePermission(r.checker, auth.PermQuarantineDelete))
-	if r.persister != nil {
-		apiV1.POST("/admin/quarantine/:id/assign", handlers.AssignQuarantineHandler(r.persister, r.gormDB), mw.RequirePermission(r.checker, auth.PermQuarantineAssign))
-	}
+	// Role CRUD, DB app-users, quarantine and volume metrics migrated to
+	// AdminService (gRPC, wired above).
 
 	// Realtime ingestion events are now served over gRPC by EventService.Subscribe
 	// (server-stream, wired near the other Connect services above).
 
-	// Volume metrics — requires admin.system
-	apiV1.GET("/admin/storage-metrics", handlers.VolumeMetricsHandler(r.cfg, r.gormDB), mw.RequirePermission(r.checker, auth.PermAdminSystem))
+	// Modules & connectors (list, runtime status, start/stop, FTP/DICOM config,
+	// activation settings, connector config CRUD + test + health) are now served
+	// over gRPC by ModuleService (étape 9, wired near the other Connect services
+	// above). Recent 5xx errors moved to AdminService.GetRecentErrors (étape 8).
 
-	// Active modules — requires admin.system
-	apiV1.GET("/modules", handlers.ModulesHandler(r.ingestRouter, r.bridge), mw.RequirePermission(r.checker, auth.PermAdminSystem))
-
-	// Module hot-control (EPIC-007 Phase 1) — requires admin.system
-	apiV1.GET("/admin/modules/status", handlers.ListModuleStatusHandler(module.GlobalRegistry), mw.RequirePermission(r.checker, auth.PermAdminSystem))
-	apiV1.POST("/admin/modules/:name/stop", handlers.StopModuleHandler(module.GlobalRegistry, r.moduleConfigRepo, r.gormDB), mw.RequirePermission(r.checker, auth.PermAdminSystem))
-	apiV1.POST("/admin/modules/:name/start", handlers.StartModuleHandler(module.GlobalRegistry, r.moduleConfigRepo, r.authEncKey, r.cfg, r.ftpQueue, r.gormDB), mw.RequirePermission(r.checker, auth.PermAdminSystem))
-
-	// FTP module configuration — requires admin.system
-	apiV1.GET("/admin/modules/ftp/config", handlers.GetFTPConfigHandler(r.moduleConfigRepo, r.authEncKey), mw.RequirePermission(r.checker, auth.PermAdminSystem))
-	apiV1.PUT("/admin/modules/ftp/config", handlers.SaveFTPConfigHandler(r.moduleConfigRepo, r.authEncKey, module.GlobalRegistry), mw.RequirePermission(r.checker, auth.PermAdminSystem))
-
-	// DICOM module configuration — requires admin.system
-	apiV1.GET("/admin/modules/dicom/config", handlers.GetDICOMConfigHandler(r.moduleConfigRepo, r.authEncKey), mw.RequirePermission(r.checker, auth.PermAdminSystem))
-	apiV1.PUT("/admin/modules/dicom/config", handlers.SaveDICOMConfigHandler(r.moduleConfigRepo, r.authEncKey, module.GlobalRegistry), mw.RequirePermission(r.checker, auth.PermAdminSystem))
-
-	// Vendor module activation settings (DB-backed, replaces config.yaml modules.active) — requires admin.system
-	apiV1.GET("/admin/settings/modules", handlers.GetModuleSettingsHandler(r.moduleSettingsRepo, r.activeModules), mw.RequirePermission(r.checker, auth.PermAdminSystem))
-	apiV1.PUT("/admin/settings/modules", handlers.SaveModuleSettingsHandler(r.moduleSettingsRepo, r.ingestRouter, r.gormDB), mw.RequirePermission(r.checker, auth.PermAdminSystem))
-
-	// User creation defaults (default role for new logins) — requires admin.roles
-	apiV1.GET("/admin/settings/user-defaults", handlers.GetUserDefaultsHandler(r.moduleSettingsRepo), mw.RequirePermission(r.checker, auth.PermAdminRoles))
-	apiV1.PUT("/admin/settings/user-defaults", handlers.SaveUserDefaultsHandler(r.moduleSettingsRepo), mw.RequirePermission(r.checker, auth.PermAdminRoles))
-
-	// Center branding (name + logo) — requires admin.branding
+	// Center branding (name + logo) — requires admin.branding.
+	// ⚠️ Logo upload stays REST (multipart bytes); the JSON save could move to gRPC later.
 	apiV1.PUT("/admin/settings/branding", handlers.SaveBrandingHandler(r.moduleSettingsRepo, r.gormDB), mw.RequirePermission(r.checker, auth.PermAdminBranding))
 	apiV1.POST("/admin/settings/branding/logo", handlers.UploadLogoHandler(r.moduleSettingsRepo, r.gormDB), mw.RequirePermission(r.checker, auth.PermAdminBranding))
-
-	// Proxy connector configuration (Story 7.6) — requires admin.system
-	apiV1.GET("/admin/connectors/config", handlers.ListConnectorConfigsHandler(r.moduleConfigRepo, r.authEncKey), mw.RequirePermission(r.checker, auth.PermAdminSystem))
-	apiV1.PUT("/admin/connectors/:name/config", handlers.SaveConnectorConfigHandler(r.moduleConfigRepo, r.authEncKey, module.GlobalRegistry, r.connectorReload, r.gormDB), mw.RequirePermission(r.checker, auth.PermAdminSystem))
-	apiV1.DELETE("/admin/connectors/:name", handlers.DeleteConnectorConfigHandler(r.moduleConfigRepo, r.connectorReload, r.gormDB), mw.RequirePermission(r.checker, auth.PermAdminSystem))
-	apiV1.POST("/admin/connectors/:name/test", handlers.TestConnectorHandler(r.moduleConfigRepo, r.authEncKey), mw.RequirePermission(r.checker, auth.PermAdminSystem))
-
-	// Outbound PACS connectors — requires admin.system
-	apiV1.GET("/admin/connectors", handlers.ConnectorsHandler(r.connCheckers), mw.RequirePermission(r.checker, auth.PermAdminSystem))
-
-	// Recent 5xx errors — requires admin.system
-	apiV1.GET("/admin/errors", handlers.RecentErrorsHandler(), mw.RequirePermission(r.checker, auth.PermAdminSystem))
 
 	// Batch export create/formats/status + progress are now served over gRPC by
 	// ExportService (Create/Formats/Get + WatchProgress stream, wired above).
@@ -579,22 +650,11 @@ func (r *RouterConfig) RegisterRoutes() {
 
 	// User pins (favourites) are now served over gRPC by PinService (wired above).
 
-	// Per-user outbound webhooks — requires webhook.manage. Each user manages
-	// only their own webhooks (repo scoping); secrets are stored encrypted.
-	if r.userWebhookRepo != nil && r.webhookDispatcher != nil {
-		apiV1.GET("/webhooks/options", handlers.WebhookOptionsHandler(r.ingestRouter), mw.RequirePermission(r.checker, auth.PermWebhookManage))
-		apiV1.GET("/webhooks", handlers.ListUserWebhooksHandler(r.userWebhookRepo), mw.RequirePermission(r.checker, auth.PermWebhookManage))
-		apiV1.POST("/webhooks", handlers.CreateUserWebhookHandler(r.userWebhookRepo, r.authEncKey, r.gormDB), mw.RequirePermission(r.checker, auth.PermWebhookManage))
-		apiV1.PUT("/webhooks/:id", handlers.UpdateUserWebhookHandler(r.userWebhookRepo, r.authEncKey, r.gormDB), mw.RequirePermission(r.checker, auth.PermWebhookManage))
-		apiV1.DELETE("/webhooks/:id", handlers.DeleteUserWebhookHandler(r.userWebhookRepo, r.gormDB), mw.RequirePermission(r.checker, auth.PermWebhookManage))
-		apiV1.POST("/webhooks/:id/test", handlers.TestUserWebhookHandler(r.userWebhookRepo, r.webhookDispatcher), mw.RequirePermission(r.checker, auth.PermWebhookManage))
-	}
+	// Per-user webhooks are now served over gRPC by WebhookService (wired above).
 
 	// Per-user API keys — requires apikey.manage: keys grant durable
 	// programmatic access, so handing them out is an explicit role decision.
-	apiV1.GET("/api-keys", handlers.ListAPIKeysHandler(apiKeyRepo), mw.RequirePermission(r.checker, auth.PermAPIKeyManage))
-	apiV1.POST("/api-keys", handlers.CreateAPIKeyHandler(apiKeyRepo, r.gormDB), mw.RequirePermission(r.checker, auth.PermAPIKeyManage))
-	apiV1.DELETE("/api-keys/:id", handlers.DeleteAPIKeyHandler(apiKeyRepo, r.gormDB), mw.RequirePermission(r.checker, auth.PermAPIKeyManage))
+	// API keys are now served over gRPC by APIKeyService (wired above).
 
 	// Tags are now served over gRPC by TagService (wired above), including the
 	// BatchGetPatientTags / BatchGetEcgTags reads that resolve a whole list page
