@@ -42,6 +42,8 @@ const (
 	// ECGServiceUpdateMetadataProcedure is the fully-qualified name of the ECGService's UpdateMetadata
 	// RPC.
 	ECGServiceUpdateMetadataProcedure = "/grpc.api.v1.ECGService/UpdateMetadata"
+	// ECGServiceMarkViewedProcedure is the fully-qualified name of the ECGService's MarkViewed RPC.
+	ECGServiceMarkViewedProcedure = "/grpc.api.v1.ECGService/MarkViewed"
 )
 
 // ECGServiceClient is a client for the grpc.api.v1.ECGService service.
@@ -50,6 +52,7 @@ type ECGServiceClient interface {
 	ListAll(context.Context, *v1.ListAllRequest) (*v1.ListAllResponse, error)
 	GetMetadata(context.Context, *v1.GetMetadataRequest) (*v1.GetMetadataResponse, error)
 	UpdateMetadata(context.Context, *v1.UpdateMetadataRequest) (*v1.UpdateMetadataResponse, error)
+	MarkViewed(context.Context, *v1.MarkViewedRequest) (*v1.MarkViewedResponse, error)
 }
 
 // NewECGServiceClient constructs a client for the grpc.api.v1.ECGService service. By default, it
@@ -87,6 +90,12 @@ func NewECGServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(eCGServiceMethods.ByName("UpdateMetadata")),
 			connect.WithClientOptions(opts...),
 		),
+		markViewed: connect.NewClient[v1.MarkViewedRequest, v1.MarkViewedResponse](
+			httpClient,
+			baseURL+ECGServiceMarkViewedProcedure,
+			connect.WithSchema(eCGServiceMethods.ByName("MarkViewed")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -96,6 +105,7 @@ type eCGServiceClient struct {
 	listAll        *connect.Client[v1.ListAllRequest, v1.ListAllResponse]
 	getMetadata    *connect.Client[v1.GetMetadataRequest, v1.GetMetadataResponse]
 	updateMetadata *connect.Client[v1.UpdateMetadataRequest, v1.UpdateMetadataResponse]
+	markViewed     *connect.Client[v1.MarkViewedRequest, v1.MarkViewedResponse]
 }
 
 // GetFilters calls grpc.api.v1.ECGService.GetFilters.
@@ -134,12 +144,22 @@ func (c *eCGServiceClient) UpdateMetadata(ctx context.Context, req *v1.UpdateMet
 	return nil, err
 }
 
+// MarkViewed calls grpc.api.v1.ECGService.MarkViewed.
+func (c *eCGServiceClient) MarkViewed(ctx context.Context, req *v1.MarkViewedRequest) (*v1.MarkViewedResponse, error) {
+	response, err := c.markViewed.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
 // ECGServiceHandler is an implementation of the grpc.api.v1.ECGService service.
 type ECGServiceHandler interface {
 	GetFilters(context.Context, *v1.GetFiltersRequest) (*v1.GetFiltersResponse, error)
 	ListAll(context.Context, *v1.ListAllRequest) (*v1.ListAllResponse, error)
 	GetMetadata(context.Context, *v1.GetMetadataRequest) (*v1.GetMetadataResponse, error)
 	UpdateMetadata(context.Context, *v1.UpdateMetadataRequest) (*v1.UpdateMetadataResponse, error)
+	MarkViewed(context.Context, *v1.MarkViewedRequest) (*v1.MarkViewedResponse, error)
 }
 
 // NewECGServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -173,6 +193,12 @@ func NewECGServiceHandler(svc ECGServiceHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(eCGServiceMethods.ByName("UpdateMetadata")),
 		connect.WithHandlerOptions(opts...),
 	)
+	eCGServiceMarkViewedHandler := connect.NewUnaryHandlerSimple(
+		ECGServiceMarkViewedProcedure,
+		svc.MarkViewed,
+		connect.WithSchema(eCGServiceMethods.ByName("MarkViewed")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/grpc.api.v1.ECGService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ECGServiceGetFiltersProcedure:
@@ -183,6 +209,8 @@ func NewECGServiceHandler(svc ECGServiceHandler, opts ...connect.HandlerOption) 
 			eCGServiceGetMetadataHandler.ServeHTTP(w, r)
 		case ECGServiceUpdateMetadataProcedure:
 			eCGServiceUpdateMetadataHandler.ServeHTTP(w, r)
+		case ECGServiceMarkViewedProcedure:
+			eCGServiceMarkViewedHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -206,4 +234,8 @@ func (UnimplementedECGServiceHandler) GetMetadata(context.Context, *v1.GetMetada
 
 func (UnimplementedECGServiceHandler) UpdateMetadata(context.Context, *v1.UpdateMetadataRequest) (*v1.UpdateMetadataResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("grpc.api.v1.ECGService.UpdateMetadata is not implemented"))
+}
+
+func (UnimplementedECGServiceHandler) MarkViewed(context.Context, *v1.MarkViewedRequest) (*v1.MarkViewedResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("grpc.api.v1.ECGService.MarkViewed is not implemented"))
 }
