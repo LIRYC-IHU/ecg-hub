@@ -17,12 +17,20 @@ import (
 	"github.com/labstack/echo/v4"
 	"gorm.io/gorm"
 
+	"github.com/LIRYC-IHU/ecg-hub/internal/api/dto"
 	mw "github.com/LIRYC-IHU/ecg-hub/internal/api/middleware"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
+	"github.com/LIRYC-IHU/ecg-hub/internal/ecgmeta"
 	"github.com/LIRYC-IHU/ecg-hub/internal/export"
 	stor "github.com/LIRYC-IHU/ecg-hub/internal/storage"
 )
+
+// ecgMetaRepo is the ECG repository interface required by the metadata handlers.
+type ecgMetaRepo interface {
+	FindByID(id string) (*models.ECG, error)
+	UpdateMetadata(ecgID string, extra map[string]any, recordedAt *time.Time) error
+}
 
 // ecgByIDFinder is the minimal ECG repository interface needed by DownloadECGHandler.
 // Implemented by *repository.ECGRepository; can be stubbed in tests.
@@ -50,7 +58,7 @@ type patientByIDFinder interface {
 //	502 — bridge binary failed
 //
 // @Summary Download ECG file
-// @Tags ECG
+// @Tags ECG,Research
 // @Param id path string true "ECG UUID"
 // @Param format query string false "Export format — repeat the parameter to receive a ZIP bundle (e.g. ?format=original&format=xmlfda)" Enums(original, xmlfda, dicom)
 // @Param anonymize query boolean false "Strip patient-identifying fields from converted outputs (research use). Mutually exclusive with inject; converted formats only."
@@ -157,8 +165,165 @@ func parseConvertOptions(c echo.Context) (export.ConvertOptions, string) {
 	return opts, ""
 }
 
-// ECG filter facets are now served over gRPC/Connect by ECGServiceHandler
-// (ecg_service.go).
+// AllECGsParams holds query parameters for GET /api/v1/ecgs.
+type AllECGsParams struct {
+	Q           string `query:"q"`            // search by patient name, patient_id, filename
+	HL7Status   string `query:"hl7_status"`   // "pending"|"success"|"hl7_exhausted"
+	Vendor      string `query:"vendor"`       // exact vendor match
+	DeviceModel string `query:"device_model"` // exact device model match (from extra JSONB)
+	FileFormat  string `query:"file_format"`  // file extension filter (e.g. ".xml", ".dat", ".dcm")
+	From        string `query:"from"`         // YYYY-MM-DD, inclusive
+	To          string `query:"to"`           // YYYY-MM-DD, inclusive
+	Page        int    `query:"page"`
+	PerPage     int    `query:"per_page"`
+}
+
+// ListAllECGsHandler handles GET /api/v1/ecgs.
+// Returns a paginated, cross-patient ECG timeline sorted by acquisition date desc.
+// Each row embeds patient demographics via a LEFT JOIN on patients.patient_id.
+//
+// Requires: AuthMiddleware, RequirePermission(patient.read)
+//
+// @Summary List all ECGs (cross-patient timeline)
+// @Tags ECG,Research
+// @Param q query string false "Search patient name, ID, filename"
+// @Param hl7_status query string false "HL7 status filter" Enums(pending, success, hl7_exhausted)
+// @Param vendor query string false "Vendor filter"
+// @Param device_model query string false "Device model filter"
+// @Param file_format query string false "File extension filter (e.g. .xml, .dat, .dcm)"
+// @Param from query string false "Start date (YYYY-MM-DD)"
+// @Param to query string false "End date (YYYY-MM-DD)"
+// @Param page query int false "Page number" default(1)
+// @Param per_page query int false "Items per page" default(50)
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Security BearerAuth
+// @Security ApiKeyAuth
+// @Router /api/v1/ecgs [get]
+func ListAllECGsHandler(db *gorm.DB) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		var params AllECGsParams
+		if err := c.Bind(&params); err != nil {
+			return c.JSON(http.StatusBadRequest, mw.APIError("INVALID_PARAMS", err.Error()))
+		}
+		if params.Page <= 0 {
+			params.Page = 1
+		}
+		if params.PerPage <= 0 {
+			params.PerPage = 50
+		}
+		if params.PerPage > 200 {
+			params.PerPage = 200
+		}
+
+		buildQ := func() *gorm.DB {
+			q := db.Model(&models.ECG{}).
+				Joins("LEFT JOIN patients ON patients.patient_id = ecgs.patient_id")
+			if params.Q != "" {
+				like := "%" + params.Q + "%"
+				q = q.Where("(patients.last_name ILIKE ? OR patients.first_name ILIKE ? OR ecgs.patient_id ILIKE ? OR ecgs.original_filename ILIKE ?)", like, like, like, like)
+			}
+			if params.HL7Status != "" {
+				q = q.Where("ecgs.hl7_status = ?", params.HL7Status)
+			}
+			if params.Vendor != "" {
+				q = q.Where("ecgs.vendor = ?", params.Vendor)
+			}
+			if params.DeviceModel != "" {
+				q = q.Where("ecgs.extra->>'device_model' = ?", params.DeviceModel)
+			}
+			if params.FileFormat != "" {
+				q = q.Where("LOWER(substring(ecgs.original_filename from '\\.([^.]+)$')) = LOWER(?)", strings.TrimPrefix(params.FileFormat, "."))
+			}
+			if params.From != "" {
+				if t, err := time.Parse("2006-01-02", params.From); err == nil {
+					q = q.Where("COALESCE(ecgs.recorded_at, ecgs.ingested_at) >= ?", t)
+				}
+			}
+			if params.To != "" {
+				if t, err := time.Parse("2006-01-02", params.To); err == nil {
+					q = q.Where("COALESCE(ecgs.recorded_at, ecgs.ingested_at) < ?", t.AddDate(0, 0, 1))
+				}
+			}
+			return q
+		}
+
+		var total int64
+		if err := buildQ().Count(&total).Error; err != nil {
+			return c.JSON(http.StatusInternalServerError, mw.APIError("DB_ERROR", "count failed"))
+		}
+
+		var rows []dto.EcgWithPatientRow
+		offset := (params.Page - 1) * params.PerPage
+		if err := buildQ().
+			Select("ecgs.*, patients.first_name AS patient_first_name, patients.last_name AS patient_last_name, patients.gender AS patient_gender, patients.date_of_birth AS patient_dob").
+			Order("COALESCE(ecgs.recorded_at, ecgs.ingested_at) DESC").
+			Offset(offset).Limit(params.PerPage).
+			Scan(&rows).Error; err != nil {
+			return c.JSON(http.StatusInternalServerError, mw.APIError("DB_ERROR", "query failed"))
+		}
+
+		result := make([]dto.EcgWithPatientDTO, len(rows))
+		for i := range rows {
+			result[i] = dto.EcgWithPatientToDTO(&rows[i])
+		}
+
+		userID, _ := c.Get(mw.CtxKeyUserID).(string)
+		_ = mw.WriteAuditLog(c.Request().Context(), db, userID, "ecg_search", "", map[string]any{
+			"q":          params.Q,
+			"hl7_status": params.HL7Status,
+			"vendor":     params.Vendor,
+			"from":       params.From,
+			"to":         params.To,
+			"page":       params.Page,
+			"per_page":   params.PerPage,
+			"total":      total,
+		})
+
+		return c.JSON(http.StatusOK, map[string]any{
+			"data":     result,
+			"total":    total,
+			"page":     params.Page,
+			"per_page": params.PerPage,
+		})
+	}
+}
+
+// ECGFiltersHandler returns distinct filter facets for the ECG search UI.
+// GET /api/v1/ecgs/filters → { vendors: [...], device_models: [...], file_formats: [...] }
+//
+// @Summary Get filter facets (vendors, device models, file formats)
+// @Tags ECG
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Security BearerAuth
+// @Router /api/v1/ecgs/filters [get]
+func ECGFiltersHandler(db *gorm.DB) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		var vendors []string
+		db.Model(&models.ECG{}).Distinct("vendor").Where("vendor != ''").Order("vendor").Pluck("vendor", &vendors)
+
+		var deviceModels []string
+		db.Model(&models.ECG{}).
+			Where("extra->>'device_model' IS NOT NULL AND extra->>'device_model' != ''").
+			Distinct("extra->>'device_model'").
+			Order("extra->>'device_model'").
+			Pluck("extra->>'device_model'", &deviceModels)
+
+		var fileFormats []string
+		db.Model(&models.ECG{}).
+			Where("original_filename LIKE '%.%'").
+			Distinct("LOWER(substring(original_filename from '\\.([^.]+)$'))").
+			Order("LOWER(substring(original_filename from '\\.([^.]+)$'))").
+			Pluck("LOWER(substring(original_filename from '\\.([^.]+)$'))", &fileFormats)
+
+		return c.JSON(http.StatusOK, map[string]any{
+			"vendors":       vendors,
+			"device_models": deviceModels,
+			"file_formats":  fileFormats,
+		})
+	}
+}
 
 // DeleteECGHandler handles DELETE /api/v1/ecgs/:id.
 // Deletes the ECG record from the DB and removes the file from storage.
@@ -201,6 +366,49 @@ func DeleteECGHandler(db *gorm.DB) echo.HandlerFunc {
 
 		return c.NoContent(http.StatusNoContent)
 	}
+}
+
+// ECGMetadataHandler returns the field definitions and current metadata values for one ECG.
+//
+//	GET /api/v1/ecgs/:id/metadata   (requires ecg.read)
+//
+// Response: { "fields": [...], "values": { "last_name": "Doe", ... } }
+//
+// @Summary Get ECG metadata
+// @Tags ECG,Research
+// @Param id path string true "ECG UUID"
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Failure 404 {object} map[string]string
+// @Security BearerAuth
+// @Security ApiKeyAuth
+// @Router /api/v1/ecgs/{id}/metadata [get]
+func ECGMetadataHandler(db *gorm.DB) echo.HandlerFunc {
+	repo := repository.NewECGRepository(db)
+	return func(c echo.Context) error {
+		id, err := parseECGID(c)
+		if err != nil {
+			return c.JSON(http.StatusBadRequest, mw.APIError("INVALID_ID", "id must be a positive integer"))
+		}
+		ecg, err := repo.FindByID(id)
+		if err != nil {
+			if errors.Is(err, repository.ErrECGNotFound) {
+				return c.JSON(http.StatusNotFound, mw.APIError("ECG_NOT_FOUND", "ECG not found"))
+			}
+			return c.JSON(http.StatusInternalServerError, mw.APIError("DB_ERROR", "query failed"))
+		}
+
+		values := buildMetaValues(ecg)
+		return c.JSON(http.StatusOK, map[string]any{
+			"fields": ecgmeta.FieldList(),
+			"values": values,
+		})
+	}
+}
+
+// parseECGID extracts and validates the :id path parameter.
+func parseECGID(c echo.Context) (string, error) {
+	return c.Param("id"), nil
 }
 
 // buildMetaValues constructs the metadata value map from an ECG record.

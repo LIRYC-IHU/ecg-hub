@@ -428,18 +428,25 @@ func (r *RouterConfig) RegisterRoutes() {
 	// Per-patient ECG listing is now served over gRPC by PatientService.ListECGs (above).
 	// Mark-all-viewed is now served over gRPC by PatientService.MarkECGsViewed (above).
 
-	// Cross-patient ECG timeline (Direction A) is now served over gRPC by
-	// ECGService.ListAll (above).
-	// ECG filter facets are now served over gRPC by ECGService.GetFilters (above).
+	// ─── Public research REST API ────────────────────────────────────────────
+	// Read-only REST surface for external researchers (webhook → pull details),
+	// authenticated by API key (X-API-Key, handled by AuthMiddleware on apiV1)
+	// or JWT. The frontend itself consumes the gRPC/Connect services above;
+	// these REST endpoints are kept — identical to the ones documented in the
+	// Swagger spec on main — so machine clients keep a simple HTTP/JSON surface.
+	apiV1.GET("/patients", handlers.SearchPatientsHandler(r.gormDB), mw.RequirePermission(r.checker, auth.PermPatientRead))
+	apiV1.GET("/patients/:id/ecgs", handlers.ListPatientECGsHandler(r.gormDB), mw.RequirePermission(r.checker, auth.PermPatientRead))
+	apiV1.GET("/patients/:id/tags", handlers.ListPatientTagsHandler(tagSvcRepo), mw.RequirePermission(r.checker, auth.PermPatientRead))
+	apiV1.GET("/ecgs", handlers.ListAllECGsHandler(r.gormDB), mw.RequirePermission(r.checker, auth.PermPatientRead))
+	apiV1.GET("/ecgs/filters", handlers.ECGFiltersHandler(r.gormDB), mw.RequirePermission(r.checker, auth.PermPatientRead))
+	apiV1.GET("/ecgs/:id/metadata", handlers.ECGMetadataHandler(r.gormDB), mw.RequirePermission(r.checker, auth.PermECGRead))
+	apiV1.GET("/ecgs/:id/tags", handlers.ListECGTagsHandler(tagSvcRepo), mw.RequirePermission(r.checker, auth.PermPatientRead))
 
 	// ECG download — requires ecg.download
 	apiV1.GET("/ecgs/:id/download", handlers.DownloadECGHandler(r.gormDB, r.bridge), mw.RequirePermission(r.checker, auth.PermECGDownload))
 
 	// ECG waveform for viewer (auto-converts to DICOM if needed) — requires ecg.read
 	apiV1.GET("/ecgs/:id/waveform", handlers.ECGWaveformHandler(r.gormDB, r.cfg.Storage.VolumePath, r.bridge), mw.RequirePermission(r.checker, auth.PermECGRead))
-
-	// ECG metadata read/write is now served over gRPC by ECGService.GetMetadata
-	// / UpdateMetadata (above).
 
 	// Mark a single ECG as viewed (first view) — clears its "new" indicator.
 	apiV1.POST("/ecgs/:id/view", handlers.MarkECGViewedHandler(r.gormDB), mw.RequirePermission(r.checker, auth.PermECGRead))
