@@ -6,6 +6,7 @@ import { fetchRoles, createRole, updateRole, deleteRole } from '../../lib/api'
 import type { AppRole } from '../../lib/api'
 import { Spinner } from '../ui/Spinner'
 import { useNotification } from '../../context/NotificationContext'
+import { useConfirm } from '../../context/ConfirmContext'
 
 // Shape of a role entry in an exported/imported JSON file. The id is intentionally
 // omitted — roles are matched by their (unique) name on import.
@@ -30,6 +31,7 @@ export function AdminRolesPage() {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const { notify } = useNotification()
+  const confirm = useConfirm()
 
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [pendingPerms, setPendingPerms] = useState<Record<number, string[]>>({})
@@ -303,10 +305,13 @@ export function AdminRolesPage() {
                 )}
               </div>
               <button
-                onClick={() => {
-                  if (confirm(t('admin.roles.deleteConfirm', { name: selectedRole.name }))) {
-                    deleteMutation.mutate(selectedRole.id)
-                  }
+                onClick={async () => {
+                  const ok = await confirm({
+                    title: t('common.delete'),
+                    message: t('admin.roles.deleteConfirm', { name: selectedRole.name }),
+                    danger: true,
+                  })
+                  if (ok) deleteMutation.mutate(selectedRole.id)
                 }}
                 disabled={deleteMutation.isPending}
                 className="flex items-center gap-1.5 text-xs text-destructive border border-destructive/20 px-3 py-1.5 rounded-lg hover:bg-destructive/5 disabled:opacity-50 transition-colors"

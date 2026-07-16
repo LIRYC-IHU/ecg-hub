@@ -13,6 +13,7 @@ import {
 } from "../../lib/api";
 import { Spinner } from "../ui/Spinner";
 import { useNotification } from "../../context/NotificationContext";
+import { useConfirm } from "../../context/ConfirmContext";
 import { useAuth } from "../../hooks/useAuth";
 
 // ─── Password Input with toggle ────────────────────────────────────────────
@@ -70,6 +71,7 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
 function OIDCCard({ provider }: { provider: AuthProviderDTO | undefined }) {
   const { t } = useTranslation();
   const { notify } = useNotification();
+  const confirm = useConfirm();
   const queryClient = useQueryClient();
 
   const [issuerUrl, setIssuerUrl] = useState("");
@@ -306,8 +308,14 @@ function OIDCCard({ provider }: { provider: AuthProviderDTO | undefined }) {
         </button>
         {provider && (
           <button
-            onClick={() => {
-              if (confirm(t("admin.authProviders.deleteConfirm"))) {
+            onClick={async () => {
+              if (
+                await confirm({
+                  title: t("common.delete"),
+                  message: t("admin.authProviders.deleteConfirm"),
+                  danger: true,
+                })
+              ) {
                 deleteMutation.mutate();
               }
             }}
@@ -328,6 +336,7 @@ function OIDCCard({ provider }: { provider: AuthProviderDTO | undefined }) {
 function LDAPCard({ provider }: { provider: AuthProviderDTO | undefined }) {
   const { t } = useTranslation();
   const { notify } = useNotification();
+  const confirm = useConfirm();
   const queryClient = useQueryClient();
 
   const [host, setHost] = useState("");
@@ -602,8 +611,14 @@ function LDAPCard({ provider }: { provider: AuthProviderDTO | undefined }) {
         </button>
         {provider && (
           <button
-            onClick={() => {
-              if (confirm(t("admin.authProviders.deleteConfirm"))) {
+            onClick={async () => {
+              if (
+                await confirm({
+                  title: t("common.delete"),
+                  message: t("admin.authProviders.deleteConfirm"),
+                  danger: true,
+                })
+              ) {
                 deleteMutation.mutate();
               }
             }}

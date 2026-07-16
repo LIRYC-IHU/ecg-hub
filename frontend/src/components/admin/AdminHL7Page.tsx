@@ -34,6 +34,7 @@ import {
 } from "../../lib/api";
 import { Spinner } from "../ui/Spinner";
 import { useNotification } from "../../context/NotificationContext";
+import { useConfirm } from "../../context/ConfirmContext";
 
 // ─── HL7 Connection Settings Form ───────────────────────────────────────────
 
@@ -583,6 +584,7 @@ function HL7SchedulerForm({
 function HL7SchedulerSection() {
   const { t } = useTranslation();
   const { notify } = useNotification();
+  const confirm = useConfirm();
   const queryClient = useQueryClient();
 
   const { data: settings, isLoading } = useQuery({
@@ -685,8 +687,11 @@ function HL7SchedulerSection() {
             {t("admin.system.hl7.runNow")}
           </button>
           <button
-            onClick={() => {
-              if (confirm(t("admin.system.hl7.bulkRetryConfirm")))
+            onClick={async () => {
+              if (await confirm({
+                title: t("admin.system.hl7.bulkRetry"),
+                message: t("admin.system.hl7.bulkRetryConfirm"),
+              }))
                 bulkRetryMutation.mutate();
             }}
             disabled={bulkRetryMutation.isPending}
@@ -993,6 +998,7 @@ function HL7MappingZone({
 function HL7TestSection() {
   const { t } = useTranslation();
   const { notify } = useNotification();
+  const confirm = useConfirm();
   const queryClient = useQueryClient();
   const [patientId, setPatientId] = useState("");
   const [result, setResult] = useState<HL7TestResult | null>(null);
@@ -1111,12 +1117,18 @@ function HL7TestSection() {
   );
 
   const handleDeletePreset = useCallback(
-    (id: string) => {
-      if (confirm(t("admin.system.hl7.deletePresetConfirm"))) {
+    async (id: string) => {
+      if (
+        await confirm({
+          title: t("common.delete"),
+          message: t("admin.system.hl7.deletePresetConfirm"),
+          danger: true,
+        })
+      ) {
         deletePresetMutation.mutate(id);
       }
     },
-    [deletePresetMutation, t],
+    [deletePresetMutation, t, confirm],
   );
 
   const handleDrop = useCallback((targetField: string, sourcePath: string) => {
