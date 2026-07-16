@@ -1,0 +1,71 @@
+syntax = "proto3";
+package grpc.api.v1;
+
+// HL7 service. Per-ECG inbound retry (Force), outbound ORU result-send
+// (SendResult) + its latest status (GetOruStatus), and the per-patient HL7
+// attempt history (ListAttempts).
+
+// OruAttempt mirrors models.HL7ORUAttempt — the outcome of an outbound HL7 ORU
+// result-send (ECG result pushed to the HIS/DPI).
+message OruAttempt {
+  string id = 1;
+  string ecg_id = 2;
+  string patient_id = 3;
+  string status = 4;        // "success"|"rejected"|"failed"
+  string msa_code = 5;      // AA, AE, AR, CA, CE, CR
+  string msa_message = 6;
+  string error = 7;
+  bool included_pdf = 8;
+  string triggered_by = 9;  // "auto" or a user id for manual sends
+  int32 response_ms = 10;
+  string created_at = 11;   // ISO 8601 UTC
+}
+
+// Hl7Attempt mirrors models.HL7Attempt — one inbound HL7 enrichment attempt.
+message Hl7Attempt {
+  string id = 1;
+  string ecg_id = 2;
+  string patient_id = 3;
+  string status = 4;        // "success"|"failed"|"exhausted"|"rejected"
+  string msa_code = 5;      // AA, AE, AR
+  string msa_message = 6;
+  string error = 7;
+  int32 response_ms = 8;
+  string created_at = 9;    // ISO 8601 UTC
+}
+
+message ForceRequest {
+  string ecg_id = 1;
+}
+message ForceResponse {
+  string hl7_status = 1; // always "pending" after a forced retry
+}
+
+message GetOruStatusRequest {
+  string ecg_id = 1;
+}
+message GetOruStatusResponse {
+  OruAttempt attempt = 1; // unset when the ECG has no ORU attempt yet
+}
+
+message SendResultRequest {
+  string ecg_id = 1;
+}
+message SendResultResponse {
+  OruAttempt attempt = 1; // the recorded attempt on a successful send
+}
+
+message ListAttemptsRequest {
+  string patient_id = 1;
+  int32 limit = 2; // 1..100, defaults to 20
+}
+message ListAttemptsResponse {
+  repeated Hl7Attempt data = 1;
+}
+
+service HL7Service {
+  rpc Force(ForceRequest) returns (ForceResponse) {}
+  rpc GetOruStatus(GetOruStatusRequest) returns (GetOruStatusResponse) {}
+  rpc SendResult(SendResultRequest) returns (SendResultResponse) {}
+  rpc ListAttempts(ListAttemptsRequest) returns (ListAttemptsResponse) {}
+}

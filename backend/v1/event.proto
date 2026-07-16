@@ -1,0 +1,26 @@
+syntax = "proto3";
+package grpc.api.v1;
+
+// Event service. Server-streaming replacement for the /events/ws WebSocket:
+// the client opens one Subscribe stream and receives ingestion notifications
+// (ecg.ingested / unidentified / quarantined / duplicate) until it disconnects.
+// connect-web consumes server streams natively over HTTP/1.1.
+
+// Event mirrors events.Event (the WebSocket JSON payload). Optional fields are
+// empty when absent.
+message Event {
+  string type = 1;          // "ecg.ingested"|"ecg.unidentified"|"ecg.quarantined"|"ecg.duplicate"
+  string ecg_id = 2;
+  string patient_id = 3;
+  string quarantine_id = 4;
+  string vendor = 5;
+  string filename = 6;
+  string reason = 7;
+  string at = 8;            // RFC3339 timestamp
+}
+
+message SubscribeRequest {}
+
+service EventService {
+  rpc Subscribe(SubscribeRequest) returns (stream Event) {}
+}

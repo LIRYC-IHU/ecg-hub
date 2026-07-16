@@ -1,0 +1,88 @@
+syntax = "proto3";
+package grpc.api.v1;
+
+import "v1/ecg.proto";
+
+// Patient service. "mark all ECGs as viewed" + the per-patient ECG list; search
+// follows later in the migration.
+//
+// NOTE: protovalidate field constraints (import "buf/validate/validate.proto")
+// are deferred — they make protoc-gen-es emit an import to the validate proto's
+// TS (which we don't generate) and require the dep on grpcurl's import path. To
+// be enabled once the buf/validate codegen (Go + TS) is set up.
+
+// Patient mirrors dto.PatientDTO: the patient record plus ECG aggregates
+// (counts + last activity) returned by Search. Timestamps are ISO 8601 UTC
+// strings, empty when null.
+message Patient {
+  string id = 1;
+  string patient_id = 2;
+  string first_name = 3;
+  string last_name = 4;
+  string date_of_birth = 5; // ISO 8601 UTC; empty when null
+  string gender = 6;
+  string nda = 7;            // Numéro de Dossier Administratif
+  int32 ecg_count = 8;
+  int32 unviewed_count = 9;  // ECGs not yet opened — drives the "new" indicator
+  string last_activity = 10; // ISO 8601 UTC; MAX(COALESCE(recorded_at, ingested_at)); empty when null
+}
+
+// SearchRequest is the patient search + filter set (GET /patients). The ECG-level
+// filters (vendor..to) keep only patients owning at least one matching ECG.
+message SearchRequest {
+  string q = 1;            // patient name, patient_id or nda
+  string tags = 2;         // comma-separated tag IDs
+  string sort_by = 3;      // patient_id|last_name|created_at|last_activity
+  string sort_order = 4;   // asc|desc
+  int32 page = 5;
+  int32 per_page = 6;
+  string vendor = 7;
+  string device_model = 8;
+  string file_format = 9;
+  string hl7_status = 10;
+  string from = 11;        // YYYY-MM-DD (inclusive)
+  string to = 12;          // YYYY-MM-DD (inclusive)
+}
+
+message SearchResponse {
+  repeated Patient data = 1;
+  int64 total = 2;
+  int32 page = 3;
+  int32 per_page = 4;
+}
+
+message MarkECGsViewedRequest {
+  string patient_id = 1;
+}
+
+message MarkECGsViewedResponse {
+  string patient_id = 1;
+  int32 marked = 2; // number of ECGs newly marked as viewed
+}
+
+// ListECGsRequest lists one patient's ECGs. patient_id accepts the UUID
+// (patients.id) or the device string (patients.patient_id).
+message ListECGsRequest {
+  string patient_id = 1;
+  int32 page = 2;
+  int32 per_page = 3;
+  string from = 4;         // YYYY-MM-DD (inclusive)
+  string to = 5;           // YYYY-MM-DD (inclusive)
+  string vendor = 6;
+  string device_model = 7;
+  string file_format = 8;
+  string hl7_status = 9;
+}
+
+message ListECGsResponse {
+  repeated Ecg data = 1;
+  int64 total = 2;
+  int32 page = 3;
+  int32 per_page = 4;
+}
+
+service PatientService {
+  rpc Search(SearchRequest) returns (SearchResponse) {}
+  rpc MarkECGsViewed(MarkECGsViewedRequest) returns (MarkECGsViewedResponse) {}
+  rpc ListECGs(ListECGsRequest) returns (ListECGsResponse) {}
+}

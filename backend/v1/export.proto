@@ -1,0 +1,25 @@
+syntax = "proto3";
+package grpc.api.v1;
+
+// Export service. Server-streaming progress for a batch export job (replaces the
+// /exports/:id/ws WebSocket). The job's creation, formats, status and ZIP
+// download stay REST (POST /exports, /exports/formats, GET /exports/:id, and the
+// binary /exports/:id/download).
+
+message WatchProgressRequest {
+  string job_id = 1;
+}
+
+// ExportProgress mirrors the former WebSocket exportProgressEvent payload.
+message ExportProgress {
+  string status = 1;          // job status ("pending"|"running"|"complete"|"failed"…)
+  int32 processed_count = 2;
+  int32 ecg_count = 3;
+  int32 percent = 4;
+  string download_url = 5;    // set once complete
+  string error = 6;           // set once failed
+}
+
+service ExportService {
+  rpc WatchProgress(WatchProgressRequest) returns (stream ExportProgress) {}
+}
