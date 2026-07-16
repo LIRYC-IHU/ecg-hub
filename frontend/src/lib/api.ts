@@ -9,12 +9,14 @@ import type {
 import {
   adminClient,
   authClient,
+  authAdminClient,
   apiKeyClient,
   brandingClient,
   ecgClient,
   exportClient,
   healthClient,
   hl7Client,
+  hl7AdminClient,
   moduleClient,
   patientClient,
   pinClient,
@@ -1119,80 +1121,116 @@ export interface HL7Preset {
   created_at: string;
 }
 
+// hl7MappingFromProto maps a gRPC HL7Mapping to the frontend type.
+function hl7MappingFromProto(
+  m: import("../gen/v1/hl7admin_pb").HL7Mapping,
+): HL7Mapping {
+  return {
+    id: m.id,
+    preset_id: m.presetId,
+    source_path: m.sourcePath,
+    target_field: m.targetField,
+  };
+}
+
+// hl7PresetFromProto maps a gRPC HL7Preset to the frontend type.
+function hl7PresetFromProto(
+  p: import("../gen/v1/hl7admin_pb").HL7Preset,
+): HL7Preset {
+  return {
+    id: p.id,
+    name: p.name,
+    active: p.active,
+    created_at: p.createdAt,
+    mappings: p.mappings.map(hl7MappingFromProto),
+  };
+}
+
 export async function testHL7Query(patientId: string): Promise<HL7TestResult> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/hl7/test`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ patient_id: patientId }),
-  });
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
+  const r = await hl7AdminClient.testQuery({ patientId });
+  let tree: HL7SegmentNode[] | undefined;
+  if (r.treeJson) {
+    try {
+      tree = JSON.parse(r.treeJson) as HL7SegmentNode[];
+    } catch {
+      tree = undefined;
+    }
   }
-  return res.json();
+  return {
+    success: r.success,
+    patient_id: r.patientId,
+    duration: r.duration,
+    error: r.error || undefined,
+    raw: r.raw || undefined,
+    tree,
+    demographics: r.demographics
+      ? {
+          last_name: r.demographics.lastName,
+          first_name: r.demographics.firstName,
+          date_of_birth: r.demographics.dateOfBirth,
+          gender: r.demographics.gender,
+          source: r.demographics.source,
+        }
+      : undefined,
+  };
 }
 
 export async function fetchHL7Presets(): Promise<HL7Preset[]> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/hl7/presets`);
-  if (!res.ok) return [];
-  const json = await res.json();
-  return json.data ?? [];
+  try {
+    const res = await hl7AdminClient.listPresets({});
+    return res.presets.map(hl7PresetFromProto);
+  } catch {
+    return [];
+  }
 }
 
 export async function createHL7Preset(
   name: string,
   mappings: { source_path: string; target_field: string }[],
 ): Promise<HL7Preset> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/hl7/presets`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, mappings }),
+  const res = await hl7AdminClient.createPreset({
+    name,
+    mappings: mappings.map((m) => ({
+      sourcePath: m.source_path,
+      targetField: m.target_field,
+    })),
   });
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
-  const json = await res.json();
-  return json.data;
+  return res.preset
+    ? hl7PresetFromProto(res.preset)
+    : { id: "", name, active: false, mappings: [], created_at: "" };
 }
 
 export async function activateHL7Preset(id: string): Promise<void> {
-  await fetch(`${BASE_URL}/api/v1/admin/hl7/presets/${id}/activate`, {
-    method: "POST",
-  });
+  await hl7AdminClient.activatePreset({ id });
 }
 
 export async function deleteHL7Preset(id: string): Promise<void> {
-  await fetch(`${BASE_URL}/api/v1/admin/hl7/presets/${id}`, {
-    method: "DELETE",
-  });
+  await hl7AdminClient.deletePreset({ id });
 }
 
 export async function saveHL7PresetMappings(
   presetId: string,
   mappings: { source_path: string; target_field: string }[],
 ): Promise<void> {
-  const res = await fetch(
-    `${BASE_URL}/api/v1/admin/hl7/presets/${presetId}/mappings`,
-    {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mappings }),
-    },
-  );
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
+  await hl7AdminClient.savePresetMappings({
+    id: presetId,
+    mappings: mappings.map((m) => ({
+      sourcePath: m.source_path,
+      targetField: m.target_field,
+    })),
+  });
 }
 
 export async function fetchActiveHL7Mappings(): Promise<{
   data: HL7Mapping[];
   active: boolean;
 }> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/hl7/active-mappings`);
-  if (!res.ok) return { data: [], active: false };
-  return res.json();
+  try {
+    const res = await hl7AdminClient.getActiveMappings({});
+    return { data: res.data.map(hl7MappingFromProto), active: res.active };
+  } catch {
+    return { data: [], active: false };
+  }
 }
 
 // ─── HL7 Settings ────────────────────────────────────────────────────────────
@@ -1225,11 +1263,41 @@ export interface HL7Settings {
   oru_include_pdf: boolean;
 }
 
+// hl7SettingsFromProto maps a gRPC HL7Settings message to the frontend type.
+function hl7SettingsFromProto(
+  s: import("../gen/v1/hl7admin_pb").HL7Settings,
+): HL7Settings {
+  return {
+    id: s.id,
+    trigger_mode: s.triggerMode as HL7Settings["trigger_mode"],
+    cron_expression: s.cronExpression,
+    max_retries: s.maxRetries,
+    timeout: s.timeout,
+    enabled: s.enabled,
+    hl7_enabled: s.hl7Enabled,
+    updated_at: s.updatedAt,
+    last_run: s.lastRun || undefined,
+    next_run: s.nextRun || undefined,
+    host: s.host,
+    port: s.port,
+    sending_application: s.sendingApplication,
+    sending_facility: s.sendingFacility,
+    receiving_application: s.receivingApplication,
+    receiving_facility: s.receivingFacility,
+    version: s.version,
+    processing_id: s.processingId,
+    oru_enabled: s.oruEnabled,
+    oru_trigger_mode: s.oruTriggerMode as HL7Settings["oru_trigger_mode"],
+    oru_host: s.oruHost,
+    oru_port: s.oruPort,
+    oru_include_pdf: s.oruIncludePdf,
+  };
+}
+
 export async function fetchHL7Settings(): Promise<HL7Settings> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/hl7/settings`);
-  if (!res.ok) throw new Error("Failed to fetch HL7 settings");
-  const json = await res.json();
-  return json.data;
+  const res = await hl7AdminClient.getSettings({});
+  if (!res.settings) throw new Error("Failed to fetch HL7 settings");
+  return hl7SettingsFromProto(res.settings);
 }
 
 export async function updateHL7Settings(
@@ -1258,27 +1326,35 @@ export async function updateHL7Settings(
     >
   >,
 ): Promise<HL7Settings> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/hl7/settings`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(settings),
+  // Only the provided fields are sent; proto3 `optional` distinguishes unset
+  // from zero, so the backend applies exactly what the UI changed.
+  const res = await hl7AdminClient.updateSettings({
+    hl7Enabled: settings.hl7_enabled,
+    triggerMode: settings.trigger_mode,
+    cronExpression: settings.cron_expression,
+    maxRetries: settings.max_retries,
+    timeout: settings.timeout,
+    enabled: settings.enabled,
+    host: settings.host,
+    port: settings.port,
+    sendingApplication: settings.sending_application,
+    sendingFacility: settings.sending_facility,
+    receivingApplication: settings.receiving_application,
+    receivingFacility: settings.receiving_facility,
+    version: settings.version,
+    processingId: settings.processing_id,
+    oruEnabled: settings.oru_enabled,
+    oruTriggerMode: settings.oru_trigger_mode,
+    oruHost: settings.oru_host,
+    oruPort: settings.oru_port,
+    oruIncludePdf: settings.oru_include_pdf,
   });
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
-  const json = await res.json();
-  return json.data;
+  if (!res.settings) throw new Error("Failed to update HL7 settings");
+  return hl7SettingsFromProto(res.settings);
 }
 
 export async function triggerHL7Run(): Promise<void> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/hl7/run`, {
-    method: "POST",
-  });
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
+  await hl7AdminClient.forceRun({});
 }
 
 export interface HL7PingResult {
@@ -1292,25 +1368,18 @@ export async function bulkRetryHL7(): Promise<{
   count: number;
   message: string;
 }> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/hl7/bulk-retry`, {
-    method: "POST",
-  });
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
-  return res.json();
+  const res = await hl7AdminClient.bulkRetry({});
+  return { count: Number(res.count), message: res.message };
 }
 
 export async function pingHL7(): Promise<HL7PingResult> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/hl7/ping`, {
-    method: "POST",
-  });
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
-  return res.json();
+  const res = await hl7AdminClient.ping({});
+  return {
+    success: res.success,
+    host: res.host,
+    latency: res.latency,
+    error: res.error || undefined,
+  };
 }
 
 // ─── HL7 History ─────────────────────────────────────────────────────────────
@@ -1513,70 +1582,53 @@ export interface AuthProviderDTO {
 }
 
 export async function fetchAdminAuthProviders(): Promise<AuthProviderDTO[]> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/auth/providers`);
-  if (!res.ok) return [];
-  const json = await res.json();
-  return json.data ?? [];
+  try {
+    const res = await authAdminClient.listProviders({});
+    return res.providers.map((p) => ({
+      id: p.id,
+      provider_type: p.providerType as AuthProviderDTO["provider_type"],
+      active: p.active,
+      config: p.configJson
+        ? (JSON.parse(p.configJson) as Record<string, unknown>)
+        : {},
+    }));
+  } catch {
+    return [];
+  }
 }
 
 export async function saveOIDCConfig(
   config: Record<string, unknown>,
 ): Promise<void> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/auth/oidc`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(config),
-  });
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
+  await authAdminClient.saveOIDC({ configJson: JSON.stringify(config) });
 }
 
 export async function saveLDAPConfig(
   config: Record<string, unknown>,
 ): Promise<void> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/auth/ldap`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(config),
-  });
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
+  await authAdminClient.saveLDAP({ configJson: JSON.stringify(config) });
 }
 
 export async function deleteAuthProvider(id: string): Promise<void> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/auth/providers/${id}`, {
-    method: "DELETE",
-  });
-  if (!res.ok && res.status !== 404) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
+  await authAdminClient.deleteProvider({ id });
 }
 
 export async function testOIDCConnection(
   config: Record<string, unknown>,
 ): Promise<{ success: boolean; error?: string }> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/auth/oidc/test`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(config),
+  const res = await authAdminClient.testOIDC({
+    configJson: JSON.stringify(config),
   });
-  return res.json();
+  return { success: res.success, error: res.error || undefined };
 }
 
 export async function testLDAPConnection(
   config: Record<string, unknown>,
 ): Promise<{ success: boolean; error?: string }> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/auth/ldap/test`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(config),
+  const res = await authAdminClient.testLDAP({
+    configJson: JSON.stringify(config),
   });
-  return res.json();
+  return { success: res.success, error: res.error || undefined };
 }
 
 // ─── Module Control ──────────────────────────────────────────────────────────

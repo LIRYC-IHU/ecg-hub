@@ -1,0 +1,71 @@
+syntax = "proto3";
+package grpc.api.v1;
+
+// AuthAdminService groups the admin auth-provider configuration endpoints of
+// "étape 11": list configured OIDC/LDAP providers, save each, delete one, and
+// test connectivity. Every RPC requires admin.auth_config (enforced in the
+// router). Provider configs are polymorphic (OIDC vs LDAP) and treated as an
+// opaque object by the UI, so they travel as a JSON string (config_json) — the
+// backend parses/validates it into its typed structs and masks secrets on read.
+
+message AuthProvider {
+  string id = 1;
+  string provider_type = 2; // "oidc" | "ldap"
+  bool active = 3;
+  string config_json = 4; // decrypted config with secrets masked
+}
+
+message ListAuthProvidersRequest {}
+
+message ListAuthProvidersResponse {
+  repeated AuthProvider providers = 1;
+}
+
+message SaveOIDCConfigRequest {
+  string config_json = 1; // SaveOIDCRequest JSON (issuer_url, client_id, …, active)
+}
+
+message SaveLDAPConfigRequest {
+  string config_json = 1; // SaveLDAPRequest JSON (host, port, …, active)
+}
+
+// Shared reply for provider saves/deletes that require a restart to apply.
+message SaveAuthConfigResponse {
+  string message = 1;
+  bool restart_required = 2;
+}
+
+message DeleteAuthProviderRequest {
+  string id = 1;
+}
+
+message DeleteAuthProviderResponse {
+  string message = 1;
+  bool restart_required = 2;
+}
+
+message TestOIDCRequest {
+  string config_json = 1;
+}
+
+message TestLDAPRequest {
+  string config_json = 1;
+}
+
+// Shared reply for the connectivity tests. host/latency are only populated by
+// the LDAP TCP dial; OIDC leaves them empty.
+message TestAuthResponse {
+  bool success = 1;
+  string error = 2;
+  string host = 3;
+  string latency = 4;
+}
+
+service AuthAdminService {
+  rpc ListProviders(ListAuthProvidersRequest) returns (ListAuthProvidersResponse) {}
+  rpc SaveOIDC(SaveOIDCConfigRequest) returns (SaveAuthConfigResponse) {}
+  rpc SaveLDAP(SaveLDAPConfigRequest) returns (SaveAuthConfigResponse) {}
+  rpc DeleteProvider(DeleteAuthProviderRequest) returns (DeleteAuthProviderResponse) {}
+  rpc TestOIDC(TestOIDCRequest) returns (TestAuthResponse) {}
+  rpc TestLDAP(TestLDAPRequest) returns (TestAuthResponse) {}
+}

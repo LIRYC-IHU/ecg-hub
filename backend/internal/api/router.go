@@ -427,6 +427,61 @@ func (r *RouterConfig) RegisterRoutes() {
 	)
 	mountConnect(r.e, modulePath, moduleHandler)
 
+	// HL7 admin service — protected HL7 config (étape 10). Presets/test/ping/
+	// settings/run require hl7.config; active-mappings needs patient.read;
+	// bulk-retry needs hl7.bulk_retry. Settings/scheduler deps may be nil (HL7
+	// disabled) — the handler nil-checks and returns Unavailable.
+	hl7AdminPath, hl7AdminHandler := apiv1connect.NewHL7AdminServiceHandler(
+		&handlers.HL7AdminServiceHandler{
+			DB:           r.gormDB,
+			MappingRepo:  repository.NewHL7MappingRepository(r.gormDB),
+			SettingsRepo: r.hl7SettingsRepo,
+			Scheduler:    r.hl7Scheduler,
+		},
+		connect.WithInterceptors(
+			validateInterceptor,
+			mw.ConnectRequireAuth(r.authProvider, r.userRepo, apiKeyRepo),
+			mw.ConnectRequirePermission(r.checker, map[string]string{
+				apiv1connect.HL7AdminServiceListPresetsProcedure:        auth.PermHL7Config,
+				apiv1connect.HL7AdminServiceCreatePresetProcedure:       auth.PermHL7Config,
+				apiv1connect.HL7AdminServiceActivatePresetProcedure:     auth.PermHL7Config,
+				apiv1connect.HL7AdminServiceDeletePresetProcedure:       auth.PermHL7Config,
+				apiv1connect.HL7AdminServiceSavePresetMappingsProcedure: auth.PermHL7Config,
+				apiv1connect.HL7AdminServiceGetActiveMappingsProcedure:  auth.PermPatientRead,
+				apiv1connect.HL7AdminServiceTestQueryProcedure:          auth.PermHL7Config,
+				apiv1connect.HL7AdminServicePingProcedure:               auth.PermHL7Config,
+				apiv1connect.HL7AdminServiceGetSettingsProcedure:        auth.PermHL7Config,
+				apiv1connect.HL7AdminServiceUpdateSettingsProcedure:     auth.PermHL7Config,
+				apiv1connect.HL7AdminServiceForceRunProcedure:           auth.PermHL7Config,
+				apiv1connect.HL7AdminServiceBulkRetryProcedure:          auth.PermHL7BulkRetry,
+			}),
+		),
+	)
+	mountConnect(r.e, hl7AdminPath, hl7AdminHandler)
+
+	// Auth-admin service — protected auth-provider config (étape 11). Every
+	// procedure requires admin.auth_config.
+	authAdminPath, authAdminHandler := apiv1connect.NewAuthAdminServiceHandler(
+		&handlers.AuthAdminServiceHandler{
+			Repo:   repository.NewAuthConfigRepository(r.gormDB),
+			EncKey: r.authEncKey,
+			DB:     r.gormDB,
+		},
+		connect.WithInterceptors(
+			validateInterceptor,
+			mw.ConnectRequireAuth(r.authProvider, r.userRepo, apiKeyRepo),
+			mw.ConnectRequirePermission(r.checker, map[string]string{
+				apiv1connect.AuthAdminServiceListProvidersProcedure: auth.PermAdminAuthConfig,
+				apiv1connect.AuthAdminServiceSaveOIDCProcedure:       auth.PermAdminAuthConfig,
+				apiv1connect.AuthAdminServiceSaveLDAPProcedure:       auth.PermAdminAuthConfig,
+				apiv1connect.AuthAdminServiceDeleteProviderProcedure: auth.PermAdminAuthConfig,
+				apiv1connect.AuthAdminServiceTestOIDCProcedure:       auth.PermAdminAuthConfig,
+				apiv1connect.AuthAdminServiceTestLDAPProcedure:       auth.PermAdminAuthConfig,
+			}),
+		),
+	)
+	mountConnect(r.e, authAdminPath, authAdminHandler)
+
 	// Event service — protected server-stream (replaces the /events/ws WebSocket).
 	// Streaming handlers are NOT covered by the unary auth interceptors, so it uses
 	// the streaming-capable mw.ConnectStreamAuth (auth + patient.read). Only wired
@@ -662,37 +717,10 @@ func (r *RouterConfig) RegisterRoutes() {
 
 	// HL7 attempt history is now served over gRPC by HL7Service.ListAttempts (above).
 
-	// HL7 test query + mapping presets — requires admin.system
-	hl7MappingRepo := repository.NewHL7MappingRepository(r.gormDB)
-	apiV1.GET("/admin/hl7/presets", handlers.ListHL7PresetsHandler(hl7MappingRepo), mw.RequirePermission(r.checker, auth.PermHL7Config))
-	apiV1.POST("/admin/hl7/presets", handlers.CreateHL7PresetHandler(hl7MappingRepo), mw.RequirePermission(r.checker, auth.PermHL7Config))
-	apiV1.POST("/admin/hl7/presets/:id/activate", handlers.ActivateHL7PresetHandler(hl7MappingRepo), mw.RequirePermission(r.checker, auth.PermHL7Config))
-	apiV1.PUT("/admin/hl7/presets/:id/mappings", handlers.SaveHL7PresetMappingsHandler(hl7MappingRepo), mw.RequirePermission(r.checker, auth.PermHL7Config))
-	apiV1.DELETE("/admin/hl7/presets/:id", handlers.DeleteHL7PresetHandler(hl7MappingRepo), mw.RequirePermission(r.checker, auth.PermHL7Config))
-	apiV1.GET("/admin/hl7/active-mappings", handlers.GetActiveHL7MappingsHandler(hl7MappingRepo), mw.RequirePermission(r.checker, auth.PermPatientRead))
-	// HL7 test query — always available; creates a temporary client from DB settings.
-	apiV1.POST("/admin/hl7/test", handlers.HL7TestHandlerFromRepo(r.hl7SettingsRepo), mw.RequirePermission(r.checker, auth.PermHL7Config))
+	// HL7 admin (mapping presets, active mappings, test/ping, scheduler & ORU
+	// settings, run & bulk-retry) is now served over gRPC by HL7AdminService
+	// (étape 10, wired near the other Connect services above).
 
-	// HL7 scheduler settings — requires hl7.config
-	if r.hl7SettingsRepo != nil {
-		apiV1.GET("/admin/hl7/settings", handlers.GetHL7SettingsHandler(r.hl7SettingsRepo, r.hl7Scheduler), mw.RequirePermission(r.checker, auth.PermHL7Config))
-		apiV1.PUT("/admin/hl7/settings", handlers.UpdateHL7SettingsHandler(r.hl7SettingsRepo, r.hl7Scheduler, r.gormDB), mw.RequirePermission(r.checker, auth.PermHL7Config))
-	}
-	// HL7 ping — always available (used to test connection before enabling scheduler)
-	if r.hl7SettingsRepo != nil {
-		apiV1.POST("/admin/hl7/ping", handlers.PingHL7HandlerFromRepo(r.hl7SettingsRepo), mw.RequirePermission(r.checker, auth.PermHL7Config))
-	}
-	if r.hl7Scheduler != nil {
-		apiV1.POST("/admin/hl7/run", handlers.ForceHL7RunHandler(r.hl7Scheduler), mw.RequirePermission(r.checker, auth.PermHL7Config))
-		apiV1.POST("/admin/hl7/bulk-retry", handlers.BulkRetryHL7Handler(r.gormDB), mw.RequirePermission(r.checker, auth.PermHL7BulkRetry))
-	}
-
-	// Auth provider configuration (OIDC/LDAP from UI) — requires admin.auth_config
-	authConfigRepo := repository.NewAuthConfigRepository(r.gormDB)
-	apiV1.GET("/admin/auth/providers", handlers.ListAuthProvidersHandler(authConfigRepo, r.authEncKey), mw.RequirePermission(r.checker, auth.PermAdminAuthConfig))
-	apiV1.PUT("/admin/auth/oidc", handlers.SaveOIDCConfigHandler(authConfigRepo, r.authEncKey, r.gormDB), mw.RequirePermission(r.checker, auth.PermAdminAuthConfig))
-	apiV1.PUT("/admin/auth/ldap", handlers.SaveLDAPConfigHandler(authConfigRepo, r.authEncKey, r.gormDB), mw.RequirePermission(r.checker, auth.PermAdminAuthConfig))
-	apiV1.DELETE("/admin/auth/providers/:id", handlers.DeleteAuthProviderHandler(authConfigRepo, r.gormDB), mw.RequirePermission(r.checker, auth.PermAdminAuthConfig))
-	apiV1.POST("/admin/auth/oidc/test", handlers.TestOIDCHandler(r.authEncKey), mw.RequirePermission(r.checker, auth.PermAdminAuthConfig))
-	apiV1.POST("/admin/auth/ldap/test", handlers.TestLDAPHandler(r.authEncKey), mw.RequirePermission(r.checker, auth.PermAdminAuthConfig))
+	// Auth provider configuration (OIDC/LDAP from UI) is now served over gRPC by
+	// AuthAdminService (étape 11, wired near the other Connect services above).
 }
