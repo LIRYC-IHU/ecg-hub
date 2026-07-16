@@ -3,7 +3,6 @@ package handlers
 import (
 	"context"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -321,32 +320,4 @@ func GetActiveHL7MappingsHandler(repo *repository.HL7MappingRepository) echo.Han
 	}
 }
 
-// ListHL7AttemptsHandler returns the HL7 attempt history for a given patient.
-func ListHL7AttemptsHandler(repo *repository.HL7AttemptRepository) echo.HandlerFunc {
-	return func(c echo.Context) error {
-		patientID := c.Param("id")
-		if patientID == "" {
-			return c.JSON(http.StatusBadRequest, map[string]string{
-				"code":    "INVALID_PARAMS",
-				"message": "patient id is required",
-			})
-		}
-
-		limit := 20
-		if l := c.QueryParam("limit"); l != "" {
-			if parsed, err := strconv.Atoi(l); err == nil && parsed > 0 && parsed <= 100 {
-				limit = parsed
-			}
-		}
-
-		attempts, err := repo.ListByPatient(patientID, limit)
-		if err != nil {
-			return c.JSON(http.StatusInternalServerError, map[string]string{
-				"code":    "DB_ERROR",
-				"message": "query failed",
-			})
-		}
-
-		return c.JSON(http.StatusOK, map[string]any{"data": attempts})
-	}
-}
+// HL7 attempt history is now served over gRPC by HL7Service.ListAttempts.
