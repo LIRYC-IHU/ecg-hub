@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"strconv"
 
@@ -11,7 +10,6 @@ import (
 
 	mw "github.com/LIRYC-IHU/ecg-hub/internal/api/middleware"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
-	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
 	appmetrics "github.com/LIRYC-IHU/ecg-hub/internal/metrics"
 	"github.com/LIRYC-IHU/ecg-hub/internal/module"
 )
@@ -77,47 +75,6 @@ func AdminStatsHandler(db *gorm.DB) echo.HandlerFunc {
 // HL7Enricher is the interface for triggering HL7 enrichment.
 type HL7Enricher interface {
 	Enrich(ctx context.Context, ecgID string, patientID string) error
-}
-
-// ForceHL7Handler handles POST /api/v1/ecgs/:id/hl7/force.
-// Resets hl7_status to "pending", then immediately runs the HL7 query if an enricher is available.
-//
-// @Summary Force HL7 retry for an ECG
-// @Tags ECG
-// @Param id path string true "ECG UUID"
-// @Produce json
-// @Success 200 {object} map[string]string
-// @Failure 404 {object} map[string]string
-// @Security BearerAuth
-// @Router /api/v1/ecgs/{id}/hl7/force [post]
-func ForceHL7Handler(db *gorm.DB, enricher HL7Enricher) echo.HandlerFunc {
-	return func(c echo.Context) error {
-		id := c.Param("id")
-
-		ecgRepo := repository.NewECGRepository(db)
-		ecg, err := ecgRepo.FindByID(id)
-		if err != nil {
-			if errors.Is(err, repository.ErrECGNotFound) {
-				return c.JSON(http.StatusNotFound, mw.APIError("ECG_NOT_FOUND", "ecg not found"))
-			}
-			return c.JSON(http.StatusInternalServerError, mw.APIError("DB_ERROR", "query failed"))
-		}
-
-		if err := ecgRepo.UpdateHL7Lifecycle(id, "pending", 0); err != nil {
-			return c.JSON(http.StatusInternalServerError, mw.APIError("DB_ERROR", "update failed"))
-		}
-
-		userID, _ := c.Get(mw.CtxKeyUserID).(string)
-		_ = mw.WriteAuditLog(c.Request().Context(), db, userID, "hl7_force",
-			id, map[string]any{"ecg_id": id})
-
-		// Execute enrichment immediately if available
-		if enricher != nil {
-			_ = enricher.Enrich(c.Request().Context(), id, ecg.PatientID)
-		}
-
-		return c.JSON(http.StatusOK, map[string]any{"hl7_status": "pending"})
-	}
 }
 
 // ModuleListProvider returns the currently active modules (live, reflects hot-reload).
