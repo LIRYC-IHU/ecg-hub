@@ -220,6 +220,12 @@ func (r *RouterConfig) RegisterRoutes() {
 	// services; auth interceptors are added per-service.
 	validateInterceptor := validate.NewInterceptor()
 
+	// metricsInterceptor records RED metrics (grpc_requests_total /
+	// grpc_request_duration_seconds / grpc_requests_in_flight) for every RPC.
+	// Added as the first (outermost) interceptor on each service below so
+	// auth/validation failures are timed and counted with their Connect code.
+	metricsInterceptor := appmetrics.ConnectMetricsInterceptor()
+
 	// Healthz — public payload, richer when authenticated (optional JWT).
 	healthzPath, healthzHandler := apiv1connect.NewHealthzServiceHandler(
 		&handlers.HealthzServiceHandler{
@@ -229,21 +235,21 @@ func (r *RouterConfig) RegisterRoutes() {
 			ECTP:         r.ectpStatus,
 			ConnCheckers: r.connCheckers,
 		},
-		connect.WithInterceptors(validateInterceptor, mw.ConnectOptionalAuth(r.authProvider, r.userRepo)),
+		connect.WithInterceptors(metricsInterceptor, validateInterceptor, mw.ConnectOptionalAuth(r.authProvider, r.userRepo)),
 	)
 	mountConnect(r.e, healthzPath, healthzHandler)
 
 	// Branding — public (login/setup pages).
 	brandingPath, brandingHandler := apiv1connect.NewBrandingServiceHandler(
 		&handlers.BrandingServiceHandler{Settings: r.moduleSettingsRepo},
-		connect.WithInterceptors(validateInterceptor),
+		connect.WithInterceptors(metricsInterceptor, validateInterceptor),
 	)
 	mountConnect(r.e, brandingPath, brandingHandler)
 
 	// Setup status — public (bootstrap page before any account exists).
 	setupPath, setupHandler := apiv1connect.NewSetupServiceHandler(
 		&handlers.SetupServiceHandler{DB: r.gormDB},
-		connect.WithInterceptors(validateInterceptor),
+		connect.WithInterceptors(metricsInterceptor, validateInterceptor),
 	)
 	mountConnect(r.e, setupPath, setupHandler)
 
@@ -253,7 +259,7 @@ func (r *RouterConfig) RegisterRoutes() {
 			Provider:       r.authProvider,
 			AuthConfigRepo: repository.NewAuthConfigRepository(r.gormDB),
 		},
-		connect.WithInterceptors(validateInterceptor),
+		connect.WithInterceptors(metricsInterceptor, validateInterceptor),
 	)
 	mountConnect(r.e, authPath, authHandler)
 
@@ -262,7 +268,7 @@ func (r *RouterConfig) RegisterRoutes() {
 	// gRPC service as the migration proceeds.
 	sessionPath, sessionHandler := apiv1connect.NewSessionServiceHandler(
 		&handlers.SessionServiceHandler{Perms: r.checker},
-		connect.WithInterceptors(
+		connect.WithInterceptors(metricsInterceptor,
 			validateInterceptor,
 			mw.ConnectRequireAuth(r.authProvider, r.userRepo, apiKeyRepo),
 		),
@@ -274,12 +280,12 @@ func (r *RouterConfig) RegisterRoutes() {
 	// service exposes methods with different permissions).
 	ecgPath, ecgHandler := apiv1connect.NewECGServiceHandler(
 		&handlers.ECGServiceHandler{DB: r.gormDB},
-		connect.WithInterceptors(
+		connect.WithInterceptors(metricsInterceptor,
 			validateInterceptor,
 			mw.ConnectRequireAuth(r.authProvider, r.userRepo, apiKeyRepo),
 			mw.ConnectRequirePermission(r.checker, map[string]string{
-				apiv1connect.ECGServiceGetFiltersProcedure:    auth.PermPatientRead,
-				apiv1connect.ECGServiceListAllProcedure:       auth.PermPatientRead,
+				apiv1connect.ECGServiceGetFiltersProcedure:     auth.PermPatientRead,
+				apiv1connect.ECGServiceListAllProcedure:        auth.PermPatientRead,
 				apiv1connect.ECGServiceGetMetadataProcedure:    auth.PermECGRead,
 				apiv1connect.ECGServiceUpdateMetadataProcedure: auth.PermECGWrite,
 				apiv1connect.ECGServiceMarkViewedProcedure:     auth.PermECGRead,
@@ -291,13 +297,13 @@ func (r *RouterConfig) RegisterRoutes() {
 	// Patient service — protected.
 	patientPath, patientHandler := apiv1connect.NewPatientServiceHandler(
 		&handlers.PatientServiceHandler{DB: r.gormDB},
-		connect.WithInterceptors(
+		connect.WithInterceptors(metricsInterceptor,
 			validateInterceptor,
 			mw.ConnectRequireAuth(r.authProvider, r.userRepo, apiKeyRepo),
 			mw.ConnectRequirePermission(r.checker, map[string]string{
 				apiv1connect.PatientServiceSearchProcedure:         auth.PermPatientRead,
 				apiv1connect.PatientServiceMarkECGsViewedProcedure: auth.PermECGRead,
-				apiv1connect.PatientServiceListECGsProcedure:        auth.PermPatientRead,
+				apiv1connect.PatientServiceListECGsProcedure:       auth.PermPatientRead,
 			}),
 		),
 	)
@@ -309,7 +315,7 @@ func (r *RouterConfig) RegisterRoutes() {
 	tagSvcRepo := repository.NewTagRepository(r.gormDB)
 	tagPath, tagHandler := apiv1connect.NewTagServiceHandler(
 		&handlers.TagServiceHandler{Repo: tagSvcRepo},
-		connect.WithInterceptors(
+		connect.WithInterceptors(metricsInterceptor,
 			validateInterceptor,
 			mw.ConnectRequireAuth(r.authProvider, r.userRepo, apiKeyRepo),
 			mw.ConnectRequirePermission(r.checker, map[string]string{
@@ -334,7 +340,7 @@ func (r *RouterConfig) RegisterRoutes() {
 	// caller's identity comes from the auth interceptor, never the request.
 	pinPath, pinHandler := apiv1connect.NewPinServiceHandler(
 		&handlers.PinServiceHandler{DB: r.gormDB},
-		connect.WithInterceptors(
+		connect.WithInterceptors(metricsInterceptor,
 			validateInterceptor,
 			mw.ConnectRequireAuth(r.authProvider, r.userRepo, apiKeyRepo),
 			mw.ConnectRequirePermission(r.checker, map[string]string{
@@ -360,7 +366,7 @@ func (r *RouterConfig) RegisterRoutes() {
 			SettingsRepo: r.moduleSettingsRepo,
 			Persister:    r.persister,
 		},
-		connect.WithInterceptors(
+		connect.WithInterceptors(metricsInterceptor,
 			validateInterceptor,
 			mw.ConnectRequireAuth(r.authProvider, r.userRepo, apiKeyRepo),
 			mw.ConnectRequirePermission(r.checker, map[string]string{
@@ -403,25 +409,25 @@ func (r *RouterConfig) RegisterRoutes() {
 			ConnectorReload: r.connectorReload,
 			ConnCheckers:    r.connCheckers,
 		},
-		connect.WithInterceptors(
+		connect.WithInterceptors(metricsInterceptor,
 			validateInterceptor,
 			mw.ConnectRequireAuth(r.authProvider, r.userRepo, apiKeyRepo),
 			mw.ConnectRequirePermission(r.checker, map[string]string{
-				apiv1connect.ModuleServiceListModulesProcedure:         auth.PermAdminSystem,
-				apiv1connect.ModuleServiceListModuleStatusProcedure:    auth.PermAdminSystem,
-				apiv1connect.ModuleServiceStartModuleProcedure:         auth.PermAdminSystem,
-				apiv1connect.ModuleServiceStopModuleProcedure:          auth.PermAdminSystem,
-				apiv1connect.ModuleServiceGetFTPConfigProcedure:        auth.PermAdminSystem,
-				apiv1connect.ModuleServiceSaveFTPConfigProcedure:       auth.PermAdminSystem,
-				apiv1connect.ModuleServiceGetDICOMConfigProcedure:      auth.PermAdminSystem,
-				apiv1connect.ModuleServiceSaveDICOMConfigProcedure:     auth.PermAdminSystem,
-				apiv1connect.ModuleServiceGetModuleSettingsProcedure:   auth.PermAdminSystem,
-				apiv1connect.ModuleServiceSaveModuleSettingsProcedure:  auth.PermAdminSystem,
+				apiv1connect.ModuleServiceListModulesProcedure:          auth.PermAdminSystem,
+				apiv1connect.ModuleServiceListModuleStatusProcedure:     auth.PermAdminSystem,
+				apiv1connect.ModuleServiceStartModuleProcedure:          auth.PermAdminSystem,
+				apiv1connect.ModuleServiceStopModuleProcedure:           auth.PermAdminSystem,
+				apiv1connect.ModuleServiceGetFTPConfigProcedure:         auth.PermAdminSystem,
+				apiv1connect.ModuleServiceSaveFTPConfigProcedure:        auth.PermAdminSystem,
+				apiv1connect.ModuleServiceGetDICOMConfigProcedure:       auth.PermAdminSystem,
+				apiv1connect.ModuleServiceSaveDICOMConfigProcedure:      auth.PermAdminSystem,
+				apiv1connect.ModuleServiceGetModuleSettingsProcedure:    auth.PermAdminSystem,
+				apiv1connect.ModuleServiceSaveModuleSettingsProcedure:   auth.PermAdminSystem,
 				apiv1connect.ModuleServiceListConnectorConfigsProcedure: auth.PermAdminSystem,
-				apiv1connect.ModuleServiceSaveConnectorConfigProcedure: auth.PermAdminSystem,
-				apiv1connect.ModuleServiceDeleteConnectorProcedure:     auth.PermAdminSystem,
-				apiv1connect.ModuleServiceTestConnectorProcedure:       auth.PermAdminSystem,
-				apiv1connect.ModuleServiceListConnectorsProcedure:      auth.PermAdminSystem,
+				apiv1connect.ModuleServiceSaveConnectorConfigProcedure:  auth.PermAdminSystem,
+				apiv1connect.ModuleServiceDeleteConnectorProcedure:      auth.PermAdminSystem,
+				apiv1connect.ModuleServiceTestConnectorProcedure:        auth.PermAdminSystem,
+				apiv1connect.ModuleServiceListConnectorsProcedure:       auth.PermAdminSystem,
 			}),
 		),
 	)
@@ -438,7 +444,7 @@ func (r *RouterConfig) RegisterRoutes() {
 			SettingsRepo: r.hl7SettingsRepo,
 			Scheduler:    r.hl7Scheduler,
 		},
-		connect.WithInterceptors(
+		connect.WithInterceptors(metricsInterceptor,
 			validateInterceptor,
 			mw.ConnectRequireAuth(r.authProvider, r.userRepo, apiKeyRepo),
 			mw.ConnectRequirePermission(r.checker, map[string]string{
@@ -467,11 +473,11 @@ func (r *RouterConfig) RegisterRoutes() {
 			EncKey: r.authEncKey,
 			DB:     r.gormDB,
 		},
-		connect.WithInterceptors(
+		connect.WithInterceptors(metricsInterceptor,
 			validateInterceptor,
 			mw.ConnectRequireAuth(r.authProvider, r.userRepo, apiKeyRepo),
 			mw.ConnectRequirePermission(r.checker, map[string]string{
-				apiv1connect.AuthAdminServiceListProvidersProcedure: auth.PermAdminAuthConfig,
+				apiv1connect.AuthAdminServiceListProvidersProcedure:  auth.PermAdminAuthConfig,
 				apiv1connect.AuthAdminServiceSaveOIDCProcedure:       auth.PermAdminAuthConfig,
 				apiv1connect.AuthAdminServiceSaveLDAPProcedure:       auth.PermAdminAuthConfig,
 				apiv1connect.AuthAdminServiceDeleteProviderProcedure: auth.PermAdminAuthConfig,
@@ -489,7 +495,7 @@ func (r *RouterConfig) RegisterRoutes() {
 	if r.eventHub != nil {
 		eventPath, eventHandler := apiv1connect.NewEventServiceHandler(
 			&handlers.EventServiceHandler{Hub: r.eventHub},
-			connect.WithInterceptors(
+			connect.WithInterceptors(metricsInterceptor,
 				mw.ConnectStreamAuth(r.authProvider, r.userRepo, apiKeyRepo, r.checker, map[string]string{
 					apiv1connect.EventServiceSubscribeProcedure: auth.PermPatientRead,
 				}),
@@ -516,7 +522,7 @@ func (r *RouterConfig) RegisterRoutes() {
 			DB:        r.gormDB,
 			AdminRole: r.checker.AdminRole(),
 		},
-		connect.WithInterceptors(
+		connect.WithInterceptors(metricsInterceptor,
 			validateInterceptor,
 			mw.ConnectRequireAuth(r.authProvider, r.userRepo, apiKeyRepo),
 			mw.ConnectRequirePermission(r.checker, map[string]string{
@@ -541,14 +547,14 @@ func (r *RouterConfig) RegisterRoutes() {
 			ORURepo:     repository.NewHL7ORUAttemptRepository(r.gormDB),
 			AttemptRepo: repository.NewHL7AttemptRepository(r.gormDB),
 		},
-		connect.WithInterceptors(
+		connect.WithInterceptors(metricsInterceptor,
 			validateInterceptor,
 			mw.ConnectRequireAuth(r.authProvider, r.userRepo, apiKeyRepo),
 			mw.ConnectRequirePermission(r.checker, map[string]string{
 				apiv1connect.HL7ServiceForceProcedure:        auth.PermECGForceHL7,
-				apiv1connect.HL7ServiceGetOruStatusProcedure:  auth.PermECGRead,
-				apiv1connect.HL7ServiceSendResultProcedure:    auth.PermECGSendResult,
-				apiv1connect.HL7ServiceListAttemptsProcedure:  auth.PermPatientRead,
+				apiv1connect.HL7ServiceGetOruStatusProcedure: auth.PermECGRead,
+				apiv1connect.HL7ServiceSendResultProcedure:   auth.PermECGSendResult,
+				apiv1connect.HL7ServiceListAttemptsProcedure: auth.PermPatientRead,
 			}),
 		),
 	)
@@ -558,7 +564,7 @@ func (r *RouterConfig) RegisterRoutes() {
 	// returned only at creation.
 	apiKeyPath, apiKeyHandler := apiv1connect.NewAPIKeyServiceHandler(
 		&handlers.APIKeyServiceHandler{Repo: apiKeyRepo, DB: r.gormDB},
-		connect.WithInterceptors(
+		connect.WithInterceptors(metricsInterceptor,
 			validateInterceptor,
 			mw.ConnectRequireAuth(r.authProvider, r.userRepo, apiKeyRepo),
 			mw.ConnectRequirePermission(r.checker, map[string]string{
@@ -581,7 +587,7 @@ func (r *RouterConfig) RegisterRoutes() {
 				Dispatcher: r.webhookDispatcher,
 				Modules:    r.ingestRouter,
 			},
-			connect.WithInterceptors(
+			connect.WithInterceptors(metricsInterceptor,
 				validateInterceptor,
 				mw.ConnectRequireAuth(r.authProvider, r.userRepo, apiKeyRepo),
 				mw.ConnectRequirePermission(r.checker, map[string]string{
