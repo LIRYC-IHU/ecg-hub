@@ -18,37 +18,93 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
-        "/api/v1/ecgs/{id}": {
-            "delete": {
+        "/api/v1/ecgs": {
+            "get": {
                 "security": [
                     {
                         "BearerAuth": []
+                    },
+                    {
+                        "ApiKeyAuth": []
                     }
                 ],
-                "tags": [
-                    "ECG"
+                "produces": [
+                    "application/json"
                 ],
-                "summary": "Delete ECG",
+                "tags": [
+                    "ECG",
+                    "Research"
+                ],
+                "summary": "List all ECGs (cross-patient timeline)",
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "ECG UUID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
+                        "description": "Search patient name, ID, filename",
+                        "name": "q",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "pending",
+                            "success",
+                            "hl7_exhausted"
+                        ],
+                        "type": "string",
+                        "description": "HL7 status filter",
+                        "name": "hl7_status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Vendor filter",
+                        "name": "vendor",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Device model filter",
+                        "name": "device_model",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "File extension filter (e.g. .xml, .dat, .dcm)",
+                        "name": "file_format",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Start date (YYYY-MM-DD)",
+                        "name": "from",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "End date (YYYY-MM-DD)",
+                        "name": "to",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page number",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 50,
+                        "description": "Items per page",
+                        "name": "per_page",
+                        "in": "query"
                     }
                 ],
                 "responses": {
-                    "204": {
-                        "description": "No Content"
-                    },
-                    "404": {
-                        "description": "Not Found",
+                    "200": {
+                        "description": "OK",
                         "schema": {
                             "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "additionalProperties": true
                         }
                     }
                 }
@@ -68,7 +124,8 @@ const docTemplate = `{
                     "application/octet-stream"
                 ],
                 "tags": [
-                    "ECG"
+                    "ECG",
+                    "Research"
                 ],
                 "summary": "Download ECG file",
                 "parameters": [
@@ -149,21 +206,24 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/v1/ecgs/{id}/view": {
-            "post": {
+        "/api/v1/ecgs/{id}/metadata": {
+            "get": {
                 "security": [
                     {
                         "BearerAuth": []
+                    },
+                    {
+                        "ApiKeyAuth": []
                     }
                 ],
-                "description": "Stamps viewed_at on first view; clears the \"new\" indicator. Idempotent.",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
-                    "ECG"
+                    "ECG",
+                    "Research"
                 ],
-                "summary": "Mark an ECG as viewed",
+                "summary": "Get ECG metadata",
                 "parameters": [
                     {
                         "type": "string",
@@ -171,6 +231,219 @@ const docTemplate = `{
                         "name": "id",
                         "in": "path",
                         "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/patients": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    },
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Patients",
+                    "Research"
+                ],
+                "summary": "Search patients",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Search query",
+                        "name": "q",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "patient_id",
+                            "last_name",
+                            "created_at"
+                        ],
+                        "type": "string",
+                        "description": "Sort field",
+                        "name": "sort_by",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "asc",
+                            "desc"
+                        ],
+                        "type": "string",
+                        "description": "Sort order",
+                        "name": "sort_order",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Only patients with an ECG from this vendor",
+                        "name": "vendor",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Only patients with an ECG from this device model",
+                        "name": "device_model",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Only patients with an ECG of this file extension",
+                        "name": "file_format",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "pending",
+                            "success",
+                            "hl7_exhausted"
+                        ],
+                        "type": "string",
+                        "description": "Only patients with an ECG in this HL7 status",
+                        "name": "hl7_status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Only patients with an ECG recorded on/after this date (YYYY-MM-DD)",
+                        "name": "from",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Only patients with an ECG recorded on/before this date (YYYY-MM-DD)",
+                        "name": "to",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page number",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 50,
+                        "description": "Items per page",
+                        "name": "per_page",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/patients/{id}/ecgs": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    },
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Patients",
+                    "Research"
+                ],
+                "summary": "List ECGs for a patient",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Patient UUID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Start date (YYYY-MM-DD)",
+                        "name": "from",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "End date (YYYY-MM-DD)",
+                        "name": "to",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Vendor filter",
+                        "name": "vendor",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Device model filter",
+                        "name": "device_model",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "File extension filter (e.g. .xml, .dat, .dcm)",
+                        "name": "file_format",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "pending",
+                            "success",
+                            "hl7_exhausted"
+                        ],
+                        "type": "string",
+                        "description": "HL7 status",
+                        "name": "hl7_status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page number",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Items per page",
+                        "name": "per_page",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -202,7 +475,8 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "uploads"
+                    "uploads",
+                    "Research"
                 ],
                 "summary": "Upload ECG files manually (offline/isolated devices)",
                 "parameters": [

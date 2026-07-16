@@ -9,28 +9,66 @@ info:
   title: ECG Hub API
   version: "1.0"
 paths:
-  /api/v1/ecgs/{id}:
-    delete:
+  /api/v1/ecgs:
+    get:
       parameters:
-      - description: ECG UUID
-        in: path
-        name: id
-        required: true
+      - description: Search patient name, ID, filename
+        in: query
+        name: q
         type: string
+      - description: HL7 status filter
+        enum:
+        - pending
+        - success
+        - hl7_exhausted
+        in: query
+        name: hl7_status
+        type: string
+      - description: Vendor filter
+        in: query
+        name: vendor
+        type: string
+      - description: Device model filter
+        in: query
+        name: device_model
+        type: string
+      - description: File extension filter (e.g. .xml, .dat, .dcm)
+        in: query
+        name: file_format
+        type: string
+      - description: Start date (YYYY-MM-DD)
+        in: query
+        name: from
+        type: string
+      - description: End date (YYYY-MM-DD)
+        in: query
+        name: to
+        type: string
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - default: 50
+        description: Items per page
+        in: query
+        name: per_page
+        type: integer
+      produces:
+      - application/json
       responses:
-        "204":
-          description: No Content
-        "404":
-          description: Not Found
+        "200":
+          description: OK
           schema:
-            additionalProperties:
-              type: string
+            additionalProperties: true
             type: object
       security:
       - BearerAuth: []
-      summary: Delete ECG
+      - ApiKeyAuth: []
+      summary: List all ECGs (cross-patient timeline)
       tags:
       - ECG
+      - Research
   /api/v1/ecgs/{id}/download:
     get:
       parameters:
@@ -96,9 +134,9 @@ paths:
       summary: Download ECG file
       tags:
       - ECG
-  /api/v1/ecgs/{id}/view:
-    post:
-      description: Stamps viewed_at on first view; clears the "new" indicator. Idempotent.
+      - Research
+  /api/v1/ecgs/{id}/metadata:
+    get:
       parameters:
       - description: ECG UUID
         in: path
@@ -113,11 +151,153 @@ paths:
           schema:
             additionalProperties: true
             type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
       security:
       - BearerAuth: []
-      summary: Mark an ECG as viewed
+      - ApiKeyAuth: []
+      summary: Get ECG metadata
       tags:
       - ECG
+      - Research
+  /api/v1/patients:
+    get:
+      parameters:
+      - description: Search query
+        in: query
+        name: q
+        type: string
+      - description: Sort field
+        enum:
+        - patient_id
+        - last_name
+        - created_at
+        in: query
+        name: sort_by
+        type: string
+      - description: Sort order
+        enum:
+        - asc
+        - desc
+        in: query
+        name: sort_order
+        type: string
+      - description: Only patients with an ECG from this vendor
+        in: query
+        name: vendor
+        type: string
+      - description: Only patients with an ECG from this device model
+        in: query
+        name: device_model
+        type: string
+      - description: Only patients with an ECG of this file extension
+        in: query
+        name: file_format
+        type: string
+      - description: Only patients with an ECG in this HL7 status
+        enum:
+        - pending
+        - success
+        - hl7_exhausted
+        in: query
+        name: hl7_status
+        type: string
+      - description: Only patients with an ECG recorded on/after this date (YYYY-MM-DD)
+        in: query
+        name: from
+        type: string
+      - description: Only patients with an ECG recorded on/before this date (YYYY-MM-DD)
+        in: query
+        name: to
+        type: string
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - default: 50
+        description: Items per page
+        in: query
+        name: per_page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      - ApiKeyAuth: []
+      summary: Search patients
+      tags:
+      - Patients
+      - Research
+  /api/v1/patients/{id}/ecgs:
+    get:
+      parameters:
+      - description: Patient UUID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Start date (YYYY-MM-DD)
+        in: query
+        name: from
+        type: string
+      - description: End date (YYYY-MM-DD)
+        in: query
+        name: to
+        type: string
+      - description: Vendor filter
+        in: query
+        name: vendor
+        type: string
+      - description: Device model filter
+        in: query
+        name: device_model
+        type: string
+      - description: File extension filter (e.g. .xml, .dat, .dcm)
+        in: query
+        name: file_format
+        type: string
+      - description: HL7 status
+        enum:
+        - pending
+        - success
+        - hl7_exhausted
+        in: query
+        name: hl7_status
+        type: string
+      - description: Page number
+        in: query
+        name: page
+        type: integer
+      - description: Items per page
+        in: query
+        name: per_page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      - ApiKeyAuth: []
+      summary: List ECGs for a patient
+      tags:
+      - Patients
+      - Research
   /api/v1/uploads:
     post:
       consumes:
@@ -148,6 +328,7 @@ paths:
       summary: Upload ECG files manually (offline/isolated devices)
       tags:
       - uploads
+      - Research
 securityDefinitions:
   ApiKeyAuth:
     description: Per-user API key ("ecghub_…") created from the API Keys page. Inherits
