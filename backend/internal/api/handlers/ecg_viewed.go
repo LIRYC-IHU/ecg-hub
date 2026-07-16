@@ -33,25 +33,5 @@ func MarkECGViewedHandler(db *gorm.DB) echo.HandlerFunc {
 	}
 }
 
-// MarkPatientECGsViewedHandler handles POST /api/v1/patients/:id/ecgs/view.
-// It marks every unviewed ECG of the patient as viewed ("mark all as seen").
-//
-//	@Summary		Mark all of a patient's ECGs as viewed
-//	@Description	Marks every unviewed ECG of the patient as viewed and returns how many were updated.
-//	@Tags			Patients
-//	@Produce		json
-//	@Param			id	path	string	true	"Patient business ID (patient_id)"
-//	@Success		200	{object}	map[string]interface{}
-//	@Security		BearerAuth
-//	@Router			/api/v1/patients/{id}/ecgs/view [post]
-func MarkPatientECGsViewedHandler(db *gorm.DB) echo.HandlerFunc {
-	repo := repository.NewECGRepository(db)
-	return func(c echo.Context) error {
-		patientID := c.Param("id")
-		n, err := repo.MarkViewedByPatient(patientID)
-		if err != nil {
-			return c.JSON(http.StatusInternalServerError, mw.APIError("DB_ERROR", "failed to mark ECGs as viewed"))
-		}
-		return c.JSON(http.StatusOK, map[string]any{"patient_id": patientID, "marked": n})
-	}
-}
+// Mark-all-viewed is now served over gRPC/Connect by PatientServiceHandler
+// (patient_service.go).
