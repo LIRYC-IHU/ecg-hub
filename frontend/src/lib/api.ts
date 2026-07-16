@@ -1,6 +1,7 @@
 import type {
   ECG,
   ECGMetaResponse,
+  ECGWithPatient,
   ErrorResponse,
   ListResponse,
   Patient,
@@ -8,10 +9,21 @@ import type {
 import {
   authClient,
   brandingClient,
+  ecgClient,
   healthClient,
+  hl7Client,
+  patientClient,
   sessionClient,
   setupClient,
+  tagClient,
 } from "./grpc";
+import type {
+  Ecg as EcgProto,
+  EcgWithPatient as EcgWithPatientProto,
+} from "../gen/v1/ecg_pb";
+import type { OruAttempt as OruAttemptProto } from "../gen/v1/hl7_pb";
+import type { Patient as PatientProto } from "../gen/v1/patient_pb";
+import type { Tag as TagProto } from "../gen/v1/tag_pb";
 
 const BASE_URL = (import.meta.env as Record<string, string>).VITE_API_URL ?? "";
 
@@ -109,30 +121,51 @@ export interface ECGFilterFacets {
 }
 
 export async function fetchECGFilterFacets(): Promise<ECGFilterFacets> {
-  const res = await fetch(`${BASE_URL}/api/v1/ecgs/filters`);
-  if (!res.ok) return { vendors: [], device_models: [], file_formats: [] };
-  return res.json();
+  try {
+    const res = await ecgClient.getFilters({});
+    return {
+      vendors: res.vendors,
+      device_models: res.deviceModels,
+      file_formats: res.fileFormats,
+    };
+  } catch {
+    return { vendors: [], device_models: [], file_formats: [] };
+  }
+}
+
+// ecgWithPatientFromProto flattens the nested gRPC EcgWithPatient (ecg + joined
+// demographics) into the frontend's flat ECGWithPatient type.
+function ecgWithPatientFromProto(r: EcgWithPatientProto): ECGWithPatient {
+  return {
+    ...ecgFromProto(r.ecg ?? ({} as EcgProto)),
+    patient_first_name: r.patientFirstName,
+    patient_last_name: r.patientLastName,
+    patient_gender: r.patientGender,
+    patient_dob: r.patientDob || null,
+  };
 }
 
 export async function fetchAllECGs(
   filters: AllECGFilters = {},
-): Promise<ListResponse<import("../types").ECGWithPatient>> {
-  const params = new URLSearchParams();
-  if (filters.q) params.set("q", filters.q);
-  if (filters.hl7_status) params.set("hl7_status", filters.hl7_status);
-  if (filters.vendor) params.set("vendor", filters.vendor);
-  if (filters.device_model) params.set("device_model", filters.device_model);
-  if (filters.file_format) params.set("file_format", filters.file_format);
-  if (filters.from) params.set("from", filters.from);
-  if (filters.to) params.set("to", filters.to);
-  params.set("page", String(filters.page ?? 1));
-  params.set("per_page", String(filters.per_page ?? 50));
-  const res = await fetch(`${BASE_URL}/api/v1/ecgs?${params}`);
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
-  return res.json();
+): Promise<ListResponse<ECGWithPatient>> {
+  // gRPC: ECGService.ListAll — cross-patient timeline with joined demographics.
+  const res = await ecgClient.listAll({
+    q: filters.q ?? "",
+    hl7Status: filters.hl7_status ?? "",
+    vendor: filters.vendor ?? "",
+    deviceModel: filters.device_model ?? "",
+    fileFormat: filters.file_format ?? "",
+    from: filters.from ?? "",
+    to: filters.to ?? "",
+    page: filters.page ?? 1,
+    perPage: filters.per_page ?? 50,
+  });
+  return {
+    data: res.data.map(ecgWithPatientFromProto),
+    total: Number(res.total),
+    page: res.page,
+    per_page: res.perPage,
+  };
 }
 
 export interface ECGFilters {
@@ -146,28 +179,49 @@ export interface ECGFilters {
   per_page?: number;
 }
 
+// ecgFromProto maps the gRPC Ecg message to the frontend ECG type. Mirrors the
+// old EcgDTO JSON shape: file_path/immutable are not sent by the API (list view),
+// recorded_at is null when empty, extra is the parsed JSON object.
+function ecgFromProto(e: EcgProto): ECG {
+  return {
+    id: e.id as unknown as number, // API id is a string; typing is historical
+    patient_id: e.patientId,
+    vendor: e.vendor,
+    file_path: "",
+    original_filename: e.originalFilename,
+    recorded_at: e.recordedAt || null,
+    ingested_at: e.ingestedAt,
+    hl7_status: e.hl7Status as ECG["hl7_status"],
+    viewed: e.viewed,
+    immutable: false,
+    extra: e.extraJson ? (JSON.parse(e.extraJson) as Record<string, unknown>) : {},
+  };
+}
+
 export async function fetchECGs(
   patientId: number,
   filters: ECGFilters = {},
 ): Promise<ListResponse<ECG>> {
-  const params = new URLSearchParams();
-  if (filters.from) params.set("from", filters.from);
-  if (filters.to) params.set("to", filters.to);
-  if (filters.vendor) params.set("vendor", filters.vendor);
-  if (filters.device_model) params.set("device_model", filters.device_model);
-  if (filters.file_format) params.set("file_format", filters.file_format);
-  if (filters.hl7_status) params.set("hl7_status", filters.hl7_status);
-  params.set("page", String(filters.page ?? 1));
-  params.set("per_page", String(filters.per_page ?? 20));
-
-  const res = await fetch(
-    `${BASE_URL}/api/v1/patients/${patientId}/ecgs?${params}`,
-  );
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
-  return res.json();
+  // gRPC: PatientService.ListECGs. patientId is really the patient UUID (string)
+  // at runtime — the numeric typing is historical; ListECGs resolves UUID or
+  // device id server-side.
+  const res = await patientClient.listECGs({
+    patientId: String(patientId),
+    from: filters.from ?? "",
+    to: filters.to ?? "",
+    vendor: filters.vendor ?? "",
+    deviceModel: filters.device_model ?? "",
+    fileFormat: filters.file_format ?? "",
+    hl7Status: filters.hl7_status ?? "",
+    page: filters.page ?? 1,
+    perPage: filters.per_page ?? 20,
+  });
+  return {
+    data: res.data.map(ecgFromProto),
+    total: Number(res.total),
+    page: res.page,
+    per_page: res.perPage,
+  };
 }
 
 // ─── Manual ECG upload (offline/isolated devices) ──────────────────────────
@@ -183,9 +237,10 @@ export interface UploadResponse {
   queued: number;
 }
 
-// uploadECGs sends one or more ECG files to the manual ingestion endpoint. Each
-// accepted file is processed by the same pipeline as FTP/DICOM; live per-file
-// status arrives over the /events/ws WebSocket (correlated by filename).
+// uploadECGs sends one or more ECG files to the manual ingestion endpoint (REST
+// multipart — binary stays REST). Each accepted file is processed by the same
+// pipeline as FTP/DICOM; live per-file status arrives over the
+// EventService.Subscribe gRPC stream (correlated by filename).
 export async function uploadECGs(files: File[]): Promise<UploadResponse> {
   const fd = new FormData();
   for (const f of files) fd.append("files", f);
@@ -456,13 +511,8 @@ export async function testWebhook(): Promise<{
 }
 
 export async function forceHL7(ecgId: number): Promise<void> {
-  const res = await fetch(`${BASE_URL}/api/v1/ecgs/${ecgId}/hl7/force`, {
-    method: "POST",
-  });
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
+  // gRPC: HL7Service.Force.
+  await hl7Client.force({ ecgId: String(ecgId) });
 }
 
 // ORUAttempt mirrors the backend models.HL7ORUAttempt — the outcome of an outbound
@@ -481,29 +531,40 @@ export interface ORUAttempt {
   created_at: string;
 }
 
+// oruAttemptFromProto maps the gRPC OruAttempt to the frontend ORUAttempt.
+function oruAttemptFromProto(a: OruAttemptProto): ORUAttempt {
+  return {
+    id: a.id,
+    ecg_id: a.ecgId,
+    patient_id: a.patientId,
+    status: a.status as ORUAttempt["status"],
+    msa_code: a.msaCode || undefined,
+    msa_message: a.msaMessage || undefined,
+    error: a.error || undefined,
+    included_pdf: a.includedPdf,
+    triggered_by: a.triggeredBy || undefined,
+    response_ms: a.responseMs,
+    created_at: a.createdAt,
+  };
+}
+
 // sendECGResult manually triggers the outbound ORU result-send for an ECG.
 // Requires the ecg.send_result permission. Returns the recorded attempt on success;
-// throws the ErrorResponse (HIS rejection / send failure / disabled) otherwise.
+// throws the ConnectError (HIS rejection / send failure / disabled) otherwise.
 export async function sendECGResult(ecgId: number): Promise<ORUAttempt> {
-  const res = await fetch(`${BASE_URL}/api/v1/ecgs/${ecgId}/send-result`, {
-    method: "POST",
-  });
-  const json = await res.json();
-  if (!res.ok) {
-    // On a send failure the body is { error, attempt }; guards return { code, message }.
-    throw (json.error ?? json) as ErrorResponse;
-  }
-  return json.attempt as ORUAttempt;
+  // gRPC: HL7Service.SendResult. On failure a ConnectError propagates (the UI
+  // shows its message; the latest attempt is re-read via fetchECGORUStatus).
+  const res = await hl7Client.sendResult({ ecgId: String(ecgId) });
+  return oruAttemptFromProto(res.attempt!);
 }
 
 // fetchECGORUStatus returns the most recent outbound ORU attempt for an ECG, or null.
 export async function fetchECGORUStatus(
   ecgId: number,
 ): Promise<ORUAttempt | null> {
-  const res = await fetch(`${BASE_URL}/api/v1/ecgs/${ecgId}/oru-status`);
-  if (!res.ok) throw new Error("Failed to fetch ORU status");
-  const json = await res.json();
-  return (json.attempt as ORUAttempt | null) ?? null;
+  // gRPC: HL7Service.GetOruStatus. attempt is unset when the ECG has none.
+  const res = await hl7Client.getOruStatus({ ecgId: String(ecgId) });
+  return res.attempt ? oruAttemptFromProto(res.attempt) : null;
 }
 
 export interface AuditLogFilters {
@@ -582,29 +643,47 @@ export interface PatientFilters {
   to?: string;
 }
 
+// patientFromProto maps the gRPC Patient message to the frontend Patient type
+// (mirrors dto.PatientWithStatsToDTO). Empty date strings become null.
+function patientFromProto(p: PatientProto): Patient {
+  return {
+    id: p.id as unknown as number, // API id is a string; typing is historical
+    patient_id: p.patientId,
+    first_name: p.firstName,
+    last_name: p.lastName,
+    date_of_birth: p.dateOfBirth || null,
+    gender: p.gender,
+    nda: p.nda || undefined,
+    ecg_count: p.ecgCount,
+    unviewed_count: p.unviewedCount,
+    last_activity: p.lastActivity || null,
+  };
+}
+
 export async function fetchPatients(
   filters: PatientFilters = {},
 ): Promise<ListResponse<Patient>> {
-  const params = new URLSearchParams();
-  if (filters.q) params.set("q", filters.q);
-  if (filters.tags && filters.tags.length > 0)
-    params.set("tags", filters.tags.join(","));
-  if (filters.sort_by) params.set("sort_by", filters.sort_by);
-  if (filters.sort_order) params.set("sort_order", filters.sort_order);
-  if (filters.vendor) params.set("vendor", filters.vendor);
-  if (filters.device_model) params.set("device_model", filters.device_model);
-  if (filters.file_format) params.set("file_format", filters.file_format);
-  if (filters.hl7_status) params.set("hl7_status", filters.hl7_status);
-  if (filters.from) params.set("from", filters.from);
-  if (filters.to) params.set("to", filters.to);
-  params.set("page", String(filters.page ?? 1));
-  params.set("per_page", String(filters.per_page ?? 50));
-  const res = await fetch(`${BASE_URL}/api/v1/patients?${params}`);
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
-  return res.json();
+  // gRPC: PatientService.Search.
+  const res = await patientClient.search({
+    q: filters.q ?? "",
+    tags: filters.tags?.length ? filters.tags.join(",") : "",
+    sortBy: filters.sort_by ?? "",
+    sortOrder: filters.sort_order ?? "",
+    vendor: filters.vendor ?? "",
+    deviceModel: filters.device_model ?? "",
+    fileFormat: filters.file_format ?? "",
+    hl7Status: filters.hl7_status ?? "",
+    from: filters.from ?? "",
+    to: filters.to ?? "",
+    page: filters.page ?? 1,
+    perPage: filters.per_page ?? 50,
+  });
+  return {
+    data: res.data.map(patientFromProto),
+    total: Number(res.total),
+    page: res.page,
+    per_page: res.perPage,
+  };
 }
 
 export interface AppRole {
@@ -780,39 +859,37 @@ export async function markEcgViewed(ecgId: string): Promise<void> {
 
 // markPatientEcgsViewed marks all of a patient's ECGs as viewed ("mark all as seen").
 export async function markPatientEcgsViewed(patientId: string): Promise<void> {
-  const res = await fetch(
-    `${BASE_URL}/api/v1/patients/${encodeURIComponent(patientId)}/ecgs/view`,
-    { method: "POST" },
-  );
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
+  await patientClient.markECGsViewed({ patientId });
 }
 
 export async function fetchECGMeta(ecgId: number): Promise<ECGMetaResponse> {
-  const res = await fetch(`${BASE_URL}/api/v1/ecgs/${ecgId}/metadata`);
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
-  return res.json();
+  // gRPC: ECGService.GetMetadata. values arrive as a JSON object string.
+  const res = await ecgClient.getMetadata({ id: String(ecgId) });
+  return {
+    fields: res.fields.map((f) => ({
+      key: f.key,
+      label: f.label,
+      type: f.type as ECGMetaResponse["fields"][number]["type"],
+      options: f.options.length ? f.options : undefined,
+    })),
+    values: res.valuesJson
+      ? (JSON.parse(res.valuesJson) as Record<string, unknown>)
+      : {},
+  };
 }
 
 export async function patchECGMetadata(
   ecgId: number,
   values: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
-  const res = await fetch(`${BASE_URL}/api/v1/ecgs/${ecgId}/metadata`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(values),
+  // gRPC: ECGService.UpdateMetadata. Only editable keys are applied server-side.
+  const res = await ecgClient.updateMetadata({
+    id: String(ecgId),
+    valuesJson: JSON.stringify(values),
   });
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
-  return res.json();
+  return res.valuesJson
+    ? (JSON.parse(res.valuesJson) as Record<string, unknown>)
+    : {};
 }
 
 // --- Batch Export (FR19, Story 5.1) ---
@@ -1242,12 +1319,19 @@ export interface HL7Attempt {
 export async function fetchHL7History(
   patientId: string,
 ): Promise<HL7Attempt[]> {
-  const res = await fetch(
-    `${BASE_URL}/api/v1/patients/${patientId}/hl7-history`,
-  );
-  if (!res.ok) return [];
-  const json = await res.json();
-  return json.data ?? [];
+  // gRPC: HL7Service.ListAttempts (most recent first, default limit 20).
+  const res = await hl7Client.listAttempts({ patientId });
+  return res.data.map((a) => ({
+    id: a.id,
+    ecg_id: a.ecgId,
+    patient_id: a.patientId,
+    status: a.status as HL7Attempt["status"],
+    msa_code: a.msaCode || undefined,
+    msa_message: a.msaMessage || undefined,
+    error: a.error || undefined,
+    response_ms: a.responseMs,
+    created_at: a.createdAt,
+  }));
 }
 
 // ─── Tags ───────────────────────────────────────────────────────────────────
@@ -1260,21 +1344,25 @@ export interface TagDTO {
   created_at: string;
 }
 
+// tagFromProto maps the gRPC Tag message to the frontend TagDTO.
+function tagFromProto(t: TagProto): TagDTO {
+  return {
+    id: t.id,
+    name: t.name,
+    color: t.color,
+    created_by: t.createdBy,
+    created_at: t.createdAt,
+  };
+}
+
 export async function fetchTags(): Promise<TagDTO[]> {
-  const res = await fetch(`${BASE_URL}/api/v1/tags`);
-  if (!res.ok) return [];
-  const json = await res.json();
-  return json.data ?? [];
+  const res = await tagClient.listTags({});
+  return res.data.map(tagFromProto);
 }
 
 export async function createTag(name: string, color?: string): Promise<TagDTO> {
-  const res = await fetch(`${BASE_URL}/api/v1/tags`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, color }),
-  });
-  const json = await res.json();
-  return json.data;
+  const res = await tagClient.createTag({ name, color: color ?? "" });
+  return tagFromProto(res.tag!);
 }
 
 export async function updateTag(
@@ -1282,84 +1370,72 @@ export async function updateTag(
   name: string,
   color: string,
 ): Promise<TagDTO> {
-  const res = await fetch(`${BASE_URL}/api/v1/tags/${id}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, color }),
-  });
-  const json = await res.json();
-  return json.data;
+  const res = await tagClient.updateTag({ id, name, color });
+  return tagFromProto(res.tag!);
 }
 
 export async function deleteTag(id: string): Promise<void> {
-  await fetch(`${BASE_URL}/api/v1/tags/${id}`, { method: "DELETE" });
+  await tagClient.deleteTag({ id });
 }
 
 export async function fetchPatientTags(patientId: string): Promise<TagDTO[]> {
-  const res = await fetch(`${BASE_URL}/api/v1/patients/${patientId}/tags`);
-  if (!res.ok) return [];
-  const json = await res.json();
-  return json.data ?? [];
+  const res = await tagClient.listPatientTags({ patientId });
+  return res.data.map(tagFromProto);
 }
 
 export async function tagPatient(
   patientId: string,
   tagId: string,
 ): Promise<void> {
-  const res = await fetch(`${BASE_URL}/api/v1/patients/${patientId}/tags`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ tag_id: tagId }),
-  });
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
+  await tagClient.tagPatient({ patientId, tagId });
 }
 
 export async function untagPatient(
   patientId: string,
   tagId: string,
 ): Promise<void> {
-  const res = await fetch(
-    `${BASE_URL}/api/v1/patients/${patientId}/tags/${tagId}`,
-    {
-      method: "DELETE",
-    },
-  );
-  if (!res.ok && res.status !== 404) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
+  await tagClient.untagPatient({ patientId, tagId });
 }
 
 export async function fetchECGTags(ecgId: string): Promise<TagDTO[]> {
-  const res = await fetch(`${BASE_URL}/api/v1/ecgs/${ecgId}/tags`);
-  if (!res.ok) return [];
-  const json = await res.json();
-  return json.data ?? [];
+  const res = await tagClient.listEcgTags({ ecgId });
+  return res.data.map(tagFromProto);
 }
 
 export async function tagECG(ecgId: string, tagId: string): Promise<void> {
-  const res = await fetch(`${BASE_URL}/api/v1/ecgs/${ecgId}/tags`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ tag_id: tagId }),
-  });
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
+  await tagClient.tagEcg({ ecgId, tagId });
 }
 
 export async function untagECG(ecgId: string, tagId: string): Promise<void> {
-  const res = await fetch(`${BASE_URL}/api/v1/ecgs/${ecgId}/tags/${tagId}`, {
-    method: "DELETE",
-  });
-  if (!res.ok && res.status !== 404) {
-    const err: ErrorResponse = await res.json();
-    throw err;
+  await tagClient.untagEcg({ ecgId, tagId });
+}
+
+// ── Batch tag reads (kill the per-row N+1) ───────────────────────────────────
+// One request resolves tags for a whole list page. Returns a map keyed by the
+// entity id; ids with no tags are absent (callers default to []).
+
+export async function fetchECGTagsBatch(
+  ecgIds: string[],
+): Promise<Record<string, TagDTO[]>> {
+  if (ecgIds.length === 0) return {};
+  const res = await tagClient.batchGetEcgTags({ ecgIds });
+  const out: Record<string, TagDTO[]> = {};
+  for (const [id, list] of Object.entries(res.tags)) {
+    out[id] = list.tags.map(tagFromProto);
   }
+  return out;
+}
+
+export async function fetchPatientTagsBatch(
+  patientIds: string[],
+): Promise<Record<string, TagDTO[]>> {
+  if (patientIds.length === 0) return {};
+  const res = await tagClient.batchGetPatientTags({ patientIds });
+  const out: Record<string, TagDTO[]> = {};
+  for (const [id, list] of Object.entries(res.tags)) {
+    out[id] = list.tags.map(tagFromProto);
+  }
+  return out;
 }
 
 export interface VolumeMetric {
