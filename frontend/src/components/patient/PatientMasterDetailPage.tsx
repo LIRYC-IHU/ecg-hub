@@ -53,6 +53,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../../hooks/useAuth";
 import { useNotification } from "../../context/NotificationContext";
+import { useConfirm } from "../../context/ConfirmContext";
 import { DownloadFormatPopup } from "../ecg/DownloadFormatPopup";
 import { TagBadge } from "../ui/TagBadge";
 import { TagManager } from "../tags/TagManager";
@@ -1148,6 +1149,7 @@ function BulkECGFooter({
 }) {
   const { t } = useTranslation();
   const { notify, notifyProgress } = useNotification();
+  const confirm = useConfirm();
   const queryClient = useQueryClient();
   const [busy, setBusy] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
@@ -1244,8 +1246,12 @@ function BulkECGFooter({
           <button
             disabled={busy}
             onClick={async () => {
-              if (!window.confirm(t("ecg.deleteConfirmBulk", { count })))
-                return;
+              const ok = await confirm({
+                title: t("common.delete"),
+                message: t("ecg.deleteConfirmBulk", { count }),
+                danger: true,
+              });
+              if (!ok) return;
               setBusy(true);
               try {
                 for (const id of ecgIds) {
