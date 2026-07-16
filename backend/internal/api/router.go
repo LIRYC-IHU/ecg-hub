@@ -282,6 +282,7 @@ func (r *RouterConfig) RegisterRoutes() {
 				apiv1connect.ECGServiceListAllProcedure:       auth.PermPatientRead,
 				apiv1connect.ECGServiceGetMetadataProcedure:    auth.PermECGRead,
 				apiv1connect.ECGServiceUpdateMetadataProcedure: auth.PermECGWrite,
+				apiv1connect.ECGServiceMarkViewedProcedure:     auth.PermECGRead,
 			}),
 		),
 	)
@@ -329,6 +330,22 @@ func (r *RouterConfig) RegisterRoutes() {
 	)
 	mountConnect(r.e, tagPath, tagHandler)
 
+	// Pin service — protected. Per-user pinned patients (patient.read); the
+	// caller's identity comes from the auth interceptor, never the request.
+	pinPath, pinHandler := apiv1connect.NewPinServiceHandler(
+		&handlers.PinServiceHandler{DB: r.gormDB},
+		connect.WithInterceptors(
+			validateInterceptor,
+			mw.ConnectRequireAuth(r.authProvider, r.userRepo, apiKeyRepo),
+			mw.ConnectRequirePermission(r.checker, map[string]string{
+				apiv1connect.PinServiceListPinsProcedure:     auth.PermPatientRead,
+				apiv1connect.PinServicePinPatientProcedure:   auth.PermPatientRead,
+				apiv1connect.PinServiceUnpinPatientProcedure: auth.PermPatientRead,
+			}),
+		),
+	)
+	mountConnect(r.e, pinPath, pinHandler)
+
 	// Event service — protected server-stream (replaces the /events/ws WebSocket).
 	// Streaming handlers are NOT covered by the unary auth interceptors, so it uses
 	// the streaming-capable mw.ConnectStreamAuth (auth + patient.read). Only wired
@@ -348,9 +365,29 @@ func (r *RouterConfig) RegisterRoutes() {
 	// Export service — protected server-stream for batch-export progress (replaces
 	// the /exports/:id/ws WebSocket). ecg.download via the streaming interceptor;
 	// per-job ownership is enforced inside the handler.
+	// Create/Formats/Get are unary (unary auth+permission interceptors);
+	// WatchProgress is a server-stream (streaming interceptor). Both enforce
+	// ecg.download. The two interceptor kinds coexist: UnaryInterceptorFunc
+	// ignores streams, ConnectStreamAuth passes unary through — no gaps, no
+	// double auth.
 	exportPath, exportHandler := apiv1connect.NewExportServiceHandler(
-		&handlers.ExportServiceHandler{Repo: r.exportRepo, AdminRole: r.checker.AdminRole()},
+		&handlers.ExportServiceHandler{
+			Repo:      r.exportRepo,
+			Creator:   r.exportRepo,
+			ECGRepo:   repository.NewECGRepository(r.gormDB),
+			Pool:      r.exportPool,
+			Bridge:    r.bridge,
+			DB:        r.gormDB,
+			AdminRole: r.checker.AdminRole(),
+		},
 		connect.WithInterceptors(
+			validateInterceptor,
+			mw.ConnectRequireAuth(r.authProvider, r.userRepo, apiKeyRepo),
+			mw.ConnectRequirePermission(r.checker, map[string]string{
+				apiv1connect.ExportServiceCreateProcedure:  auth.PermECGDownload,
+				apiv1connect.ExportServiceFormatsProcedure: auth.PermECGDownload,
+				apiv1connect.ExportServiceGetProcedure:     auth.PermECGDownload,
+			}),
 			mw.ConnectStreamAuth(r.authProvider, r.userRepo, apiKeyRepo, r.checker, map[string]string{
 				apiv1connect.ExportServiceWatchProgressProcedure: auth.PermECGDownload,
 			}),
@@ -448,8 +485,7 @@ func (r *RouterConfig) RegisterRoutes() {
 	// ECG waveform for viewer (auto-converts to DICOM if needed) — requires ecg.read
 	apiV1.GET("/ecgs/:id/waveform", handlers.ECGWaveformHandler(r.gormDB, r.cfg.Storage.VolumePath, r.bridge), mw.RequirePermission(r.checker, auth.PermECGRead))
 
-	// Mark a single ECG as viewed (first view) — clears its "new" indicator.
-	apiV1.POST("/ecgs/:id/view", handlers.MarkECGViewedHandler(r.gormDB), mw.RequirePermission(r.checker, auth.PermECGRead))
+	// Single-ECG mark-viewed is now served over gRPC by ECGService.MarkViewed.
 
 	// ECG deletion — requires ecg.delete
 	apiV1.DELETE("/ecgs/:id", handlers.DeleteECGHandler(r.gormDB), mw.RequirePermission(r.checker, auth.PermECGDelete))
@@ -536,23 +572,12 @@ func (r *RouterConfig) RegisterRoutes() {
 	// Recent 5xx errors — requires admin.system
 	apiV1.GET("/admin/errors", handlers.RecentErrorsHandler(), mw.RequirePermission(r.checker, auth.PermAdminSystem))
 
-	// Batch export (FR19, Story 5.1) — requires ecg.download
-	ecgRepo := repository.NewECGRepository(r.gormDB)
-	apiV1.POST("/exports", handlers.CreateExportHandler(r.gormDB, r.exportRepo, ecgRepo, r.exportPool), mw.RequirePermission(r.checker, auth.PermECGDownload))
-	// Available formats for a set of ECGs — drives the download dialog (must precede /exports/:id is N/A: distinct method/path).
-	apiV1.POST("/exports/formats", handlers.ExportFormatsHandler(r.gormDB, r.bridge), mw.RequirePermission(r.checker, auth.PermECGDownload))
-	apiV1.GET("/exports/:id", handlers.GetExportHandler(r.exportRepo, r.checker.AdminRole()), mw.RequirePermission(r.checker, auth.PermECGDownload))
-
-	// Batch export progress is now served over gRPC by ExportService.WatchProgress
-	// (server-stream, wired near the other Connect services above). The ZIP
-	// download stays REST (binary).
+	// Batch export create/formats/status + progress are now served over gRPC by
+	// ExportService (Create/Formats/Get + WatchProgress stream, wired above).
+	// Only the ZIP download stays REST (binary).
 	apiV1.GET("/exports/:id/download", handlers.DownloadExportHandler(r.exportRepo, r.checker.AdminRole()), mw.RequirePermission(r.checker, auth.PermECGDownload))
 
-	// User pins (favourites) — requires patient.read
-	pinRepo := repository.NewPinRepository(r.gormDB)
-	apiV1.GET("/pins", handlers.ListPinsHandler(pinRepo), mw.RequirePermission(r.checker, auth.PermPatientRead))
-	apiV1.POST("/pins", handlers.PinPatientHandler(pinRepo), mw.RequirePermission(r.checker, auth.PermPatientRead))
-	apiV1.DELETE("/pins/:patient_id", handlers.UnpinPatientHandler(pinRepo), mw.RequirePermission(r.checker, auth.PermPatientRead))
+	// User pins (favourites) are now served over gRPC by PinService (wired above).
 
 	// Per-user outbound webhooks — requires webhook.manage. Each user manages
 	// only their own webhooks (repo scoping); secrets are stored encrypted.
