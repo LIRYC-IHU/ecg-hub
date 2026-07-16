@@ -315,3 +315,13 @@ func (h *ECGServiceHandler) UpdateMetadata(ctx context.Context, req *apiv1.Updat
 	}
 	return &apiv1.UpdateMetadataResponse{ValuesJson: string(valuesJSON)}, nil
 }
+
+// MarkViewed stamps viewed_at on first view (clears the "new" indicator).
+// Idempotent — re-marking an already-viewed ECG is a no-op success.
+func (h *ECGServiceHandler) MarkViewed(_ context.Context, req *apiv1.MarkViewedRequest) (*apiv1.MarkViewedResponse, error) {
+	repo := repository.NewECGRepository(h.DB)
+	if _, err := repo.MarkViewed(req.Id); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	return &apiv1.MarkViewedResponse{Id: req.Id, Viewed: true}, nil
+}
