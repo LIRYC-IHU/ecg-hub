@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
+import { exportClient } from '../lib/grpc'
 
 export interface ExportWSState {
   status: 'connecting' | 'queued' | 'processing' | 'complete' | 'failed'
@@ -18,49 +19,54 @@ const INITIAL_STATE: ExportWSState = {
   error: null,
 }
 
+// useExportWebSocket streams a batch export job's progress from the gRPC
+// ExportService.WatchProgress server-stream (formerly the /exports/:id/ws
+// WebSocket). The name is kept for its consumers. Reconnects with backoff on a
+// premature stream end, but stops once the job reaches a terminal state.
 export function useExportWebSocket(jobId: string | null): ExportWSState {
   const [state, setState] = useState<ExportWSState>(INITIAL_STATE)
-  const retriesRef = useRef(0)
 
   useEffect(() => {
     if (!jobId) return
 
-    retriesRef.current = 0
-    let ws: WebSocket
+    setState(INITIAL_STATE)
+    const abort = new AbortController()
     let cancelled = false
+    let terminal = false
 
-    function connect() {
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-      const url = `${protocol}//${window.location.host}/api/v1/exports/${jobId}/ws`
-      ws = new WebSocket(url)
-
-      ws.onmessage = (e) => {
-        const msg = JSON.parse(e.data as string)
-        setState({
-          status: msg.status,
-          processedCount: msg.processed_count ?? 0,
-          ecgCount: msg.ecg_count ?? 0,
-          percent: msg.percent ?? 0,
-          downloadUrl: msg.download_url ?? null,
-          error: msg.error ?? null,
-        })
-      }
-
-      ws.onclose = (e) => {
-        if (cancelled) return
-        // Reconnect unless terminal state (code 1000 = NormalClosure) or retries exhausted.
-        if (retriesRef.current < 3 && e.code !== 1000) {
-          const delay = Math.pow(2, retriesRef.current) * 1000
-          retriesRef.current++
-          setTimeout(connect, delay)
+    async function run() {
+      let retries = 0
+      while (!cancelled && !terminal) {
+        try {
+          for await (const p of exportClient.watchProgress(
+            { jobId: jobId! },
+            { signal: abort.signal },
+          )) {
+            retries = 0
+            setState({
+              status: p.status as ExportWSState['status'],
+              processedCount: p.processedCount,
+              ecgCount: p.ecgCount,
+              percent: p.percent,
+              downloadUrl: p.downloadUrl || null,
+              error: p.error || null,
+            })
+            if (p.status === 'complete' || p.status === 'failed') terminal = true
+          }
+        } catch {
+          // premature end — reconnect below (AbortError filtered by `cancelled`)
         }
+        if (cancelled || terminal || retries >= 3) break
+        const delay = Math.pow(2, retries) * 1000
+        retries++
+        await new Promise((r) => setTimeout(r, delay))
       }
     }
 
-    connect()
+    void run()
     return () => {
       cancelled = true
-      ws?.close()
+      abort.abort()
     }
   }, [jobId])
 
