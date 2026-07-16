@@ -52,12 +52,19 @@ export function TagManager({ patientId, ecgId, canCreate = true, canDelete = fal
 
   const queryKey = isECG ? ["ecg-tags", entityId] : ["patient-tags", entityId];
 
+  // Only fetch this entity's tags when the popover is actually open — otherwise
+  // every mounted TagManager (one per list row) would fire a request (N+1). The
+  // display dots come from the parent's batch query instead.
   const { data: entityTags = [] } = useQuery({
     queryKey,
     queryFn: () => isECG ? fetchECGTags(entityId) : fetchPatientTags(entityId),
     staleTime: 30_000,
-    enabled: !!entityId,
+    enabled: open && !!entityId,
   });
+
+  // Batch key the list parents use for the display dots — invalidate it after
+  // any apply/remove so the dots refresh alongside this popover's own cache.
+  const batchKey = isECG ? ["ecg-tags-batch"] : ["patient-tags-batch"];
 
   const patientTagIds = new Set(entityTags.map((t) => t.id));
 
@@ -79,6 +86,7 @@ export function TagManager({ patientId, ecgId, canCreate = true, canDelete = fal
     },
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey });
+      void queryClient.invalidateQueries({ queryKey: batchKey });
     },
   });
 
@@ -97,6 +105,7 @@ export function TagManager({ patientId, ecgId, canCreate = true, canDelete = fal
     },
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey });
+      void queryClient.invalidateQueries({ queryKey: batchKey });
     },
   });
 
@@ -115,6 +124,7 @@ export function TagManager({ patientId, ecgId, canCreate = true, canDelete = fal
       setConfirmDeleteId(null);
       void queryClient.invalidateQueries({ queryKey: ["tags"] });
       void queryClient.invalidateQueries({ queryKey });
+      void queryClient.invalidateQueries({ queryKey: batchKey });
     },
   });
 
