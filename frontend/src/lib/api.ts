@@ -10,9 +10,11 @@ import {
   authClient,
   brandingClient,
   ecgClient,
+  exportClient,
   healthClient,
   hl7Client,
   patientClient,
+  pinClient,
   sessionClient,
   setupClient,
   tagClient,
@@ -482,17 +484,12 @@ export async function fetchModules(): Promise<ModuleStatus[]> {
 export async function fetchExportFormats(
   ecgIds: number[],
 ): Promise<ExportFormat[]> {
-  const res = await fetch(`${BASE_URL}/api/v1/exports/formats`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ecg_ids: ecgIds }),
-  });
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
-  const json: { formats: ExportFormat[] } = await res.json();
-  return json.formats ?? [];
+  const res = await exportClient.formats({ ecgIds: ecgIds.map(String) });
+  return res.formats.map((f) => ({
+    id: f.id,
+    label: f.label,
+    extension: f.extension,
+  }));
 }
 
 export async function testWebhook(): Promise<{
@@ -848,13 +845,7 @@ export async function assignQuarantineEntry(
 
 // markEcgViewed stamps a single ECG as viewed (clears its "new" indicator).
 export async function markEcgViewed(ecgId: string): Promise<void> {
-  const res = await fetch(`${BASE_URL}/api/v1/ecgs/${ecgId}/view`, {
-    method: "POST",
-  });
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
+  await ecgClient.markViewed({ id: ecgId });
 }
 
 // markPatientEcgsViewed marks all of a patient's ECGs as viewed ("mark all as seen").
@@ -912,28 +903,45 @@ export interface ExportJobResponse {
   error?: string;
 }
 
+// exportJobFromProto maps the gRPC ExportJob (camelCase) to the snake_case
+// ExportJobResponse the UI consumes. error is "" on the wire → undefined.
+function exportJobFromProto(j: {
+  id: string;
+  status: string;
+  ecgCount: number;
+  processedCount: number;
+  formats: string[];
+  createdAt: string;
+  downloadUrl: string;
+  error: string;
+}): ExportJobResponse {
+  return {
+    id: j.id,
+    status: j.status as ExportJobResponse["status"],
+    ecg_count: j.ecgCount,
+    processed_count: j.processedCount,
+    formats: j.formats,
+    created_at: j.createdAt,
+    download_url: j.downloadUrl,
+    error: j.error || undefined,
+  };
+}
+
 export async function createExportJob(
   req: ExportJobRequest,
 ): Promise<ExportJobResponse> {
-  const res = await fetch(`${BASE_URL}/api/v1/exports`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(req),
+  const res = await exportClient.create({
+    ecgIds: req.ecg_ids.map(String),
+    formats: req.formats,
+    anonymize: req.anonymize ?? false,
+    inject: req.inject ?? false,
   });
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
-  return res.json();
+  return exportJobFromProto(res.job!);
 }
 
 export async function getExportJob(jobId: string): Promise<ExportJobResponse> {
-  const res = await fetch(`${BASE_URL}/api/v1/exports/${jobId}`);
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
-  return res.json();
+  const res = await exportClient.get({ id: jobId });
+  return exportJobFromProto(res.job!);
 }
 
 export async function setAppUserRole(
@@ -1039,24 +1047,20 @@ export async function uploadLogo(file: File): Promise<string> {
 // ─── Pins (favourites) ──────────────────────────────────────────────────────
 
 export async function fetchPins(): Promise<string[]> {
-  const res = await fetch(`${BASE_URL}/api/v1/pins`);
-  if (!res.ok) return [];
-  const json = await res.json();
-  return json.data ?? [];
+  try {
+    const res = await pinClient.listPins({});
+    return res.patientIds;
+  } catch {
+    return [];
+  }
 }
 
 export async function pinPatient(patientId: string): Promise<void> {
-  await fetch(`${BASE_URL}/api/v1/pins`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ patient_id: patientId }),
-  });
+  await pinClient.pinPatient({ patientId });
 }
 
 export async function unpinPatient(patientId: string): Promise<void> {
-  await fetch(`${BASE_URL}/api/v1/pins/${patientId}`, {
-    method: "DELETE",
-  });
+  await pinClient.unpinPatient({ patientId });
 }
 
 // ─── HL7 Test ────────────────────────────────────────────────────────────────
