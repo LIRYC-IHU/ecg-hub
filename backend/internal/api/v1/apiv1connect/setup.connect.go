@@ -35,11 +35,14 @@ const (
 const (
 	// SetupServiceGetStatusProcedure is the fully-qualified name of the SetupService's GetStatus RPC.
 	SetupServiceGetStatusProcedure = "/grpc.api.v1.SetupService/GetStatus"
+	// SetupServiceInitializeProcedure is the fully-qualified name of the SetupService's Initialize RPC.
+	SetupServiceInitializeProcedure = "/grpc.api.v1.SetupService/Initialize"
 )
 
 // SetupServiceClient is a client for the grpc.api.v1.SetupService service.
 type SetupServiceClient interface {
 	GetStatus(context.Context, *v1.GetSetupStatusRequest) (*v1.GetSetupStatusResponse, error)
+	Initialize(context.Context, *v1.InitializeRequest) (*v1.InitializeResponse, error)
 }
 
 // NewSetupServiceClient constructs a client for the grpc.api.v1.SetupService service. By default,
@@ -59,12 +62,19 @@ func NewSetupServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(setupServiceMethods.ByName("GetStatus")),
 			connect.WithClientOptions(opts...),
 		),
+		initialize: connect.NewClient[v1.InitializeRequest, v1.InitializeResponse](
+			httpClient,
+			baseURL+SetupServiceInitializeProcedure,
+			connect.WithSchema(setupServiceMethods.ByName("Initialize")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // setupServiceClient implements SetupServiceClient.
 type setupServiceClient struct {
-	getStatus *connect.Client[v1.GetSetupStatusRequest, v1.GetSetupStatusResponse]
+	getStatus  *connect.Client[v1.GetSetupStatusRequest, v1.GetSetupStatusResponse]
+	initialize *connect.Client[v1.InitializeRequest, v1.InitializeResponse]
 }
 
 // GetStatus calls grpc.api.v1.SetupService.GetStatus.
@@ -76,9 +86,19 @@ func (c *setupServiceClient) GetStatus(ctx context.Context, req *v1.GetSetupStat
 	return nil, err
 }
 
+// Initialize calls grpc.api.v1.SetupService.Initialize.
+func (c *setupServiceClient) Initialize(ctx context.Context, req *v1.InitializeRequest) (*v1.InitializeResponse, error) {
+	response, err := c.initialize.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
 // SetupServiceHandler is an implementation of the grpc.api.v1.SetupService service.
 type SetupServiceHandler interface {
 	GetStatus(context.Context, *v1.GetSetupStatusRequest) (*v1.GetSetupStatusResponse, error)
+	Initialize(context.Context, *v1.InitializeRequest) (*v1.InitializeResponse, error)
 }
 
 // NewSetupServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -94,10 +114,18 @@ func NewSetupServiceHandler(svc SetupServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(setupServiceMethods.ByName("GetStatus")),
 		connect.WithHandlerOptions(opts...),
 	)
+	setupServiceInitializeHandler := connect.NewUnaryHandlerSimple(
+		SetupServiceInitializeProcedure,
+		svc.Initialize,
+		connect.WithSchema(setupServiceMethods.ByName("Initialize")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/grpc.api.v1.SetupService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case SetupServiceGetStatusProcedure:
 			setupServiceGetStatusHandler.ServeHTTP(w, r)
+		case SetupServiceInitializeProcedure:
+			setupServiceInitializeHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -109,4 +137,8 @@ type UnimplementedSetupServiceHandler struct{}
 
 func (UnimplementedSetupServiceHandler) GetStatus(context.Context, *v1.GetSetupStatusRequest) (*v1.GetSetupStatusResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("grpc.api.v1.SetupService.GetStatus is not implemented"))
+}
+
+func (UnimplementedSetupServiceHandler) Initialize(context.Context, *v1.InitializeRequest) (*v1.InitializeResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("grpc.api.v1.SetupService.Initialize is not implemented"))
 }
