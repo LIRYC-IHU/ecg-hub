@@ -269,6 +269,118 @@ func (r *RouterConfig) RegisterRoutes() {
 	)
 	mountConnect(r.e, sessionPath, sessionHandler)
 
+	// ECG service — protected. ConnectRequirePermission enforces a per-method
+	// permission via the generated procedure constants (the map is how one
+	// service exposes methods with different permissions).
+	ecgPath, ecgHandler := apiv1connect.NewECGServiceHandler(
+		&handlers.ECGServiceHandler{DB: r.gormDB},
+		connect.WithInterceptors(
+			validateInterceptor,
+			mw.ConnectRequireAuth(r.authProvider, r.userRepo, apiKeyRepo),
+			mw.ConnectRequirePermission(r.checker, map[string]string{
+				apiv1connect.ECGServiceGetFiltersProcedure:    auth.PermPatientRead,
+				apiv1connect.ECGServiceListAllProcedure:       auth.PermPatientRead,
+				apiv1connect.ECGServiceGetMetadataProcedure:    auth.PermECGRead,
+				apiv1connect.ECGServiceUpdateMetadataProcedure: auth.PermECGWrite,
+			}),
+		),
+	)
+	mountConnect(r.e, ecgPath, ecgHandler)
+
+	// Patient service — protected.
+	patientPath, patientHandler := apiv1connect.NewPatientServiceHandler(
+		&handlers.PatientServiceHandler{DB: r.gormDB},
+		connect.WithInterceptors(
+			validateInterceptor,
+			mw.ConnectRequireAuth(r.authProvider, r.userRepo, apiKeyRepo),
+			mw.ConnectRequirePermission(r.checker, map[string]string{
+				apiv1connect.PatientServiceSearchProcedure:         auth.PermPatientRead,
+				apiv1connect.PatientServiceMarkECGsViewedProcedure: auth.PermECGRead,
+				apiv1connect.PatientServiceListECGsProcedure:        auth.PermPatientRead,
+			}),
+		),
+	)
+	mountConnect(r.e, patientPath, patientHandler)
+
+	// Tag service — protected. Reads (list/batch) need patient.read; mutations
+	// need the specific tag.* permissions. The batch RPCs resolve tags for a
+	// whole list page in one request (kills the former per-row N+1).
+	tagSvcRepo := repository.NewTagRepository(r.gormDB)
+	tagPath, tagHandler := apiv1connect.NewTagServiceHandler(
+		&handlers.TagServiceHandler{Repo: tagSvcRepo},
+		connect.WithInterceptors(
+			validateInterceptor,
+			mw.ConnectRequireAuth(r.authProvider, r.userRepo, apiKeyRepo),
+			mw.ConnectRequirePermission(r.checker, map[string]string{
+				apiv1connect.TagServiceListTagsProcedure:            auth.PermPatientRead,
+				apiv1connect.TagServiceListPatientTagsProcedure:     auth.PermPatientRead,
+				apiv1connect.TagServiceListEcgTagsProcedure:         auth.PermPatientRead,
+				apiv1connect.TagServiceBatchGetPatientTagsProcedure: auth.PermPatientRead,
+				apiv1connect.TagServiceBatchGetEcgTagsProcedure:     auth.PermPatientRead,
+				apiv1connect.TagServiceCreateTagProcedure:           auth.PermTagCreate,
+				apiv1connect.TagServiceUpdateTagProcedure:           auth.PermTagCreate,
+				apiv1connect.TagServiceDeleteTagProcedure:           auth.PermTagDelete,
+				apiv1connect.TagServiceTagPatientProcedure:          auth.PermTagApply,
+				apiv1connect.TagServiceUntagPatientProcedure:        auth.PermTagApply,
+				apiv1connect.TagServiceTagEcgProcedure:              auth.PermTagApply,
+				apiv1connect.TagServiceUntagEcgProcedure:            auth.PermTagApply,
+			}),
+		),
+	)
+	mountConnect(r.e, tagPath, tagHandler)
+
+	// Event service — protected server-stream (replaces the /events/ws WebSocket).
+	// Streaming handlers are NOT covered by the unary auth interceptors, so it uses
+	// the streaming-capable mw.ConnectStreamAuth (auth + patient.read). Only wired
+	// when the realtime hub is attached.
+	if r.eventHub != nil {
+		eventPath, eventHandler := apiv1connect.NewEventServiceHandler(
+			&handlers.EventServiceHandler{Hub: r.eventHub},
+			connect.WithInterceptors(
+				mw.ConnectStreamAuth(r.authProvider, r.userRepo, apiKeyRepo, r.checker, map[string]string{
+					apiv1connect.EventServiceSubscribeProcedure: auth.PermPatientRead,
+				}),
+			),
+		)
+		mountConnect(r.e, eventPath, eventHandler)
+	}
+
+	// Export service — protected server-stream for batch-export progress (replaces
+	// the /exports/:id/ws WebSocket). ecg.download via the streaming interceptor;
+	// per-job ownership is enforced inside the handler.
+	exportPath, exportHandler := apiv1connect.NewExportServiceHandler(
+		&handlers.ExportServiceHandler{Repo: r.exportRepo, AdminRole: r.checker.AdminRole()},
+		connect.WithInterceptors(
+			mw.ConnectStreamAuth(r.authProvider, r.userRepo, apiKeyRepo, r.checker, map[string]string{
+				apiv1connect.ExportServiceWatchProgressProcedure: auth.PermECGDownload,
+			}),
+		),
+	)
+	mountConnect(r.e, exportPath, exportHandler)
+
+	// HL7 service — protected. Per-ECG inbound retry + outbound ORU send/status +
+	// per-patient attempt history. Mixed permissions via the per-procedure map.
+	hl7Path, hl7Handler := apiv1connect.NewHL7ServiceHandler(
+		&handlers.HL7ServiceHandler{
+			DB:          r.gormDB,
+			Enricher:    r.hl7Enricher,
+			ORUService:  r.oruService,
+			ORURepo:     repository.NewHL7ORUAttemptRepository(r.gormDB),
+			AttemptRepo: repository.NewHL7AttemptRepository(r.gormDB),
+		},
+		connect.WithInterceptors(
+			validateInterceptor,
+			mw.ConnectRequireAuth(r.authProvider, r.userRepo, apiKeyRepo),
+			mw.ConnectRequirePermission(r.checker, map[string]string{
+				apiv1connect.HL7ServiceForceProcedure:        auth.PermECGForceHL7,
+				apiv1connect.HL7ServiceGetOruStatusProcedure:  auth.PermECGRead,
+				apiv1connect.HL7ServiceSendResultProcedure:    auth.PermECGSendResult,
+				apiv1connect.HL7ServiceListAttemptsProcedure:  auth.PermPatientRead,
+			}),
+		),
+	)
+	mountConnect(r.e, hl7Path, hl7Handler)
+
 	// Swagger UI — requires authentication + swagger.read permission.
 	// The spec itself is generated restricted to the Patients, ECG and health
 	// tags (swag init --tags) — the endpoints a machine client (webhook
@@ -312,18 +424,13 @@ func (r *RouterConfig) RegisterRoutes() {
 	// Current user identity + permissions is now served over gRPC by
 	// SessionService.GetCurrentUser (wired above).
 
-	// Patient search and ECG listing — requires patient.read
-	apiV1.GET("/patients", handlers.SearchPatientsHandler(r.gormDB), mw.RequirePermission(r.checker, auth.PermPatientRead))
-	apiV1.GET("/patients/:id/ecgs", handlers.ListPatientECGsHandler(r.gormDB), mw.RequirePermission(r.checker, auth.PermPatientRead))
+	// Patient search is now served over gRPC by PatientService.Search (above).
+	// Per-patient ECG listing is now served over gRPC by PatientService.ListECGs (above).
+	// Mark-all-viewed is now served over gRPC by PatientService.MarkECGsViewed (above).
 
-	// Mark all of a patient's ECGs as viewed ("mark all as seen") — clears the new indicator.
-	apiV1.POST("/patients/:id/ecgs/view", handlers.MarkPatientECGsViewedHandler(r.gormDB), mw.RequirePermission(r.checker, auth.PermECGRead))
-
-	// Cross-patient ECG timeline (Direction A) — requires patient.read
-	apiV1.GET("/ecgs", handlers.ListAllECGsHandler(r.gormDB), mw.RequirePermission(r.checker, auth.PermPatientRead))
-
-	// ECG filter facets (vendors, device models) — requires patient.read
-	apiV1.GET("/ecgs/filters", handlers.ECGFiltersHandler(r.gormDB), mw.RequirePermission(r.checker, auth.PermPatientRead))
+	// Cross-patient ECG timeline (Direction A) is now served over gRPC by
+	// ECGService.ListAll (above).
+	// ECG filter facets are now served over gRPC by ECGService.GetFilters (above).
 
 	// ECG download — requires ecg.download
 	apiV1.GET("/ecgs/:id/download", handlers.DownloadECGHandler(r.gormDB, r.bridge), mw.RequirePermission(r.checker, auth.PermECGDownload))
@@ -331,30 +438,17 @@ func (r *RouterConfig) RegisterRoutes() {
 	// ECG waveform for viewer (auto-converts to DICOM if needed) — requires ecg.read
 	apiV1.GET("/ecgs/:id/waveform", handlers.ECGWaveformHandler(r.gormDB, r.cfg.Storage.VolumePath, r.bridge), mw.RequirePermission(r.checker, auth.PermECGRead))
 
-	// ECG metadata read — requires ecg.read (future graphical viewer + metadata panel)
-	apiV1.GET("/ecgs/:id/metadata", handlers.ECGMetadataHandler(r.gormDB), mw.RequirePermission(r.checker, auth.PermECGRead))
+	// ECG metadata read/write is now served over gRPC by ECGService.GetMetadata
+	// / UpdateMetadata (above).
 
 	// Mark a single ECG as viewed (first view) — clears its "new" indicator.
 	apiV1.POST("/ecgs/:id/view", handlers.MarkECGViewedHandler(r.gormDB), mw.RequirePermission(r.checker, auth.PermECGRead))
 
-	// ECG metadata write — requires ecg.write
-	apiV1.PATCH("/ecgs/:id/metadata", handlers.PatchECGMetadataHandler(r.gormDB), mw.RequirePermission(r.checker, auth.PermECGWrite))
-
 	// ECG deletion — requires ecg.delete
 	apiV1.DELETE("/ecgs/:id", handlers.DeleteECGHandler(r.gormDB), mw.RequirePermission(r.checker, auth.PermECGDelete))
 
-	// Force HL7 retry — requires ecg.force_hl7
-	apiV1.POST("/ecgs/:id/hl7/force", handlers.ForceHL7Handler(r.gormDB, r.hl7Enricher), mw.RequirePermission(r.checker, auth.PermECGForceHL7))
-
-	// Outbound HL7 ORU result-send. Manual trigger — works regardless of the
-	// configured trigger mode. POST requires ecg.send_result; the status badge
-	// (latest attempt) is readable with ecg.read. Both registered only when the
-	// ORU service is wired (HL7 enabled).
-	hl7ORUAttemptRepo := repository.NewHL7ORUAttemptRepository(r.gormDB)
-	apiV1.GET("/ecgs/:id/oru-status", handlers.GetECGORUStatusHandler(hl7ORUAttemptRepo), mw.RequirePermission(r.checker, auth.PermECGRead))
-	if r.oruService != nil {
-		apiV1.POST("/ecgs/:id/send-result", handlers.SendECGResultHandler(r.oruService, r.gormDB), mw.RequirePermission(r.checker, auth.PermECGSendResult))
-	}
+	// HL7 inbound retry + outbound ORU send/status are now served over gRPC by
+	// HL7Service (Force / SendResult / GetOruStatus, wired above).
 
 	// Manual ECG upload (offline/isolated devices) — feeds the shared ingestion
 	// pipeline; live per-file status streams over /events/ws. Requires ecg.upload.
@@ -389,11 +483,8 @@ func (r *RouterConfig) RegisterRoutes() {
 		apiV1.POST("/admin/quarantine/:id/assign", handlers.AssignQuarantineHandler(r.persister, r.gormDB), mw.RequirePermission(r.checker, auth.PermQuarantineAssign))
 	}
 
-	// Realtime ingestion events WebSocket — streams valid/unidentified/quarantined
-	// notifications. Available to anyone who can read patients.
-	if r.eventHub != nil {
-		apiV1.GET("/events/ws", handlers.EventsWSHandler(r.eventHub), mw.RequirePermission(r.checker, auth.PermPatientRead))
-	}
+	// Realtime ingestion events are now served over gRPC by EventService.Subscribe
+	// (server-stream, wired near the other Connect services above).
 
 	// Volume metrics — requires admin.system
 	apiV1.GET("/admin/storage-metrics", handlers.VolumeMetricsHandler(r.cfg, r.gormDB), mw.RequirePermission(r.checker, auth.PermAdminSystem))
@@ -445,8 +536,9 @@ func (r *RouterConfig) RegisterRoutes() {
 	apiV1.POST("/exports/formats", handlers.ExportFormatsHandler(r.gormDB, r.bridge), mw.RequirePermission(r.checker, auth.PermECGDownload))
 	apiV1.GET("/exports/:id", handlers.GetExportHandler(r.exportRepo, r.checker.AdminRole()), mw.RequirePermission(r.checker, auth.PermECGDownload))
 
-	// Batch export — WebSocket progress + download (FR20, Story 5.2)
-	apiV1.GET("/exports/:id/ws", handlers.ExportWSHandler(r.exportRepo, r.checker.AdminRole()), mw.RequirePermission(r.checker, auth.PermECGDownload))
+	// Batch export progress is now served over gRPC by ExportService.WatchProgress
+	// (server-stream, wired near the other Connect services above). The ZIP
+	// download stays REST (binary).
 	apiV1.GET("/exports/:id/download", handlers.DownloadExportHandler(r.exportRepo, r.checker.AdminRole()), mw.RequirePermission(r.checker, auth.PermECGDownload))
 
 	// User pins (favourites) — requires patient.read
@@ -472,22 +564,11 @@ func (r *RouterConfig) RegisterRoutes() {
 	apiV1.POST("/api-keys", handlers.CreateAPIKeyHandler(apiKeyRepo, r.gormDB), mw.RequirePermission(r.checker, auth.PermAPIKeyManage))
 	apiV1.DELETE("/api-keys/:id", handlers.DeleteAPIKeyHandler(apiKeyRepo, r.gormDB), mw.RequirePermission(r.checker, auth.PermAPIKeyManage))
 
-	// Tags — list visible to all readers, create/delete/apply require specific permissions
-	tagRepo := repository.NewTagRepository(r.gormDB)
-	apiV1.GET("/tags", handlers.ListTagsHandler(tagRepo), mw.RequirePermission(r.checker, auth.PermPatientRead))
-	apiV1.GET("/patients/:id/tags", handlers.ListPatientTagsHandler(tagRepo), mw.RequirePermission(r.checker, auth.PermPatientRead))
-	apiV1.POST("/tags", handlers.CreateTagHandler(tagRepo), mw.RequirePermission(r.checker, auth.PermTagCreate))
-	apiV1.PUT("/tags/:id", handlers.UpdateTagHandler(tagRepo), mw.RequirePermission(r.checker, auth.PermTagCreate))
-	apiV1.DELETE("/tags/:id", handlers.DeleteTagHandler(tagRepo), mw.RequirePermission(r.checker, auth.PermTagDelete))
-	apiV1.POST("/patients/:id/tags", handlers.TagPatientHandler(tagRepo), mw.RequirePermission(r.checker, auth.PermTagApply))
-	apiV1.DELETE("/patients/:id/tags/:tag_id", handlers.UntagPatientHandler(tagRepo), mw.RequirePermission(r.checker, auth.PermTagApply))
-	apiV1.GET("/ecgs/:id/tags", handlers.ListECGTagsHandler(tagRepo), mw.RequirePermission(r.checker, auth.PermPatientRead))
-	apiV1.POST("/ecgs/:id/tags", handlers.TagECGHandler(tagRepo), mw.RequirePermission(r.checker, auth.PermTagApply))
-	apiV1.DELETE("/ecgs/:id/tags/:tag_id", handlers.UntagECGHandler(tagRepo), mw.RequirePermission(r.checker, auth.PermTagApply))
+	// Tags are now served over gRPC by TagService (wired above), including the
+	// BatchGetPatientTags / BatchGetEcgTags reads that resolve a whole list page
+	// in one request.
 
-	// HL7 attempt history — requires patient.read
-	hl7AttemptRepo := repository.NewHL7AttemptRepository(r.gormDB)
-	apiV1.GET("/patients/:id/hl7-history", handlers.ListHL7AttemptsHandler(hl7AttemptRepo), mw.RequirePermission(r.checker, auth.PermPatientRead))
+	// HL7 attempt history is now served over gRPC by HL7Service.ListAttempts (above).
 
 	// HL7 test query + mapping presets — requires admin.system
 	hl7MappingRepo := repository.NewHL7MappingRepository(r.gormDB)

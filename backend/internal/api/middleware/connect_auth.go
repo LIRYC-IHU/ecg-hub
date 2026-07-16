@@ -3,6 +3,7 @@ package middleware
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -126,6 +127,106 @@ func ConnectRequireAuth(provider auth.Provider, roleResolver RoleResolver, apiKe
 			return next(ContextWithIdentity(ctx, userID, claims.Sub, role), req)
 		}
 	}
+}
+
+// PermissionChecker is the subset of *auth.PermissionChecker the permission
+// interceptor needs.
+type PermissionChecker interface {
+	HasPermission(ctx context.Context, role, permission string) bool
+}
+
+// ConnectRequirePermission enforces a per-procedure permission map: it looks up
+// the required permission for the incoming procedure (req.Spec().Procedure) and
+// returns CodePermissionDenied when the caller's role lacks it. Procedures absent
+// from the map require only authentication. A single service usually mixes
+// methods with different permissions, so the map (keyed by the generated
+// <Service><Method>Procedure constants) is the per-method mechanism the
+// service-wide interceptor can't provide alone. Must run AFTER ConnectRequireAuth
+// so the role is already in the context.
+func ConnectRequirePermission(checker PermissionChecker, perms map[string]string) connect.UnaryInterceptorFunc {
+	return func(next connect.UnaryFunc) connect.UnaryFunc {
+		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+			if perm, ok := perms[req.Spec().Procedure]; ok {
+				if !checker.HasPermission(ctx, RoleFromContext(ctx), perm) {
+					return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("requires permission %s", perm))
+				}
+			}
+			return next(ctx, req)
+		}
+	}
+}
+
+// streamAuthInterceptor is the streaming-capable counterpart of
+// ConnectRequireAuth + ConnectRequirePermission. Unary interceptor funcs only
+// wrap unary calls — server-streaming handlers (EventService.Subscribe) would
+// otherwise run UNAUTHENTICATED. This full connect.Interceptor enforces auth +
+// the per-procedure permission map on the streaming handler path. WrapUnary /
+// WrapStreamingClient are pass-through (unary auth is handled by the unary
+// interceptors; there is no client side here).
+type streamAuthInterceptor struct {
+	provider     auth.Provider
+	roleResolver RoleResolver
+	apiKeys      APIKeyAuthenticator
+	checker      PermissionChecker
+	perms        map[string]string
+}
+
+// ConnectStreamAuth builds a streaming auth+permission interceptor. perms is the
+// same per-procedure map shape used by ConnectRequirePermission.
+func ConnectStreamAuth(provider auth.Provider, roleResolver RoleResolver, apiKeys APIKeyAuthenticator, checker PermissionChecker, perms map[string]string) connect.Interceptor {
+	return &streamAuthInterceptor{provider: provider, roleResolver: roleResolver, apiKeys: apiKeys, checker: checker, perms: perms}
+}
+
+func (i *streamAuthInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc { return next }
+
+func (i *streamAuthInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
+	return next
+}
+
+func (i *streamAuthInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
+	return func(ctx context.Context, conn connect.StreamingHandlerConn) error {
+		ctx, err := i.authenticate(ctx, conn.RequestHeader())
+		if err != nil {
+			return err
+		}
+		if perm, ok := i.perms[conn.Spec().Procedure]; ok {
+			if !i.checker.HasPermission(ctx, RoleFromContext(ctx), perm) {
+				return connect.NewError(connect.CodePermissionDenied, fmt.Errorf("requires permission %s", perm))
+			}
+		}
+		return next(ctx, conn)
+	}
+}
+
+// authenticate mirrors ConnectRequireAuth (API key path then JWT path) and
+// returns a context carrying the resolved identity.
+func (i *streamAuthInterceptor) authenticate(ctx context.Context, header http.Header) (context.Context, error) {
+	if i.apiKeys != nil {
+		if key := apiKeyFromHeader(header); key != "" {
+			userID, err := i.apiKeys.ResolveAPIKey(ctx, key)
+			if err != nil {
+				return ctx, connect.NewError(connect.CodeUnauthenticated, errors.New("invalid API key"))
+			}
+			username, role, err := i.roleResolver.IdentityByID(ctx, userID)
+			if err != nil {
+				return ctx, connect.NewError(connect.CodeUnauthenticated, errors.New("invalid API key"))
+			}
+			return ContextWithIdentity(ctx, userID, username, role), nil
+		}
+	}
+	raw := tokenFromHeader(header)
+	if raw == "" {
+		return ctx, connect.NewError(connect.CodeUnauthenticated, errors.New("missing or invalid token"))
+	}
+	claims, err := i.provider.ValidateToken(ctx, raw)
+	if err != nil {
+		return ctx, connect.NewError(connect.CodeUnauthenticated, errors.New("invalid or expired token"))
+	}
+	if i.roleResolver.ShouldRefreshToken(ctx, claims.Sub) {
+		return ctx, connect.NewError(connect.CodeUnauthenticated, errors.New("session invalidated — please login again"))
+	}
+	userID, role := resolveIdentity(ctx, i.roleResolver, claims)
+	return ContextWithIdentity(ctx, userID, claims.Sub, role), nil
 }
 
 // resolveIdentity applies the DB role resolution (live admin changes take effect
