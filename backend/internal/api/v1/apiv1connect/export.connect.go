@@ -33,6 +33,12 @@ const (
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
+	// ExportServiceCreateProcedure is the fully-qualified name of the ExportService's Create RPC.
+	ExportServiceCreateProcedure = "/grpc.api.v1.ExportService/Create"
+	// ExportServiceFormatsProcedure is the fully-qualified name of the ExportService's Formats RPC.
+	ExportServiceFormatsProcedure = "/grpc.api.v1.ExportService/Formats"
+	// ExportServiceGetProcedure is the fully-qualified name of the ExportService's Get RPC.
+	ExportServiceGetProcedure = "/grpc.api.v1.ExportService/Get"
 	// ExportServiceWatchProgressProcedure is the fully-qualified name of the ExportService's
 	// WatchProgress RPC.
 	ExportServiceWatchProgressProcedure = "/grpc.api.v1.ExportService/WatchProgress"
@@ -40,6 +46,9 @@ const (
 
 // ExportServiceClient is a client for the grpc.api.v1.ExportService service.
 type ExportServiceClient interface {
+	Create(context.Context, *v1.CreateExportRequest) (*v1.CreateExportResponse, error)
+	Formats(context.Context, *v1.ExportFormatsRequest) (*v1.ExportFormatsResponse, error)
+	Get(context.Context, *v1.GetExportRequest) (*v1.GetExportResponse, error)
 	WatchProgress(context.Context, *v1.WatchProgressRequest) (*connect.ServerStreamForClient[v1.ExportProgress], error)
 }
 
@@ -54,6 +63,24 @@ func NewExportServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 	baseURL = strings.TrimRight(baseURL, "/")
 	exportServiceMethods := v1.File_v1_export_proto.Services().ByName("ExportService").Methods()
 	return &exportServiceClient{
+		create: connect.NewClient[v1.CreateExportRequest, v1.CreateExportResponse](
+			httpClient,
+			baseURL+ExportServiceCreateProcedure,
+			connect.WithSchema(exportServiceMethods.ByName("Create")),
+			connect.WithClientOptions(opts...),
+		),
+		formats: connect.NewClient[v1.ExportFormatsRequest, v1.ExportFormatsResponse](
+			httpClient,
+			baseURL+ExportServiceFormatsProcedure,
+			connect.WithSchema(exportServiceMethods.ByName("Formats")),
+			connect.WithClientOptions(opts...),
+		),
+		get: connect.NewClient[v1.GetExportRequest, v1.GetExportResponse](
+			httpClient,
+			baseURL+ExportServiceGetProcedure,
+			connect.WithSchema(exportServiceMethods.ByName("Get")),
+			connect.WithClientOptions(opts...),
+		),
 		watchProgress: connect.NewClient[v1.WatchProgressRequest, v1.ExportProgress](
 			httpClient,
 			baseURL+ExportServiceWatchProgressProcedure,
@@ -65,7 +92,37 @@ func NewExportServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 
 // exportServiceClient implements ExportServiceClient.
 type exportServiceClient struct {
+	create        *connect.Client[v1.CreateExportRequest, v1.CreateExportResponse]
+	formats       *connect.Client[v1.ExportFormatsRequest, v1.ExportFormatsResponse]
+	get           *connect.Client[v1.GetExportRequest, v1.GetExportResponse]
 	watchProgress *connect.Client[v1.WatchProgressRequest, v1.ExportProgress]
+}
+
+// Create calls grpc.api.v1.ExportService.Create.
+func (c *exportServiceClient) Create(ctx context.Context, req *v1.CreateExportRequest) (*v1.CreateExportResponse, error) {
+	response, err := c.create.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
+// Formats calls grpc.api.v1.ExportService.Formats.
+func (c *exportServiceClient) Formats(ctx context.Context, req *v1.ExportFormatsRequest) (*v1.ExportFormatsResponse, error) {
+	response, err := c.formats.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
+// Get calls grpc.api.v1.ExportService.Get.
+func (c *exportServiceClient) Get(ctx context.Context, req *v1.GetExportRequest) (*v1.GetExportResponse, error) {
+	response, err := c.get.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
 }
 
 // WatchProgress calls grpc.api.v1.ExportService.WatchProgress.
@@ -75,6 +132,9 @@ func (c *exportServiceClient) WatchProgress(ctx context.Context, req *v1.WatchPr
 
 // ExportServiceHandler is an implementation of the grpc.api.v1.ExportService service.
 type ExportServiceHandler interface {
+	Create(context.Context, *v1.CreateExportRequest) (*v1.CreateExportResponse, error)
+	Formats(context.Context, *v1.ExportFormatsRequest) (*v1.ExportFormatsResponse, error)
+	Get(context.Context, *v1.GetExportRequest) (*v1.GetExportResponse, error)
 	WatchProgress(context.Context, *v1.WatchProgressRequest, *connect.ServerStream[v1.ExportProgress]) error
 }
 
@@ -85,6 +145,24 @@ type ExportServiceHandler interface {
 // and JSON codecs. They also support gzip compression.
 func NewExportServiceHandler(svc ExportServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
 	exportServiceMethods := v1.File_v1_export_proto.Services().ByName("ExportService").Methods()
+	exportServiceCreateHandler := connect.NewUnaryHandlerSimple(
+		ExportServiceCreateProcedure,
+		svc.Create,
+		connect.WithSchema(exportServiceMethods.ByName("Create")),
+		connect.WithHandlerOptions(opts...),
+	)
+	exportServiceFormatsHandler := connect.NewUnaryHandlerSimple(
+		ExportServiceFormatsProcedure,
+		svc.Formats,
+		connect.WithSchema(exportServiceMethods.ByName("Formats")),
+		connect.WithHandlerOptions(opts...),
+	)
+	exportServiceGetHandler := connect.NewUnaryHandlerSimple(
+		ExportServiceGetProcedure,
+		svc.Get,
+		connect.WithSchema(exportServiceMethods.ByName("Get")),
+		connect.WithHandlerOptions(opts...),
+	)
 	exportServiceWatchProgressHandler := connect.NewServerStreamHandlerSimple(
 		ExportServiceWatchProgressProcedure,
 		svc.WatchProgress,
@@ -93,6 +171,12 @@ func NewExportServiceHandler(svc ExportServiceHandler, opts ...connect.HandlerOp
 	)
 	return "/grpc.api.v1.ExportService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
+		case ExportServiceCreateProcedure:
+			exportServiceCreateHandler.ServeHTTP(w, r)
+		case ExportServiceFormatsProcedure:
+			exportServiceFormatsHandler.ServeHTTP(w, r)
+		case ExportServiceGetProcedure:
+			exportServiceGetHandler.ServeHTTP(w, r)
 		case ExportServiceWatchProgressProcedure:
 			exportServiceWatchProgressHandler.ServeHTTP(w, r)
 		default:
@@ -103,6 +187,18 @@ func NewExportServiceHandler(svc ExportServiceHandler, opts ...connect.HandlerOp
 
 // UnimplementedExportServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedExportServiceHandler struct{}
+
+func (UnimplementedExportServiceHandler) Create(context.Context, *v1.CreateExportRequest) (*v1.CreateExportResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("grpc.api.v1.ExportService.Create is not implemented"))
+}
+
+func (UnimplementedExportServiceHandler) Formats(context.Context, *v1.ExportFormatsRequest) (*v1.ExportFormatsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("grpc.api.v1.ExportService.Formats is not implemented"))
+}
+
+func (UnimplementedExportServiceHandler) Get(context.Context, *v1.GetExportRequest) (*v1.GetExportResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("grpc.api.v1.ExportService.Get is not implemented"))
+}
 
 func (UnimplementedExportServiceHandler) WatchProgress(context.Context, *v1.WatchProgressRequest, *connect.ServerStream[v1.ExportProgress]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("grpc.api.v1.ExportService.WatchProgress is not implemented"))
