@@ -89,9 +89,20 @@ message UpdateMetadataResponse {
   string values_json = 1; // metadata values after the update
 }
 
+// MarkViewedRequest stamps viewed_at on first view (clears the "new" indicator).
+message MarkViewedRequest {
+  string id = 1; // ECG id
+}
+
+message MarkViewedResponse {
+  string id = 1;
+  bool viewed = 2;
+}
+
 service ECGService {
   rpc GetFilters(GetFiltersRequest) returns (GetFiltersResponse) {}
   rpc ListAll(ListAllRequest) returns (ListAllResponse) {}
   rpc GetMetadata(GetMetadataRequest) returns (GetMetadataResponse) {}
   rpc UpdateMetadata(UpdateMetadataRequest) returns (UpdateMetadataResponse) {}
+  rpc MarkViewed(MarkViewedRequest) returns (MarkViewedResponse) {}
 }
