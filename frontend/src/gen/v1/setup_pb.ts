@@ -10,7 +10,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file v1/setup.proto.
  */
 export const file_v1_setup: GenFile = /*@__PURE__*/
-  fileDesc("Cg52MS9zZXR1cC5wcm90bxILZ3JwYy5hcGkudjEiFwoVR2V0U2V0dXBTdGF0dXNSZXF1ZXN0Ii0KFkdldFNldHVwU3RhdHVzUmVzcG9uc2USEwoLaW5pdGlhbGl6ZWQYASABKAgyZgoMU2V0dXBTZXJ2aWNlElYKCUdldFN0YXR1cxIiLmdycGMuYXBpLnYxLkdldFNldHVwU3RhdHVzUmVxdWVzdBojLmdycGMuYXBpLnYxLkdldFNldHVwU3RhdHVzUmVzcG9uc2UiAEKfAQoPY29tLmdycGMuYXBpLnYxQgpTZXR1cFByb3RvUAFaMmdpdGh1Yi5jb20vTElSWUMtSUhVL2VjZy1odWIvaW50ZXJuYWwvYXBpL3YxO2FwaXYxogIDR0FYqgILR3JwYy5BcGkuVjHKAgtHcnBjXEFwaVxWMeICF0dycGNcQXBpXFYxXEdQQk1ldGFkYXRh6gINR3JwYzo6QXBpOjpWMWIGcHJvdG8z");
+  fileDesc("Cg52MS9zZXR1cC5wcm90bxILZ3JwYy5hcGkudjEiFwoVR2V0U2V0dXBTdGF0dXNSZXF1ZXN0Ii0KFkdldFNldHVwU3RhdHVzUmVzcG9uc2USEwoLaW5pdGlhbGl6ZWQYASABKAgiNwoRSW5pdGlhbGl6ZVJlcXVlc3QSEAoIdXNlcm5hbWUYASABKAkSEAoIcGFzc3dvcmQYAiABKAkiQAoSSW5pdGlhbGl6ZVJlc3BvbnNlEgoKAmlkGAEgASgJEhAKCHVzZXJuYW1lGAIgASgJEgwKBHJvbGUYAyABKAkytwEKDFNldHVwU2VydmljZRJWCglHZXRTdGF0dXMSIi5ncnBjLmFwaS52MS5HZXRTZXR1cFN0YXR1c1JlcXVlc3QaIy5ncnBjLmFwaS52MS5HZXRTZXR1cFN0YXR1c1Jlc3BvbnNlIgASTwoKSW5pdGlhbGl6ZRIeLmdycGMuYXBpLnYxLkluaXRpYWxpemVSZXF1ZXN0Gh8uZ3JwYy5hcGkudjEuSW5pdGlhbGl6ZVJlc3BvbnNlIgBCnwEKD2NvbS5ncnBjLmFwaS52MUIKU2V0dXBQcm90b1ABWjJnaXRodWIuY29tL0xJUllDLUlIVS9lY2ctaHViL2ludGVybmFsL2FwaS92MTthcGl2MaICA0dBWKoCC0dycGMuQXBpLlYxygILR3JwY1xBcGlcVjHiAhdHcnBjXEFwaVxWMVxHUEJNZXRhZGF0YeoCDUdycGM6OkFwaTo6VjFiBnByb3RvMw");
 
 /**
  * System bootstrap status — public, used by the setup page before any account
@@ -48,6 +48,58 @@ export const GetSetupStatusResponseSchema: GenMessage<GetSetupStatusResponse> = 
   messageDesc(file_v1_setup, 1);
 
 /**
+ * Initialize creates the first local admin account. Public — only usable while
+ * the system is uninitialised (no local/identity account exists yet).
+ *
+ * @generated from message grpc.api.v1.InitializeRequest
+ */
+export type InitializeRequest = Message<"grpc.api.v1.InitializeRequest"> & {
+  /**
+   * @generated from field: string username = 1;
+   */
+  username: string;
+
+  /**
+   * @generated from field: string password = 2;
+   */
+  password: string;
+};
+
+/**
+ * Describes the message grpc.api.v1.InitializeRequest.
+ * Use `create(InitializeRequestSchema)` to create a new message.
+ */
+export const InitializeRequestSchema: GenMessage<InitializeRequest> = /*@__PURE__*/
+  messageDesc(file_v1_setup, 2);
+
+/**
+ * @generated from message grpc.api.v1.InitializeResponse
+ */
+export type InitializeResponse = Message<"grpc.api.v1.InitializeResponse"> & {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * @generated from field: string username = 2;
+   */
+  username: string;
+
+  /**
+   * @generated from field: string role = 3;
+   */
+  role: string;
+};
+
+/**
+ * Describes the message grpc.api.v1.InitializeResponse.
+ * Use `create(InitializeResponseSchema)` to create a new message.
+ */
+export const InitializeResponseSchema: GenMessage<InitializeResponse> = /*@__PURE__*/
+  messageDesc(file_v1_setup, 3);
+
+/**
  * @generated from service grpc.api.v1.SetupService
  */
 export const SetupService: GenService<{
@@ -58,6 +110,14 @@ export const SetupService: GenService<{
     methodKind: "unary";
     input: typeof GetSetupStatusRequestSchema;
     output: typeof GetSetupStatusResponseSchema;
+  },
+  /**
+   * @generated from rpc grpc.api.v1.SetupService.Initialize
+   */
+  initialize: {
+    methodKind: "unary";
+    input: typeof InitializeRequestSchema;
+    output: typeof InitializeResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_v1_setup, 0);
