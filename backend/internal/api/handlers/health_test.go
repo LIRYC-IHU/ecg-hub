@@ -3,14 +3,10 @@ package handlers
 import (
 	"context"
 	"fmt"
-	"net/http"
-	"net/http/httptest"
-	"strings"
 	"testing"
 
 	mw "github.com/LIRYC-IHU/ecg-hub/internal/api/middleware"
 	apiv1 "github.com/LIRYC-IHU/ecg-hub/internal/api/v1"
-	"github.com/labstack/echo/v4"
 )
 
 // mockPinger implements DBPinger for unit tests.
@@ -152,15 +148,10 @@ func TestCheckHealth_AuthedConnectors(t *testing.T) {
 	}
 }
 
-// --- ConnectorsHandler (REST, unchanged) ---
+// --- buildConnectorEntries (shared by ModuleService.ListConnectors + healthz) ---
 
-func TestConnectorsHandler_EndpointFields(t *testing.T) {
-	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/connectors", nil)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-
-	checkers := []ConnectorHealthChecker{
+func TestBuildConnectorEntries_EndpointFields(t *testing.T) {
+	entries := buildConnectorEntries([]ConnectorHealthChecker{
 		&mockConnector{
 			name:     "dicom-test",
 			protocol: "dicom_cstore",
@@ -168,36 +159,20 @@ func TestConnectorsHandler_EndpointFields(t *testing.T) {
 			port:     11112,
 			aeTitle:  "ECG_HUB",
 		},
-	}
+	})
 
-	handler := ConnectorsHandler(checkers)
-	if err := handler(c); err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	if len(entries) != 1 {
+		t.Fatalf("entries: want 1, got %d", len(entries))
 	}
-	if rec.Code != http.StatusOK {
-		t.Errorf("status: want 200, got %d", rec.Code)
-	}
-	body := rec.Body.String()
-	for _, want := range []string{
-		`"name":"dicom-test"`,
-		`"host":"10.0.0.1"`,
-		`"port":11112`,
-		`"ae_title":"ECG_HUB"`,
-		`"protocol":"dicom_cstore"`,
-	} {
-		if !strings.Contains(body, want) {
-			t.Errorf("body should contain %s, got: %s", want, body)
-		}
+	e := entries[0]
+	if e.Name != "dicom-test" || e.Protocol != "dicom_cstore" || e.Host != "10.0.0.1" ||
+		e.Port != 11112 || e.AETitle != "ECG_HUB" || e.Status != "ok" {
+		t.Errorf("unexpected entry: %+v", e)
 	}
 }
 
-func TestConnectorsHandler_ConnectorError(t *testing.T) {
-	e := echo.New()
-	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/connectors", nil)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-
-	checkers := []ConnectorHealthChecker{
+func TestBuildConnectorEntries_ConnectorError(t *testing.T) {
+	entries := buildConnectorEntries([]ConnectorHealthChecker{
 		&mockConnector{
 			name:     "broken",
 			protocol: "ectp_ftp",
@@ -205,17 +180,15 @@ func TestConnectorsHandler_ConnectorError(t *testing.T) {
 			port:     9100,
 			err:      fmt.Errorf("connection refused"),
 		},
-	}
+	})
 
-	handler := ConnectorsHandler(checkers)
-	if err := handler(c); err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	if len(entries) != 1 {
+		t.Fatalf("entries: want 1, got %d", len(entries))
 	}
-	body := rec.Body.String()
-	if !strings.Contains(body, `"connection refused"`) {
-		t.Errorf("body should contain error message, got: %s", body)
+	if entries[0].Status != "connection refused" {
+		t.Errorf("status: want error message, got %q", entries[0].Status)
 	}
-	if !strings.Contains(body, `"host":"down.local"`) {
-		t.Errorf("body should still contain host, got: %s", body)
+	if entries[0].Host != "down.local" {
+		t.Errorf("host: want down.local, got %q", entries[0].Host)
 	}
 }
