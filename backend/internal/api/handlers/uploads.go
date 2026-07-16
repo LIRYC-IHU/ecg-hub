@@ -40,7 +40,7 @@ type uploadFileResult struct {
 // @Description scripts can submit files without an interactive login. Requires the ecg.upload
 // @Description permission on the key's role. Valid files are stored, files without a patient ID
 // @Description go to the unidentified review queue, invalid files are rejected.
-// @Tags uploads
+// @Tags uploads,Research
 // @Accept multipart/form-data
 // @Param files formData file true "ECG files (repeat the field for multiple)"
 // @Produce json
