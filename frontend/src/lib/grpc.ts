@@ -3,9 +3,15 @@ import { createConnectTransport } from "@connectrpc/connect-web";
 
 import { AuthService } from "../gen/v1/auth_pb";
 import { BrandingService } from "../gen/v1/branding_pb";
+import { ECGService } from "../gen/v1/ecg_pb";
+import { EventService } from "../gen/v1/event_pb";
+import { ExportService } from "../gen/v1/export_pb";
 import { HealthzService } from "../gen/v1/healthz_pb";
+import { HL7Service } from "../gen/v1/hl7_pb";
+import { PatientService } from "../gen/v1/patient_pb";
 import { SessionService } from "../gen/v1/session_pb";
 import { SetupService } from "../gen/v1/setup_pb";
+import { TagService } from "../gen/v1/tag_pb";
 
 const BASE_URL = (import.meta.env as Record<string, string>).VITE_API_URL ?? "";
 
@@ -24,3 +30,9 @@ export const brandingClient = createClient(BrandingService, connectTransport);
 export const setupClient = createClient(SetupService, connectTransport);
 export const authClient = createClient(AuthService, connectTransport);
 export const sessionClient = createClient(SessionService, connectTransport);
+export const ecgClient = createClient(ECGService, connectTransport);
+export const patientClient = createClient(PatientService, connectTransport);
+export const tagClient = createClient(TagService, connectTransport);
+export const eventClient = createClient(EventService, connectTransport);
+export const exportClient = createClient(ExportService, connectTransport);
+export const hl7Client = createClient(HL7Service, connectTransport);
