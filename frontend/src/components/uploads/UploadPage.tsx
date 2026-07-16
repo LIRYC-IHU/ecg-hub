@@ -14,6 +14,7 @@ import {
   RotateCcw,
 } from "lucide-react";
 import { uploadECGs, type UploadFileResult } from "../../lib/api";
+import { eventClient } from "../../lib/grpc";
 import { useNotification } from "../../context/NotificationContext";
 
 // RowStatus mirrors the lifecycle of one uploaded file: queued on the server,
@@ -113,56 +114,64 @@ export function UploadPage() {
   const [rows, setRows] = useState<UploadRow[]>([]);
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const wsRef = useRef<WebSocket | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   const pending = rows.filter((r) => r.status === "queued").length;
 
-  // Close the live socket on unmount.
-  useEffect(() => () => wsRef.current?.close(1000, "unmount"), []);
+  // Abort the live stream on unmount.
+  useEffect(() => () => abortRef.current?.abort(), []);
 
-  // openEventsSocket connects to the shared ingestion events stream and resolves
-  // once the socket is OPEN. We connect BEFORE enqueuing files — otherwise a fast
-  // file can finish (and broadcast its terminal event) before we subscribe,
-  // leaving its row stuck on "processing".
-  function openEventsSocket(): Promise<void> {
+  // openEventStream subscribes to EventService.Subscribe and resolves once the
+  // stream is live — the server sends an immediate keepalive as its first frame,
+  // which guarantees its hub subscription is active. We open BEFORE enqueuing
+  // files, otherwise a fast file could finish (and broadcast its terminal event)
+  // before we subscribe, leaving its row stuck on "processing". Later events
+  // update the matching queued row by filename.
+  function openEventStream(): Promise<void> {
+    const abort = new AbortController();
+    abortRef.current = abort;
     return new Promise((resolve, reject) => {
-      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const ws = new WebSocket(
-        `${protocol}//${window.location.host}/api/v1/events/ws`,
-      );
-      wsRef.current = ws;
-      ws.onmessage = (e) => {
-        let ev: IngestionEvent;
+      let ready = false;
+      void (async () => {
         try {
-          ev = JSON.parse(e.data as string) as IngestionEvent;
+          for await (const ev of eventClient.subscribe(
+            {},
+            { signal: abort.signal },
+          )) {
+            if (!ready) {
+              ready = true;
+              resolve(); // first frame (keepalive) → stream + hub subscription live
+            }
+            if (!ev.filename) continue; // skip keepalive frames
+            // Refresh patient/quarantine lists so other open views stay in sync.
+            void queryClient.invalidateQueries({ queryKey: ["patients"] });
+            void queryClient.invalidateQueries({
+              queryKey: ["admin", "quarantine"],
+            });
+            const type = ev.type as IngestionEvent["type"];
+            setRows((prev) => {
+              const idx = prev.findIndex(
+                (r) => r.status === "queued" && r.filename === ev.filename,
+              );
+              if (idx === -1) return prev;
+              const next = [...prev];
+              next[idx] = {
+                ...next[idx],
+                status: statusFromEvent(type),
+                patientId: ev.patientId || undefined,
+                quarantineId: ev.quarantineId || undefined,
+                reason: ev.reason || undefined,
+              };
+              return next;
+            });
+          }
         } catch {
-          return;
+          if (!ready) reject(new Error("stream error"));
         }
-        if (!ev.filename) return;
-        // Refresh patient/quarantine lists so other open views stay in sync.
-        void queryClient.invalidateQueries({ queryKey: ["patients"] });
-        void queryClient.invalidateQueries({ queryKey: ["admin", "quarantine"] });
-        setRows((prev) => {
-          const idx = prev.findIndex(
-            (r) => r.status === "queued" && r.filename === ev.filename,
-          );
-          if (idx === -1) return prev;
-          const next = [...prev];
-          next[idx] = {
-            ...next[idx],
-            status: statusFromEvent(ev.type),
-            patientId: ev.patient_id,
-            quarantineId: ev.quarantine_id,
-            reason: ev.reason,
-          };
-          return next;
-        });
-      };
-      ws.onopen = () => resolve();
-      ws.onerror = () => reject(new Error("ws error"));
-      // Fallback so a stalled handshake never blocks the upload.
+      })();
+      // Fallback so a stalled stream never blocks the upload.
       setTimeout(() => {
-        if (ws.readyState !== WebSocket.OPEN) reject(new Error("ws timeout"));
+        if (!ready) reject(new Error("stream timeout"));
       }, 5000);
     });
   }
@@ -184,9 +193,9 @@ export function UploadPage() {
       status: "queued",
     }));
 
-    // Connect the live socket first (best-effort — proceed even if it fails).
+    // Open the live stream first (best-effort — proceed even if it fails).
     try {
-      await openEventsSocket();
+      await openEventStream();
     } catch {
       /* no live updates; rows may stay "processing" until refresh */
     }
@@ -208,7 +217,7 @@ export function UploadPage() {
       );
     } catch {
       notify("error", t("uploads.uploadError"));
-      wsRef.current?.close(1000, "error");
+      abortRef.current?.abort();
       setPhase("select");
     } finally {
       setUploading(false);
@@ -216,8 +225,8 @@ export function UploadPage() {
   }
 
   function reset() {
-    wsRef.current?.close(1000, "reset");
-    wsRef.current = null;
+    abortRef.current?.abort();
+    abortRef.current = null;
     setFiles([]);
     setRows([]);
     setPhase("select");
