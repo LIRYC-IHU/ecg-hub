@@ -1,0 +1,209 @@
+syntax = "proto3";
+package grpc.api.v1;
+
+// ModuleService groups the admin module & connector hot-control endpoints of
+// "étape 9": active vendor modules, module runtime status, start/stop, FTP &
+// DICOM ingest module config, DB-driven module activation settings, and outbound
+// PACS proxy connectors (config CRUD + connectivity test + health). Every RPC is
+// guarded by admin.system in the router.
+
+// ---- Active vendor modules (GET /modules) ----------------------------------
+
+message ExportFormat {
+  string id = 1; // "original" | "xmlfda" | "dicom"
+  string label = 2;
+  string extension = 3;
+}
+
+message ModuleInfo {
+  string name = 1;
+  repeated string extensions = 2;
+  string status = 3; // "ok" or an error message
+  string version = 4; // converter binary version, when available
+  repeated ExportFormat formats = 5;
+}
+
+message ListModulesRequest {}
+
+message ListModulesResponse {
+  repeated ModuleInfo modules = 1;
+}
+
+// ---- Module runtime status + hot-control -----------------------------------
+
+message ModuleControlStatus {
+  string name = 1;
+  string status = 2; // "running" | "stopped" | "error"
+}
+
+message ListModuleStatusRequest {}
+
+message ListModuleStatusResponse {
+  repeated ModuleControlStatus data = 1;
+}
+
+message StartModuleRequest {
+  string name = 1;
+}
+
+message StopModuleRequest {
+  string name = 1;
+}
+
+message ModuleControlResponse {
+  string status = 1; // "running" | "stopped"
+}
+
+// ---- FTP module config -----------------------------------------------------
+
+message FTPConfig {
+  int32 port = 1;
+  string passive_port_range = 2;
+  string public_host = 3;
+  bool tls = 4;
+  string username = 5;
+  string password = 6; // masked on read; masked/empty on write preserves the stored value
+  bool enabled = 7;
+}
+
+message GetFTPConfigRequest {}
+
+message SaveFTPConfigRequest {
+  FTPConfig config = 1;
+}
+
+// ---- DICOM module config ---------------------------------------------------
+
+message DICOMConfig {
+  int32 port = 1;
+  string ae_title = 2;
+  bool echo_enabled = 3;
+  bool tls = 4;
+  bool enabled = 5;
+}
+
+message GetDICOMConfigRequest {}
+
+message SaveDICOMConfigRequest {
+  DICOMConfig config = 1;
+}
+
+// Shared reply for config saves that require a module restart.
+message SaveModuleConfigResponse {
+  string message = 1;
+  bool restart_required = 2;
+}
+
+// ---- Module activation settings (GET/PUT /admin/settings/modules) ----------
+
+message GetModuleSettingsRequest {}
+
+message ModuleSettings {
+  repeated string active = 1;    // active in DB (empty = all)
+  repeated string available = 2; // all compiled-in module names
+}
+
+message SaveModuleSettingsRequest {
+  repeated string active = 1;
+}
+
+message SaveModuleSettingsResponse {
+  repeated string active = 1;
+}
+
+// ---- Outbound PACS proxy connectors ----------------------------------------
+
+message ConnectorConfig {
+  string name = 1;
+  string protocol = 2; // "ectp_ftp" | "dicom_cstore"
+  repeated string extensions = 3;
+  repeated string vendors = 4;
+  int32 max_attempts = 5;
+  string interval = 6;
+  string ectp_host = 7;
+  int32 ectp_port = 8;
+  string ftp_host = 9;
+  int32 ftp_port = 10;
+  string ftp_username = 11;
+  string ftp_password = 12; // masked on read; masked/empty on write preserves the stored value
+  string dicom_host = 13;
+  int32 dicom_port = 14;
+  string calling_ae = 15;
+  string called_ae = 16;
+  string dicom_timeout = 17;
+}
+
+message ConnectorConfigEntry {
+  string module_type = 1;
+  bool enabled = 2;
+  ConnectorConfig config = 3;
+}
+
+message ListConnectorConfigsRequest {}
+
+message ListConnectorConfigsResponse {
+  repeated ConnectorConfigEntry data = 1;
+}
+
+message SaveConnectorConfigRequest {
+  string name = 1;
+  ConnectorConfig config = 2;
+  bool enabled = 3;
+}
+
+message DeleteConnectorRequest {
+  string name = 1;
+}
+
+message DeleteConnectorResponse {
+  string message = 1;
+}
+
+message TestConnectorRequest {
+  string name = 1;
+}
+
+message TestConnectorResponse {
+  bool success = 1;
+  string latency = 2;
+  string error = 3;
+}
+
+// Live health of the outbound connectors (GET /admin/connectors).
+// Named ConnectorStatus to avoid colliding with healthz.proto's
+// ConnectorHealthEntry (same package namespace).
+message ConnectorStatus {
+  string name = 1;
+  string protocol = 2;
+  string status = 3; // "ok" or an error message
+  string host = 4;
+  int32 port = 5;
+  string ae_title = 6;
+}
+
+message ListConnectorsRequest {}
+
+message ListConnectorsResponse {
+  repeated ConnectorStatus connectors = 1;
+}
+
+service ModuleService {
+  rpc ListModules(ListModulesRequest) returns (ListModulesResponse) {}
+  rpc ListModuleStatus(ListModuleStatusRequest) returns (ListModuleStatusResponse) {}
+  rpc StartModule(StartModuleRequest) returns (ModuleControlResponse) {}
+  rpc StopModule(StopModuleRequest) returns (ModuleControlResponse) {}
+
+  rpc GetFTPConfig(GetFTPConfigRequest) returns (FTPConfig) {}
+  rpc SaveFTPConfig(SaveFTPConfigRequest) returns (SaveModuleConfigResponse) {}
+  rpc GetDICOMConfig(GetDICOMConfigRequest) returns (DICOMConfig) {}
+  rpc SaveDICOMConfig(SaveDICOMConfigRequest) returns (SaveModuleConfigResponse) {}
+
+  rpc GetModuleSettings(GetModuleSettingsRequest) returns (ModuleSettings) {}
+  rpc SaveModuleSettings(SaveModuleSettingsRequest) returns (SaveModuleSettingsResponse) {}
+
+  rpc ListConnectorConfigs(ListConnectorConfigsRequest) returns (ListConnectorConfigsResponse) {}
+  rpc SaveConnectorConfig(SaveConnectorConfigRequest) returns (SaveModuleConfigResponse) {}
+  rpc DeleteConnector(DeleteConnectorRequest) returns (DeleteConnectorResponse) {}
+  rpc TestConnector(TestConnectorRequest) returns (TestConnectorResponse) {}
+  rpc ListConnectors(ListConnectorsRequest) returns (ListConnectorsResponse) {}
+}

@@ -1,0 +1,39 @@
+syntax = "proto3";
+package grpc.api.v1;
+
+// Per-user API keys (ecghub_…) for machine clients / researchers. Protected —
+// requires apikey.manage. Keys are scoped to the caller's identity (from the
+// auth interceptor). The plaintext key is returned ONLY once, at creation.
+
+// ApiKey never carries the hash or the plaintext (except CreateApiKeyResponse).
+message ApiKey {
+  string id = 1;
+  string name = 2;
+  string prefix = 3;             // display prefix, e.g. "ecghub_ab12"
+  string created_at = 4;         // ISO 8601 UTC
+  string last_used_at = 5;       // ISO 8601 UTC; empty when never used
+}
+
+message ListApiKeysRequest {}
+message ListApiKeysResponse {
+  repeated ApiKey keys = 1;
+}
+
+message CreateApiKeyRequest {
+  string name = 1; // 1..100 chars
+}
+message CreateApiKeyResponse {
+  ApiKey key = 1;
+  string plaintext = 2; // the full ecghub_… key — shown once, never again
+}
+
+message DeleteApiKeyRequest {
+  string id = 1;
+}
+message DeleteApiKeyResponse {}
+
+service APIKeyService {
+  rpc ListApiKeys(ListApiKeysRequest) returns (ListApiKeysResponse) {}
+  rpc CreateApiKey(CreateApiKeyRequest) returns (CreateApiKeyResponse) {}
+  rpc DeleteApiKey(DeleteApiKeyRequest) returns (DeleteApiKeyResponse) {}
+}

@@ -9,6 +9,20 @@ message GetSetupStatusResponse {
   bool initialized = 1; // true once at least one local/identity account exists
 }
 
+// Initialize creates the first local admin account. Public — only usable while
+// the system is uninitialised (no local/identity account exists yet).
+message InitializeRequest {
+  string username = 1;
+  string password = 2;
+}
+
+message InitializeResponse {
+  string id = 1;
+  string username = 2;
+  string role = 3;
+}
+
 service SetupService {
   rpc GetStatus(GetSetupStatusRequest) returns (GetSetupStatusResponse) {}
+  rpc Initialize(InitializeRequest) returns (InitializeResponse) {}
 }
