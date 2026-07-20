@@ -60,7 +60,6 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
-	"golang.org/x/time/rate"
 )
 
 func main() {
@@ -164,15 +163,10 @@ func main() {
 	// reject legitimate 10–50 MiB ECG uploads. JSON and logo endpoints stay far under it.
 	e.Use(middleware.BodyLimit("64M"))
 
-	// Global per-IP rate limit as a coarse DoS guard. Generous so it never trips
-	// on normal SPA usage; stricter per-route limits apply to /auth (see router).
-	e.Use(middleware.RateLimiterWithConfig(middleware.RateLimiterConfig{
-		Store: middleware.NewRateLimiterMemoryStoreWithConfig(middleware.RateLimiterMemoryStoreConfig{
-			Rate:      rate.Limit(50), // ~50 req/s per IP sustained
-			Burst:     100,
-			ExpiresIn: 3 * time.Minute,
-		}),
-	}))
+	// Global per-IP rate limiting is intentionally NOT applied here: it capped
+	// throughput (incl. gRPC/Connect load tests) and DoS protection is handled
+	// upstream by the DSI infrastructure (reverse proxy / WAF). Strict per-route
+	// limits still apply to /auth (see router).
 	e.Use(middleware.RequestLoggerWithConfig(middleware.RequestLoggerConfig{
 		LogStatus: true,
 		LogURI:    true,
