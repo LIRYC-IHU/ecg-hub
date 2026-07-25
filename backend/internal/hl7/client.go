@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -85,7 +86,7 @@ func (c *Client) QueryPatient(_ context.Context, patientID string) (*PatientDemo
 		return nil, fmt.Errorf("hl7: invalid patient_id: contains HL7 control characters")
 	}
 
-	addr := fmt.Sprintf("%s:%d", c.host, c.port)
+	addr := net.JoinHostPort(c.host, strconv.Itoa(c.port))
 	conn, err := net.DialTimeout("tcp", addr, c.timeout)
 	if err != nil {
 		return nil, fmt.Errorf("hl7: dial %s: %w", addr, err)
@@ -147,7 +148,7 @@ func (c *Client) QueryPatientFull(_ context.Context, patientID string) (*QueryRe
 		return nil, fmt.Errorf("hl7: invalid patient_id: contains HL7 control characters")
 	}
 
-	addr := fmt.Sprintf("%s:%d", c.host, c.port)
+	addr := net.JoinHostPort(c.host, strconv.Itoa(c.port))
 	conn, err := net.DialTimeout("tcp", addr, c.timeout)
 	if err != nil {
 		return nil, fmt.Errorf("hl7: dial %s: %w", addr, err)

@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -42,9 +43,9 @@ func New(cfg connector.Config) *PolarisConnector {
 }
 
 // Name returns the connector identifier — matches pacs.connectors[].name in config.yaml.
-func (c *PolarisConnector) Name() string              { return c.cfg.Name }
-func (c *PolarisConnector) Protocol() string           { return c.cfg.Protocol }
-func (c *PolarisConnector) Endpoint() (string, int)    { return c.cfg.ECTP.Host, c.cfg.ECTP.Port }
+func (c *PolarisConnector) Name() string            { return c.cfg.Name }
+func (c *PolarisConnector) Protocol() string        { return c.cfg.Protocol }
+func (c *PolarisConnector) Endpoint() (string, int) { return c.cfg.ECTP.Host, c.cfg.ECTP.Port }
 
 // Accepts reports whether this connector should forward the given ECG.
 // Filters are applied on extension (from OriginalFilename) and vendor name.
@@ -123,7 +124,7 @@ func (c *PolarisConnector) Forward(_ context.Context, ecg *models.ECG, filePath 
 // Health dials the ECTP port to verify Polaris is reachable.
 // Returns nil when the TCP handshake succeeds; a wrapped error otherwise.
 func (c *PolarisConnector) Health() error {
-	addr := fmt.Sprintf("%s:%d", c.cfg.ECTP.Host, c.cfg.ECTP.Port)
+	addr := net.JoinHostPort(c.cfg.ECTP.Host, strconv.Itoa(c.cfg.ECTP.Port))
 	conn, err := net.DialTimeout("tcp", addr, healthTimeout)
 	if err != nil {
 		return fmt.Errorf("polaris: ECTP unreachable (%s): %w", addr, err)

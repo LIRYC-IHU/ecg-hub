@@ -7,14 +7,15 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"strconv"
 	"strings"
 	"time"
 
 	"connectrpc.com/connect"
 	"gorm.io/gorm"
 
-	apiv1 "github.com/LIRYC-IHU/ecg-hub/internal/api/v1"
 	mw "github.com/LIRYC-IHU/ecg-hub/internal/api/middleware"
+	apiv1 "github.com/LIRYC-IHU/ecg-hub/internal/api/v1"
 	"github.com/LIRYC-IHU/ecg-hub/internal/auth"
 	"github.com/LIRYC-IHU/ecg-hub/internal/config"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
@@ -541,7 +542,7 @@ func (h *ModuleServiceHandler) TestConnector(_ context.Context, req *apiv1.TestC
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("host or port not configured for this connector"))
 	}
 
-	addr := fmt.Sprintf("%s:%d", host, port)
+	addr := net.JoinHostPort(host, strconv.Itoa(port))
 	start := time.Now()
 	conn, dialErr := net.DialTimeout("tcp", addr, 5*time.Second)
 	latency := time.Since(start)

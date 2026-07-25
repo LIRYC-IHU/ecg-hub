@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -26,7 +27,7 @@ const (
 // It dials a fresh TCP connection to host:port, sends FILE|SEND, reads the ACK, then closes.
 // Returns an error if the connection fails, write fails, or the server does not respond 200.
 func SendFileSend(host string, port int, timeout time.Duration) error {
-	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", host, port), timeout)
+	conn, err := net.DialTimeout("tcp", net.JoinHostPort(host, strconv.Itoa(port)), timeout)
 	if err != nil {
 		return fmt.Errorf("ectp: FILE|SEND dial: %w", err)
 	}
@@ -40,7 +41,7 @@ func SendFileSend(host string, port int, timeout time.Duration) error {
 // sends FILE|ENDS followed by the filename payload padded to exactly 23 bytes,
 // then reads the ACK and closes.
 func SendFileEnds(host string, port int, timeout time.Duration, filename string) error {
-	conn, err := net.DialTimeout("tcp", fmt.Sprintf("%s:%d", host, port), timeout)
+	conn, err := net.DialTimeout("tcp", net.JoinHostPort(host, strconv.Itoa(port)), timeout)
 	if err != nil {
 		return fmt.Errorf("ectp: FILE|ENDS dial: %w", err)
 	}

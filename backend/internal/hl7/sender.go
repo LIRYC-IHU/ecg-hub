@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -49,7 +50,7 @@ func (s *Sender) SendResult(ctx context.Context, p ORUPatient, obs ORUObservatio
 
 // sendRaw frames and writes a pre-built HL7 message, then reads and validates the ACK.
 func (s *Sender) sendRaw(_ context.Context, message string) (*MSAResult, error) {
-	addr := fmt.Sprintf("%s:%d", s.host, s.port)
+	addr := net.JoinHostPort(s.host, strconv.Itoa(s.port))
 	conn, err := net.DialTimeout("tcp", addr, s.timeout)
 	if err != nil {
 		return nil, fmt.Errorf("hl7: dial %s: %w", addr, err)

@@ -6,13 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strconv"
 	"time"
 
 	"connectrpc.com/connect"
 	"gorm.io/gorm"
 
-	apiv1 "github.com/LIRYC-IHU/ecg-hub/internal/api/v1"
 	mw "github.com/LIRYC-IHU/ecg-hub/internal/api/middleware"
+	apiv1 "github.com/LIRYC-IHU/ecg-hub/internal/api/v1"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
 	"github.com/LIRYC-IHU/ecg-hub/internal/hl7"
@@ -213,7 +214,7 @@ func (h *HL7AdminServiceHandler) Ping(_ context.Context, _ *apiv1.HL7PingRequest
 	if err != nil || settings.Host == "" || settings.Port == 0 {
 		return nil, connect.NewError(connect.CodeUnavailable, errors.New("HL7 host/port not configured"))
 	}
-	addr := fmt.Sprintf("%s:%d", settings.Host, settings.Port)
+	addr := net.JoinHostPort(settings.Host, strconv.Itoa(settings.Port))
 	start := time.Now()
 	conn, dialErr := net.DialTimeout("tcp", addr, 5*time.Second)
 	latency := time.Since(start).Round(time.Millisecond).String()
