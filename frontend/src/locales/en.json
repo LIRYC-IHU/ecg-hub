@@ -4,23 +4,8 @@
     "noResults": "No patients found",
     "loading": "Searching…"
   },
-  "sort": {
-    "newest": "Most recent",
-    "oldest": "Oldest",
-    "nameAZ": "Name A → Z",
-    "nameZA": "Name Z → A",
-    "idAsc": "ID ascending",
-    "idDesc": "ID descending"
-  },
   "patient": {
-    "notFound": "Patient not found",
     "ecgs": "ECGs",
-    "expandAll": "Expand all",
-    "collapseAll": "Collapse all",
-    "colName": "Name",
-    "colId": "Identifier",
-    "colEcgs": "ECGs",
-    "colLastActivity": "Last activity",
     "pin": "Pin",
     "unpin": "Unpin",
     "pinned": "Pinned",
@@ -41,7 +26,6 @@
     "hl7NoHistory": "No HL7 attempts yet",
     "hl7ForceError": "Error forcing HL7 retry",
     "history": "History",
-    "downloadAll": "Download all",
     "totalEcgs": "Total ECGs",
     "lastExam": "Last exam",
     "hl7Sent": "HL7 Sent",
@@ -73,14 +57,11 @@
     "deleteError": "Error while deleting",
     "open": "Open",
     "new": "New",
-    "downloadOriginal": "Original format",
     "downloadError": "Download failed",
-    "downloadXmlfda": "XMLFDA format",
     "downloadFormatsTitle": "Formats to download",
     "vendor": "Vendor",
     "date": "Date",
     "hl7Status": "HL7 Status",
-    "hl7Retry": "Resend HL7",
     "status": {
       "pending": "Pending",
       "success": "Sent",
@@ -94,18 +75,12 @@
       "saved": "Metadata saved",
       "saveError": "Error saving metadata",
       "loading": "Loading…",
-      "noWrite": "Read-only",
       "fields": {
         "recorded_at": "Recording date",
         "last_name": "Last name",
         "first_name": "First name",
         "sex": "Sex",
-        "device_model": "Device model",
-        "lead_count": "Leads",
-        "duration_seconds": "Duration (s)",
-        "sample_rate": "Sample rate (Hz)",
-        "document_type": "Document type",
-        "document_version": "Document version"
+        "device_model": "Device model"
       }
     },
     "patientData": {
@@ -121,11 +96,7 @@
   "export": {
     "selected": "{{count}} ECG selected",
     "selected_other": "{{count}} ECGs selected",
-    "clearSelection": "Deselect all",
-    "exportZip": "Export as ZIP",
     "exporting": "Exporting…",
-    "jobStarted": "Export started — {{count}} ECG(s) queued",
-    "jobError": "Failed to start export",
     "preparing": "Preparing…",
     "progress": "{{percent}}% in progress",
     "done": "Download ZIP",
@@ -176,7 +147,6 @@
       "assignNewHint": "Demographics (name, date of birth…) will be filled automatically via HL7 enrichment from the HIS. Make sure the ID matches the patient in the HIS.",
       "assignNewConfirm": "Create and assign",
       "assignChange": "Change",
-      "patientIdPlaceholder": "Patient ID",
       "assignConfirm": "Confirm assignment",
       "assigned": "ECG assigned and re-ingested",
       "assignError": "Error assigning patient"
@@ -218,12 +188,7 @@
         "test": "Test",
         "testing": "Testing…",
         "secret": "Secret",
-        "secretConfigured": "Configured",
-        "secretMissing": "Missing",
-        "lastTest": "Last test:",
-        "urlCopied": "URL copied",
         "testOk": "Webhook OK — HTTP {{code}}",
-        "testWarn": "Webhook — HTTP response {{code}}",
         "testError": "Webhook — unable to reach remote server",
         "moved": "Webhooks are now configured per user (events, filters, HMAC secret) — research servers receive ECG events and call the API back to fetch data.",
         "open": "Open webhook configuration"
@@ -289,7 +254,6 @@
         "rawData": "Raw HL7 Response",
         "noResult": "Enter a patient ID and click Send to test the HL7 connection.",
         "mappingTitle": "Field Mapping",
-        "saveMapping": "Save",
         "updateMapping": "Update",
         "saveAsNew": "Save as new",
         "mappingSaved": "Mapping saved",
@@ -360,7 +324,6 @@
       "filterUser": "Filter by user…",
       "allActions": "All actions",
       "entries": "entries",
-      "exportCSV": "Export CSV",
       "exportJSON": "Export JSON",
       "exportTitle": "Export JSON",
       "exportFormat": "Format",
@@ -397,7 +360,6 @@
       "newRole": "New role",
       "namePlaceholder": "Role name (e.g. nurse)",
       "descPlaceholder": "Description",
-      "noRoles": "No roles",
       "selectRole": "Select a role",
       "saved": "Permissions saved",
       "saveError": "Error saving permissions",
@@ -674,7 +636,6 @@
   "auth": {
     "login": "Login",
     "logout": "Logout",
-    "unauthorized": "Unauthorized",
     "ssoLogin": "Sign in with SSO",
     "username": "Username",
     "password": "Password",
@@ -692,8 +653,7 @@
     "passwordTooShort": "Password must be at least 8 characters",
     "passwordNeedsDigit": "Password must contain at least 1 digit",
     "passwordMismatch": "Passwords do not match",
-    "success": "Admin account created. Please log in.",
-    "alreadyInitialized": "System is already initialized"
+    "success": "Admin account created. Please log in."
   },
   "common": {
     "loading": "Loading…",
@@ -706,7 +666,6 @@
     "clearAll": "Clear all",
     "selected": "{{count}} selected",
     "selected_other": "{{count}} selected",
-    "exportStarted": "Export started ({{count}} ECGs)",
     "exportError": "Export error"
   },
   "webhooks": {

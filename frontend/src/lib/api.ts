@@ -1,7 +1,6 @@
 import type {
   ECG,
   ECGMetaResponse,
-  ECGWithPatient,
   ErrorResponse,
   ListResponse,
   Patient,
@@ -25,10 +24,7 @@ import {
   tagClient,
   webhookClient,
 } from "./grpc";
-import type {
-  Ecg as EcgProto,
-  EcgWithPatient as EcgWithPatientProto,
-} from "../gen/v1/ecg_pb";
+import type { Ecg as EcgProto } from "../gen/v1/ecg_pb";
 import type { OruAttempt as OruAttemptProto } from "../gen/v1/hl7_pb";
 import type { Patient as PatientProto } from "../gen/v1/patient_pb";
 import type { Tag as TagProto } from "../gen/v1/tag_pb";
@@ -133,40 +129,7 @@ export async function fetchECGFilterFacets(): Promise<ECGFilterFacets> {
   }
 }
 
-// ecgWithPatientFromProto flattens the nested gRPC EcgWithPatient (ecg + joined
-// demographics) into the frontend's flat ECGWithPatient type.
-function ecgWithPatientFromProto(r: EcgWithPatientProto): ECGWithPatient {
-  return {
-    ...ecgFromProto(r.ecg ?? ({} as EcgProto)),
-    patient_first_name: r.patientFirstName,
-    patient_last_name: r.patientLastName,
-    patient_gender: r.patientGender,
-    patient_dob: r.patientDob || null,
-  };
-}
 
-export async function fetchAllECGs(
-  filters: AllECGFilters = {},
-): Promise<ListResponse<ECGWithPatient>> {
-  // gRPC: ECGService.ListAll — cross-patient timeline with joined demographics.
-  const res = await ecgClient.listAll({
-    q: filters.q ?? "",
-    hl7Status: filters.hl7_status ?? "",
-    vendor: filters.vendor ?? "",
-    deviceModel: filters.device_model ?? "",
-    fileFormat: filters.file_format ?? "",
-    from: filters.from ?? "",
-    to: filters.to ?? "",
-    page: filters.page ?? 1,
-    perPage: filters.per_page ?? 50,
-  });
-  return {
-    data: res.data.map(ecgWithPatientFromProto),
-    total: Number(res.total),
-    page: res.page,
-    per_page: res.perPage,
-  };
-}
 
 export interface ECGFilters {
   from?: string;
@@ -292,9 +255,9 @@ function patientDataQuery(mode?: PatientDataMode): string {
   return "";
 }
 
-// downloadECGFormat triggers a browser download for a specific export format.
-// format = "original" | "xmlfda" | "dicom" | ...
-export async function downloadECGFormat(
+
+// downloadECGFormat triggers a browser download for a single export format.
+async function downloadECGFormat(
   id: number,
   format: string,
   mode?: PatientDataMode,
@@ -403,11 +366,6 @@ export async function fetchHealth(): Promise<{
   };
 }
 
-export interface WebhookStatus {
-  enabled: boolean;
-  url: string;
-  secret_configured: boolean;
-}
 
 export interface KeycloakUser {
   id: string;
@@ -449,14 +407,6 @@ export async function deleteECG(id: number): Promise<void> {
   }
 }
 
-export async function fetchWebhookStatus(): Promise<WebhookStatus> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/webhook`);
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
-  return res.json();
-}
 
 export interface ExportFormat {
   id: string; // "original" | "xmlfda" | "dicom"
@@ -884,10 +834,6 @@ export async function markEcgViewed(ecgId: string): Promise<void> {
   await ecgClient.markViewed({ id: ecgId });
 }
 
-// markPatientEcgsViewed marks all of a patient's ECGs as viewed ("mark all as seen").
-export async function markPatientEcgsViewed(patientId: string): Promise<void> {
-  await patientClient.markECGsViewed({ patientId });
-}
 
 export async function fetchECGMeta(ecgId: number): Promise<ECGMetaResponse> {
   // gRPC: ECGService.GetMetadata. values arrive as a JSON object string.
@@ -975,10 +921,6 @@ export async function createExportJob(
   return exportJobFromProto(res.job!);
 }
 
-export async function getExportJob(jobId: string): Promise<ExportJobResponse> {
-  const res = await exportClient.get({ id: jobId });
-  return exportJobFromProto(res.job!);
-}
 
 export async function setAppUserRole(
   userId: string,
@@ -1543,34 +1485,7 @@ export async function fetchStorageMetrics(): Promise<StorageMetricsResp> {
   };
 }
 
-export interface RecentError {
-  timestamp: string;
-  method: string;
-  route: string;
-  status: number;
-  error?: string;
-  request_uri: string;
-  user_id?: string;
-  duration_ms: number;
-}
 
-export async function fetchRecentErrors(limit = 20): Promise<RecentError[]> {
-  try {
-    const res = await adminClient.getRecentErrors({ limit });
-    return res.errors.map((e) => ({
-      timestamp: e.timestamp,
-      method: e.method,
-      route: e.route,
-      status: e.status,
-      error: e.error || undefined,
-      request_uri: e.requestUri,
-      user_id: e.userId || undefined,
-      duration_ms: e.durationMs,
-    }));
-  } catch {
-    return [];
-  }
-}
 
 // ─── Auth Providers (admin) ─────────────────────────────────────────────────
 
@@ -1766,12 +1681,6 @@ export function connectorTypeFromProtocol(protocol: string): ConnectorType {
   return protocol === "dicom_cstore" ? "pacs_dicom" : "polaris";
 }
 
-// protocolFromConnectorType maps a ConnectorType back to the backend protocol string.
-export function protocolFromConnectorType(
-  ct: ConnectorType,
-): ConnectorConfig["protocol"] {
-  return ct === "pacs_dicom" ? "dicom_cstore" : "ectp_ftp";
-}
 
 // connectorConfigFromProto maps a gRPC ConnectorConfig to the frontend type.
 function connectorConfigFromProto(
