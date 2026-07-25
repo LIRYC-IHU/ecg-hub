@@ -61,6 +61,18 @@ export function ECGViewerModal({ ecgId, filename, onClose }: Props) {
     return () => clearTimeout(id);
   }, [prefs]);
 
+  // Close on Escape — same pattern as ConfirmDialog. In fullscreen the browser
+  // already consumes Escape to exit it, so don't also close the viewer.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || document.fullscreenElement) return;
+      if (showOptions) { setShowOptions(false); return; }
+      onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose, showOptions]);
+
   useEffect(() => {
     setLoading(true);
     setError(null);
