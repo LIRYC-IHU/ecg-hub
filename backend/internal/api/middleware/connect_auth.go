@@ -53,6 +53,7 @@ func ContextWithIdentity(ctx context.Context, userID, username, role string) con
 }
 
 // ContextWithRole is a shorthand for ContextWithIdentity with only the role set.
+// Used by handler tests that exercise role-gated paths without an interceptor.
 func ContextWithRole(ctx context.Context, role string) context.Context {
 	return context.WithValue(ctx, connectRoleKey, role)
 }

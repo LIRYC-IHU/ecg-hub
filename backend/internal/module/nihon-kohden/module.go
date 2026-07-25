@@ -24,8 +24,8 @@ import (
 
 var ECTPPort = 30003
 
-var nkToFDABinary = bridgeBin("BRIDGE_NK_TO_FDA", "nk-to-fda")
-var nkToDICOMBinary = bridgeBin("BRIDGE_NK_TO_DICOM", "nk-to-dicom")
+var nkToFDABinary = bridgeutil.ResolveBin("BRIDGE_NK_TO_FDA", "nk-to-fda")
+var nkToDICOMBinary = bridgeutil.ResolveBin("BRIDGE_NK_TO_DICOM", "nk-to-dicom")
 
 var _ module.Module = (*Module)(nil)
 
@@ -50,10 +50,6 @@ type nkMetadataJSON struct {
 	V1SAmplitude float64 `json:"v1sAmplitude"`
 	SampleRate   int     `json:"sampleRate"`
 	TotalSamples int     `json:"totalSamples"`
-}
-
-func bridgeBin(envKey, name string) string {
-	return bridgeutil.ResolveBin(envKey, name)
 }
 
 func init() {

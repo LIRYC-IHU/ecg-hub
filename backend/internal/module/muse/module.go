@@ -39,14 +39,7 @@ func init() {
 	module.Register(&Module{})
 }
 
-var museToFDABin = bridgeBin("BRIDGE_MUSE_TO_FDA", "muse-to-fda")
-
-// bridgeBin resolves the converter binary path used for metadata extraction.
-// Per-binary env var (absolute path only) takes precedence, then
-// BRIDGE_BIN_DIR/name, else bare name ($PATH).
-func bridgeBin(envKey, name string) string {
-	return bridgeutil.ResolveBin(envKey, name)
-}
+var museToFDABin = bridgeutil.ResolveBin("BRIDGE_MUSE_TO_FDA", "muse-to-fda")
 
 // Module implements module.Module for GE MUSE RestingECG XML files.
 type Module struct{}

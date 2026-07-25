@@ -54,21 +54,3 @@ func PatientWithStatsToDTO(p *PatientWithStats) PatientDTO {
 		LastActivity:  lastActivity,
 	}
 }
-
-// PatientToDTO converts a GORM Patient model to its API representation (no ECG stats).
-func PatientToDTO(p *models.Patient) PatientDTO {
-	var dob *string
-	if p.DateOfBirth != nil {
-		s := p.DateOfBirth.UTC().Format(time.RFC3339)
-		dob = &s
-	}
-	return PatientDTO{
-		ID:          p.ID,
-		PatientID:   p.PatientID,
-		FirstName:   p.FirstName,
-		LastName:    p.LastName,
-		DateOfBirth: dob,
-		Gender:      p.Gender,
-		NDA:         p.NDA,
-	}
-}

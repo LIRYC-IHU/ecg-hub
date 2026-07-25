@@ -29,12 +29,8 @@ func init() {
 	module.Register(&Module{})
 }
 
-var mindrayToFDABin = bridgeBin("BRIDGE_MINDRAY_TO_FDA", "mindray-to-fda")
-var mindrayToDICOMBin = bridgeBin("BRIDGE_MINDRAY_TO_DICOM", "mindray-to-dicom")
-
-func bridgeBin(envKey, name string) string {
-	return bridgeutil.ResolveBin(envKey, name)
-}
+var mindrayToFDABin = bridgeutil.ResolveBin("BRIDGE_MINDRAY_TO_FDA", "mindray-to-fda")
+var mindrayToDICOMBin = bridgeutil.ResolveBin("BRIDGE_MINDRAY_TO_DICOM", "mindray-to-dicom")
 
 // Module implements module.Module for Mindray BeneHeart binary files.
 type Module struct{}

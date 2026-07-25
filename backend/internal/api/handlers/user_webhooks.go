@@ -23,22 +23,6 @@ type webhookRequest struct {
 	Vendors            []string `json:"vendors"`
 }
 
-// webhookResponse is the API shape of a webhook. Secrets are never returned;
-// HasSecret/HasAuthHeader tell the UI whether values are configured.
-type webhookResponse struct {
-	models.UserWebhook
-	HasSecret     bool `json:"has_secret"`
-	HasAuthHeader bool `json:"has_auth_header"`
-}
-
-func toWebhookResponse(h models.UserWebhook) webhookResponse {
-	return webhookResponse{
-		UserWebhook:   h,
-		HasSecret:     h.SecretEncrypted != "",
-		HasAuthHeader: h.AuthHeaderEncrypted != "",
-	}
-}
-
 // validateWebhookRequest checks name, URL and event types.
 // Returns an error message ("" = valid).
 func validateWebhookRequest(req *webhookRequest) string {

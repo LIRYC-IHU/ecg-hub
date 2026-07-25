@@ -86,37 +86,6 @@ func finishOIDCAuth(c echo.Context, flow auth.OIDCFlow) (string, error) {
 	return jwtToken, nil
 }
 
-// OIDCLoginHandler redirects the browser to the Keycloak authorization endpoint.
-// The state is HMAC-signed and a PKCE verifier is stored in a short-lived cookie,
-// so the callback can be verified without server-side session storage.
-//
-// GET /api/v1/auth/oidc/login
-func OIDCLoginHandler(flow auth.OIDCFlow) echo.HandlerFunc {
-	return func(c echo.Context) error {
-		url, err := startOIDCAuth(c, flow)
-		if err != nil {
-			return err
-		}
-		return c.Redirect(http.StatusFound, url)
-	}
-}
-
-// OIDCCallbackHandler handles the redirect from Keycloak after user authentication.
-// It verifies the signed state, exchanges the authorization code for an ECG Hub JWT,
-// and redirects the browser to the frontend with the token in the query string.
-//
-// GET /api/v1/auth/oidc/callback?code=...&state=...
-func OIDCCallbackHandler(flow auth.OIDCFlow) echo.HandlerFunc {
-	return func(c echo.Context) error {
-		jwtToken, err := finishOIDCAuth(c, flow)
-		if err != nil {
-			return err
-		}
-		setJWTCookie(c, jwtToken)
-		return c.Redirect(http.StatusFound, "/")
-	}
-}
-
 // ─── Dynamic OIDC handlers (config from DB) ──────────────────────────────────
 
 type oidcDBParams struct {

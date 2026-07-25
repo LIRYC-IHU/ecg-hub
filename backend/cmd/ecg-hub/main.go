@@ -185,25 +185,25 @@ func main() {
 	// Build ECGBridge — maps vendor names to conversion binaries.
 	// Add new vendors here when ecg-bridge publishes new tools.
 	binaries := map[string]string{
-		"philips:xmlfda":      bridgeBin("BRIDGE_PHILIPS_TO_FDA", "philips-to-fda"),
-		"philips:dicom":       bridgeBin("BRIDGE_PHILIPS_TO_DICOM", "philips-to-dicom"),
-		"dicom:xmlfda":        bridgeBin("BRIDGE_DICOM_TO_FDA", "dicom-to-fda"),
-		"nihon-kohden:xmlfda": bridgeBin("BRIDGE_NK_TO_FDA", "nk-to-fda"),
-		"nihon-kohden:dicom":  bridgeBin("BRIDGE_NK_TO_DICOM", "nk-to-dicom"),
-		"mindray:xmlfda":      bridgeBin("BRIDGE_MINDRAY_TO_FDA", "mindray-to-fda"),
-		"mindray:dicom":       bridgeBin("BRIDGE_MINDRAY_TO_DICOM", "mindray-to-dicom"),
-		"muse:xmlfda":         bridgeBin("BRIDGE_MUSE_TO_FDA", "muse-to-fda"),
-		"muse:dicom":          bridgeBin("BRIDGE_MUSE_TO_DICOM", "muse-to-dicom"),
+		"philips:xmlfda":      bridgeutil.ResolveBin("BRIDGE_PHILIPS_TO_FDA", "philips-to-fda"),
+		"philips:dicom":       bridgeutil.ResolveBin("BRIDGE_PHILIPS_TO_DICOM", "philips-to-dicom"),
+		"dicom:xmlfda":        bridgeutil.ResolveBin("BRIDGE_DICOM_TO_FDA", "dicom-to-fda"),
+		"nihon-kohden:xmlfda": bridgeutil.ResolveBin("BRIDGE_NK_TO_FDA", "nk-to-fda"),
+		"nihon-kohden:dicom":  bridgeutil.ResolveBin("BRIDGE_NK_TO_DICOM", "nk-to-dicom"),
+		"mindray:xmlfda":      bridgeutil.ResolveBin("BRIDGE_MINDRAY_TO_FDA", "mindray-to-fda"),
+		"mindray:dicom":       bridgeutil.ResolveBin("BRIDGE_MINDRAY_TO_DICOM", "mindray-to-dicom"),
+		"muse:xmlfda":         bridgeutil.ResolveBin("BRIDGE_MUSE_TO_FDA", "muse-to-fda"),
+		"muse:dicom":          bridgeutil.ResolveBin("BRIDGE_MUSE_TO_DICOM", "muse-to-dicom"),
 		// fda: the source is already FDA aECG XML (some devices export it directly),
 		// so DICOM is produced by fda-to-dicom and PDF by fda-to-pdf rendering the
 		// source verbatim. "original" already serves the FDA XML download.
-		"fda:dicom": bridgeBin("BRIDGE_FDA_TO_DICOM", "fda-to-dicom"),
+		"fda:dicom": bridgeutil.ResolveBin("BRIDGE_FDA_TO_DICOM", "fda-to-dicom"),
 	}
 
 	// PDF reports are rendered from FDA aECG XML, so a single fda-to-pdf binary
 	// serves every vendor that can produce xmlfda (see ECGBridge.convertToPDF).
 	bridge := export.NewECGBridge(binaries, 5*time.Second).
-		WithPDFBinary(bridgeBin("BRIDGE_FDA_TO_PDF", "fda-to-pdf"))
+		WithPDFBinary(bridgeutil.ResolveBin("BRIDGE_FDA_TO_PDF", "fda-to-pdf"))
 
 	// Keycloak Admin client — optional, enabled via env vars only (OIDC itself
 	// is configured from the admin UI and stored in DB). Handlers receiving nil
@@ -946,17 +946,6 @@ func validateJWTSecret(cfg *config.Config) {
 	}
 }
 
-// envOr returns the value of the environment variable key, or fallback if unset or empty.
-func envOr(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return fallback
-}
-
-// bridgeBin resolves a converter binary path via bridgeutil.ResolveBin:
-// per-binary env var (absolute path only, e.g. BRIDGE_PHILIPS_TO_FDA) takes
-// precedence, then BRIDGE_BIN_DIR/name, else bare name (relies on $PATH).
-func bridgeBin(envKey, name string) string {
-	return bridgeutil.ResolveBin(envKey, name)
-}
+// Converter binary paths come from bridgeutil.ResolveBin: per-binary env var
+// (absolute path only, e.g. BRIDGE_PHILIPS_TO_FDA) takes precedence, then
+// BRIDGE_BIN_DIR/name, else bare name (relies on $PATH).

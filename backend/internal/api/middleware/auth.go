@@ -188,23 +188,6 @@ func extractToken(c echo.Context) string {
 	return ""
 }
 
-// RequireRole returns a middleware that enforces a minimum role level.
-// Role hierarchy: "admin" satisfies any required role, including "reader".
-// On failure it returns 403 {"code":"INSUFFICIENT_ROLE","message":"..."}.
-//
-// Must be applied AFTER AuthMiddleware (requires CtxKeyRole to be set).
-func RequireRole(required string) echo.MiddlewareFunc {
-	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
-			userRole, _ := c.Get(CtxKeyRole).(string)
-			if !roleAllowed(userRole, required) {
-				return c.JSON(http.StatusForbidden, APIError("INSUFFICIENT_ROLE", fmt.Sprintf("requires %s role", required)))
-			}
-			return next(c)
-		}
-	}
-}
-
 // RequirePermission returns a middleware that checks whether the authenticated user's role
 // has the specified permission. Must be applied AFTER AuthMiddleware.
 // Returns 403 if the role lacks the permission.
@@ -220,18 +203,6 @@ func RequirePermission(checker interface {
 			return next(c)
 		}
 	}
-}
-
-// roleAllowed returns true if userRole meets the required role level.
-// Role hierarchy: admin > writer > reader.
-func roleAllowed(userRole, required string) bool {
-	const (
-		roleReader = 1
-		roleWriter = 2
-		roleAdmin  = 3
-	)
-	level := map[string]int{"reader": roleReader, "writer": roleWriter, "admin": roleAdmin}
-	return level[userRole] >= level[required]
 }
 
 // APIError builds the standard ECG Hub error response body.

@@ -58,9 +58,10 @@ func clearJWTCookie(c echo.Context) {
 // GetProviders is now served over gRPC/Connect by AuthServiceHandler
 // (auth_service.go).
 
-// LoginHandler handles LDAP credential exchange for an ECG Hub-signed JWT.
-// Only available when auth.provider == "ldap" — returns 400 for OIDC mode.
+// LoginHandlerWithDB handles LDAP credential exchange for an ECG Hub-signed JWT,
+// falling back to the LDAP config stored in DB when the static provider is nil.
 // Public endpoint — no Bearer token required (this endpoint issues the token).
+// When db is non-nil, login outcomes (success/failure) are written to the audit log.
 //
 //	@Summary		Login (LDAP only)
 //	@Description	Exchange LDAP credentials for an ECG Hub-signed JWT. Not applicable when auth.provider is oidc.
@@ -72,12 +73,6 @@ func clearJWTCookie(c echo.Context) {
 //	@Failure		400		{object}	map[string]string	"UNSUPPORTED_PROVIDER or validation error"
 //	@Failure		401		{object}	map[string]string	"UNAUTHENTICATED"
 //	@Router			/api/v1/auth/login [post]
-func LoginHandler(provider auth.Provider) echo.HandlerFunc {
-	return LoginHandlerWithDB(provider, nil, "", "", nil, nil)
-}
-
-// LoginHandlerWithDB is like LoginHandler but also tries LDAP config from DB when ldapAuth is nil.
-// When db is non-nil, login outcomes (success/failure) are written to the audit log.
 func LoginHandlerWithDB(provider auth.Provider, authConfigRepo *repository.AuthConfigRepository, encKey, jwtSecret string, userStore auth.UserStore, db *gorm.DB) echo.HandlerFunc {
 	// auditLogin records a login outcome. The actor is the attempted username
 	// (the internal uuid is not yet known at this point); the audit list falls
