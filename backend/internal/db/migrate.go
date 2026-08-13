@@ -47,6 +47,7 @@ func RunMigrations(db *gorm.DB) error {
 		&appmodels.ModuleConfig{},
 		&appmodels.ModuleSettings{},
 		&appmodels.UserWebhook{},
+		&appmodels.WebhookDelivery{},
 	}
 	// for _, m := range models {
 	// 	err := db.Migrator().DropTable(m)
@@ -183,6 +184,8 @@ func RunMigrations(db *gorm.DB) error {
 			`ALTER TABLE patient_tags ADD CONSTRAINT fk_patient_tags_patient FOREIGN KEY (patient_id) REFERENCES patients(patient_id) ON UPDATE CASCADE ON DELETE CASCADE`},
 		{"connector_jobs", "fk_connector_jobs_quarantine",
 			`ALTER TABLE connector_jobs ADD CONSTRAINT fk_connector_jobs_quarantine FOREIGN KEY (quarantine_id) REFERENCES quarantine_entries(id) ON DELETE CASCADE`},
+		{"webhook_deliveries", "fk_webhook_deliveries_webhook",
+			`ALTER TABLE webhook_deliveries ADD CONSTRAINT fk_webhook_deliveries_webhook FOREIGN KEY (webhook_id) REFERENCES user_webhooks(id) ON DELETE CASCADE`},
 	} {
 		if db.Migrator().HasTable(fk.table) && !db.Migrator().HasConstraint(fk.table, fk.name) {
 			if err := db.Exec(fk.ddl).Error; err != nil {

@@ -11,6 +11,8 @@ import {
   CheckCircle2,
   XCircle,
   X,
+  History,
+  RotateCcw,
 } from "lucide-react";
 import {
   fetchWebhooks,
@@ -19,12 +21,95 @@ import {
   updateWebhook,
   deleteWebhook,
   testUserWebhook,
+  fetchWebhookDeliveries,
+  resendWebhookDelivery,
   type UserWebhook,
   type WebhookInput,
 } from "../../lib/api";
 import { Spinner } from "../ui/Spinner";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { useNotification } from "../../context/NotificationContext";
+
+function WebhookDeliveries({ webhookId }: { webhookId: string }) {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const { notify } = useNotification();
+
+  const { data: deliveries = [], isLoading } = useQuery({
+    queryKey: ["webhook-deliveries", webhookId],
+    queryFn: () => fetchWebhookDeliveries(webhookId),
+    staleTime: 10_000,
+  });
+
+  const resendMutation = useMutation({
+    mutationFn: (deliveryId: string) =>
+      resendWebhookDelivery(webhookId, deliveryId),
+    onSuccess: (result) => {
+      void queryClient.invalidateQueries({
+        queryKey: ["webhook-deliveries", webhookId],
+      });
+      if (result.ok) {
+        notify("success", t("webhooks.resendOk", { status: result.status_code }));
+      } else {
+        notify("error", t("webhooks.resendFailed", { error: result.error }));
+      }
+    },
+    onError: () => notify("error", t("webhooks.resendError")),
+  });
+
+  if (isLoading) {
+    return (
+      <div className="px-4 py-3 flex justify-center">
+        <Spinner size={16} className="text-primary" />
+      </div>
+    );
+  }
+
+  if (deliveries.length === 0) {
+    return (
+      <div className="px-4 py-3 text-xs text-muted-foreground">
+        {t("webhooks.deliveriesEmpty")}
+      </div>
+    );
+  }
+
+  return (
+    <div className="divide-y divide-border/60">
+      {deliveries.map((d) => (
+        <div key={d.id} className="px-4 py-2 flex items-center gap-2 text-xs">
+          {d.error === "" ? (
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+          ) : (
+            <XCircle className="w-3.5 h-3.5 text-destructive shrink-0" />
+          )}
+          <span className="font-mono text-foreground">
+            {t(`webhooks.eventTypes.${d.event}`, d.event)}
+          </span>
+          <span className="text-muted-foreground">
+            {new Date(d.delivered_at).toLocaleString()}
+          </span>
+          {d.status_code > 0 && (
+            <span className="text-muted-foreground">HTTP {d.status_code}</span>
+          )}
+          {d.error !== "" && (
+            <span className="text-destructive truncate flex-1" title={d.error}>
+              {d.error}
+            </span>
+          )}
+          <button
+            onClick={() => resendMutation.mutate(d.id)}
+            disabled={resendMutation.isPending}
+            className="ml-auto p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0"
+            title={t("webhooks.resend")}
+            aria-label={t("webhooks.resend")}
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 // Form state: secret/authHeader empty string means "unchanged" while editing
 // (the API receives undefined); the explicit clear action sends "".
@@ -81,8 +166,12 @@ export function WebhooksPage() {
   const [form, setForm] = useState<FormState>(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+
   // Id of the webhook pending delete confirmation (null = dialog closed).
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const [historyId, setHistoryId] = useState<string | null>(null);
+
 
   const { data: hooks = [], isLoading } = useQuery({
     queryKey: ["webhooks"],
@@ -454,51 +543,94 @@ export function WebhooksPage() {
           </div>
         ) : (
           hooks.map((hook) => (
-            <div key={hook.id} className="px-4 py-3 flex items-center gap-3">
-              <span
-                className={`w-2 h-2 rounded-full shrink-0 ${
-                  hook.enabled ? "bg-emerald-500" : "bg-muted-foreground/40"
-                }`}
-                title={
-                  hook.enabled
-                    ? t("webhooks.enabledLabel")
-                    : t("webhooks.disabled")
-                }
-              />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-medium text-foreground truncate">
-                    {hook.name}
+            <div key={hook.id}>
+              <div className="px-4 py-3 flex items-center gap-3">
+                <span
+                  className={`w-2 h-2 rounded-full shrink-0 ${
+                    hook.enabled ? "bg-emerald-500" : "bg-muted-foreground/40"
+                  }`}
+                  title={
+                    hook.enabled
+                      ? t("webhooks.enabledLabel")
+                      : t("webhooks.disabled")
+                  }
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-medium text-foreground truncate">
+                      {hook.name}
+                    </p>
+                    {(hook.events ?? []).length > 0 && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                        {(hook.events ?? []).length} {t("webhooks.eventsBadge")}
+                      </span>
+                    )}
+                    {(hook.vendors ?? []).length > 0 && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
+                        {(hook.vendors ?? []).join(", ")}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground font-mono truncate">
+                    {hook.url}
                   </p>
-                  {(hook.events ?? []).length > 0 && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
-                      {(hook.events ?? []).length} {t("webhooks.eventsBadge")}
-                    </span>
-                  )}
-                  {(hook.vendors ?? []).length > 0 && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
-                      {(hook.vendors ?? []).join(", ")}
-                    </span>
+                  {hook.last_delivered_at && (
+                    <p className="text-[11px] text-muted-foreground inline-flex items-center gap-1 mt-0.5">
+                      {hook.last_error === "" ? (
+                        <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                      ) : (
+                        <XCircle className="w-3 h-3 text-destructive" />
+                      )}
+                      {t("webhooks.lastDelivery", {
+                        date: new Date(hook.last_delivered_at).toLocaleString(),
+                      })}
+                      {hook.last_status_code > 0 && ` — HTTP ${hook.last_status_code}`}
+                      {hook.last_error !== "" && ` — ${hook.last_error}`}
+                    </p>
                   )}
                 </div>
-                <p className="text-xs text-muted-foreground font-mono truncate">
-                  {hook.url}
-                </p>
-                {hook.last_delivered_at && (
-                  <p className="text-[11px] text-muted-foreground inline-flex items-center gap-1 mt-0.5">
-                    {hook.last_error === "" ? (
-                      <CheckCircle2 className="w-3 h-3 text-emerald-500" />
-                    ) : (
-                      <XCircle className="w-3 h-3 text-destructive" />
-                    )}
-                    {t("webhooks.lastDelivery", {
-                      date: new Date(hook.last_delivered_at).toLocaleString(),
-                    })}
-                    {hook.last_status_code > 0 && ` — HTTP ${hook.last_status_code}`}
-                    {hook.last_error !== "" && ` — ${hook.last_error}`}
-                  </p>
-                )}
+                <button
+                  onClick={() =>
+                    setHistoryId(historyId === hook.id ? null : hook.id)
+                  }
+                  className={`p-2 rounded-md hover:text-foreground hover:bg-muted transition-colors shrink-0 ${
+                    historyId === hook.id
+                      ? "text-foreground bg-muted"
+                      : "text-muted-foreground"
+                  }`}
+                  title={t("webhooks.history")}
+                  aria-label={t("webhooks.history")}
+                >
+                  <History className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => testMutation.mutate(hook.id)}
+                  disabled={testMutation.isPending}
+                  className="p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0"
+                  title={t("webhooks.test")}
+                  aria-label={t("webhooks.test")}
+                >
+                  <Send className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => openEdit(hook)}
+                  className="p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0"
+                  title={t("webhooks.edit")}
+                  aria-label={t("webhooks.edit")}
+                >
+                  <Pencil className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => handleDelete(hook.id)}
+                  disabled={deleteMutation.isPending}
+                  className="p-2 rounded-md text-destructive hover:bg-destructive/5 transition-colors shrink-0"
+                  title={t("webhooks.delete")}
+                  aria-label={t("webhooks.delete")}
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
               </div>
+
               <button
                 onClick={() => testMutation.mutate(hook.id)}
                 disabled={testMutation.isPending}
@@ -525,6 +657,13 @@ export function WebhooksPage() {
               >
                 <Trash2 className="w-4 h-4" />
               </button>
+
+              {historyId === hook.id && (
+                <div className="bg-background/50 border-t border-border">
+                  <WebhookDeliveries webhookId={hook.id} />
+                </div>
+              )}
+
             </div>
           ))
         )}

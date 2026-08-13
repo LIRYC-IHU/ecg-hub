@@ -383,7 +383,8 @@ func main() {
 	// events out to the endpoints each user configures from the frontend
 	// (research servers etc.). Subscribed to the event hub further down.
 	userWebhookRepo := repository.NewUserWebhookRepository(gormDB)
-	webhookDispatcher := webhook.NewDispatcher(userWebhookRepo, gormDB, authEncKey, publicBaseURL())
+	webhookDeliveryRepo := repository.NewWebhookDeliveryRepository(gormDB)
+	webhookDispatcher := webhook.NewDispatcher(userWebhookRepo, webhookDeliveryRepo, gormDB, authEncKey, publicBaseURL())
 	hl7Notifier := webhook.NewMultiNotifier(webhookDispatcher)
 
 	// HL7 Scheduler: always created so it can be started from the UI via Reload().
@@ -463,7 +464,7 @@ func main() {
 	// the /api/v1/webhooks management routes.
 	go webhookDispatcher.Run(eventHub)
 	defer webhookDispatcher.Stop()
-	router.WithUserWebhooks(userWebhookRepo, webhookDispatcher)
+	router.WithUserWebhooks(userWebhookRepo, webhookDeliveryRepo, webhookDispatcher)
 	router.WithConnectorReload(reloadConnectors)
 
 	// Ingestion persistence worker — created before RegisterRoutes so the quarantine

@@ -1886,6 +1886,7 @@ export interface WebhookTestResult {
   error: string;
 }
 
+
 // webhookFromProto maps the gRPC Webhook (camelCase) to the snake_case
 // UserWebhook the UI uses. lastDeliveredAt is "" on the wire → null.
 function webhookFromProto(w: {
@@ -1935,6 +1936,15 @@ function webhookInputToProto(input: WebhookInput) {
     events: input.events,
     vendors: input.vendors,
   };
+
+// WebhookDelivery is one logged delivery attempt (final outcome after retries).
+export interface WebhookDelivery {
+  id: string;
+  event: string;
+  status_code: number;
+  error: string;
+  attempts: number;
+  delivered_at: string;
 }
 
 export async function fetchWebhooks(): Promise<UserWebhook[]> {
@@ -1986,4 +1996,30 @@ export async function deleteWebhook(id: string): Promise<void> {
 export async function testUserWebhook(id: string): Promise<WebhookTestResult> {
   const res = await webhookClient.testWebhook({ id });
   return { ok: res.ok, status_code: res.statusCode, error: res.error };
+}
+
+export async function fetchWebhookDeliveries(
+  webhookId: string,
+  offset = 0,
+): Promise<WebhookDelivery[]> {
+  const res = await fetch(
+    `${BASE_URL}/api/v1/webhooks/${webhookId}/deliveries?offset=${offset}`,
+  );
+  if (!res.ok) return [];
+  return res.json();
+}
+
+export async function resendWebhookDelivery(
+  webhookId: string,
+  deliveryId: string,
+): Promise<WebhookTestResult> {
+  const res = await fetch(
+    `${BASE_URL}/api/v1/webhooks/${webhookId}/deliveries/${deliveryId}/resend`,
+    { method: "POST" },
+  );
+  if (!res.ok) {
+    const err: ErrorResponse = await res.json();
+    throw err;
+  }
+  return res.json();
 }

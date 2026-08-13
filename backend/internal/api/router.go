@@ -53,36 +53,37 @@ func newLoginRateLimiter() echo.MiddlewareFunc {
 }
 
 type RouterConfig struct {
-	e                  *echo.Echo
-	gormDB             *gorm.DB
-	authProvider       auth.Provider
-	bridge             export.Converter
-	keycloakAdmin      *auth.KeycloakAdminClient
-	checker            *auth.PermissionChecker
-	userRepo           *repository.UserRepo
-	activeModules      []module.Module
-	dicomStatus        handlers.DICOMStatus
-	ftpStatus          handlers.FTPStatus
-	ectpStatus         handlers.ECTPStatus
-	exportRepo         *repository.ExportJobRepository
-	exportPool         *export.WorkerPool
-	connCheckers       []handlers.ConnectorHealthChecker
-	hl7Client          *hl7.Client                       // nil when HL7 is disabled
-	hl7Enricher        handlers.HL7Enricher              // nil when HL7 is disabled
-	hl7Scheduler       handlers.HL7SchedulerStatus       // nil when HL7 is disabled
-	hl7SettingsRepo    *repository.HL7SettingsRepository // nil when HL7 is disabled
-	cfg                *config.Config
-	authEncKey         string // encryption key for auth provider configs
-	moduleConfigRepo   *repository.ModuleConfigRepository
-	moduleSettingsRepo *repository.ModuleSettingsRepository
-	ftpQueue           ingestion.IngestQueue
-	ingestRouter       *ingestion.Router                 // for hot module reload
-	persister          *ingestion.Persister              // for re-ingesting assigned unidentified ECGs; nil disables the assign route
-	eventHub           *events.Hub                       // realtime ingestion event hub; nil disables the events WS route
-	userWebhookRepo    *repository.UserWebhookRepository // per-user webhooks; nil disables the /webhooks routes
-	webhookDispatcher  *webhook.Dispatcher               // delivers user webhooks; required by the test route
-	connectorReload    func()                            // rebuilds the outbound connector runtime from DB after a config change
-	oruService         handlers.ORUSender                // outbound HL7 ORU result-sender; nil disables the send-result route
+	e                   *echo.Echo
+	gormDB              *gorm.DB
+	authProvider        auth.Provider
+	bridge              export.Converter
+	keycloakAdmin       *auth.KeycloakAdminClient
+	checker             *auth.PermissionChecker
+	userRepo            *repository.UserRepo
+	activeModules       []module.Module
+	dicomStatus         handlers.DICOMStatus
+	ftpStatus           handlers.FTPStatus
+	ectpStatus          handlers.ECTPStatus
+	exportRepo          *repository.ExportJobRepository
+	exportPool          *export.WorkerPool
+	connCheckers        []handlers.ConnectorHealthChecker
+	hl7Client           *hl7.Client                       // nil when HL7 is disabled
+	hl7Enricher         handlers.HL7Enricher              // nil when HL7 is disabled
+	hl7Scheduler        handlers.HL7SchedulerStatus       // nil when HL7 is disabled
+	hl7SettingsRepo     *repository.HL7SettingsRepository // nil when HL7 is disabled
+	cfg                 *config.Config
+	authEncKey          string // encryption key for auth provider configs
+	moduleConfigRepo    *repository.ModuleConfigRepository
+	moduleSettingsRepo  *repository.ModuleSettingsRepository
+	ftpQueue            ingestion.IngestQueue
+	ingestRouter        *ingestion.Router                     // for hot module reload
+	persister           *ingestion.Persister                  // for re-ingesting assigned unidentified ECGs; nil disables the assign route
+	eventHub            *events.Hub                           // realtime ingestion event hub; nil disables the events WS route
+	userWebhookRepo     *repository.UserWebhookRepository     // per-user webhooks; nil disables the /webhooks routes
+	webhookDeliveryRepo *repository.WebhookDeliveryRepository // delivery history; nil disables the /deliveries routes
+	webhookDispatcher   *webhook.Dispatcher                   // delivers user webhooks; required by the test/resend routes
+	connectorReload     func()                                // rebuilds the outbound connector runtime from DB after a config change
+	oruService          handlers.ORUSender                    // outbound HL7 ORU result-sender; nil disables the send-result route
 }
 
 // WithConnectorReload attaches the callback that rebuilds the outbound PACS
@@ -94,11 +95,12 @@ func (r *RouterConfig) WithConnectorReload(reload func()) *RouterConfig {
 	return r
 }
 
-// WithUserWebhooks attaches the per-user webhook repository and dispatcher so
-// the /api/v1/webhooks routes can be registered. Must be called before
-// RegisterRoutes. Returns r for chaining.
-func (r *RouterConfig) WithUserWebhooks(repo *repository.UserWebhookRepository, d *webhook.Dispatcher) *RouterConfig {
+// WithUserWebhooks attaches the per-user webhook repository, delivery-history
+// repository and dispatcher so the /api/v1/webhooks routes can be registered.
+// Must be called before RegisterRoutes. Returns r for chaining.
+func (r *RouterConfig) WithUserWebhooks(repo *repository.UserWebhookRepository, deliveryRepo *repository.WebhookDeliveryRepository, d *webhook.Dispatcher) *RouterConfig {
 	r.userWebhookRepo = repo
+	r.webhookDeliveryRepo = deliveryRepo
 	r.webhookDispatcher = d
 	return r
 }
@@ -711,7 +713,24 @@ func (r *RouterConfig) RegisterRoutes() {
 
 	// User pins (favourites) are now served over gRPC by PinService (wired above).
 
+
 	// Per-user webhooks are now served over gRPC by WebhookService (wired above).
+
+	// Per-user outbound webhooks — requires webhook.manage. Each user manages
+	// only their own webhooks (repo scoping); secrets are stored encrypted.
+	if r.userWebhookRepo != nil && r.webhookDispatcher != nil {
+		apiV1.GET("/webhooks/options", handlers.WebhookOptionsHandler(r.ingestRouter), mw.RequirePermission(r.checker, auth.PermWebhookManage))
+		apiV1.GET("/webhooks", handlers.ListUserWebhooksHandler(r.userWebhookRepo), mw.RequirePermission(r.checker, auth.PermWebhookManage))
+		apiV1.POST("/webhooks", handlers.CreateUserWebhookHandler(r.userWebhookRepo, r.authEncKey, r.gormDB), mw.RequirePermission(r.checker, auth.PermWebhookManage))
+		apiV1.PUT("/webhooks/:id", handlers.UpdateUserWebhookHandler(r.userWebhookRepo, r.authEncKey, r.gormDB), mw.RequirePermission(r.checker, auth.PermWebhookManage))
+		apiV1.DELETE("/webhooks/:id", handlers.DeleteUserWebhookHandler(r.userWebhookRepo, r.gormDB), mw.RequirePermission(r.checker, auth.PermWebhookManage))
+		apiV1.POST("/webhooks/:id/test", handlers.TestUserWebhookHandler(r.userWebhookRepo, r.webhookDispatcher), mw.RequirePermission(r.checker, auth.PermWebhookManage))
+		if r.webhookDeliveryRepo != nil {
+			apiV1.GET("/webhooks/:id/deliveries", handlers.ListWebhookDeliveriesHandler(r.userWebhookRepo, r.webhookDeliveryRepo), mw.RequirePermission(r.checker, auth.PermWebhookManage))
+			apiV1.POST("/webhooks/:id/deliveries/:deliveryId/resend", handlers.ResendWebhookDeliveryHandler(r.userWebhookRepo, r.webhookDeliveryRepo, r.webhookDispatcher, r.gormDB), mw.RequirePermission(r.checker, auth.PermWebhookManage))
+		}
+	}
+
 
 	// Per-user API keys — requires apikey.manage: keys grant durable
 	// programmatic access, so handing them out is an explicit role decision.

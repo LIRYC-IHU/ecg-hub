@@ -76,7 +76,7 @@ func TestDeliver_SignatureAndHeaders(t *testing.T) {
 		t.Fatalf("encrypt: %v", err)
 	}
 
-	d := NewDispatcher(nil, nil, encKey, "http://hub.local")
+	d := NewDispatcher(nil, nil, nil, encKey, "http://hub.local")
 	hook := models.UserWebhook{
 		ID:                  "hook-1",
 		URL:                 srv.URL,
@@ -139,7 +139,7 @@ func TestDeliver_Non2xxIsError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	d := NewDispatcher(nil, nil, "k", "")
+	d := NewDispatcher(nil, nil, nil, "k", "")
 	status, err := d.Deliver(models.UserWebhook{URL: srv.URL}, Payload{Event: "test"})
 	if err == nil {
 		t.Fatal("want error for HTTP 502")
@@ -174,11 +174,11 @@ func TestWebhookDialControl_SSRF(t *testing.T) {
 	defer func() { allowLoopbackWebhookForTest = true }()
 
 	blocked := []string{
-		"127.0.0.1:80",        // loopback
-		"[::1]:443",           // IPv6 loopback
-		"169.254.169.254:80",  // cloud metadata (link-local)
-		"0.0.0.0:80",          // unspecified
-		"224.0.0.1:80",        // multicast
+		"127.0.0.1:80",       // loopback
+		"[::1]:443",          // IPv6 loopback
+		"169.254.169.254:80", // cloud metadata (link-local)
+		"0.0.0.0:80",         // unspecified
+		"224.0.0.1:80",       // multicast
 	}
 	for _, addr := range blocked {
 		if err := webhookDialControl("tcp", addr, nil); err == nil {
@@ -187,10 +187,10 @@ func TestWebhookDialControl_SSRF(t *testing.T) {
 	}
 
 	allowed := []string{
-		"8.8.8.8:443",      // public
-		"10.1.2.3:80",      // RFC1918 — legitimate internal research server
-		"192.168.1.10:80",  // RFC1918
-		"172.16.0.5:443",   // RFC1918
+		"8.8.8.8:443",     // public
+		"10.1.2.3:80",     // RFC1918 — legitimate internal research server
+		"192.168.1.10:80", // RFC1918
+		"172.16.0.5:443",  // RFC1918
 	}
 	for _, addr := range allowed {
 		if err := webhookDialControl("tcp", addr, nil); err != nil {
