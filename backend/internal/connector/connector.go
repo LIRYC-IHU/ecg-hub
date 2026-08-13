@@ -1,22 +1,15 @@
 // Package connector defines the unified Connector interface for ECG Hub outbound forwarding.
 //
 // A Connector forwards a persisted ECG file to an external PACS system.
-// The pattern mirrors internal/module — each connector registers via init() and is
-// selected by name in config.yaml.
+// Connectors are built from DB config at startup and on hot reload
+// (see buildConnectorsFromDB in cmd/ecg-hub/main.go) — there is no registry.
 //
-// To add a new connector:
-//  1. Create internal/connector/<name>/connector.go
-//  2. Implement the Connector interface
-//  3. Register via init(): connector.Register(&<Name>Connector{})
-//  4. Import in cmd/ecg-hub/main.go: _ "github.com/LIRYC-IHU/ecg-hub/internal/connector/<name>"
-//  5. Add the connector name to pacs.connectors[].name in config.yaml
+// To add a new connector: create internal/connector/<name>/connector.go,
+// implement the Connector interface, and construct it in buildConnectorsFromDB.
 package connector
 
 import (
 	"context"
-	"fmt"
-	"log/slog"
-	"sync"
 
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 )
@@ -49,54 +42,4 @@ type Connector interface {
 	// Called at startup and exposed via GET /api/v1/health.
 	// Return nil when reachable, a descriptive error otherwise.
 	Health() error
-}
-
-var (
-	mu       sync.RWMutex
-	registry = make(map[string]Connector)
-)
-
-// Register adds c to the global connector registry.
-// Panics on duplicate names — caught at startup, not at runtime.
-func Register(c Connector) {
-	mu.Lock()
-	defer mu.Unlock()
-	if _, exists := registry[c.Name()]; exists {
-		panic(fmt.Sprintf("connector %q already registered", c.Name()))
-	}
-	registry[c.Name()] = c
-}
-
-// Get retrieves a registered connector by name.
-// Returns (connector, true) if found, (nil, false) otherwise.
-func Get(name string) (Connector, bool) {
-	mu.RLock()
-	defer mu.RUnlock()
-	c, ok := registry[name]
-	return c, ok
-}
-
-// Active returns connectors whose names appear in the given list, in order.
-// Unknown names are skipped with a warning — allows config to list a connector
-// not yet compiled in (e.g. during a rolling deploy).
-// If names is empty, returns all registered connectors.
-func Active(names []string) []Connector {
-	mu.RLock()
-	defer mu.RUnlock()
-	if len(names) == 0 {
-		out := make([]Connector, 0, len(registry))
-		for _, c := range registry {
-			out = append(out, c)
-		}
-		return out
-	}
-	out := make([]Connector, 0, len(names))
-	for _, name := range names {
-		if c, ok := registry[name]; ok {
-			out = append(out, c)
-		} else {
-			slog.Warn("connector: configured connector not registered — skipping", "name", name)
-		}
-	}
-	return out
 }

@@ -1,0 +1,207 @@
+syntax = "proto3";
+package grpc.api.v1;
+
+// HL7AdminService groups the admin HL7 configuration endpoints of "étape 10":
+// mapping presets CRUD, active mappings, connectivity test (QRY^A19) + ping,
+// scheduler/connection/ORU settings, and the manual run / bulk-retry actions.
+// Most RPCs require hl7.config; GetActiveMappings requires patient.read and
+// BulkRetry requires hl7.bulk_retry (enforced per procedure in the router).
+
+// ---- Mapping presets -------------------------------------------------------
+
+message HL7Mapping {
+  string id = 1;
+  string preset_id = 2;
+  string source_path = 3;
+  string target_field = 4;
+}
+
+// HL7MappingInput is a mapping supplied by the client on create/save (no ids).
+message HL7MappingInput {
+  string source_path = 1;
+  string target_field = 2;
+}
+
+message HL7Preset {
+  string id = 1;
+  string name = 2;
+  bool active = 3;
+  string created_at = 4; // RFC3339
+  repeated HL7Mapping mappings = 5;
+}
+
+message ListHL7PresetsRequest {}
+
+message ListHL7PresetsResponse {
+  repeated HL7Preset presets = 1;
+}
+
+message CreateHL7PresetRequest {
+  string name = 1;
+  repeated HL7MappingInput mappings = 2;
+}
+
+message CreateHL7PresetResponse {
+  HL7Preset preset = 1;
+}
+
+message ActivateHL7PresetRequest {
+  string id = 1;
+}
+
+message ActivateHL7PresetResponse {}
+
+message DeleteHL7PresetRequest {
+  string id = 1;
+}
+
+message DeleteHL7PresetResponse {}
+
+message SaveHL7PresetMappingsRequest {
+  string id = 1;
+  repeated HL7MappingInput mappings = 2;
+}
+
+message SaveHL7PresetMappingsResponse {
+  repeated HL7Mapping mappings = 1;
+}
+
+message GetActiveHL7MappingsRequest {}
+
+message GetActiveHL7MappingsResponse {
+  repeated HL7Mapping data = 1;
+  bool active = 2;
+}
+
+// ---- Connectivity test + ping ----------------------------------------------
+
+message HL7Demographics {
+  string last_name = 1;
+  string first_name = 2;
+  string date_of_birth = 3;
+  string gender = 4;
+  string source = 5;
+}
+
+message HL7TestQueryRequest {
+  string patient_id = 1;
+}
+
+message HL7TestQueryResponse {
+  bool success = 1;
+  string patient_id = 2;
+  string duration = 3;
+  string error = 4;
+  string raw = 5;
+  string tree_json = 6; // JSON-encoded []SegmentNode (recursive; parsed client-side)
+  string msa_code = 7;
+  string msa_message = 8;
+  HL7Demographics demographics = 9;
+}
+
+message HL7PingRequest {}
+
+message HL7PingResponse {
+  bool success = 1;
+  string host = 2;
+  string latency = 3;
+  string error = 4;
+}
+
+// ---- Scheduler / connection / ORU settings ---------------------------------
+
+message HL7Settings {
+  string id = 1;
+  string trigger_mode = 2; // "immediate" | "scheduled"
+  string cron_expression = 3;
+  int32 max_retries = 4;
+  string timeout = 5;
+  bool enabled = 6;
+  bool hl7_enabled = 7;
+  string updated_at = 8;
+  string last_run = 9;  // empty when never run
+  string next_run = 10; // empty when scheduler disabled
+  // Connection
+  string host = 11;
+  int32 port = 12;
+  string sending_application = 13;
+  string sending_facility = 14;
+  string receiving_application = 15;
+  string receiving_facility = 16;
+  string version = 17;
+  string processing_id = 18;
+  // Outbound ORU
+  bool oru_enabled = 19;
+  string oru_trigger_mode = 20; // "auto" | "manual"
+  string oru_host = 21;
+  int32 oru_port = 22;
+  bool oru_include_pdf = 23;
+}
+
+message GetHL7SettingsRequest {}
+
+message GetHL7SettingsResponse {
+  HL7Settings settings = 1;
+}
+
+// UpdateHL7SettingsRequest uses proto3 `optional` on every field so only the
+// fields the client actually sets are applied (mirrors the pointer-based REST
+// PATCH semantics).
+message UpdateHL7SettingsRequest {
+  optional bool hl7_enabled = 1;
+  optional string trigger_mode = 2;
+  optional string cron_expression = 3;
+  optional int32 max_retries = 4;
+  optional string timeout = 5;
+  optional bool enabled = 6;
+  optional string host = 7;
+  optional int32 port = 8;
+  optional string sending_application = 9;
+  optional string sending_facility = 10;
+  optional string receiving_application = 11;
+  optional string receiving_facility = 12;
+  optional string version = 13;
+  optional string processing_id = 14;
+  optional bool oru_enabled = 15;
+  optional string oru_trigger_mode = 16;
+  optional string oru_host = 17;
+  optional int32 oru_port = 18;
+  optional bool oru_include_pdf = 19;
+}
+
+message UpdateHL7SettingsResponse {
+  HL7Settings settings = 1;
+}
+
+// ---- Manual run + bulk retry -----------------------------------------------
+
+message ForceHL7RunRequest {}
+
+message ForceHL7RunResponse {
+  string message = 1;
+}
+
+message BulkRetryHL7Request {}
+
+message BulkRetryHL7Response {
+  int64 count = 1;
+  string message = 2;
+}
+
+service HL7AdminService {
+  rpc ListPresets(ListHL7PresetsRequest) returns (ListHL7PresetsResponse) {}
+  rpc CreatePreset(CreateHL7PresetRequest) returns (CreateHL7PresetResponse) {}
+  rpc ActivatePreset(ActivateHL7PresetRequest) returns (ActivateHL7PresetResponse) {}
+  rpc DeletePreset(DeleteHL7PresetRequest) returns (DeleteHL7PresetResponse) {}
+  rpc SavePresetMappings(SaveHL7PresetMappingsRequest) returns (SaveHL7PresetMappingsResponse) {}
+  rpc GetActiveMappings(GetActiveHL7MappingsRequest) returns (GetActiveHL7MappingsResponse) {}
+
+  rpc TestQuery(HL7TestQueryRequest) returns (HL7TestQueryResponse) {}
+  rpc Ping(HL7PingRequest) returns (HL7PingResponse) {}
+
+  rpc GetSettings(GetHL7SettingsRequest) returns (GetHL7SettingsResponse) {}
+  rpc UpdateSettings(UpdateHL7SettingsRequest) returns (UpdateHL7SettingsResponse) {}
+
+  rpc ForceRun(ForceHL7RunRequest) returns (ForceHL7RunResponse) {}
+  rpc BulkRetry(BulkRetryHL7Request) returns (BulkRetryHL7Response) {}
+}

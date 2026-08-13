@@ -89,3 +89,57 @@ func (r *TagRepository) ListECGTags(ecgID string) ([]models.Tag, error) {
 		Find(&tags).Error
 	return tags, err
 }
+
+// ListPatientTagsBatch resolves tags for many patients in a single query,
+// returned grouped by patient_id (patients with no tags are simply absent).
+func (r *TagRepository) ListPatientTagsBatch(patientIDs []string) (map[string][]models.Tag, error) {
+	out := map[string][]models.Tag{}
+	if len(patientIDs) == 0 {
+		return out, nil
+	}
+	type row struct {
+		PatientID string `gorm:"column:patient_id"`
+		models.Tag
+	}
+	var rows []row
+	err := r.db.Table("tags").
+		Select("patient_tags.patient_id AS patient_id, tags.*").
+		Joins("JOIN patient_tags ON patient_tags.tag_id = tags.id").
+		Where("patient_tags.patient_id IN ?", patientIDs).
+		Order("patient_tags.patient_id, tags.name ASC").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	for _, rw := range rows {
+		out[rw.PatientID] = append(out[rw.PatientID], rw.Tag)
+	}
+	return out, nil
+}
+
+// ListECGTagsBatch resolves tags for many ECGs in a single query, returned
+// grouped by ecg_id (ECGs with no tags are simply absent).
+func (r *TagRepository) ListECGTagsBatch(ecgIDs []string) (map[string][]models.Tag, error) {
+	out := map[string][]models.Tag{}
+	if len(ecgIDs) == 0 {
+		return out, nil
+	}
+	type row struct {
+		ECGID string `gorm:"column:ecg_id"`
+		models.Tag
+	}
+	var rows []row
+	err := r.db.Table("tags").
+		Select("ecg_tags.ecg_id AS ecg_id, tags.*").
+		Joins("JOIN ecg_tags ON ecg_tags.tag_id = tags.id").
+		Where("ecg_tags.ecg_id IN ?", ecgIDs).
+		Order("ecg_tags.ecg_id, tags.name ASC").
+		Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	for _, rw := range rows {
+		out[rw.ECGID] = append(out[rw.ECGID], rw.Tag)
+	}
+	return out, nil
+}

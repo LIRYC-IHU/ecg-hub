@@ -2,8 +2,9 @@ import { useEffect, useRef } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { useNotification } from "../context/NotificationContext";
+import { eventClient } from "../lib/grpc";
 
-// IngestionEvent mirrors the backend events.Event JSON payload.
+// IngestionEvent mirrors the gRPC Event message (snake_case app view).
 interface IngestionEvent {
   type: "ecg.ingested" | "ecg.unidentified" | "ecg.quarantined" | "ecg.duplicate";
   ecg_id?: string;
@@ -15,13 +16,15 @@ interface IngestionEvent {
   at?: string;
 }
 
-// useIngestionEvents keeps a single WebSocket to /api/v1/events/ws open while
-// enabled. On each ingestion event it refreshes the relevant react-query caches
-// (so mounted lists update without polling) and raises a notification:
+// useIngestionEvents keeps a single gRPC server-stream (EventService.Subscribe)
+// open while enabled. On each ingestion event it refreshes the relevant
+// react-query caches (so mounted lists update without polling) and raises a
+// notification:
 //   - valid ECG  → green, links to the patient/ECG that just arrived
 //   - unidentified / quarantined → orange, links to the quarantine review queue
 //
-// The WebSocket authenticates via the HttpOnly "jwt" cookie (sent automatically).
+// The stream authenticates via the HttpOnly "jwt" cookie (sent automatically by
+// the Connect transport's credentials:"include").
 export function useIngestionEvents(enabled: boolean): void {
   const queryClient = useQueryClient();
   const { notify } = useNotification();
@@ -35,12 +38,12 @@ export function useIngestionEvents(enabled: boolean): void {
   useEffect(() => {
     if (!enabled) return;
 
-    let ws: WebSocket | null = null;
+    const abort = new AbortController();
     let cancelled = false;
-    let retries = 0;
-    let retryTimer: ReturnType<typeof setTimeout> | undefined;
 
     function handle(ev: IngestionEvent) {
+      // keepalive frames only keep proxies from idling the stream out — ignore.
+      if ((ev.type as string) === "keepalive") return;
       const { queryClient, notify, t } = handlersRef.current;
       // The patients list refreshes for every event (a new ECG may add a patient
       // or change counts). invalidate is cheap when the query isn't mounted.
@@ -94,37 +97,43 @@ export function useIngestionEvents(enabled: boolean): void {
       }
     }
 
-    function connect() {
-      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      ws = new WebSocket(
-        `${protocol}//${window.location.host}/api/v1/events/ws`,
-      );
-
-      ws.onopen = () => {
-        retries = 0;
-      };
-      ws.onmessage = (e) => {
+    // Consume the server-stream with exponential-backoff reconnection. A clean
+    // stream end (proxy idle timeout, server restart) simply reconnects; an
+    // AbortError from unmount stops the loop.
+    async function run() {
+      let retries = 0;
+      while (!cancelled) {
         try {
-          handle(JSON.parse(e.data as string) as IngestionEvent);
+          for await (const ev of eventClient.subscribe(
+            {},
+            { signal: abort.signal },
+          )) {
+            retries = 0;
+            handle({
+              type: ev.type as IngestionEvent["type"],
+              ecg_id: ev.ecgId,
+              patient_id: ev.patientId,
+              quarantine_id: ev.quarantineId,
+              vendor: ev.vendor,
+              filename: ev.filename,
+              reason: ev.reason,
+              at: ev.at,
+            });
+          }
         } catch {
-          // ignore malformed frames
+          // fall through to reconnect (AbortError is filtered by `cancelled`)
         }
-      };
-      ws.onclose = (e) => {
-        if (cancelled || e.code === 1000) return;
-        if (retries < 6) {
-          const delay = Math.min(Math.pow(2, retries) * 1000, 15000);
-          retries++;
-          retryTimer = setTimeout(connect, delay);
-        }
-      };
+        if (cancelled) break;
+        const delay = Math.min(Math.pow(2, retries) * 1000, 15000);
+        retries = Math.min(retries + 1, 6);
+        await new Promise((r) => setTimeout(r, delay));
+      }
     }
 
-    connect();
+    void run();
     return () => {
       cancelled = true;
-      if (retryTimer) clearTimeout(retryTimer);
-      ws?.close(1000, "unmount");
+      abort.abort();
     };
   }, [enabled]);
 }

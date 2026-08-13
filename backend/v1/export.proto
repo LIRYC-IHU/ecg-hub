@@ -1,0 +1,74 @@
+syntax = "proto3";
+package grpc.api.v1;
+
+// Export service. Job creation/formats/status over unary RPCs + server-streaming
+// progress (replaces the /exports/:id/ws WebSocket). Only the ZIP download stays
+// REST (binary GET /exports/:id/download).
+
+message WatchProgressRequest {
+  string job_id = 1;
+}
+
+// ExportProgress mirrors the former WebSocket exportProgressEvent payload.
+message ExportProgress {
+  string status = 1;          // job status ("pending"|"running"|"complete"|"failed"…)
+  int32 processed_count = 2;
+  int32 ecg_count = 3;
+  int32 percent = 4;
+  string download_url = 5;    // set once complete
+  string error = 6;           // set once failed
+}
+
+// CreateExportRequest enqueues a batch export job. anonymize/inject control
+// patient data in converted outputs and are mutually exclusive.
+message CreateExportRequest {
+  repeated string ecg_ids = 1; // 1..500
+  repeated string formats = 2; // e.g. "original","xmlfda","dicom"
+  bool anonymize = 3;
+  bool inject = 4;
+}
+
+message ExportJob {
+  string id = 1;
+  string status = 2;
+  int32 ecg_count = 3;
+  int32 processed_count = 4;
+  repeated string formats = 5;
+  string created_at = 6;       // ISO 8601 UTC
+  string download_url = 7;
+  string error = 8;            // set when failed
+}
+
+message CreateExportResponse {
+  ExportJob job = 1;
+}
+
+// FormatMeta is one available export format with UI metadata.
+message FormatMeta {
+  string id = 1;
+  string label = 2;
+  string extension = 3;
+}
+
+message ExportFormatsRequest {
+  repeated string ecg_ids = 1;
+}
+
+message ExportFormatsResponse {
+  repeated FormatMeta formats = 1;
+}
+
+message GetExportRequest {
+  string id = 1;
+}
+
+message GetExportResponse {
+  ExportJob job = 1;
+}
+
+service ExportService {
+  rpc Create(CreateExportRequest) returns (CreateExportResponse) {}
+  rpc Formats(ExportFormatsRequest) returns (ExportFormatsResponse) {}
+  rpc Get(GetExportRequest) returns (GetExportResponse) {}
+  rpc WatchProgress(WatchProgressRequest) returns (stream ExportProgress) {}
+}

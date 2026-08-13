@@ -1,53 +1,4 @@
 basePath: /api/v1
-definitions:
-  handlers.ConnectorHealthEntry:
-    properties:
-      ae_title:
-        type: string
-      host:
-        type: string
-      name:
-        type: string
-      port:
-        type: integer
-      protocol:
-        type: string
-      status:
-        description: '"ok" or error message'
-        type: string
-    type: object
-  handlers.HealthResponse:
-    properties:
-      connectors:
-        description: outbound PACS connectors (empty when none configured)
-        items:
-          $ref: '#/definitions/handlers.ConnectorHealthEntry'
-        type: array
-      database:
-        description: '"ok" or "error"'
-        type: string
-      dicom_enabled:
-        description: 'true when dicom.enabled: true in config'
-        type: boolean
-      dicom_port:
-        description: configured port (0 when disabled)
-        type: integer
-      ectp_enabled:
-        description: true when nihon-kohden module is active
-        type: boolean
-      ectp_port:
-        description: ECTP TCP port (0 when disabled)
-        type: integer
-      ftp_enabled:
-        description: 'true when ftp.enabled: true in config'
-        type: boolean
-      ftp_port:
-        description: configured port (0 when disabled)
-        type: integer
-      status:
-        description: '"ok" or "degraded"'
-        type: string
-    type: object
 host: localhost
 info:
   contact:
@@ -117,28 +68,7 @@ paths:
       summary: List all ECGs (cross-patient timeline)
       tags:
       - ECG
-  /api/v1/ecgs/{id}:
-    delete:
-      parameters:
-      - description: ECG UUID
-        in: path
-        name: id
-        required: true
-        type: string
-      responses:
-        "204":
-          description: No Content
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      security:
-      - BearerAuth: []
-      summary: Delete ECG
-      tags:
-      - ECG
+      - Research
   /api/v1/ecgs/{id}/download:
     get:
       parameters:
@@ -204,34 +134,7 @@ paths:
       summary: Download ECG file
       tags:
       - ECG
-  /api/v1/ecgs/{id}/hl7/force:
-    post:
-      parameters:
-      - description: ECG UUID
-        in: path
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      security:
-      - BearerAuth: []
-      summary: Force HL7 retry for an ECG
-      tags:
-      - ECG
+      - Research
   /api/v1/ecgs/{id}/metadata:
     get:
       parameters:
@@ -260,78 +163,7 @@ paths:
       summary: Get ECG metadata
       tags:
       - ECG
-    patch:
-      consumes:
-      - application/json
-      parameters:
-      - description: ECG UUID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: Metadata fields to update
-        in: body
-        name: body
-        required: true
-        schema:
-          additionalProperties: true
-          type: object
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: Not Found
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      security:
-      - BearerAuth: []
-      summary: Update ECG metadata
-      tags:
-      - ECG
-  /api/v1/ecgs/{id}/view:
-    post:
-      description: Stamps viewed_at on first view; clears the "new" indicator. Idempotent.
-      parameters:
-      - description: ECG UUID
-        in: path
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-      - BearerAuth: []
-      summary: Mark an ECG as viewed
-      tags:
-      - ECG
-  /api/v1/ecgs/filters:
-    get:
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-      - BearerAuth: []
-      summary: Get filter facets (vendors, device models, file formats)
-      tags:
-      - ECG
+      - Research
   /api/v1/patients:
     get:
       parameters:
@@ -406,6 +238,7 @@ paths:
       summary: Search patients
       tags:
       - Patients
+      - Research
   /api/v1/patients/{id}/ecgs:
     get:
       parameters:
@@ -464,29 +297,7 @@ paths:
       summary: List ECGs for a patient
       tags:
       - Patients
-  /api/v1/patients/{id}/ecgs/view:
-    post:
-      description: Marks every unviewed ECG of the patient as viewed and returns how
-        many were updated.
-      parameters:
-      - description: Patient business ID (patient_id)
-        in: path
-        name: id
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            additionalProperties: true
-            type: object
-      security:
-      - BearerAuth: []
-      summary: Mark all of a patient's ECGs as viewed
-      tags:
-      - Patients
+      - Research
   /api/v1/uploads:
     post:
       consumes:
@@ -517,24 +328,7 @@ paths:
       summary: Upload ECG files manually (offline/isolated devices)
       tags:
       - uploads
-  /healthz:
-    get:
-      description: Returns system health including database connectivity, FTP and
-        DICOM server status
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/handlers.HealthResponse'
-        "503":
-          description: Service Unavailable
-          schema:
-            $ref: '#/definitions/handlers.HealthResponse'
-      summary: Health check
-      tags:
-      - health
+      - Research
 securityDefinitions:
   ApiKeyAuth:
     description: Per-user API key ("ecghub_…") created from the API Keys page. Inherits

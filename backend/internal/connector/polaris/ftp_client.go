@@ -19,7 +19,7 @@ import (
 //
 // PWD and EPSV are intentionally omitted — Polaris returns 502 for both.
 func Upload(host string, port int, user, pass, filename string, r io.Reader, timeout time.Duration) (int64, error) {
-	addr := fmt.Sprintf("%s:%d", host, port)
+	addr := net.JoinHostPort(host, strconv.Itoa(port))
 	ctrl, err := net.DialTimeout("tcp", addr, timeout)
 	if err != nil {
 		return 0, fmt.Errorf("ftp: dial control %s: %w", addr, err)
@@ -74,7 +74,7 @@ func Upload(host string, port int, user, pass, filename string, r io.Reader, tim
 	}
 
 	// Open data connection before sending STOR.
-	dataAddr := fmt.Sprintf("%s:%d", dataHost, dataPort)
+	dataAddr := net.JoinHostPort(dataHost, strconv.Itoa(dataPort))
 	data, err := net.DialTimeout("tcp", dataAddr, timeout)
 	if err != nil {
 		return 0, fmt.Errorf("ftp: dial data %s: %w", dataAddr, err)

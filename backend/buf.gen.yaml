@@ -1,0 +1,24 @@
+version: v2
+plugins:
+  - local: [go, tool, protoc-gen-go]
+    out: internal/api
+    opt: paths=source_relative
+  - local: [go, tool, protoc-gen-connect-go]
+    out: internal/api
+    opt:
+      - paths=source_relative
+      - simple
+  # TypeScript for the frontend (connect-web). protoc-gen-es v2 emits both the
+  # message types and the service descriptor consumed by createClient().
+  - local: ../frontend/node_modules/.bin/protoc-gen-es
+    out: ../frontend/src/gen
+    opt: target=ts
+managed:
+  enabled: true
+  override:
+    - file_option: go_package_prefix
+      value: github.com/LIRYC-IHU/ecg-hub/internal/api
+
+  disable:
+    - file_option: go_package
+      module: buf.build/bufbuild/protovalidate

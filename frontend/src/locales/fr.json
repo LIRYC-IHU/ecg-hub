@@ -4,23 +4,8 @@
     "noResults": "Aucun patient trouvé",
     "loading": "Recherche en cours…"
   },
-  "sort": {
-    "newest": "Plus récents",
-    "oldest": "Plus anciens",
-    "nameAZ": "Nom A → Z",
-    "nameZA": "Nom Z → A",
-    "idAsc": "ID croissant",
-    "idDesc": "ID décroissant"
-  },
   "patient": {
-    "notFound": "Patient introuvable",
     "ecgs": "ECGs",
-    "expandAll": "Tout ouvrir",
-    "collapseAll": "Tout fermer",
-    "colName": "Nom",
-    "colId": "Identifiant",
-    "colEcgs": "ECGs",
-    "colLastActivity": "Dernière activité",
     "pin": "Épingler",
     "unpin": "Désépingler",
     "pinned": "Épinglés",
@@ -41,7 +26,6 @@
     "hl7NoHistory": "Aucune tentative HL7",
     "hl7ForceError": "Erreur lors de la relance HL7",
     "history": "Historique",
-    "downloadAll": "Tout télécharger",
     "totalEcgs": "Total ECGs",
     "lastExam": "Dernier examen",
     "hl7Sent": "Envoyés HL7",
@@ -73,14 +57,11 @@
     "deleteError": "Erreur lors de la suppression",
     "open": "Ouvrir",
     "new": "Nouveau",
-    "downloadOriginal": "Format original",
     "downloadError": "Erreur lors du téléchargement",
-    "downloadXmlfda": "Format XMLFDA",
     "downloadFormatsTitle": "Formats à télécharger",
     "vendor": "Vendeur",
     "date": "Date",
     "hl7Status": "Statut HL7",
-    "hl7Retry": "Renvoyer HL7",
     "status": {
       "pending": "En attente",
       "success": "Envoyé",
@@ -94,18 +75,12 @@
       "saved": "Métadonnées enregistrées",
       "saveError": "Erreur lors de l'enregistrement",
       "loading": "Chargement…",
-      "noWrite": "Lecture seule",
       "fields": {
         "recorded_at": "Date d'enregistrement",
         "last_name": "Nom",
         "first_name": "Prénom",
         "sex": "Sexe",
-        "device_model": "Modèle appareil",
-        "lead_count": "Dérivations",
-        "duration_seconds": "Durée (s)",
-        "sample_rate": "Fréquence (Hz)",
-        "document_type": "Type document",
-        "document_version": "Version document"
+        "device_model": "Modèle appareil"
       }
     },
     "patientData": {
@@ -121,11 +96,7 @@
   "export": {
     "selected": "{{count}} ECG sélectionné",
     "selected_other": "{{count}} ECGs sélectionnés",
-    "clearSelection": "Tout désélectionner",
-    "exportZip": "Exporter en ZIP",
     "exporting": "Export…",
-    "jobStarted": "Export lancé — {{count}} ECG(s) en cours de traitement",
-    "jobError": "Échec du lancement de l'export",
     "preparing": "Préparation…",
     "progress": "{{percent}}% en cours",
     "done": "Télécharger le ZIP",
@@ -176,7 +147,6 @@
       "assignNewHint": "La démographie (nom, date de naissance…) sera complétée automatiquement via l'enrichissement HL7 depuis le HIS. Vérifiez que l'identifiant correspond bien au patient dans le HIS.",
       "assignNewConfirm": "Créer et assigner",
       "assignChange": "Changer",
-      "patientIdPlaceholder": "Identifiant patient (Patient ID)",
       "assignConfirm": "Confirmer l'assignation",
       "assigned": "ECG assigné et réingéré",
       "assignError": "Erreur lors de l'assignation"
@@ -218,12 +188,7 @@
         "test": "Tester",
         "testing": "Test…",
         "secret": "Secret",
-        "secretConfigured": "Configuré",
-        "secretMissing": "Manquant",
-        "lastTest": "Dernier test :",
-        "urlCopied": "URL copiée",
         "testOk": "Webhook OK — HTTP {{code}}",
-        "testWarn": "Webhook — réponse HTTP {{code}}",
         "testError": "Webhook — impossible de joindre le serveur distant",
         "moved": "Les webhooks se configurent désormais par utilisateur (événements, filtres, secret HMAC) — les serveurs de recherche reçoivent les événements ECG et rappellent l'API pour récupérer les données.",
         "open": "Ouvrir la configuration des webhooks"
@@ -289,7 +254,6 @@
         "rawData": "Réponse HL7 brute",
         "noResult": "Entrez un identifiant patient et cliquez Envoyer pour tester la connexion HL7.",
         "mappingTitle": "Mapping des champs",
-        "saveMapping": "Sauvegarder",
         "updateMapping": "Mettre à jour",
         "saveAsNew": "Nouveau preset",
         "mappingSaved": "Mapping sauvegardé",
@@ -360,7 +324,6 @@
       "filterUser": "Filtrer par utilisateur…",
       "allActions": "Toutes les actions",
       "entries": "entrées",
-      "exportCSV": "Exporter CSV",
       "exportJSON": "Exporter JSON",
       "exportTitle": "Export JSON",
       "exportFormat": "Format",
@@ -397,7 +360,6 @@
       "newRole": "Nouveau rôle",
       "namePlaceholder": "Nom du rôle (ex: infirmière)",
       "descPlaceholder": "Description",
-      "noRoles": "Aucun rôle",
       "selectRole": "Sélectionner un rôle",
       "saved": "Permissions enregistrées",
       "saveError": "Erreur lors de la sauvegarde",
@@ -578,6 +540,7 @@
     "deleted": "Clé supprimée",
     "deleteError": "Échec de la suppression",
     "confirmDelete": "Supprimer cette clé API ? Cette action est irréversible.",
+    "confirmDeleteNamed": "Supprimer la clé « {{name}} » ? Action irréversible ; tout client l'utilisant cessera de fonctionner.",
     "delete": "Supprimer",
     "empty": "Aucune clé API. Générez-en une ci-dessus.",
     "copyWarning": "Copiez cette clé maintenant : elle ne sera plus affichée par la suite.",
@@ -674,7 +637,6 @@
   "auth": {
     "login": "Connexion",
     "logout": "Déconnexion",
-    "unauthorized": "Accès non autorisé",
     "ssoLogin": "Se connecter avec SSO",
     "username": "Nom d'utilisateur",
     "password": "Mot de passe",
@@ -692,8 +654,7 @@
     "passwordTooShort": "Le mot de passe doit contenir au moins 8 caractères",
     "passwordNeedsDigit": "Le mot de passe doit contenir au moins 1 chiffre",
     "passwordMismatch": "Les mots de passe ne correspondent pas",
-    "success": "Compte administrateur créé. Veuillez vous connecter.",
-    "alreadyInitialized": "Le système est déjà initialisé"
+    "success": "Compte administrateur créé. Veuillez vous connecter."
   },
   "common": {
     "loading": "Chargement…",
@@ -706,7 +667,6 @@
     "clearAll": "Tout effacer",
     "selected": "{{count}} sélectionné",
     "selected_other": "{{count}} sélectionnés",
-    "exportStarted": "Export lancé ({{count}} ECGs)",
     "exportError": "Erreur lors de l'export"
   },
   "webhooks": {
@@ -741,6 +701,7 @@
     "deleted": "Webhook supprimé",
     "deleteError": "Échec de la suppression",
     "confirmDelete": "Supprimer ce webhook ?",
+    "confirmDeleteNamed": "Supprimer le webhook « {{name}} » ? Il cessera de recevoir des événements immédiatement.",
     "delete": "Supprimer",
     "edit": "Modifier",
     "test": "Envoyer un événement test",

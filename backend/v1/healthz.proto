@@ -1,0 +1,36 @@
+syntax = "proto3";
+package grpc.api.v1;
+
+// CheckHealthRequest carries no input — health is a server-side snapshot.
+message CheckHealthRequest {}
+
+// ConnectorHealthEntry mirrors handlers.ConnectorHealthEntry: one outbound
+// PACS connector's health state. Empty host/ae_title/protocol are omitted by
+// the JSON codec via proto3 default-value semantics.
+message ConnectorHealthEntry {
+  string name = 1;
+  string protocol = 2;
+  string status = 3; // "ok" or the error message
+  string host = 4;
+  int32 port = 5;
+  string ae_title = 6;
+}
+
+// CheckHealthResponse is the full health snapshot. Unauthenticated callers get
+// only status/database populated (the rest stays zero-valued); authenticated
+// callers get the runtime module + connector details.
+message CheckHealthResponse {
+  string status = 1;   // "ok" or "degraded"
+  string database = 2; // "ok" or "error"
+  bool dicom_enabled = 3;
+  int32 dicom_port = 4;
+  bool ftp_enabled = 5;
+  int32 ftp_port = 6;
+  bool ectp_enabled = 7;
+  int32 ectp_port = 8;
+  repeated ConnectorHealthEntry connectors = 9;
+}
+
+service HealthzService {
+  rpc CheckHealth(CheckHealthRequest) returns (CheckHealthResponse) {}
+}

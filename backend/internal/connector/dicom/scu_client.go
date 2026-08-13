@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net"
+	"strconv"
 	"time"
 
 	legacydicom "github.com/apaladiychuk/go-dicom"
@@ -60,7 +61,7 @@ func NewSCUClient(cfg connector.DICOMEndpoint) (*SCUClient, error) {
 }
 
 func (c *SCUClient) addr() string {
-	return fmt.Sprintf("%s:%d", c.host, c.port)
+	return net.JoinHostPort(c.host, strconv.Itoa(c.port))
 }
 
 // Echo sends a standards-compliant C-ECHO to the remote PACS.
@@ -219,7 +220,7 @@ func dicomWriteCEchoRQ(w io.Writer) error {
 
 	var cmdField [2]byte
 	binary.LittleEndian.PutUint16(cmdField[:], 0x0030) // C-ECHO-RQ
-	writeElem(0x0000, 0x0100, cmdField[:])              // CommandField
+	writeElem(0x0000, 0x0100, cmdField[:])             // CommandField
 
 	var msgID [2]byte
 	binary.LittleEndian.PutUint16(msgID[:], 1)
@@ -227,7 +228,7 @@ func dicomWriteCEchoRQ(w io.Writer) error {
 
 	var dataSetType [2]byte
 	binary.LittleEndian.PutUint16(dataSetType[:], 0x0101) // No data set
-	writeElem(0x0000, 0x0800, dataSetType[:])              // CommandDataSetType
+	writeElem(0x0000, 0x0800, dataSetType[:])             // CommandDataSetType
 
 	// Prepend GroupLength (0000,0000) = total length of remaining elements
 	var full bytes.Buffer
@@ -241,8 +242,8 @@ func dicomWriteCEchoRQ(w io.Writer) error {
 	// Wrap in P-DATA-TF PDV
 	pdvHeader := make([]byte, 6)
 	binary.BigEndian.PutUint32(pdvHeader[0:], uint32(full.Len()+2)) // PDV length
-	pdvHeader[4] = 0x01                                              // Presentation Context ID
-	pdvHeader[5] = 0x03                                              // Last fragment + command
+	pdvHeader[4] = 0x01                                             // Presentation Context ID
+	pdvHeader[5] = 0x03                                             // Last fragment + command
 
 	var pdu bytes.Buffer
 	pdu.WriteByte(0x04) // P-DATA-TF

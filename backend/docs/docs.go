@@ -32,7 +32,8 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "ECG"
+                    "ECG",
+                    "Research"
                 ],
                 "summary": "List all ECGs (cross-patient timeline)",
                 "parameters": [
@@ -109,67 +110,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/v1/ecgs/filters": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "ECG"
-                ],
-                "summary": "Get filter facets (vendors, device models, file formats)",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
-        "/api/v1/ecgs/{id}": {
-            "delete": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "tags": [
-                    "ECG"
-                ],
-                "summary": "Delete ECG",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "ECG UUID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "204": {
-                        "description": "No Content"
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
         "/api/v1/ecgs/{id}/download": {
             "get": {
                 "security": [
@@ -184,7 +124,8 @@ const docTemplate = `{
                     "application/octet-stream"
                 ],
                 "tags": [
-                    "ECG"
+                    "ECG",
+                    "Research"
                 ],
                 "summary": "Download ECG file",
                 "parameters": [
@@ -265,51 +206,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/v1/ecgs/{id}/hl7/force": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "ECG"
-                ],
-                "summary": "Force HL7 retry for an ECG",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "ECG UUID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
         "/api/v1/ecgs/{id}/metadata": {
             "get": {
                 "security": [
@@ -324,7 +220,8 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "ECG"
+                    "ECG",
+                    "Research"
                 ],
                 "summary": "Get ECG metadata",
                 "parameters": [
@@ -354,95 +251,6 @@ const docTemplate = `{
                         }
                     }
                 }
-            },
-            "patch": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "ECG"
-                ],
-                "summary": "Update ECG metadata",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "ECG UUID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Metadata fields to update",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/api/v1/ecgs/{id}/view": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Stamps viewed_at on first view; clears the \"new\" indicator. Idempotent.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "ECG"
-                ],
-                "summary": "Mark an ECG as viewed",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "ECG UUID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
             }
         },
         "/api/v1/patients": {
@@ -459,7 +267,8 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "Patients"
+                    "Patients",
+                    "Research"
                 ],
                 "summary": "Search patients",
                 "parameters": [
@@ -571,7 +380,8 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "Patients"
+                    "Patients",
+                    "Research"
                 ],
                 "summary": "List ECGs for a patient",
                 "parameters": [
@@ -647,41 +457,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/api/v1/patients/{id}/ecgs/view": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Marks every unviewed ECG of the patient as viewed and returns how many were updated.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Patients"
-                ],
-                "summary": "Mark all of a patient's ECGs as viewed",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Patient business ID (patient_id)",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": true
-                        }
-                    }
-                }
-            }
-        },
         "/api/v1/uploads": {
             "post": {
                 "security": [
@@ -700,7 +475,8 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "uploads"
+                    "uploads",
+                    "Research"
                 ],
                 "summary": "Upload ECG files manually (offline/isolated devices)",
                 "parameters": [
@@ -720,102 +496,6 @@ const docTemplate = `{
                             "additionalProperties": true
                         }
                     }
-                }
-            }
-        },
-        "/healthz": {
-            "get": {
-                "description": "Returns system health including database connectivity, FTP and DICOM server status",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "health"
-                ],
-                "summary": "Health check",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/handlers.HealthResponse"
-                        }
-                    },
-                    "503": {
-                        "description": "Service Unavailable",
-                        "schema": {
-                            "$ref": "#/definitions/handlers.HealthResponse"
-                        }
-                    }
-                }
-            }
-        }
-    },
-    "definitions": {
-        "handlers.ConnectorHealthEntry": {
-            "type": "object",
-            "properties": {
-                "ae_title": {
-                    "type": "string"
-                },
-                "host": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "port": {
-                    "type": "integer"
-                },
-                "protocol": {
-                    "type": "string"
-                },
-                "status": {
-                    "description": "\"ok\" or error message",
-                    "type": "string"
-                }
-            }
-        },
-        "handlers.HealthResponse": {
-            "type": "object",
-            "properties": {
-                "connectors": {
-                    "description": "outbound PACS connectors (empty when none configured)",
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/handlers.ConnectorHealthEntry"
-                    }
-                },
-                "database": {
-                    "description": "\"ok\" or \"error\"",
-                    "type": "string"
-                },
-                "dicom_enabled": {
-                    "description": "true when dicom.enabled: true in config",
-                    "type": "boolean"
-                },
-                "dicom_port": {
-                    "description": "configured port (0 when disabled)",
-                    "type": "integer"
-                },
-                "ectp_enabled": {
-                    "description": "true when nihon-kohden module is active",
-                    "type": "boolean"
-                },
-                "ectp_port": {
-                    "description": "ECTP TCP port (0 when disabled)",
-                    "type": "integer"
-                },
-                "ftp_enabled": {
-                    "description": "true when ftp.enabled: true in config",
-                    "type": "boolean"
-                },
-                "ftp_port": {
-                    "description": "configured port (0 when disabled)",
-                    "type": "integer"
-                },
-                "status": {
-                    "description": "\"ok\" or \"degraded\"",
-                    "type": "string"
                 }
             }
         }

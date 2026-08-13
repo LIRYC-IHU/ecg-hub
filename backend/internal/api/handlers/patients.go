@@ -53,7 +53,7 @@ var allowedPatientSortBy = map[string]string{
 // Response: {"data": [...PatientDTO], "total": N, "page": N, "per_page": N}
 //
 // @Summary Search patients
-// @Tags Patients
+// @Tags Patients,Research
 // @Param q query string false "Search query"
 // @Param sort_by query string false "Sort field" Enums(patient_id, last_name, created_at)
 // @Param sort_order query string false "Sort order" Enums(asc, desc)
@@ -193,7 +193,7 @@ type ECGListParams struct {
 // Response: {"data": [...EcgDTO], "total": N, "page": N, "per_page": N}
 //
 // @Summary List ECGs for a patient
-// @Tags Patients
+// @Tags Patients,Research
 // @Param id path string true "Patient UUID"
 // @Param from query string false "Start date (YYYY-MM-DD)"
 // @Param to query string false "End date (YYYY-MM-DD)"

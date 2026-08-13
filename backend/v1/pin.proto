@@ -1,0 +1,30 @@
+syntax = "proto3";
+package grpc.api.v1;
+
+// Per-user pinned patients — a small favourites list keyed by the caller's
+// identity. Protected: requires a valid session (patient.read). The frontend
+// pins/unpins patients and lists them on the dashboard.
+
+message ListPinsRequest {}
+
+message ListPinsResponse {
+  repeated string patient_ids = 1; // device patient ids the user has pinned
+}
+
+message PinPatientRequest {
+  string patient_id = 1;
+}
+
+message PinPatientResponse {}
+
+message UnpinPatientRequest {
+  string patient_id = 1;
+}
+
+message UnpinPatientResponse {}
+
+service PinService {
+  rpc ListPins(ListPinsRequest) returns (ListPinsResponse) {}
+  rpc PinPatient(PinPatientRequest) returns (PinPatientResponse) {}
+  rpc UnpinPatient(UnpinPatientRequest) returns (UnpinPatientResponse) {}
+}

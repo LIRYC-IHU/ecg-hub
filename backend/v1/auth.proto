@@ -1,0 +1,17 @@
+syntax = "proto3";
+package grpc.api.v1;
+
+// Authentication service. Public methods (provider discovery) plus, later in the
+// migration, login/logout/me.
+
+// Configured authentication provider types (e.g. "local", "oidc", "ldap"),
+// public so the login page can render the right options.
+message GetProvidersRequest {}
+
+message GetProvidersResponse {
+  repeated string providers = 1;
+}
+
+service AuthService {
+  rpc GetProviders(GetProvidersRequest) returns (GetProvidersResponse) {}
+}

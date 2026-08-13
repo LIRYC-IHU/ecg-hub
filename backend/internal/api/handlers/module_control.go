@@ -4,15 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
-	"net/http"
 	"os"
 	"sync"
 	"time"
 
-	"github.com/labstack/echo/v4"
-	"gorm.io/gorm"
-
-	mw "github.com/LIRYC-IHU/ecg-hub/internal/api/middleware"
 	"github.com/LIRYC-IHU/ecg-hub/internal/auth"
 	"github.com/LIRYC-IHU/ecg-hub/internal/config"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
@@ -21,31 +16,14 @@ import (
 	"github.com/LIRYC-IHU/ecg-hub/internal/module"
 )
 
-// moduleStatusItem is the per-module payload returned by ListModuleStatusHandler.
-type moduleStatusItem struct {
-	Name   string              `json:"name"`
-	Status module.ModuleStatus `json:"status"`
-}
-
-// ListModuleStatusHandler returns the runtime status of every module registered
-// in the provided Registry.
-//
-// GET /api/v1/admin/modules/status
-// Response: { "data": [ { "name": "ftp", "status": "running" }, ... ] }
-func ListModuleStatusHandler(reg *module.Registry) echo.HandlerFunc {
-	return func(c echo.Context) error {
-		statuses := reg.List()
-		items := make([]moduleStatusItem, 0, len(statuses))
-		for name, status := range statuses {
-			items = append(items, moduleStatusItem{Name: name, Status: status})
-		}
-		return c.JSON(http.StatusOK, map[string]any{"data": items})
-	}
-}
+// The module runtime-status list and start/stop actions are now served over
+// gRPC by ModuleService (module_service.go). The shared start helpers below
+// (StartFTPFromDB / StartDICOMFromDB) and the restartable wrappers are still
+// used by ModuleService and by main.go's startup wiring.
 
 // ResolveFTPPort returns the FTP listen port configured in the DB, falling back
 // to the module default (2121) when no record exists or the stored config cannot
-// be decoded. Used to populate the /healthz FTP status — the port lives in the
+// be decoded. Used to populate the health service FTP status — the port lives in the
 // encrypted module config, not config.yaml.
 func ResolveFTPPort(repo *repository.ModuleConfigRepository, encKey string) int {
 	const defaultPort = 2121
@@ -89,80 +67,6 @@ func storedModulePort[T any](repo *repository.ModuleConfigRepository, encKey, mo
 		return 0, false
 	}
 	return port, true
-}
-
-// StopModuleHandler stops the named module via the Registry and persists
-// enabled=false in the DB so the module stays stopped across restarts.
-//
-// POST /api/v1/admin/modules/:name/stop
-// Returns 404 when the module is not registered, 500 on stop error, 200 on success.
-func StopModuleHandler(reg *module.Registry, moduleConfigRepo *repository.ModuleConfigRepository, db *gorm.DB) echo.HandlerFunc {
-	return func(c echo.Context) error {
-		name := c.Param("name")
-		if err := reg.Stop(name); err != nil {
-			if _, ok := reg.Get(name); !ok {
-				return c.JSON(http.StatusNotFound, map[string]string{
-					"error": "module not found: " + name,
-				})
-			}
-			return c.JSON(http.StatusInternalServerError, map[string]string{
-				"error": err.Error(),
-			})
-		}
-		// Persist disabled state in DB so it survives restarts.
-		if err := moduleConfigRepo.SetEnabled(name, false); err != nil {
-			slog.Warn("module_control: failed to persist disabled state", "module", name, "error", err)
-		}
-		actorID, _ := c.Get(mw.CtxKeyUserID).(string)
-		_ = mw.WriteAuditLog(c.Request().Context(), db, actorID, "module_stopped", name, nil)
-		return c.JSON(http.StatusOK, map[string]string{"status": "stopped"})
-	}
-}
-
-// StartModuleHandler starts the named module via the Registry.
-// For the "ftp" module, it reads configuration from the DB, overrides the
-// config.Config FTP fields, creates a new ingestion.Server and registers it.
-// For the "dicom" module, it reads configuration from the DB, overrides the
-// config.Config DICOM fields, creates a new dicom.Server and registers it.
-//
-// POST /api/v1/admin/modules/:name/start
-func StartModuleHandler(
-	registry *module.Registry,
-	moduleConfigRepo *repository.ModuleConfigRepository,
-	encKey string,
-	cfg *config.Config,
-	ftpQueue ingestion.IngestQueue,
-	db *gorm.DB,
-) echo.HandlerFunc {
-	return func(c echo.Context) error {
-		name := c.Param("name")
-		switch name {
-		case "ftp":
-			if err := StartFTPFromDB(moduleConfigRepo, encKey, cfg, ftpQueue, registry); err != nil {
-				slog.Error("module_control: failed to start FTP module", "error", err)
-				return c.JSON(http.StatusInternalServerError, map[string]string{
-					"error": err.Error(),
-				})
-			}
-			_ = moduleConfigRepo.SetEnabled("ftp", true)
-		case "dicom":
-			if err := StartDICOMFromDB(moduleConfigRepo, encKey, cfg, ftpQueue, registry); err != nil {
-				slog.Error("module_control: failed to start DICOM module", "error", err)
-				return c.JSON(http.StatusInternalServerError, map[string]string{
-					"error": err.Error(),
-				})
-			}
-			_ = moduleConfigRepo.SetEnabled("dicom", true)
-		default:
-			return c.JSON(http.StatusNotImplemented, map[string]string{
-				"error": "start from UI is only supported for the ftp and dicom modules",
-			})
-		}
-
-		actorID, _ := c.Get(mw.CtxKeyUserID).(string)
-		_ = mw.WriteAuditLog(c.Request().Context(), db, actorID, "module_started", name, nil)
-		return c.JSON(http.StatusOK, map[string]string{"status": "running"})
-	}
 }
 
 // StartFTPFromDB reads the FTP configuration from the DB (admin UI > Modules),
@@ -263,11 +167,11 @@ type restartableFTPWrapper struct {
 	status module.ModuleStatus
 }
 
-func (w *restartableFTPWrapper) Name() string                              { return "ftp" }
-func (w *restartableFTPWrapper) AcceptedExtensions() []string              { return nil }
-func (w *restartableFTPWrapper) Health() error                             { return nil }
-func (w *restartableFTPWrapper) SupportedFormats() []module.ExportFormat   { return nil }
-func (w *restartableFTPWrapper) Validate(_ []byte) error                   { return nil }
+func (w *restartableFTPWrapper) Name() string                            { return "ftp" }
+func (w *restartableFTPWrapper) AcceptedExtensions() []string            { return nil }
+func (w *restartableFTPWrapper) Health() error                           { return nil }
+func (w *restartableFTPWrapper) SupportedFormats() []module.ExportFormat { return nil }
+func (w *restartableFTPWrapper) Validate(_ []byte) error                 { return nil }
 func (w *restartableFTPWrapper) Parse(_ context.Context, _ []byte) (*module.ECGMetadata, error) {
 	return nil, nil
 }
@@ -362,11 +266,11 @@ type restartableDICOMWrapper struct {
 	status module.ModuleStatus
 }
 
-func (w *restartableDICOMWrapper) Name() string                              { return "dicom" }
-func (w *restartableDICOMWrapper) AcceptedExtensions() []string              { return nil }
-func (w *restartableDICOMWrapper) Health() error                             { return nil }
-func (w *restartableDICOMWrapper) SupportedFormats() []module.ExportFormat   { return nil }
-func (w *restartableDICOMWrapper) Validate(_ []byte) error                   { return nil }
+func (w *restartableDICOMWrapper) Name() string                            { return "dicom" }
+func (w *restartableDICOMWrapper) AcceptedExtensions() []string            { return nil }
+func (w *restartableDICOMWrapper) Health() error                           { return nil }
+func (w *restartableDICOMWrapper) SupportedFormats() []module.ExportFormat { return nil }
+func (w *restartableDICOMWrapper) Validate(_ []byte) error                 { return nil }
 func (w *restartableDICOMWrapper) Parse(_ context.Context, _ []byte) (*module.ECGMetadata, error) {
 	return nil, nil
 }

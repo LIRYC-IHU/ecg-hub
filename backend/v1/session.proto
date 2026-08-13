@@ -1,0 +1,17 @@
+syntax = "proto3";
+package grpc.api.v1;
+
+// Current authenticated user — identity, role and resolved permissions. Used by
+// the frontend on every page load. Protected: requires a valid session.
+message GetCurrentUserRequest {}
+
+message GetCurrentUserResponse {
+  string user_id = 1;             // stable internal uuid — keys per-user resources
+  string username = 2;            // human-readable identifier (display)
+  string role = 3;
+  repeated string permissions = 4;
+}
+
+service SessionService {
+  rpc GetCurrentUser(GetCurrentUserRequest) returns (GetCurrentUserResponse) {}
+}

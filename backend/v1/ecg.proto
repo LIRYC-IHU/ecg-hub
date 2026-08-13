@@ -1,0 +1,108 @@
+syntax = "proto3";
+package grpc.api.v1;
+
+// ECG service. Starts with the filter facets for the search UI; the ECG list,
+// metadata, waveform and download follow later in the migration.
+
+// Ecg mirrors dto.EcgDTO (the API representation, not the DB model). file_path is
+// intentionally excluded (internal). Timestamps are ISO 8601 UTC strings, empty
+// when null. extra_json is the JSONB metadata serialized as a JSON object string
+// (a plain google.protobuf.Struct would need fiddly Go/TS conversion for a
+// free-form passthrough blob).
+message Ecg {
+  string id = 1;
+  string patient_id = 2;
+  string vendor = 3;
+  string original_filename = 4;
+  string recorded_at = 5; // ISO 8601 UTC; empty for legacy records
+  string ingested_at = 6; // ISO 8601 UTC
+  string hl7_status = 7;  // "pending"|"success"|"hl7_exhausted"|"hl7_rejected"
+  bool viewed = 8;
+  string extra_json = 9;  // editable vendor metadata (JSON object)
+}
+
+// EcgWithPatient is one row of the cross-patient timeline (GET /ecgs): an Ecg
+// plus the joined patient demographics. Mirrors dto.EcgWithPatientDTO (which
+// flattens EcgDTO + patient fields); the frontend flattens the nested ecg.
+message EcgWithPatient {
+  Ecg ecg = 1;
+  string patient_first_name = 2;
+  string patient_last_name = 3;
+  string patient_gender = 4;
+  string patient_dob = 5; // ISO 8601 UTC; empty when null
+}
+
+message GetFiltersRequest {}
+
+message GetFiltersResponse {
+  repeated string vendors = 1;
+  repeated string device_models = 2;
+  repeated string file_formats = 3;
+}
+
+// ListAllRequest is the cross-patient ECG timeline filter set (GET /ecgs).
+message ListAllRequest {
+  string q = 1;            // search patient name, patient_id, filename
+  string hl7_status = 2;
+  string vendor = 3;
+  string device_model = 4;
+  string file_format = 5;
+  string from = 6;         // YYYY-MM-DD (inclusive)
+  string to = 7;           // YYYY-MM-DD (inclusive)
+  int32 page = 8;
+  int32 per_page = 9;
+}
+
+message ListAllResponse {
+  repeated EcgWithPatient data = 1;
+  int64 total = 2;
+  int32 page = 3;
+  int32 per_page = 4;
+}
+
+// EcgField is one editable metadata field definition (mirrors ecgmeta.FieldDef),
+// driving the frontend's dynamic metadata form.
+message EcgField {
+  string key = 1;
+  string label = 2;
+  string type = 3;             // "text"|"number"|"datetime"|"select"
+  repeated string options = 4; // non-empty only for type "select"
+}
+
+message GetMetadataRequest {
+  string id = 1; // ECG id
+}
+
+message GetMetadataResponse {
+  repeated EcgField fields = 1;
+  string values_json = 2; // current metadata values as a JSON object string
+}
+
+// UpdateMetadataRequest patches an ECG's editable metadata. values_json is a JSON
+// object; only keys in ecgmeta.EditableFields are applied (unknown keys ignored).
+message UpdateMetadataRequest {
+  string id = 1;
+  string values_json = 2;
+}
+
+message UpdateMetadataResponse {
+  string values_json = 1; // metadata values after the update
+}
+
+// MarkViewedRequest stamps viewed_at on first view (clears the "new" indicator).
+message MarkViewedRequest {
+  string id = 1; // ECG id
+}
+
+message MarkViewedResponse {
+  string id = 1;
+  bool viewed = 2;
+}
+
+service ECGService {
+  rpc GetFilters(GetFiltersRequest) returns (GetFiltersResponse) {}
+  rpc ListAll(ListAllRequest) returns (ListAllResponse) {}
+  rpc GetMetadata(GetMetadataRequest) returns (GetMetadataResponse) {}
+  rpc UpdateMetadata(UpdateMetadataRequest) returns (UpdateMetadataResponse) {}
+  rpc MarkViewed(MarkViewedRequest) returns (MarkViewedResponse) {}
+}

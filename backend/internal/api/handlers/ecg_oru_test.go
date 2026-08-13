@@ -2,13 +2,12 @@ package handlers
 
 import (
 	"context"
-	"net/http"
-	"net/http/httptest"
 	"testing"
 
-	"github.com/labstack/echo/v4"
+	"connectrpc.com/connect"
 
 	mw "github.com/LIRYC-IHU/ecg-hub/internal/api/middleware"
+	apiv1 "github.com/LIRYC-IHU/ecg-hub/internal/api/v1"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 	"github.com/LIRYC-IHU/ecg-hub/internal/hl7"
 )
@@ -26,27 +25,21 @@ func (f *fakeORUSender) SendForECG(_ context.Context, ecgID, triggeredBy string)
 	return f.attempt, f.err
 }
 
-func newSendCtx(t *testing.T, ecgID, userID string) (echo.Context, *httptest.ResponseRecorder) {
-	t.Helper()
-	e := echo.New()
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/ecgs/"+ecgID+"/send-result", nil)
-	rec := httptest.NewRecorder()
-	c := e.NewContext(req, rec)
-	c.SetParamNames("id")
-	c.SetParamValues(ecgID)
-	c.Set(mw.CtxKeyUserID, userID)
-	return c, rec
+// sendResult drives HL7ServiceHandler.SendResult with the caller identity in the
+// context (as the auth interceptor would set it). db is nil: pre-send guards
+// return before any audit write, so it is never touched.
+func sendResult(f *fakeORUSender, ecgID, userID string) error {
+	h := &HL7ServiceHandler{ORUService: f}
+	ctx := mw.ContextWithIdentity(context.Background(), userID, userID, "")
+	_, err := h.SendResult(ctx, &apiv1.SendResultRequest{EcgId: ecgID})
+	return err
 }
 
-func TestSendECGResult_Disabled(t *testing.T) {
+func TestSendResult_Disabled(t *testing.T) {
 	f := &fakeORUSender{err: hl7.ErrORUDisabled}
-	c, rec := newSendCtx(t, "ecg-1", "user-9")
-
-	if err := SendECGResultHandler(f, nil)(c); err != nil {
-		t.Fatalf("handler error: %v", err)
-	}
-	if rec.Code != http.StatusConflict {
-		t.Errorf("status = %d, want 409", rec.Code)
+	err := sendResult(f, "ecg-1", "user-9")
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Errorf("code = %v, want FailedPrecondition", connect.CodeOf(err))
 	}
 	if f.gotTriggeredBy != "user-9" {
 		t.Errorf("triggeredBy = %q, want user-9 (the caller)", f.gotTriggeredBy)
@@ -56,20 +49,27 @@ func TestSendECGResult_Disabled(t *testing.T) {
 	}
 }
 
-func TestSendECGResult_NoDestination(t *testing.T) {
+func TestSendResult_NoDestination(t *testing.T) {
 	f := &fakeORUSender{err: hl7.ErrORUNoDestination}
-	c, rec := newSendCtx(t, "ecg-1", "user-9")
-	_ = SendECGResultHandler(f, nil)(c)
-	if rec.Code != http.StatusConflict {
-		t.Errorf("status = %d, want 409", rec.Code)
+	err := sendResult(f, "ecg-1", "user-9")
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Errorf("code = %v, want FailedPrecondition", connect.CodeOf(err))
 	}
 }
 
-func TestSendECGResult_NoPatient(t *testing.T) {
+func TestSendResult_NoPatient(t *testing.T) {
 	f := &fakeORUSender{err: hl7.ErrORUNoPatient}
-	c, rec := newSendCtx(t, "ecg-1", "user-9")
-	_ = SendECGResultHandler(f, nil)(c)
-	if rec.Code != http.StatusUnprocessableEntity {
-		t.Errorf("status = %d, want 422", rec.Code)
+	err := sendResult(f, "ecg-1", "user-9")
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Errorf("code = %v, want FailedPrecondition", connect.CodeOf(err))
+	}
+}
+
+func TestSendResult_ServiceUnavailable(t *testing.T) {
+	// No ORU service wired → FailedPrecondition, without touching the sender.
+	h := &HL7ServiceHandler{ORUService: nil}
+	_, err := h.SendResult(context.Background(), &apiv1.SendResultRequest{EcgId: "ecg-1"})
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
+		t.Errorf("code = %v, want FailedPrecondition", connect.CodeOf(err))
 	}
 }

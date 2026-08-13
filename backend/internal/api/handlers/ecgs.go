@@ -23,7 +23,6 @@ import (
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
 	"github.com/LIRYC-IHU/ecg-hub/internal/ecgmeta"
 	"github.com/LIRYC-IHU/ecg-hub/internal/export"
-	"github.com/LIRYC-IHU/ecg-hub/internal/module"
 	stor "github.com/LIRYC-IHU/ecg-hub/internal/storage"
 )
 
@@ -59,7 +58,7 @@ type patientByIDFinder interface {
 //	502 — bridge binary failed
 //
 // @Summary Download ECG file
-// @Tags ECG
+// @Tags ECG,Research
 // @Param id path string true "ECG UUID"
 // @Param format query string false "Export format — repeat the parameter to receive a ZIP bundle (e.g. ?format=original&format=xmlfda)" Enums(original, xmlfda, dicom)
 // @Param anonymize query boolean false "Strip patient-identifying fields from converted outputs (research use). Mutually exclusive with inject; converted formats only."
@@ -186,7 +185,7 @@ type AllECGsParams struct {
 // Requires: AuthMiddleware, RequirePermission(patient.read)
 //
 // @Summary List all ECGs (cross-patient timeline)
-// @Tags ECG
+// @Tags ECG,Research
 // @Param q query string false "Search patient name, ID, filename"
 // @Param hl7_status query string false "HL7 status filter" Enums(pending, success, hl7_exhausted)
 // @Param vendor query string false "Vendor filter"
@@ -376,7 +375,7 @@ func DeleteECGHandler(db *gorm.DB) echo.HandlerFunc {
 // Response: { "fields": [...], "values": { "last_name": "Doe", ... } }
 //
 // @Summary Get ECG metadata
-// @Tags ECG
+// @Tags ECG,Research
 // @Param id path string true "ECG UUID"
 // @Produce json
 // @Success 200 {object} map[string]interface{}
@@ -404,120 +403,6 @@ func ECGMetadataHandler(db *gorm.DB) echo.HandlerFunc {
 			"fields": ecgmeta.FieldList(),
 			"values": values,
 		})
-	}
-}
-
-// PatchECGMetadataHandler updates the editable metadata fields for one ECG.
-//
-//	PATCH /api/v1/ecgs/:id/metadata   (requires ecg.write)
-//
-// Body: { "last_name": "Doe", "recorded_at": "2024-01-15T10:30:00Z", ... }
-// Only keys listed in ecgmeta.EditableFields are accepted. Unknown keys are ignored.
-//
-// @Summary Update ECG metadata
-// @Tags ECG
-// @Param id path string true "ECG UUID"
-// @Accept json
-// @Produce json
-// @Param body body map[string]interface{} true "Metadata fields to update"
-// @Success 200 {object} map[string]interface{}
-// @Failure 404 {object} map[string]string
-// @Security BearerAuth
-// @Router /api/v1/ecgs/{id}/metadata [patch]
-func PatchECGMetadataHandler(db *gorm.DB) echo.HandlerFunc {
-	repo := repository.NewECGRepository(db)
-	return func(c echo.Context) error {
-		id, err := parseECGID(c)
-		if err != nil {
-			return c.JSON(http.StatusBadRequest, mw.APIError("INVALID_ID", "id must be a positive integer"))
-		}
-
-		var body map[string]any
-		if err := c.Bind(&body); err != nil {
-			return c.JSON(http.StatusBadRequest, mw.APIError("INVALID_BODY", "invalid JSON body"))
-		}
-
-		ecg, err := repo.FindByID(id)
-		if err != nil {
-			if errors.Is(err, repository.ErrECGNotFound) {
-				return c.JSON(http.StatusNotFound, mw.APIError("ECG_NOT_FOUND", "ECG not found"))
-			}
-			return c.JSON(http.StatusInternalServerError, mw.APIError("DB_ERROR", "query failed"))
-		}
-
-		// Merge only known editable fields into extra.
-		if ecg.Extra == nil {
-			ecg.Extra = map[string]any{}
-		}
-		patch := module.MetadataPatch{}
-		changedFields := map[string]string{}
-		var newRecordedAt *time.Time
-
-		for key, rawVal := range body {
-			if _, ok := ecgmeta.EditableFields[key]; !ok {
-				continue // ignore unknown keys
-			}
-			valStr := fmt.Sprintf("%v", rawVal)
-			changedFields[key] = valStr
-			switch key {
-			case "recorded_at":
-				t, parseErr := time.Parse(time.RFC3339, valStr)
-				if parseErr != nil {
-					return c.JSON(http.StatusBadRequest,
-						mw.APIError("INVALID_DATETIME", "recorded_at must be RFC3339"))
-				}
-				newRecordedAt = &t
-				patch.RecordedAt = &t
-				ecg.Extra[key] = valStr
-			case "last_name":
-				s := valStr
-				patch.LastName = &s
-				ecg.Extra[key] = rawVal
-			case "first_name":
-				s := valStr
-				patch.FirstName = &s
-				ecg.Extra[key] = rawVal
-			case "sex":
-				s := valStr
-				patch.Sex = &s
-				ecg.Extra[key] = rawVal
-			case "device_model":
-				s := valStr
-				patch.DeviceModel = &s
-				ecg.Extra[key] = rawVal
-			case "document_type":
-				s := valStr
-				patch.DocumentType = &s
-				ecg.Extra[key] = rawVal
-			case "document_version":
-				s := valStr
-				patch.DocumentVersion = &s
-				ecg.Extra[key] = rawVal
-			default:
-				ecg.Extra[key] = rawVal
-			}
-		}
-
-		if err := repo.UpdateMetadata(ecg.ID, ecg.Extra, newRecordedAt); err != nil {
-			return c.JSON(http.StatusInternalServerError, mw.APIError("DB_ERROR", "update failed"))
-		}
-
-		// Best-effort file update — log on failure but do not fail the request.
-		if mod, ok := module.Get(ecg.Vendor); ok {
-			if fErr := mod.UpdateFile(ecg.FilePath, patch); fErr != nil {
-				slog.Warn("ecg-metadata: file update failed",
-					"ecg_id", ecg.ID, "vendor", ecg.Vendor, "error", fErr)
-			}
-		}
-
-		userID, _ := c.Get(mw.CtxKeyUserID).(string)
-		_ = mw.WriteAuditLog(c.Request().Context(), db, userID, "ecg_metadata_update",
-			id, map[string]any{
-				"fields": changedFields,
-				"file":   ecg.FilePath,
-			})
-
-		return c.JSON(http.StatusOK, buildMetaValues(ecg))
 	}
 }
 

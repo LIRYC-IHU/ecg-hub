@@ -2,21 +2,14 @@ package handlers
 
 import (
 	"encoding/json"
-	"errors"
-	"net/http"
 	"net/url"
+
 	"strconv"
 	"time"
 
-	"github.com/labstack/echo/v4"
 	"gorm.io/datatypes"
-	"gorm.io/gorm"
 
-	mw "github.com/LIRYC-IHU/ecg-hub/internal/api/middleware"
-	"github.com/LIRYC-IHU/ecg-hub/internal/auth"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
-	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
-	"github.com/LIRYC-IHU/ecg-hub/internal/webhook"
 )
 
 // webhookRequest is the JSON body for creating/updating a user webhook.
@@ -31,22 +24,6 @@ type webhookRequest struct {
 	AuthHeader         *string  `json:"auth_header"`
 	Events             []string `json:"events"`
 	Vendors            []string `json:"vendors"`
-}
-
-// webhookResponse is the API shape of a webhook. Secrets are never returned;
-// HasSecret/HasAuthHeader tell the UI whether values are configured.
-type webhookResponse struct {
-	models.UserWebhook
-	HasSecret     bool `json:"has_secret"`
-	HasAuthHeader bool `json:"has_auth_header"`
-}
-
-func toWebhookResponse(h models.UserWebhook) webhookResponse {
-	return webhookResponse{
-		UserWebhook:   h,
-		HasSecret:     h.SecretEncrypted != "",
-		HasAuthHeader: h.AuthHeaderEncrypted != "",
-	}
 }
 
 // validateWebhookRequest checks name, URL and event types.

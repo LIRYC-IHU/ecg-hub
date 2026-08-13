@@ -1,0 +1,122 @@
+syntax = "proto3";
+package grpc.api.v1;
+
+// Tag service. Tag CRUD + apply/remove on patients and ECGs, plus batch reads
+// (BatchGetPatientTags / BatchGetEcgTags) that resolve tags for a whole list
+// page in one request — killing the per-row N+1 the REST UI suffered from.
+
+// Tag mirrors models.Tag (the JSON returned by the tag API).
+message Tag {
+  string id = 1;
+  string name = 2;
+  string color = 3;
+  string created_by = 4;  // human-readable username (display only)
+  string created_at = 5;  // ISO 8601 UTC
+  string updated_at = 6;  // ISO 8601 UTC
+}
+
+// TagList wraps a repeated Tag so it can be a proto map value (proto3 maps
+// cannot have `repeated` values directly).
+message TagList {
+  repeated Tag tags = 1;
+}
+
+message ListTagsRequest {}
+message ListTagsResponse {
+  repeated Tag data = 1;
+}
+
+message CreateTagRequest {
+  string name = 1;
+  string color = 2; // defaults to #6b7280 when empty
+}
+message CreateTagResponse {
+  Tag tag = 1;
+}
+
+message UpdateTagRequest {
+  string id = 1;
+  string name = 2;
+  string color = 3;
+}
+message UpdateTagResponse {
+  Tag tag = 1;
+}
+
+message DeleteTagRequest {
+  string id = 1;
+}
+message DeleteTagResponse {}
+
+// ── Apply / remove on a patient ──────────────────────────────────────────────
+message TagPatientRequest {
+  string patient_id = 1;
+  string tag_id = 2;
+}
+message TagPatientResponse {}
+
+message UntagPatientRequest {
+  string patient_id = 1;
+  string tag_id = 2;
+}
+message UntagPatientResponse {}
+
+message ListPatientTagsRequest {
+  string patient_id = 1;
+}
+message ListPatientTagsResponse {
+  repeated Tag data = 1;
+}
+
+// ── Apply / remove on an ECG ─────────────────────────────────────────────────
+message TagEcgRequest {
+  string ecg_id = 1;
+  string tag_id = 2;
+}
+message TagEcgResponse {}
+
+message UntagEcgRequest {
+  string ecg_id = 1;
+  string tag_id = 2;
+}
+message UntagEcgResponse {}
+
+message ListEcgTagsRequest {
+  string ecg_id = 1;
+}
+message ListEcgTagsResponse {
+  repeated Tag data = 1;
+}
+
+// ── Batch reads (one request per list page) ──────────────────────────────────
+message BatchGetPatientTagsRequest {
+  repeated string patient_ids = 1;
+}
+message BatchGetPatientTagsResponse {
+  map<string, TagList> tags = 1; // keyed by patient_id; missing ids omitted
+}
+
+message BatchGetEcgTagsRequest {
+  repeated string ecg_ids = 1;
+}
+message BatchGetEcgTagsResponse {
+  map<string, TagList> tags = 1; // keyed by ecg_id; missing ids omitted
+}
+
+service TagService {
+  rpc ListTags(ListTagsRequest) returns (ListTagsResponse) {}
+  rpc CreateTag(CreateTagRequest) returns (CreateTagResponse) {}
+  rpc UpdateTag(UpdateTagRequest) returns (UpdateTagResponse) {}
+  rpc DeleteTag(DeleteTagRequest) returns (DeleteTagResponse) {}
+
+  rpc TagPatient(TagPatientRequest) returns (TagPatientResponse) {}
+  rpc UntagPatient(UntagPatientRequest) returns (UntagPatientResponse) {}
+  rpc ListPatientTags(ListPatientTagsRequest) returns (ListPatientTagsResponse) {}
+
+  rpc TagEcg(TagEcgRequest) returns (TagEcgResponse) {}
+  rpc UntagEcg(UntagEcgRequest) returns (UntagEcgResponse) {}
+  rpc ListEcgTags(ListEcgTagsRequest) returns (ListEcgTagsResponse) {}
+
+  rpc BatchGetPatientTags(BatchGetPatientTagsRequest) returns (BatchGetPatientTagsResponse) {}
+  rpc BatchGetEcgTags(BatchGetEcgTagsRequest) returns (BatchGetEcgTagsResponse) {}
+}

@@ -1,13 +1,9 @@
 package handlers
 
 import (
-	"fmt"
-	"net/http"
+	"errors"
 	"regexp"
 
-	"github.com/labstack/echo/v4"
-
-	mw "github.com/LIRYC-IHU/ecg-hub/internal/api/middleware"
 	"github.com/LIRYC-IHU/ecg-hub/internal/auth"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
@@ -16,6 +12,75 @@ import (
 
 // digitRegex checks for at least one digit in the password.
 var digitRegex = regexp.MustCompile(`[0-9]`)
+
+// Setup sentinel errors, shared by the gRPC SetupService handler so it can map
+// them to the right Connect codes (InvalidArgument / FailedPrecondition).
+var (
+	errSetupUsernameTooShort = errors.New("username must be at least 3 characters")
+	errSetupPasswordTooShort = errors.New("password must be at least 8 characters")
+	errSetupPasswordNoDigit  = errors.New("password must contain at least 1 digit")
+	errSetupAlreadyInit      = errors.New("system is already initialized")
+)
+
+// createFirstAdmin validates the credentials and atomically creates the first
+// local admin account (advisory-lock guarded so two concurrent calls can't both
+// pass the "no identity yet" check). Returns errSetup* sentinels for the caller
+// to translate to a transport-specific status. Shared by the gRPC handler.
+func createFirstAdmin(db *gorm.DB, username, password string) (*models.LocalUser, error) {
+	if len(username) < 3 {
+		return nil, errSetupUsernameTooShort
+	}
+	if len(password) < 8 {
+		return nil, errSetupPasswordTooShort
+	}
+	if !digitRegex.MatchString(password) {
+		return nil, errSetupPasswordNoDigit
+	}
+
+	hash, err := auth.HashPassword(password)
+	if err != nil {
+		return nil, err
+	}
+
+	var user *models.LocalUser
+	txErr := db.Transaction(func(tx *gorm.DB) error {
+		// pg_advisory_xact_lock ensures only one setup can run at a time.
+		if err := tx.Exec("SELECT pg_advisory_xact_lock(42)").Error; err != nil {
+			return err
+		}
+		count, err := countIdentities(tx)
+		if err != nil {
+			return err
+		}
+		if count > 0 {
+			return errSetupAlreadyInit
+		}
+		u := &models.LocalUser{
+			Username:     username,
+			PasswordHash: hash,
+			Role:         "admin",
+			Active:       true,
+		}
+		if err := tx.Create(u).Error; err != nil {
+			return err
+		}
+		user = u
+		return nil
+	})
+	if txErr != nil {
+		return nil, txErr
+	}
+
+	// Write audit log entry for system initialization.
+	auditRepo := repository.NewAuditRepository(db)
+	_ = auditRepo.Insert(&models.AuditLog{
+		UserID:     user.ID,
+		Action:     "system_initialized",
+		ResourceID: user.ID,
+	})
+
+	return user, nil
+}
 
 // countIdentities returns local users plus unified-identity rows (ecg_hub_users).
 // The setup endpoint treats the system as initialised when either is non-zero, so
@@ -33,120 +98,6 @@ func countIdentities(db *gorm.DB) (int64, error) {
 	return local + hub, nil
 }
 
-// SetupStatusHandler returns whether the system has been initialized — a local
-// admin exists, or any identity (local/OIDC/LDAP) has already logged in.
-// Public endpoint — no authentication required.
-//
-//	@Summary		Setup status
-//	@Description	Returns whether the system has been initialized (a local admin exists, or any identity has logged in).
-//	@Tags			setup
-//	@Produce		json
-//	@Success		200	{object}	map[string]bool
-//	@Router			/api/v1/setup/status [get]
-func SetupStatusHandler(db *gorm.DB) echo.HandlerFunc {
-	return func(c echo.Context) error {
-		count, err := countIdentities(db)
-		if err != nil {
-			return c.JSON(http.StatusInternalServerError, mw.APIError("INTERNAL_ERROR", "failed to check setup status"))
-		}
-		return c.JSON(http.StatusOK, map[string]bool{
-			"initialized": count > 0,
-		})
-	}
-}
-
-// SetupRequest is the JSON body for POST /api/v1/setup.
-type SetupRequest struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
-}
-
-// SetupHandler creates the first local admin user (system initialization).
-// Public endpoint — no authentication required.
-// Returns 409 if the system is already initialized.
-//
-//	@Summary		Initialize system
-//	@Description	Creates the first local admin user. Returns 409 if already initialized.
-//	@Tags			setup
-//	@Accept			json
-//	@Produce		json
-//	@Param			body	body		SetupRequest	true	"Admin credentials"
-//	@Success		201		{object}	map[string]string
-//	@Failure		400		{object}	map[string]string
-//	@Failure		409		{object}	map[string]string
-//	@Router			/api/v1/setup [post]
-func SetupHandler(repo *repository.LocalUserRepository, db *gorm.DB) echo.HandlerFunc {
-	return func(c echo.Context) error {
-		var req SetupRequest
-		if err := c.Bind(&req); err != nil {
-			return c.JSON(http.StatusBadRequest, mw.APIError("BAD_REQUEST", "invalid request body"))
-		}
-
-		// Validate username: min 3 characters.
-		if len(req.Username) < 3 {
-			return c.JSON(http.StatusBadRequest, mw.APIError("VALIDATION_ERROR", "username must be at least 3 characters"))
-		}
-
-		// Validate password: min 8 characters + at least 1 digit.
-		if len(req.Password) < 8 {
-			return c.JSON(http.StatusBadRequest, mw.APIError("VALIDATION_ERROR", "password must be at least 8 characters"))
-		}
-		if !digitRegex.MatchString(req.Password) {
-			return c.JSON(http.StatusBadRequest, mw.APIError("VALIDATION_ERROR", "password must contain at least 1 digit"))
-		}
-
-		// Hash the password.
-		hash, err := auth.HashPassword(req.Password)
-		if err != nil {
-			return c.JSON(http.StatusInternalServerError, mw.APIError("INTERNAL_ERROR", "failed to hash password"))
-		}
-
-		// Atomic initialization: use advisory lock + count check inside a transaction
-		// to prevent race conditions (two concurrent setup calls both passing the check).
-		var user *models.LocalUser
-		txErr := db.Transaction(func(tx *gorm.DB) error {
-			// pg_advisory_xact_lock ensures only one setup can run at a time.
-			if err := tx.Exec("SELECT pg_advisory_xact_lock(42)").Error; err != nil {
-				return err
-			}
-			count, err := countIdentities(tx)
-			if err != nil {
-				return err
-			}
-			if count > 0 {
-				return fmt.Errorf("ALREADY_INITIALIZED")
-			}
-			u := &models.LocalUser{
-				Username:     req.Username,
-				PasswordHash: hash,
-				Role:         "admin",
-				Active:       true,
-			}
-			if err := tx.Create(u).Error; err != nil {
-				return err
-			}
-			user = u
-			return nil
-		})
-		if txErr != nil {
-			if txErr.Error() == "ALREADY_INITIALIZED" {
-				return c.JSON(http.StatusConflict, mw.APIError("ALREADY_INITIALIZED", "system is already initialized"))
-			}
-			return c.JSON(http.StatusInternalServerError, mw.APIError("INTERNAL_ERROR", "failed to create admin user"))
-		}
-
-		// Write audit log entry for system initialization.
-		auditRepo := repository.NewAuditRepository(db)
-		_ = auditRepo.Insert(&models.AuditLog{
-			UserID:     user.ID,
-			Action:     "system_initialized",
-			ResourceID: user.ID,
-		})
-
-		return c.JSON(http.StatusCreated, map[string]string{
-			"id":       user.ID,
-			"username": user.Username,
-			"role":     user.Role,
-		})
-	}
-}
+// GetStatus and Initialize are now served over gRPC/Connect by
+// SetupServiceHandler (setup_service.go); countIdentities and createFirstAdmin
+// above are shared with it.

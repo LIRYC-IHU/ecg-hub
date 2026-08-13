@@ -50,7 +50,7 @@ func TestLoginHandler_ValidLDAP(t *testing.T) {
 	c, rec := newLoginContext(`{"username":"jdupont","password":"secret"}`)
 
 	provider := &mockAuthenticator{token: "signed.jwt.token"}
-	handler := LoginHandler(provider)
+	handler := LoginHandlerWithDB(provider, nil, "", "", nil, nil)
 	if err := handler(c); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -81,7 +81,7 @@ func TestLoginHandler_InvalidCredentials(t *testing.T) {
 	c, rec := newLoginContext(`{"username":"jdupont","password":"wrong"}`)
 
 	provider := &mockAuthenticator{err: fmt.Errorf("invalid credentials")}
-	handler := LoginHandler(provider)
+	handler := LoginHandlerWithDB(provider, nil, "", "", nil, nil)
 	if err := handler(c); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -98,7 +98,7 @@ func TestLoginHandler_OIDCProvider(t *testing.T) {
 
 	// mockProvider does NOT implement auth.Authenticator → simulates OIDC
 	provider := &mockProvider{}
-	handler := LoginHandler(provider)
+	handler := LoginHandlerWithDB(provider, nil, "", "", nil, nil)
 	if err := handler(c); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -114,7 +114,7 @@ func TestLoginHandler_EmptyUsername(t *testing.T) {
 	c, rec := newLoginContext(`{"username":"","password":"secret"}`)
 
 	provider := &mockAuthenticator{token: "tok"}
-	handler := LoginHandler(provider)
+	handler := LoginHandlerWithDB(provider, nil, "", "", nil, nil)
 	if err := handler(c); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -127,7 +127,7 @@ func TestLoginHandler_EmptyPassword(t *testing.T) {
 	c, rec := newLoginContext(`{"username":"jdupont","password":""}`)
 
 	provider := &mockAuthenticator{token: "tok"}
-	handler := LoginHandler(provider)
+	handler := LoginHandlerWithDB(provider, nil, "", "", nil, nil)
 	if err := handler(c); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

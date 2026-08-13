@@ -5,6 +5,7 @@ import { Search, Check, Trash2, Users } from 'lucide-react'
 import { fetchAppUsers, setAppUserRole, deleteAppUser, fetchRoles, fetchUserDefaults, saveUserDefaults } from '../../lib/api'
 import { Spinner } from '../ui/Spinner'
 import { useNotification } from '../../context/NotificationContext'
+import { useConfirm } from '../../context/ConfirmContext'
 
 const providerColors: Record<string, string> = {
   oidc:  'bg-primary/10 text-primary',
@@ -22,6 +23,7 @@ export function AdminAppUsersPage() {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const { notify } = useNotification()
+  const confirm = useConfirm()
   const [search, setSearch] = useState('')
   const [pendingRole, setPendingRole] = useState<Record<string, string>>({})
   const [feedback, setFeedback] = useState<Record<string, 'success' | 'error'>>({})
@@ -98,9 +100,13 @@ export function AdminAppUsersPage() {
     },
   })
 
-  function handleDelete(user: { id: string; external_id: string }) {
-    if (!window.confirm(t('admin.appUsers.confirmDelete', { user: user.external_id }))) return
-    deleteMutation.mutate(user.id)
+  async function handleDelete(user: { id: string; external_id: string }) {
+    const ok = await confirm({
+      title: t('common.delete'),
+      message: t('admin.appUsers.confirmDelete', { user: user.external_id }),
+      danger: true,
+    })
+    if (ok) deleteMutation.mutate(user.id)
   }
 
   function handleSave(userId: string) {

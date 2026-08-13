@@ -5,6 +5,29 @@ import type {
   ListResponse,
   Patient,
 } from "../types";
+import {
+  adminClient,
+  authClient,
+  authAdminClient,
+  apiKeyClient,
+  brandingClient,
+  ecgClient,
+  exportClient,
+  healthClient,
+  hl7Client,
+  hl7AdminClient,
+  moduleClient,
+  patientClient,
+  pinClient,
+  sessionClient,
+  setupClient,
+  tagClient,
+  webhookClient,
+} from "./grpc";
+import type { Ecg as EcgProto } from "../gen/v1/ecg_pb";
+import type { OruAttempt as OruAttemptProto } from "../gen/v1/hl7_pb";
+import type { Patient as PatientProto } from "../gen/v1/patient_pb";
+import type { Tag as TagProto } from "../gen/v1/tag_pb";
 
 const BASE_URL = (import.meta.env as Record<string, string>).VITE_API_URL ?? "";
 
@@ -16,29 +39,20 @@ export interface MeResponse {
 }
 
 export async function fetchSetupStatus(): Promise<{ initialized: boolean }> {
-  const res = await fetch(`${BASE_URL}/api/v1/setup/status`);
-  return res.json();
+  const res = await setupClient.getStatus({});
+  return { initialized: res.initialized };
 }
 
 export async function setupAdmin(
   username: string,
   password: string,
 ): Promise<void> {
-  const res = await fetch(`${BASE_URL}/api/v1/setup`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username, password }),
-  });
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
+  await setupClient.initialize({ username, password });
 }
 
 export async function fetchAuthProviders(): Promise<string[]> {
-  const res = await fetch(`${BASE_URL}/api/v1/auth/provider`);
-  const data: { providers: string[] } = await res.json();
-  return data.providers ?? [];
+  const res = await authClient.getProviders({});
+  return res.providers ?? [];
 }
 
 export async function loginWithLDAP(
@@ -72,9 +86,16 @@ export async function loginWithLocal(
 }
 
 export async function fetchMe(): Promise<MeResponse> {
-  const res = await fetch(`${BASE_URL}/api/v1/auth/me`);
-  if (!res.ok) throw new Error("unauthenticated");
-  return res.json();
+  // gRPC/Connect; the ConnectRequireAuth interceptor throws a ConnectError with
+  // code=unauthenticated when the session is missing/invalid (callers catch it
+  // exactly as they did the previous throw).
+  const res = await sessionClient.getCurrentUser({});
+  return {
+    user_id: res.userId,
+    username: res.username,
+    role: res.role,
+    permissions: res.permissions,
+  };
 }
 
 export interface AllECGFilters {
@@ -96,31 +117,19 @@ export interface ECGFilterFacets {
 }
 
 export async function fetchECGFilterFacets(): Promise<ECGFilterFacets> {
-  const res = await fetch(`${BASE_URL}/api/v1/ecgs/filters`);
-  if (!res.ok) return { vendors: [], device_models: [], file_formats: [] };
-  return res.json();
+  try {
+    const res = await ecgClient.getFilters({});
+    return {
+      vendors: res.vendors,
+      device_models: res.deviceModels,
+      file_formats: res.fileFormats,
+    };
+  } catch {
+    return { vendors: [], device_models: [], file_formats: [] };
+  }
 }
 
-export async function fetchAllECGs(
-  filters: AllECGFilters = {},
-): Promise<ListResponse<import("../types").ECGWithPatient>> {
-  const params = new URLSearchParams();
-  if (filters.q) params.set("q", filters.q);
-  if (filters.hl7_status) params.set("hl7_status", filters.hl7_status);
-  if (filters.vendor) params.set("vendor", filters.vendor);
-  if (filters.device_model) params.set("device_model", filters.device_model);
-  if (filters.file_format) params.set("file_format", filters.file_format);
-  if (filters.from) params.set("from", filters.from);
-  if (filters.to) params.set("to", filters.to);
-  params.set("page", String(filters.page ?? 1));
-  params.set("per_page", String(filters.per_page ?? 50));
-  const res = await fetch(`${BASE_URL}/api/v1/ecgs?${params}`);
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
-  return res.json();
-}
+
 
 export interface ECGFilters {
   from?: string;
@@ -133,28 +142,49 @@ export interface ECGFilters {
   per_page?: number;
 }
 
+// ecgFromProto maps the gRPC Ecg message to the frontend ECG type. Mirrors the
+// old EcgDTO JSON shape: file_path/immutable are not sent by the API (list view),
+// recorded_at is null when empty, extra is the parsed JSON object.
+function ecgFromProto(e: EcgProto): ECG {
+  return {
+    id: e.id as unknown as number, // API id is a string; typing is historical
+    patient_id: e.patientId,
+    vendor: e.vendor,
+    file_path: "",
+    original_filename: e.originalFilename,
+    recorded_at: e.recordedAt || null,
+    ingested_at: e.ingestedAt,
+    hl7_status: e.hl7Status as ECG["hl7_status"],
+    viewed: e.viewed,
+    immutable: false,
+    extra: e.extraJson ? (JSON.parse(e.extraJson) as Record<string, unknown>) : {},
+  };
+}
+
 export async function fetchECGs(
   patientId: number,
   filters: ECGFilters = {},
 ): Promise<ListResponse<ECG>> {
-  const params = new URLSearchParams();
-  if (filters.from) params.set("from", filters.from);
-  if (filters.to) params.set("to", filters.to);
-  if (filters.vendor) params.set("vendor", filters.vendor);
-  if (filters.device_model) params.set("device_model", filters.device_model);
-  if (filters.file_format) params.set("file_format", filters.file_format);
-  if (filters.hl7_status) params.set("hl7_status", filters.hl7_status);
-  params.set("page", String(filters.page ?? 1));
-  params.set("per_page", String(filters.per_page ?? 20));
-
-  const res = await fetch(
-    `${BASE_URL}/api/v1/patients/${patientId}/ecgs?${params}`,
-  );
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
-  return res.json();
+  // gRPC: PatientService.ListECGs. patientId is really the patient UUID (string)
+  // at runtime — the numeric typing is historical; ListECGs resolves UUID or
+  // device id server-side.
+  const res = await patientClient.listECGs({
+    patientId: String(patientId),
+    from: filters.from ?? "",
+    to: filters.to ?? "",
+    vendor: filters.vendor ?? "",
+    deviceModel: filters.device_model ?? "",
+    fileFormat: filters.file_format ?? "",
+    hl7Status: filters.hl7_status ?? "",
+    page: filters.page ?? 1,
+    perPage: filters.per_page ?? 20,
+  });
+  return {
+    data: res.data.map(ecgFromProto),
+    total: Number(res.total),
+    page: res.page,
+    per_page: res.perPage,
+  };
 }
 
 // ─── Manual ECG upload (offline/isolated devices) ──────────────────────────
@@ -170,9 +200,10 @@ export interface UploadResponse {
   queued: number;
 }
 
-// uploadECGs sends one or more ECG files to the manual ingestion endpoint. Each
-// accepted file is processed by the same pipeline as FTP/DICOM; live per-file
-// status arrives over the /events/ws WebSocket (correlated by filename).
+// uploadECGs sends one or more ECG files to the manual ingestion endpoint (REST
+// multipart — binary stays REST). Each accepted file is processed by the same
+// pipeline as FTP/DICOM; live per-file status arrives over the
+// EventService.Subscribe gRPC stream (correlated by filename).
 export async function uploadECGs(files: File[]): Promise<UploadResponse> {
   const fd = new FormData();
   for (const f of files) fd.append("files", f);
@@ -224,9 +255,9 @@ function patientDataQuery(mode?: PatientDataMode): string {
   return "";
 }
 
-// downloadECGFormat triggers a browser download for a specific export format.
-// format = "original" | "xmlfda" | "dicom" | ...
-export async function downloadECGFormat(
+
+// downloadECGFormat triggers a browser download for a single export format.
+async function downloadECGFormat(
   id: number,
   format: string,
   mode?: PatientDataMode,
@@ -267,12 +298,15 @@ export interface AdminStats {
 }
 
 export async function fetchAdminStats(): Promise<AdminStats> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/stats`);
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
-  return res.json();
+  const res = await adminClient.getStats({});
+  return {
+    total_ecgs: Number(res.totalEcgs),
+    total_patients: Number(res.totalPatients),
+    hl7_pending: Number(res.hl7Pending),
+    hl7_success: Number(res.hl7Success),
+    hl7_exhausted: Number(res.hl7Exhausted),
+    quarantine_count: Number(res.quarantineCount),
+  };
 }
 
 export interface ConnectorHealthEntry {
@@ -285,12 +319,15 @@ export interface ConnectorHealthEntry {
 }
 
 export async function fetchConnectors(): Promise<ConnectorHealthEntry[]> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/connectors`);
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
-  return res.json();
+  const res = await moduleClient.listConnectors({});
+  return res.connectors.map((c) => ({
+    name: c.name,
+    protocol: c.protocol || undefined,
+    status: c.status,
+    host: c.host || undefined,
+    port: c.port || undefined,
+    ae_title: c.aeTitle || undefined,
+  }));
 }
 
 export async function fetchHealth(): Promise<{
@@ -304,15 +341,31 @@ export async function fetchHealth(): Promise<{
   ectp_port?: number;
   connectors?: ConnectorHealthEntry[];
 }> {
-  const res = await fetch(`${BASE_URL}/healthz`);
-  return res.json();
+  // gRPC/Connect call via the generated client. The wire type is camelCase
+  // (Connect's default JSON), mapped here to the app's snake_case shape so
+  // consumers (AdminSystemPage) stay unchanged. The JWT cookie is carried by
+  // the transport, so an authenticated caller gets the full payload.
+  const res = await healthClient.checkHealth({});
+  return {
+    status: res.status,
+    database: res.database,
+    dicom_enabled: res.dicomEnabled,
+    dicom_port: res.dicomPort,
+    ftp_enabled: res.ftpEnabled,
+    ftp_port: res.ftpPort,
+    ectp_enabled: res.ectpEnabled,
+    ectp_port: res.ectpPort,
+    connectors: res.connectors.map((c) => ({
+      name: c.name,
+      protocol: c.protocol,
+      status: c.status,
+      host: c.host,
+      port: c.port,
+      ae_title: c.aeTitle,
+    })),
+  };
 }
 
-export interface WebhookStatus {
-  enabled: boolean;
-  url: string;
-  secret_configured: boolean;
-}
 
 export interface KeycloakUser {
   id: string;
@@ -354,14 +407,6 @@ export async function deleteECG(id: number): Promise<void> {
   }
 }
 
-export async function fetchWebhookStatus(): Promise<WebhookStatus> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/webhook`);
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
-  return res.json();
-}
 
 export interface ExportFormat {
   id: string; // "original" | "xmlfda" | "dicom"
@@ -378,12 +423,18 @@ export interface ModuleStatus {
 }
 
 export async function fetchModules(): Promise<ModuleStatus[]> {
-  const res = await fetch(`${BASE_URL}/api/v1/modules`);
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
-  return res.json();
+  const res = await moduleClient.listModules({});
+  return res.modules.map((m) => ({
+    name: m.name,
+    extensions: m.extensions,
+    status: m.status,
+    version: m.version || undefined,
+    formats: m.formats.map((f) => ({
+      id: f.id,
+      label: f.label,
+      extension: f.extension,
+    })),
+  }));
 }
 
 // fetchExportFormats returns the export formats actually available for the given
@@ -393,17 +444,12 @@ export async function fetchModules(): Promise<ModuleStatus[]> {
 export async function fetchExportFormats(
   ecgIds: number[],
 ): Promise<ExportFormat[]> {
-  const res = await fetch(`${BASE_URL}/api/v1/exports/formats`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ecg_ids: ecgIds }),
-  });
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
-  const json: { formats: ExportFormat[] } = await res.json();
-  return json.formats ?? [];
+  const res = await exportClient.formats({ ecgIds: ecgIds.map(String) });
+  return res.formats.map((f) => ({
+    id: f.id,
+    label: f.label,
+    extension: f.extension,
+  }));
 }
 
 export async function testWebhook(): Promise<{
@@ -422,13 +468,8 @@ export async function testWebhook(): Promise<{
 }
 
 export async function forceHL7(ecgId: number): Promise<void> {
-  const res = await fetch(`${BASE_URL}/api/v1/ecgs/${ecgId}/hl7/force`, {
-    method: "POST",
-  });
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
+  // gRPC: HL7Service.Force.
+  await hl7Client.force({ ecgId: String(ecgId) });
 }
 
 // ORUAttempt mirrors the backend models.HL7ORUAttempt — the outcome of an outbound
@@ -447,29 +488,40 @@ export interface ORUAttempt {
   created_at: string;
 }
 
+// oruAttemptFromProto maps the gRPC OruAttempt to the frontend ORUAttempt.
+function oruAttemptFromProto(a: OruAttemptProto): ORUAttempt {
+  return {
+    id: a.id,
+    ecg_id: a.ecgId,
+    patient_id: a.patientId,
+    status: a.status as ORUAttempt["status"],
+    msa_code: a.msaCode || undefined,
+    msa_message: a.msaMessage || undefined,
+    error: a.error || undefined,
+    included_pdf: a.includedPdf,
+    triggered_by: a.triggeredBy || undefined,
+    response_ms: a.responseMs,
+    created_at: a.createdAt,
+  };
+}
+
 // sendECGResult manually triggers the outbound ORU result-send for an ECG.
 // Requires the ecg.send_result permission. Returns the recorded attempt on success;
-// throws the ErrorResponse (HIS rejection / send failure / disabled) otherwise.
+// throws the ConnectError (HIS rejection / send failure / disabled) otherwise.
 export async function sendECGResult(ecgId: number): Promise<ORUAttempt> {
-  const res = await fetch(`${BASE_URL}/api/v1/ecgs/${ecgId}/send-result`, {
-    method: "POST",
-  });
-  const json = await res.json();
-  if (!res.ok) {
-    // On a send failure the body is { error, attempt }; guards return { code, message }.
-    throw (json.error ?? json) as ErrorResponse;
-  }
-  return json.attempt as ORUAttempt;
+  // gRPC: HL7Service.SendResult. On failure a ConnectError propagates (the UI
+  // shows its message; the latest attempt is re-read via fetchECGORUStatus).
+  const res = await hl7Client.sendResult({ ecgId: String(ecgId) });
+  return oruAttemptFromProto(res.attempt!);
 }
 
 // fetchECGORUStatus returns the most recent outbound ORU attempt for an ECG, or null.
 export async function fetchECGORUStatus(
   ecgId: number,
 ): Promise<ORUAttempt | null> {
-  const res = await fetch(`${BASE_URL}/api/v1/ecgs/${ecgId}/oru-status`);
-  if (!res.ok) throw new Error("Failed to fetch ORU status");
-  const json = await res.json();
-  return (json.attempt as ORUAttempt | null) ?? null;
+  // gRPC: HL7Service.GetOruStatus. attempt is unset when the ECG has none.
+  const res = await hl7Client.getOruStatus({ ecgId: String(ecgId) });
+  return res.attempt ? oruAttemptFromProto(res.attempt) : null;
 }
 
 export interface AuditLogFilters {
@@ -481,22 +533,48 @@ export interface AuditLogFilters {
   per_page?: number;
 }
 
+// auditLogFromProto maps the gRPC AuditLog message to the frontend type. The
+// backend passes details as a JSON string (details_json) to avoid re-encoding
+// its JSONB column; parse it back to an object here.
+function auditLogFromProto(
+  a: import("../gen/v1/admin_pb").AuditLog,
+): import("../types").AuditLog {
+  let details: Record<string, unknown> | null = null;
+  if (a.detailsJson) {
+    try {
+      details = JSON.parse(a.detailsJson) as Record<string, unknown>;
+    } catch {
+      details = null;
+    }
+  }
+  return {
+    id: a.id as unknown as number, // API id is a uuid string; typing is historical
+    user_id: a.userId,
+    username: a.username || undefined,
+    action: a.action as import("../types").AuditLog["action"],
+    resource_id: a.resourceId,
+    details,
+    created_at: a.createdAt,
+  };
+}
+
 export async function fetchAuditLogs(
   filters: AuditLogFilters = {},
 ): Promise<ListResponse<import("../types").AuditLog>> {
-  const params = new URLSearchParams();
-  if (filters.user_id) params.set("user_id", filters.user_id);
-  if (filters.action) params.set("action", filters.action);
-  if (filters.from) params.set("from", filters.from);
-  if (filters.to) params.set("to", filters.to);
-  params.set("page", String(filters.page ?? 1));
-  params.set("per_page", String(filters.per_page ?? 50));
-  const res = await fetch(`${BASE_URL}/api/v1/audit-logs?${params}`);
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
-  return res.json();
+  const res = await adminClient.listAuditLogs({
+    userId: filters.user_id ?? "",
+    action: filters.action ?? "",
+    from: filters.from ?? "",
+    to: filters.to ?? "",
+    page: filters.page ?? 1,
+    perPage: filters.per_page ?? 50,
+  });
+  return {
+    data: res.data.map(auditLogFromProto),
+    total: Number(res.total),
+    page: res.page,
+    per_page: res.perPage,
+  };
 }
 
 // API caps per_page at 200; paginate to gather more for exports.
@@ -548,29 +626,47 @@ export interface PatientFilters {
   to?: string;
 }
 
+// patientFromProto maps the gRPC Patient message to the frontend Patient type
+// (mirrors dto.PatientWithStatsToDTO). Empty date strings become null.
+function patientFromProto(p: PatientProto): Patient {
+  return {
+    id: p.id as unknown as number, // API id is a string; typing is historical
+    patient_id: p.patientId,
+    first_name: p.firstName,
+    last_name: p.lastName,
+    date_of_birth: p.dateOfBirth || null,
+    gender: p.gender,
+    nda: p.nda || undefined,
+    ecg_count: p.ecgCount,
+    unviewed_count: p.unviewedCount,
+    last_activity: p.lastActivity || null,
+  };
+}
+
 export async function fetchPatients(
   filters: PatientFilters = {},
 ): Promise<ListResponse<Patient>> {
-  const params = new URLSearchParams();
-  if (filters.q) params.set("q", filters.q);
-  if (filters.tags && filters.tags.length > 0)
-    params.set("tags", filters.tags.join(","));
-  if (filters.sort_by) params.set("sort_by", filters.sort_by);
-  if (filters.sort_order) params.set("sort_order", filters.sort_order);
-  if (filters.vendor) params.set("vendor", filters.vendor);
-  if (filters.device_model) params.set("device_model", filters.device_model);
-  if (filters.file_format) params.set("file_format", filters.file_format);
-  if (filters.hl7_status) params.set("hl7_status", filters.hl7_status);
-  if (filters.from) params.set("from", filters.from);
-  if (filters.to) params.set("to", filters.to);
-  params.set("page", String(filters.page ?? 1));
-  params.set("per_page", String(filters.per_page ?? 50));
-  const res = await fetch(`${BASE_URL}/api/v1/patients?${params}`);
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
-  return res.json();
+  // gRPC: PatientService.Search.
+  const res = await patientClient.search({
+    q: filters.q ?? "",
+    tags: filters.tags?.length ? filters.tags.join(",") : "",
+    sortBy: filters.sort_by ?? "",
+    sortOrder: filters.sort_order ?? "",
+    vendor: filters.vendor ?? "",
+    deviceModel: filters.device_model ?? "",
+    fileFormat: filters.file_format ?? "",
+    hl7Status: filters.hl7_status ?? "",
+    from: filters.from ?? "",
+    to: filters.to ?? "",
+    page: filters.page ?? 1,
+    perPage: filters.per_page ?? 50,
+  });
+  return {
+    data: res.data.map(patientFromProto),
+    total: Number(res.total),
+    page: res.page,
+    per_page: res.perPage,
+  };
 }
 
 export interface AppRole {
@@ -602,14 +698,21 @@ export const ALL_PERMISSIONS = [
 
 export type Permission = (typeof ALL_PERMISSIONS)[number];
 
+// roleFromProto maps the gRPC Role message to the frontend AppRole. The API id
+// is a uuid string; AppRole.id is historically typed number (used only as a key
+// and echoed back into the update/delete calls), so cast through unknown.
+function roleFromProto(r: import("../gen/v1/admin_pb").Role): AppRole {
+  return {
+    id: r.id as unknown as number,
+    name: r.name,
+    description: r.description,
+    permissions: r.permissions,
+  };
+}
+
 export async function fetchRoles(): Promise<AppRole[]> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/roles`);
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
-  const data: { data: AppRole[] } = await res.json();
-  return data.data ?? [];
+  const res = await adminClient.listRoles({});
+  return res.roles.map(roleFromProto);
 }
 
 export async function createRole(
@@ -617,16 +720,8 @@ export async function createRole(
   description: string,
   permissions: string[],
 ): Promise<AppRole> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/roles`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, description, permissions }),
-  });
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
-  return res.json();
+  const res = await adminClient.createRole({ name, description, permissions });
+  return res.role ? roleFromProto(res.role) : { id: 0, name, description, permissions };
 }
 
 export async function updateRole(
@@ -634,25 +729,12 @@ export async function updateRole(
   description: string,
   permissions: string[],
 ): Promise<void> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/roles/${id}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ description, permissions }),
-  });
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
+  // name is carried for the audit trail only; the backend keeps it immutable.
+  await adminClient.updateRole({ id: String(id), name: "", description, permissions });
 }
 
 export async function deleteRole(id: number): Promise<void> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/roles/${id}`, {
-    method: "DELETE",
-  });
-  if (!res.ok && res.status !== 404) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
+  await adminClient.deleteRole({ id: String(id) });
 }
 
 export interface AppUser {
@@ -665,13 +747,15 @@ export interface AppUser {
 }
 
 export async function fetchAppUsers(): Promise<AppUser[]> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/app-users`);
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
-  const data: { data: AppUser[] } = await res.json();
-  return data.data ?? [];
+  const res = await adminClient.listAppUsers({});
+  return res.users.map((u) => ({
+    id: u.id,
+    external_id: u.externalId,
+    provider: u.provider,
+    role_name: u.roleName,
+    role_manually_set: u.roleManuallySet,
+    last_login: u.lastLogin,
+  }));
 }
 
 export interface QuarantineEntry {
@@ -686,32 +770,52 @@ export interface QuarantineEntry {
   metadata?: Record<string, unknown>;
 }
 
+// quarantineFromProto maps the gRPC QuarantineEntry to the frontend type. The
+// backend passes extracted demographics as a JSON string (metadata_json).
+function quarantineFromProto(
+  e: import("../gen/v1/admin_pb").QuarantineEntry,
+): QuarantineEntry {
+  let metadata: Record<string, unknown> | undefined;
+  if (e.metadataJson) {
+    try {
+      metadata = JSON.parse(e.metadataJson) as Record<string, unknown>;
+    } catch {
+      metadata = undefined;
+    }
+  }
+  return {
+    id: e.id,
+    filename: e.filename,
+    file_path: e.filePath,
+    received_at: e.receivedAt,
+    error_reason: e.errorReason,
+    category: (e.category as QuarantineEntry["category"]) || "error",
+    vendor: e.vendor || undefined,
+    recorded_at: e.recordedAt || undefined,
+    metadata,
+  };
+}
+
 export async function fetchQuarantine(
   page = 1,
   perPage = 50,
   category?: string,
 ): Promise<ListResponse<QuarantineEntry>> {
-  const params = new URLSearchParams({
-    page: String(page),
-    per_page: String(perPage),
+  const res = await adminClient.listQuarantine({
+    page,
+    perPage,
+    category: category ?? "",
   });
-  if (category) params.set("category", category);
-  const res = await fetch(`${BASE_URL}/api/v1/admin/quarantine?${params}`);
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
-  return res.json();
+  return {
+    data: res.data.map(quarantineFromProto),
+    total: Number(res.total),
+    page: res.page,
+    per_page: res.perPage,
+  };
 }
 
 export async function deleteQuarantineEntry(id: string): Promise<void> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/quarantine/${id}`, {
-    method: "DELETE",
-  });
-  if (!res.ok && res.status !== 404) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
+  await adminClient.deleteQuarantine({ id });
 }
 
 // assignQuarantineEntry assigns a patient ID to an unidentified quarantine entry.
@@ -722,63 +826,43 @@ export async function assignQuarantineEntry(
   patientId: string,
   createNew = false,
 ): Promise<void> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/quarantine/${id}/assign`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ patient_id: patientId, create_new: createNew }),
-  });
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
+  await adminClient.assignQuarantine({ id, patientId, createNew });
 }
 
 // markEcgViewed stamps a single ECG as viewed (clears its "new" indicator).
 export async function markEcgViewed(ecgId: string): Promise<void> {
-  const res = await fetch(`${BASE_URL}/api/v1/ecgs/${ecgId}/view`, {
-    method: "POST",
-  });
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
+  await ecgClient.markViewed({ id: ecgId });
 }
 
-// markPatientEcgsViewed marks all of a patient's ECGs as viewed ("mark all as seen").
-export async function markPatientEcgsViewed(patientId: string): Promise<void> {
-  const res = await fetch(
-    `${BASE_URL}/api/v1/patients/${encodeURIComponent(patientId)}/ecgs/view`,
-    { method: "POST" },
-  );
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
-}
 
 export async function fetchECGMeta(ecgId: number): Promise<ECGMetaResponse> {
-  const res = await fetch(`${BASE_URL}/api/v1/ecgs/${ecgId}/metadata`);
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
-  return res.json();
+  // gRPC: ECGService.GetMetadata. values arrive as a JSON object string.
+  const res = await ecgClient.getMetadata({ id: String(ecgId) });
+  return {
+    fields: res.fields.map((f) => ({
+      key: f.key,
+      label: f.label,
+      type: f.type as ECGMetaResponse["fields"][number]["type"],
+      options: f.options.length ? f.options : undefined,
+    })),
+    values: res.valuesJson
+      ? (JSON.parse(res.valuesJson) as Record<string, unknown>)
+      : {},
+  };
 }
 
 export async function patchECGMetadata(
   ecgId: number,
   values: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
-  const res = await fetch(`${BASE_URL}/api/v1/ecgs/${ecgId}/metadata`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(values),
+  // gRPC: ECGService.UpdateMetadata. Only editable keys are applied server-side.
+  const res = await ecgClient.updateMetadata({
+    id: String(ecgId),
+    valuesJson: JSON.stringify(values),
   });
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
-  return res.json();
+  return res.valuesJson
+    ? (JSON.parse(res.valuesJson) as Record<string, unknown>)
+    : {};
 }
 
 // --- Batch Export (FR19, Story 5.1) ---
@@ -801,77 +885,63 @@ export interface ExportJobResponse {
   error?: string;
 }
 
+// exportJobFromProto maps the gRPC ExportJob (camelCase) to the snake_case
+// ExportJobResponse the UI consumes. error is "" on the wire → undefined.
+function exportJobFromProto(j: {
+  id: string;
+  status: string;
+  ecgCount: number;
+  processedCount: number;
+  formats: string[];
+  createdAt: string;
+  downloadUrl: string;
+  error: string;
+}): ExportJobResponse {
+  return {
+    id: j.id,
+    status: j.status as ExportJobResponse["status"],
+    ecg_count: j.ecgCount,
+    processed_count: j.processedCount,
+    formats: j.formats,
+    created_at: j.createdAt,
+    download_url: j.downloadUrl,
+    error: j.error || undefined,
+  };
+}
+
 export async function createExportJob(
   req: ExportJobRequest,
 ): Promise<ExportJobResponse> {
-  const res = await fetch(`${BASE_URL}/api/v1/exports`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(req),
+  const res = await exportClient.create({
+    ecgIds: req.ecg_ids.map(String),
+    formats: req.formats,
+    anonymize: req.anonymize ?? false,
+    inject: req.inject ?? false,
   });
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
-  return res.json();
+  return exportJobFromProto(res.job!);
 }
 
-export async function getExportJob(jobId: string): Promise<ExportJobResponse> {
-  const res = await fetch(`${BASE_URL}/api/v1/exports/${jobId}`);
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
-  return res.json();
-}
 
 export async function setAppUserRole(
   userId: string,
   role: string,
 ): Promise<void> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/app-users/${userId}/role`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ role }),
-  });
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
+  await adminClient.setAppUserRole({ id: userId, role });
 }
 
 // ─── User defaults ──────────────────────────────────────────────────────────
 
 export async function deleteAppUser(id: string): Promise<void> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/app-users/${id}`, {
-    method: "DELETE",
-  });
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
+  await adminClient.deleteAppUser({ id });
 }
 
 export async function fetchUserDefaults(): Promise<{ default_role: string }> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/settings/user-defaults`);
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
-  const json: { data: { default_role: string } } = await res.json();
-  return json.data;
+  const res = await adminClient.getUserDefaults({});
+  return { default_role: res.defaultRole };
 }
 
 export async function saveUserDefaults(defaultRole: string): Promise<void> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/settings/user-defaults`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ default_role: defaultRole }),
-  });
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
+  await adminClient.setUserDefaults({ defaultRole });
 }
 
 // ─── Branding ────────────────────────────────────────────────────────────────
@@ -882,10 +952,14 @@ export interface Branding {
 }
 
 export async function fetchBranding(): Promise<Branding> {
-  const res = await fetch(`${BASE_URL}/api/v1/branding`);
-  if (!res.ok) return { center_name: "", logo_base64: "" };
-  const json: { data: Branding } = await res.json();
-  return json.data ?? { center_name: "", logo_base64: "" };
+  // gRPC/Connect call; branding is non-critical (pre-auth login/setup pages),
+  // so any transport error degrades to empty branding rather than throwing.
+  try {
+    const res = await brandingClient.getBranding({});
+    return { center_name: res.centerName, logo_base64: res.logoBase64 };
+  } catch {
+    return { center_name: "", logo_base64: "" };
+  }
 }
 
 export async function saveBranding(
@@ -924,24 +998,20 @@ export async function uploadLogo(file: File): Promise<string> {
 // ─── Pins (favourites) ──────────────────────────────────────────────────────
 
 export async function fetchPins(): Promise<string[]> {
-  const res = await fetch(`${BASE_URL}/api/v1/pins`);
-  if (!res.ok) return [];
-  const json = await res.json();
-  return json.data ?? [];
+  try {
+    const res = await pinClient.listPins({});
+    return res.patientIds;
+  } catch {
+    return [];
+  }
 }
 
 export async function pinPatient(patientId: string): Promise<void> {
-  await fetch(`${BASE_URL}/api/v1/pins`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ patient_id: patientId }),
-  });
+  await pinClient.pinPatient({ patientId });
 }
 
 export async function unpinPatient(patientId: string): Promise<void> {
-  await fetch(`${BASE_URL}/api/v1/pins/${patientId}`, {
-    method: "DELETE",
-  });
+  await pinClient.unpinPatient({ patientId });
 }
 
 // ─── HL7 Test ────────────────────────────────────────────────────────────────
@@ -993,80 +1063,116 @@ export interface HL7Preset {
   created_at: string;
 }
 
+// hl7MappingFromProto maps a gRPC HL7Mapping to the frontend type.
+function hl7MappingFromProto(
+  m: import("../gen/v1/hl7admin_pb").HL7Mapping,
+): HL7Mapping {
+  return {
+    id: m.id,
+    preset_id: m.presetId,
+    source_path: m.sourcePath,
+    target_field: m.targetField,
+  };
+}
+
+// hl7PresetFromProto maps a gRPC HL7Preset to the frontend type.
+function hl7PresetFromProto(
+  p: import("../gen/v1/hl7admin_pb").HL7Preset,
+): HL7Preset {
+  return {
+    id: p.id,
+    name: p.name,
+    active: p.active,
+    created_at: p.createdAt,
+    mappings: p.mappings.map(hl7MappingFromProto),
+  };
+}
+
 export async function testHL7Query(patientId: string): Promise<HL7TestResult> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/hl7/test`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ patient_id: patientId }),
-  });
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
+  const r = await hl7AdminClient.testQuery({ patientId });
+  let tree: HL7SegmentNode[] | undefined;
+  if (r.treeJson) {
+    try {
+      tree = JSON.parse(r.treeJson) as HL7SegmentNode[];
+    } catch {
+      tree = undefined;
+    }
   }
-  return res.json();
+  return {
+    success: r.success,
+    patient_id: r.patientId,
+    duration: r.duration,
+    error: r.error || undefined,
+    raw: r.raw || undefined,
+    tree,
+    demographics: r.demographics
+      ? {
+          last_name: r.demographics.lastName,
+          first_name: r.demographics.firstName,
+          date_of_birth: r.demographics.dateOfBirth,
+          gender: r.demographics.gender,
+          source: r.demographics.source,
+        }
+      : undefined,
+  };
 }
 
 export async function fetchHL7Presets(): Promise<HL7Preset[]> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/hl7/presets`);
-  if (!res.ok) return [];
-  const json = await res.json();
-  return json.data ?? [];
+  try {
+    const res = await hl7AdminClient.listPresets({});
+    return res.presets.map(hl7PresetFromProto);
+  } catch {
+    return [];
+  }
 }
 
 export async function createHL7Preset(
   name: string,
   mappings: { source_path: string; target_field: string }[],
 ): Promise<HL7Preset> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/hl7/presets`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, mappings }),
+  const res = await hl7AdminClient.createPreset({
+    name,
+    mappings: mappings.map((m) => ({
+      sourcePath: m.source_path,
+      targetField: m.target_field,
+    })),
   });
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
-  const json = await res.json();
-  return json.data;
+  return res.preset
+    ? hl7PresetFromProto(res.preset)
+    : { id: "", name, active: false, mappings: [], created_at: "" };
 }
 
 export async function activateHL7Preset(id: string): Promise<void> {
-  await fetch(`${BASE_URL}/api/v1/admin/hl7/presets/${id}/activate`, {
-    method: "POST",
-  });
+  await hl7AdminClient.activatePreset({ id });
 }
 
 export async function deleteHL7Preset(id: string): Promise<void> {
-  await fetch(`${BASE_URL}/api/v1/admin/hl7/presets/${id}`, {
-    method: "DELETE",
-  });
+  await hl7AdminClient.deletePreset({ id });
 }
 
 export async function saveHL7PresetMappings(
   presetId: string,
   mappings: { source_path: string; target_field: string }[],
 ): Promise<void> {
-  const res = await fetch(
-    `${BASE_URL}/api/v1/admin/hl7/presets/${presetId}/mappings`,
-    {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mappings }),
-    },
-  );
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
+  await hl7AdminClient.savePresetMappings({
+    id: presetId,
+    mappings: mappings.map((m) => ({
+      sourcePath: m.source_path,
+      targetField: m.target_field,
+    })),
+  });
 }
 
 export async function fetchActiveHL7Mappings(): Promise<{
   data: HL7Mapping[];
   active: boolean;
 }> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/hl7/active-mappings`);
-  if (!res.ok) return { data: [], active: false };
-  return res.json();
+  try {
+    const res = await hl7AdminClient.getActiveMappings({});
+    return { data: res.data.map(hl7MappingFromProto), active: res.active };
+  } catch {
+    return { data: [], active: false };
+  }
 }
 
 // ─── HL7 Settings ────────────────────────────────────────────────────────────
@@ -1099,11 +1205,41 @@ export interface HL7Settings {
   oru_include_pdf: boolean;
 }
 
+// hl7SettingsFromProto maps a gRPC HL7Settings message to the frontend type.
+function hl7SettingsFromProto(
+  s: import("../gen/v1/hl7admin_pb").HL7Settings,
+): HL7Settings {
+  return {
+    id: s.id,
+    trigger_mode: s.triggerMode as HL7Settings["trigger_mode"],
+    cron_expression: s.cronExpression,
+    max_retries: s.maxRetries,
+    timeout: s.timeout,
+    enabled: s.enabled,
+    hl7_enabled: s.hl7Enabled,
+    updated_at: s.updatedAt,
+    last_run: s.lastRun || undefined,
+    next_run: s.nextRun || undefined,
+    host: s.host,
+    port: s.port,
+    sending_application: s.sendingApplication,
+    sending_facility: s.sendingFacility,
+    receiving_application: s.receivingApplication,
+    receiving_facility: s.receivingFacility,
+    version: s.version,
+    processing_id: s.processingId,
+    oru_enabled: s.oruEnabled,
+    oru_trigger_mode: s.oruTriggerMode as HL7Settings["oru_trigger_mode"],
+    oru_host: s.oruHost,
+    oru_port: s.oruPort,
+    oru_include_pdf: s.oruIncludePdf,
+  };
+}
+
 export async function fetchHL7Settings(): Promise<HL7Settings> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/hl7/settings`);
-  if (!res.ok) throw new Error("Failed to fetch HL7 settings");
-  const json = await res.json();
-  return json.data;
+  const res = await hl7AdminClient.getSettings({});
+  if (!res.settings) throw new Error("Failed to fetch HL7 settings");
+  return hl7SettingsFromProto(res.settings);
 }
 
 export async function updateHL7Settings(
@@ -1132,27 +1268,35 @@ export async function updateHL7Settings(
     >
   >,
 ): Promise<HL7Settings> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/hl7/settings`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(settings),
+  // Only the provided fields are sent; proto3 `optional` distinguishes unset
+  // from zero, so the backend applies exactly what the UI changed.
+  const res = await hl7AdminClient.updateSettings({
+    hl7Enabled: settings.hl7_enabled,
+    triggerMode: settings.trigger_mode,
+    cronExpression: settings.cron_expression,
+    maxRetries: settings.max_retries,
+    timeout: settings.timeout,
+    enabled: settings.enabled,
+    host: settings.host,
+    port: settings.port,
+    sendingApplication: settings.sending_application,
+    sendingFacility: settings.sending_facility,
+    receivingApplication: settings.receiving_application,
+    receivingFacility: settings.receiving_facility,
+    version: settings.version,
+    processingId: settings.processing_id,
+    oruEnabled: settings.oru_enabled,
+    oruTriggerMode: settings.oru_trigger_mode,
+    oruHost: settings.oru_host,
+    oruPort: settings.oru_port,
+    oruIncludePdf: settings.oru_include_pdf,
   });
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
-  const json = await res.json();
-  return json.data;
+  if (!res.settings) throw new Error("Failed to update HL7 settings");
+  return hl7SettingsFromProto(res.settings);
 }
 
 export async function triggerHL7Run(): Promise<void> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/hl7/run`, {
-    method: "POST",
-  });
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
+  await hl7AdminClient.forceRun({});
 }
 
 export interface HL7PingResult {
@@ -1166,25 +1310,18 @@ export async function bulkRetryHL7(): Promise<{
   count: number;
   message: string;
 }> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/hl7/bulk-retry`, {
-    method: "POST",
-  });
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
-  return res.json();
+  const res = await hl7AdminClient.bulkRetry({});
+  return { count: Number(res.count), message: res.message };
 }
 
 export async function pingHL7(): Promise<HL7PingResult> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/hl7/ping`, {
-    method: "POST",
-  });
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
-  return res.json();
+  const res = await hl7AdminClient.ping({});
+  return {
+    success: res.success,
+    host: res.host,
+    latency: res.latency,
+    error: res.error || undefined,
+  };
 }
 
 // ─── HL7 History ─────────────────────────────────────────────────────────────
@@ -1204,12 +1341,19 @@ export interface HL7Attempt {
 export async function fetchHL7History(
   patientId: string,
 ): Promise<HL7Attempt[]> {
-  const res = await fetch(
-    `${BASE_URL}/api/v1/patients/${patientId}/hl7-history`,
-  );
-  if (!res.ok) return [];
-  const json = await res.json();
-  return json.data ?? [];
+  // gRPC: HL7Service.ListAttempts (most recent first, default limit 20).
+  const res = await hl7Client.listAttempts({ patientId });
+  return res.data.map((a) => ({
+    id: a.id,
+    ecg_id: a.ecgId,
+    patient_id: a.patientId,
+    status: a.status as HL7Attempt["status"],
+    msa_code: a.msaCode || undefined,
+    msa_message: a.msaMessage || undefined,
+    error: a.error || undefined,
+    response_ms: a.responseMs,
+    created_at: a.createdAt,
+  }));
 }
 
 // ─── Tags ───────────────────────────────────────────────────────────────────
@@ -1222,21 +1366,25 @@ export interface TagDTO {
   created_at: string;
 }
 
+// tagFromProto maps the gRPC Tag message to the frontend TagDTO.
+function tagFromProto(t: TagProto): TagDTO {
+  return {
+    id: t.id,
+    name: t.name,
+    color: t.color,
+    created_by: t.createdBy,
+    created_at: t.createdAt,
+  };
+}
+
 export async function fetchTags(): Promise<TagDTO[]> {
-  const res = await fetch(`${BASE_URL}/api/v1/tags`);
-  if (!res.ok) return [];
-  const json = await res.json();
-  return json.data ?? [];
+  const res = await tagClient.listTags({});
+  return res.data.map(tagFromProto);
 }
 
 export async function createTag(name: string, color?: string): Promise<TagDTO> {
-  const res = await fetch(`${BASE_URL}/api/v1/tags`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, color }),
-  });
-  const json = await res.json();
-  return json.data;
+  const res = await tagClient.createTag({ name, color: color ?? "" });
+  return tagFromProto(res.tag!);
 }
 
 export async function updateTag(
@@ -1244,84 +1392,72 @@ export async function updateTag(
   name: string,
   color: string,
 ): Promise<TagDTO> {
-  const res = await fetch(`${BASE_URL}/api/v1/tags/${id}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, color }),
-  });
-  const json = await res.json();
-  return json.data;
+  const res = await tagClient.updateTag({ id, name, color });
+  return tagFromProto(res.tag!);
 }
 
 export async function deleteTag(id: string): Promise<void> {
-  await fetch(`${BASE_URL}/api/v1/tags/${id}`, { method: "DELETE" });
+  await tagClient.deleteTag({ id });
 }
 
 export async function fetchPatientTags(patientId: string): Promise<TagDTO[]> {
-  const res = await fetch(`${BASE_URL}/api/v1/patients/${patientId}/tags`);
-  if (!res.ok) return [];
-  const json = await res.json();
-  return json.data ?? [];
+  const res = await tagClient.listPatientTags({ patientId });
+  return res.data.map(tagFromProto);
 }
 
 export async function tagPatient(
   patientId: string,
   tagId: string,
 ): Promise<void> {
-  const res = await fetch(`${BASE_URL}/api/v1/patients/${patientId}/tags`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ tag_id: tagId }),
-  });
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
+  await tagClient.tagPatient({ patientId, tagId });
 }
 
 export async function untagPatient(
   patientId: string,
   tagId: string,
 ): Promise<void> {
-  const res = await fetch(
-    `${BASE_URL}/api/v1/patients/${patientId}/tags/${tagId}`,
-    {
-      method: "DELETE",
-    },
-  );
-  if (!res.ok && res.status !== 404) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
+  await tagClient.untagPatient({ patientId, tagId });
 }
 
 export async function fetchECGTags(ecgId: string): Promise<TagDTO[]> {
-  const res = await fetch(`${BASE_URL}/api/v1/ecgs/${ecgId}/tags`);
-  if (!res.ok) return [];
-  const json = await res.json();
-  return json.data ?? [];
+  const res = await tagClient.listEcgTags({ ecgId });
+  return res.data.map(tagFromProto);
 }
 
 export async function tagECG(ecgId: string, tagId: string): Promise<void> {
-  const res = await fetch(`${BASE_URL}/api/v1/ecgs/${ecgId}/tags`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ tag_id: tagId }),
-  });
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
+  await tagClient.tagEcg({ ecgId, tagId });
 }
 
 export async function untagECG(ecgId: string, tagId: string): Promise<void> {
-  const res = await fetch(`${BASE_URL}/api/v1/ecgs/${ecgId}/tags/${tagId}`, {
-    method: "DELETE",
-  });
-  if (!res.ok && res.status !== 404) {
-    const err: ErrorResponse = await res.json();
-    throw err;
+  await tagClient.untagEcg({ ecgId, tagId });
+}
+
+// ── Batch tag reads (kill the per-row N+1) ───────────────────────────────────
+// One request resolves tags for a whole list page. Returns a map keyed by the
+// entity id; ids with no tags are absent (callers default to []).
+
+export async function fetchECGTagsBatch(
+  ecgIds: string[],
+): Promise<Record<string, TagDTO[]>> {
+  if (ecgIds.length === 0) return {};
+  const res = await tagClient.batchGetEcgTags({ ecgIds });
+  const out: Record<string, TagDTO[]> = {};
+  for (const [id, list] of Object.entries(res.tags)) {
+    out[id] = list.tags.map(tagFromProto);
   }
+  return out;
+}
+
+export async function fetchPatientTagsBatch(
+  patientIds: string[],
+): Promise<Record<string, TagDTO[]>> {
+  if (patientIds.length === 0) return {};
+  const res = await tagClient.batchGetPatientTags({ patientIds });
+  const out: Record<string, TagDTO[]> = {};
+  for (const [id, list] of Object.entries(res.tags)) {
+    out[id] = list.tags.map(tagFromProto);
+  }
+  return out;
 }
 
 export interface VolumeMetric {
@@ -1337,30 +1473,19 @@ export interface StorageMetricsResp {
 }
 // Api for get Metric volume storage place
 export async function fetchStorageMetrics(): Promise<StorageMetricsResp> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/storage-metrics`);
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
-  return res.json();
+  const res = await adminClient.getStorageMetrics({});
+  return {
+    volumes: res.volumes.map((v) => ({
+      name: v.name,
+      total: Number(v.total),
+      available: Number(v.available),
+      max_size: v.maxSize || undefined,
+    })),
+    error: res.error || undefined,
+  };
 }
 
-export interface RecentError {
-  timestamp: string;
-  method: string;
-  route: string;
-  status: number;
-  error?: string;
-  request_uri: string;
-  user_id?: string;
-  duration_ms: number;
-}
 
-export async function fetchRecentErrors(limit = 20): Promise<RecentError[]> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/errors?limit=${limit}`);
-  if (!res.ok) return [];
-  return res.json();
-}
 
 // ─── Auth Providers (admin) ─────────────────────────────────────────────────
 
@@ -1372,70 +1497,53 @@ export interface AuthProviderDTO {
 }
 
 export async function fetchAdminAuthProviders(): Promise<AuthProviderDTO[]> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/auth/providers`);
-  if (!res.ok) return [];
-  const json = await res.json();
-  return json.data ?? [];
+  try {
+    const res = await authAdminClient.listProviders({});
+    return res.providers.map((p) => ({
+      id: p.id,
+      provider_type: p.providerType as AuthProviderDTO["provider_type"],
+      active: p.active,
+      config: p.configJson
+        ? (JSON.parse(p.configJson) as Record<string, unknown>)
+        : {},
+    }));
+  } catch {
+    return [];
+  }
 }
 
 export async function saveOIDCConfig(
   config: Record<string, unknown>,
 ): Promise<void> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/auth/oidc`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(config),
-  });
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
+  await authAdminClient.saveOIDC({ configJson: JSON.stringify(config) });
 }
 
 export async function saveLDAPConfig(
   config: Record<string, unknown>,
 ): Promise<void> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/auth/ldap`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(config),
-  });
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
+  await authAdminClient.saveLDAP({ configJson: JSON.stringify(config) });
 }
 
 export async function deleteAuthProvider(id: string): Promise<void> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/auth/providers/${id}`, {
-    method: "DELETE",
-  });
-  if (!res.ok && res.status !== 404) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
+  await authAdminClient.deleteProvider({ id });
 }
 
 export async function testOIDCConnection(
   config: Record<string, unknown>,
 ): Promise<{ success: boolean; error?: string }> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/auth/oidc/test`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(config),
+  const res = await authAdminClient.testOIDC({
+    configJson: JSON.stringify(config),
   });
-  return res.json();
+  return { success: res.success, error: res.error || undefined };
 }
 
 export async function testLDAPConnection(
   config: Record<string, unknown>,
 ): Promise<{ success: boolean; error?: string }> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/auth/ldap/test`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(config),
+  const res = await authAdminClient.testLDAP({
+    configJson: JSON.stringify(config),
   });
-  return res.json();
+  return { success: res.success, error: res.error || undefined };
 }
 
 // ─── Module Control ──────────────────────────────────────────────────────────
@@ -1456,60 +1564,52 @@ export interface ModuleControlStatus {
 }
 
 export async function fetchModuleStatuses(): Promise<ModuleControlStatus[]> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/modules/status`);
-  if (!res.ok) return [];
-  const json = await res.json();
-  return json.data ?? [];
+  try {
+    const res = await moduleClient.listModuleStatus({});
+    return res.data.map((s) => ({
+      name: s.name,
+      status: s.status as ModuleControlStatus["status"],
+    }));
+  } catch {
+    return [];
+  }
 }
 
 export async function stopModule(name: string): Promise<void> {
-  const res = await fetch(
-    `${BASE_URL}/api/v1/admin/modules/${encodeURIComponent(name)}/stop`,
-    {
-      method: "POST",
-    },
-  );
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
+  await moduleClient.stopModule({ name });
 }
 
 export async function startModule(name: string): Promise<void> {
-  const res = await fetch(
-    `${BASE_URL}/api/v1/admin/modules/${encodeURIComponent(name)}/start`,
-    {
-      method: "POST",
-    },
-  );
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
+  await moduleClient.startModule({ name });
 }
 
 export async function fetchFTPConfig(): Promise<FTPModuleConfig> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/modules/ftp/config`);
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
-  const json = await res.json();
-  return json.data;
+  const c = await moduleClient.getFTPConfig({});
+  return {
+    port: c.port,
+    passive_port_range: c.passivePortRange,
+    public_host: c.publicHost,
+    tls: c.tls,
+    username: c.username,
+    password: c.password,
+    enabled: c.enabled,
+  };
 }
 
 export async function saveFTPConfig(
   config: Partial<FTPModuleConfig>,
 ): Promise<void> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/modules/ftp/config`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(config),
+  await moduleClient.saveFTPConfig({
+    config: {
+      port: config.port ?? 0,
+      passivePortRange: config.passive_port_range ?? "",
+      publicHost: config.public_host ?? "",
+      tls: config.tls ?? false,
+      username: config.username ?? "",
+      password: config.password ?? "",
+      enabled: config.enabled ?? false,
+    },
   });
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
 }
 
 export interface DICOMModuleConfig {
@@ -1521,27 +1621,28 @@ export interface DICOMModuleConfig {
 }
 
 export async function fetchDICOMConfig(): Promise<DICOMModuleConfig> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/modules/dicom/config`);
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
-  const json = await res.json();
-  return json.data;
+  const c = await moduleClient.getDICOMConfig({});
+  return {
+    port: c.port,
+    ae_title: c.aeTitle,
+    echo_enabled: c.echoEnabled,
+    tls: c.tls,
+    enabled: c.enabled,
+  };
 }
 
 export async function saveDICOMConfig(
   config: Partial<DICOMModuleConfig>,
 ): Promise<void> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/modules/dicom/config`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(config),
+  await moduleClient.saveDICOMConfig({
+    config: {
+      port: config.port ?? 0,
+      aeTitle: config.ae_title ?? "",
+      echoEnabled: config.echo_enabled ?? false,
+      tls: config.tls ?? false,
+      enabled: config.enabled ?? false,
+    },
   });
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
 }
 
 // ─── Connector Config (Story 7.6) ────────────────────────────────────────────
@@ -1580,66 +1681,91 @@ export function connectorTypeFromProtocol(protocol: string): ConnectorType {
   return protocol === "dicom_cstore" ? "pacs_dicom" : "polaris";
 }
 
-// protocolFromConnectorType maps a ConnectorType back to the backend protocol string.
-export function protocolFromConnectorType(
-  ct: ConnectorType,
-): ConnectorConfig["protocol"] {
-  return ct === "pacs_dicom" ? "dicom_cstore" : "ectp_ftp";
+
+// connectorConfigFromProto maps a gRPC ConnectorConfig to the frontend type.
+function connectorConfigFromProto(
+  c: import("../gen/v1/module_pb").ConnectorConfig,
+): ConnectorConfig {
+  return {
+    name: c.name,
+    protocol: c.protocol as ConnectorConfig["protocol"],
+    enabled: false, // set by the caller from the entry-level flag
+    extensions: c.extensions,
+    vendors: c.vendors,
+    max_attempts: c.maxAttempts,
+    interval: c.interval,
+    ectp_host: c.ectpHost || undefined,
+    ectp_port: c.ectpPort || undefined,
+    ftp_host: c.ftpHost || undefined,
+    ftp_port: c.ftpPort || undefined,
+    ftp_username: c.ftpUsername || undefined,
+    ftp_password: c.ftpPassword || undefined,
+    dicom_host: c.dicomHost || undefined,
+    dicom_port: c.dicomPort || undefined,
+    calling_ae: c.callingAe || undefined,
+    called_ae: c.calledAe || undefined,
+    dicom_timeout: c.dicomTimeout || undefined,
+  };
 }
 
 export async function fetchConnectorConfigs(): Promise<
   { module_type: string; enabled: boolean; config: ConnectorConfig }[]
 > {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/connectors/config`);
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
-  const json = await res.json();
-  return json.data ?? [];
+  const res = await moduleClient.listConnectorConfigs({});
+  return res.data.map((e) => ({
+    module_type: e.moduleType,
+    enabled: e.enabled,
+    config: {
+      ...connectorConfigFromProto(
+        e.config ?? ({} as import("../gen/v1/module_pb").ConnectorConfig),
+      ),
+      enabled: e.enabled,
+    },
+  }));
 }
 
 export async function saveConnectorConfig(
   name: string,
   config: ConnectorConfig & { enabled: boolean },
 ): Promise<void> {
-  const res = await fetch(
-    `${BASE_URL}/api/v1/admin/connectors/${encodeURIComponent(name)}/config`,
-    {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(config),
+  await moduleClient.saveConnectorConfig({
+    name,
+    enabled: config.enabled,
+    config: {
+      name,
+      protocol: config.protocol,
+      extensions: config.extensions ?? [],
+      vendors: config.vendors ?? [],
+      maxAttempts: config.max_attempts ?? 0,
+      interval: config.interval ?? "",
+      ectpHost: config.ectp_host ?? "",
+      ectpPort: config.ectp_port ?? 0,
+      ftpHost: config.ftp_host ?? "",
+      ftpPort: config.ftp_port ?? 0,
+      ftpUsername: config.ftp_username ?? "",
+      ftpPassword: config.ftp_password ?? "",
+      dicomHost: config.dicom_host ?? "",
+      dicomPort: config.dicom_port ?? 0,
+      callingAe: config.calling_ae ?? "",
+      calledAe: config.called_ae ?? "",
+      dicomTimeout: config.dicom_timeout ?? "",
     },
-  );
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
+  });
 }
 
 export async function deleteConnectorConfig(name: string): Promise<void> {
-  const res = await fetch(
-    `${BASE_URL}/api/v1/admin/connectors/${encodeURIComponent(name)}`,
-    { method: "DELETE" },
-  );
-  if (!res.ok && res.status !== 404) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
+  await moduleClient.deleteConnector({ name });
 }
 
 export async function testConnector(
   name: string,
 ): Promise<{ success: boolean; latency: string; error?: string }> {
-  const res = await fetch(
-    `${BASE_URL}/api/v1/admin/connectors/${encodeURIComponent(name)}/test`,
-    { method: "POST" },
-  );
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
-  return res.json();
+  const res = await moduleClient.testConnector({ name });
+  return {
+    success: res.success,
+    latency: res.latency,
+    error: res.error || undefined,
+  };
 }
 
 // ─── Module Settings ─────────────────────────────────────────────────────────
@@ -1650,25 +1776,12 @@ export interface ModuleSettingsData {
 }
 
 export async function fetchModuleSettings(): Promise<ModuleSettingsData> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/settings/modules`);
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
-  const body: { data: ModuleSettingsData } = await res.json();
-  return body.data;
+  const res = await moduleClient.getModuleSettings({});
+  return { active: res.active, available: res.available };
 }
 
 export async function saveModuleSettings(active: string[]): Promise<void> {
-  const res = await fetch(`${BASE_URL}/api/v1/admin/settings/modules`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ active }),
-  });
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
+  await moduleClient.saveModuleSettings({ active });
 }
 
 // ─── API keys (per-user) ─────────────────────────────────────────────────────
@@ -1687,35 +1800,40 @@ export interface CreatedApiKey extends ApiKey {
   key: string;
 }
 
+// apiKeyFromProto maps the gRPC ApiKey (camelCase) to the snake_case ApiKey the
+// UI uses. lastUsedAt is "" on the wire when never used → null.
+function apiKeyFromProto(k: {
+  id: string;
+  name: string;
+  prefix: string;
+  createdAt: string;
+  lastUsedAt: string;
+}): ApiKey {
+  return {
+    id: k.id,
+    name: k.name,
+    prefix: k.prefix,
+    created_at: k.createdAt,
+    last_used_at: k.lastUsedAt || null,
+  };
+}
+
 export async function fetchApiKeys(): Promise<ApiKey[]> {
-  const res = await fetch(`${BASE_URL}/api/v1/api-keys`);
-  if (!res.ok) return [];
-  const json = await res.json();
-  return json.data ?? [];
+  try {
+    const res = await apiKeyClient.listApiKeys({});
+    return res.keys.map(apiKeyFromProto);
+  } catch {
+    return [];
+  }
 }
 
 export async function createApiKey(name: string): Promise<CreatedApiKey> {
-  const res = await fetch(`${BASE_URL}/api/v1/api-keys`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name }),
-  });
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
-  const json = await res.json();
-  return json.data;
+  const res = await apiKeyClient.createApiKey({ name });
+  return { ...apiKeyFromProto(res.key!), key: res.plaintext };
 }
 
 export async function deleteApiKey(id: string): Promise<void> {
-  const res = await fetch(`${BASE_URL}/api/v1/api-keys/${id}`, {
-    method: "DELETE",
-  });
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
+  await apiKeyClient.deleteApiKey({ id });
 }
 
 // ───────────────────────── User webhooks ─────────────────────────
@@ -1768,6 +1886,57 @@ export interface WebhookTestResult {
   error: string;
 }
 
+
+// webhookFromProto maps the gRPC Webhook (camelCase) to the snake_case
+// UserWebhook the UI uses. lastDeliveredAt is "" on the wire → null.
+function webhookFromProto(w: {
+  id: string;
+  name: string;
+  url: string;
+  enabled: boolean;
+  insecureSkipVerify: boolean;
+  events: string[];
+  vendors: string[];
+  hasSecret: boolean;
+  hasAuthHeader: boolean;
+  lastStatusCode: number;
+  lastError: string;
+  lastDeliveredAt: string;
+  createdAt: string;
+  updatedAt: string;
+}): UserWebhook {
+  return {
+    id: w.id,
+    name: w.name,
+    url: w.url,
+    enabled: w.enabled,
+    insecure_skip_verify: w.insecureSkipVerify,
+    events: w.events,
+    vendors: w.vendors,
+    has_secret: w.hasSecret,
+    has_auth_header: w.hasAuthHeader,
+    last_status_code: w.lastStatusCode,
+    last_error: w.lastError,
+    last_delivered_at: w.lastDeliveredAt || null,
+    created_at: w.createdAt,
+    updated_at: w.updatedAt,
+  };
+}
+
+// webhookInputToProto maps the UI input to the proto WebhookInput. secret /
+// auth_header stay undefined when not provided (tri-state: leave unchanged).
+function webhookInputToProto(input: WebhookInput) {
+  return {
+    name: input.name,
+    url: input.url,
+    enabled: input.enabled,
+    insecureSkipVerify: input.insecure_skip_verify,
+    secret: input.secret,
+    authHeader: input.auth_header,
+    events: input.events,
+    vendors: input.vendors,
+  };
+
 // WebhookDelivery is one logged delivery attempt (final outcome after retries).
 export interface WebhookDelivery {
   id: string;
@@ -1779,65 +1948,54 @@ export interface WebhookDelivery {
 }
 
 export async function fetchWebhooks(): Promise<UserWebhook[]> {
-  const res = await fetch(`${BASE_URL}/api/v1/webhooks`);
-  if (!res.ok) return [];
-  return res.json();
+  try {
+    const res = await webhookClient.listWebhooks({});
+    return res.webhooks.map(webhookFromProto);
+  } catch {
+    return [];
+  }
 }
 
 export async function fetchWebhookOptions(): Promise<WebhookOptions> {
-  const res = await fetch(`${BASE_URL}/api/v1/webhooks/options`);
-  if (!res.ok) return { events: [], vendors: [] };
-  return res.json();
+  try {
+    const res = await webhookClient.getOptions({});
+    return {
+      events: res.events,
+      vendors: res.vendors.map((v) => ({
+        name: v.name,
+        extensions: v.extensions,
+      })),
+    };
+  } catch {
+    return { events: [], vendors: [] };
+  }
 }
 
 export async function createWebhook(input: WebhookInput): Promise<UserWebhook> {
-  const res = await fetch(`${BASE_URL}/api/v1/webhooks`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
+  const res = await webhookClient.createWebhook({
+    input: webhookInputToProto(input),
   });
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
-  return res.json();
+  return webhookFromProto(res.webhook!);
 }
 
 export async function updateWebhook(
   id: string,
   input: WebhookInput,
 ): Promise<UserWebhook> {
-  const res = await fetch(`${BASE_URL}/api/v1/webhooks/${id}`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
+  const res = await webhookClient.updateWebhook({
+    id,
+    input: webhookInputToProto(input),
   });
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
-  return res.json();
+  return webhookFromProto(res.webhook!);
 }
 
 export async function deleteWebhook(id: string): Promise<void> {
-  const res = await fetch(`${BASE_URL}/api/v1/webhooks/${id}`, {
-    method: "DELETE",
-  });
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
+  await webhookClient.deleteWebhook({ id });
 }
 
 export async function testUserWebhook(id: string): Promise<WebhookTestResult> {
-  const res = await fetch(`${BASE_URL}/api/v1/webhooks/${id}/test`, {
-    method: "POST",
-  });
-  if (!res.ok) {
-    const err: ErrorResponse = await res.json();
-    throw err;
-  }
-  return res.json();
+  const res = await webhookClient.testWebhook({ id });
+  return { ok: res.ok, status_code: res.statusCode, error: res.error };
 }
 
 export async function fetchWebhookDeliveries(

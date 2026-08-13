@@ -1,0 +1,241 @@
+syntax = "proto3";
+package grpc.api.v1;
+
+// AdminService groups the admin console read/write operations of "étape 8":
+// roles, application users, audit logs, system stats, storage metrics, recent
+// errors, global user defaults and quarantine. Every RPC is permission-guarded
+// per procedure in the router (admin.roles / admin.users / admin.audit /
+// admin.system / admin.roles / quarantine.*).
+
+// ---- Roles ----------------------------------------------------------------
+
+message Role {
+  string id = 1;
+  string name = 2;
+  string description = 3;
+  repeated string permissions = 4;
+}
+
+message ListRolesRequest {}
+
+message ListRolesResponse {
+  repeated Role roles = 1;
+  int32 total = 2;
+}
+
+message CreateRoleRequest {
+  string name = 1;
+  string description = 2;
+  repeated string permissions = 3;
+}
+
+message CreateRoleResponse {
+  Role role = 1;
+}
+
+message UpdateRoleRequest {
+  string id = 1;
+  string name = 2; // kept for the audit trail; the name itself is immutable
+  string description = 3;
+  repeated string permissions = 4;
+}
+
+message UpdateRoleResponse {}
+
+message DeleteRoleRequest {
+  string id = 1;
+}
+
+message DeleteRoleResponse {}
+
+// ---- Application users -----------------------------------------------------
+
+message AppUser {
+  string id = 1;
+  string external_id = 2;
+  string provider = 3;
+  string role_name = 4;
+  bool role_manually_set = 5;
+  string last_login = 6; // RFC3339
+}
+
+message ListAppUsersRequest {}
+
+message ListAppUsersResponse {
+  repeated AppUser users = 1;
+  int32 total = 2;
+}
+
+message SetAppUserRoleRequest {
+  string id = 1;
+  string role = 2;
+}
+
+message SetAppUserRoleResponse {}
+
+message DeleteAppUserRequest {
+  string id = 1;
+}
+
+message DeleteAppUserResponse {}
+
+// ---- Audit logs ------------------------------------------------------------
+
+message AuditLog {
+  string id = 1;
+  string created_at = 2; // RFC3339 UTC
+  string user_id = 3;
+  string username = 4; // resolved display name; empty if unknown
+  string action = 5;
+  string resource_id = 6;
+  string details_json = 7; // JSONB passthrough, "{}" when empty
+}
+
+message ListAuditLogsRequest {
+  string user_id = 1;
+  string action = 2;
+  string from = 3; // YYYY-MM-DD inclusive
+  string to = 4;   // YYYY-MM-DD inclusive
+  int32 page = 5;
+  int32 per_page = 6;
+}
+
+message ListAuditLogsResponse {
+  repeated AuditLog data = 1;
+  int64 total = 2;
+  int32 page = 3;
+  int32 per_page = 4;
+}
+
+// ---- System stats ----------------------------------------------------------
+
+message GetStatsRequest {}
+
+message GetStatsResponse {
+  int64 hl7_pending = 1;
+  int64 hl7_success = 2;
+  int64 hl7_exhausted = 3;
+  int64 total_ecgs = 4;
+  int64 total_patients = 5;
+  int64 quarantine_count = 6;
+}
+
+// ---- Storage metrics -------------------------------------------------------
+
+message VolumeMetric {
+  string name = 1;
+  int64 total = 2;
+  int64 available = 3;
+  string max_size = 4;
+}
+
+message GetStorageMetricsRequest {}
+
+message GetStorageMetricsResponse {
+  repeated VolumeMetric volumes = 1;
+  string error = 2;
+}
+
+// ---- Recent errors ---------------------------------------------------------
+
+message ErrorEntry {
+  string timestamp = 1; // RFC3339
+  string method = 2;
+  string route = 3;
+  int32 status = 4;
+  string error = 5;
+  string request_uri = 6;
+  string user_id = 7;
+  double duration_ms = 8;
+}
+
+message GetRecentErrorsRequest {
+  int32 limit = 1;
+}
+
+message GetRecentErrorsResponse {
+  repeated ErrorEntry errors = 1;
+}
+
+// ---- Global user defaults --------------------------------------------------
+
+message GetUserDefaultsRequest {}
+
+message GetUserDefaultsResponse {
+  string default_role = 1;
+}
+
+message SetUserDefaultsRequest {
+  string default_role = 1;
+}
+
+message SetUserDefaultsResponse {
+  string default_role = 1;
+}
+
+// ---- Quarantine ------------------------------------------------------------
+
+message QuarantineEntry {
+  string id = 1;
+  string filename = 2;
+  string file_path = 3;
+  string received_at = 4; // RFC3339
+  string error_reason = 5;
+  string category = 6; // "error" | "unidentified"
+  string vendor = 7;
+  string recorded_at = 8; // RFC3339, unidentified only
+  string metadata_json = 9; // extracted demographics, unidentified only
+}
+
+message ListQuarantineRequest {
+  int32 page = 1;
+  int32 per_page = 2;
+  string category = 3;
+}
+
+message ListQuarantineResponse {
+  repeated QuarantineEntry data = 1;
+  int64 total = 2;
+  int32 page = 3;
+  int32 per_page = 4;
+}
+
+message DeleteQuarantineRequest {
+  string id = 1;
+}
+
+message DeleteQuarantineResponse {}
+
+message AssignQuarantineRequest {
+  string id = 1;
+  string patient_id = 2;
+  bool create_new = 3;
+}
+
+message AssignQuarantineResponse {
+  string id = 1;
+  string patient_id = 2;
+  string status = 3;
+}
+
+service AdminService {
+  rpc GetStats(GetStatsRequest) returns (GetStatsResponse) {}
+  rpc GetStorageMetrics(GetStorageMetricsRequest) returns (GetStorageMetricsResponse) {}
+  rpc GetRecentErrors(GetRecentErrorsRequest) returns (GetRecentErrorsResponse) {}
+  rpc ListAuditLogs(ListAuditLogsRequest) returns (ListAuditLogsResponse) {}
+  rpc GetUserDefaults(GetUserDefaultsRequest) returns (GetUserDefaultsResponse) {}
+  rpc SetUserDefaults(SetUserDefaultsRequest) returns (SetUserDefaultsResponse) {}
+
+  rpc ListRoles(ListRolesRequest) returns (ListRolesResponse) {}
+  rpc CreateRole(CreateRoleRequest) returns (CreateRoleResponse) {}
+  rpc UpdateRole(UpdateRoleRequest) returns (UpdateRoleResponse) {}
+  rpc DeleteRole(DeleteRoleRequest) returns (DeleteRoleResponse) {}
+
+  rpc ListAppUsers(ListAppUsersRequest) returns (ListAppUsersResponse) {}
+  rpc SetAppUserRole(SetAppUserRoleRequest) returns (SetAppUserRoleResponse) {}
+  rpc DeleteAppUser(DeleteAppUserRequest) returns (DeleteAppUserResponse) {}
+
+  rpc ListQuarantine(ListQuarantineRequest) returns (ListQuarantineResponse) {}
+  rpc DeleteQuarantine(DeleteQuarantineRequest) returns (DeleteQuarantineResponse) {}
+  rpc AssignQuarantine(AssignQuarantineRequest) returns (AssignQuarantineResponse) {}
+}

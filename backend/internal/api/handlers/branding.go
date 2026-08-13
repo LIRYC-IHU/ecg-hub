@@ -16,22 +16,9 @@ import (
 
 const maxLogoBytes = 512 * 1024 // 512 KB
 
-// GetBrandingHandler handles GET /api/v1/branding.
-// Public — used by login and setup pages before authentication.
-func GetBrandingHandler(repo *repository.ModuleSettingsRepository) echo.HandlerFunc {
-	return func(c echo.Context) error {
-		centerName, logoBase64, err := repo.GetBranding()
-		if err != nil {
-			return c.JSON(http.StatusInternalServerError, mw.APIError("INTERNAL", err.Error()))
-		}
-		return c.JSON(http.StatusOK, map[string]any{
-			"data": map[string]any{
-				"center_name": centerName,
-				"logo_base64": logoBase64,
-			},
-		})
-	}
-}
+// GetBranding is now served over gRPC/Connect by BrandingServiceHandler
+// (branding_service.go). The admin write handlers below stay REST until
+// étape 8 of the migration.
 
 // SaveBrandingHandler handles PUT /api/v1/admin/settings/branding.
 // Body: { "center_name": "CHU name", "logo_base64": "data:image/png;base64,..." }

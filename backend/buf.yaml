@@ -1,0 +1,14 @@
+# For details on buf.yaml configuration, visit https://buf.build/docs/configuration/v2/buf-yaml
+version: v2
+deps:
+  # protovalidate: lets .proto files declare field constraints
+  # (import "buf/validate/validate.proto") enforced at runtime by the
+  # connectrpc.com/validate interceptor. healthz has no inputs to constrain
+  # yet — this readies annotations for the next services in the migration.
+  - buf.build/bufbuild/protovalidate
+lint:
+  use:
+    - STANDARD
+breaking:
+  use:
+    - FILE

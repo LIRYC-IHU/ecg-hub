@@ -3,7 +3,7 @@
 #
 #   make            → build everything (backend + frontend) locally
 #   make init       → create .env and config.yaml from the example files
-#   make swagger    → (re)generate the OpenAPI docs (ECG, Patients, health)
+#   make swagger    → (re)generate the researcher OpenAPI docs (Research tag = API-key endpoints only)
 #   make docker     → build images and start the prod stack (detached)
 #   make dev        → start the local dev stack (air + vite hot-reload)
 #   make clean      → remove build artefacts and stop containers
@@ -16,7 +16,9 @@ BACKEND_DIR   := backend
 FRONTEND_DIR  := frontend
 BIN           := $(BACKEND_DIR)/ecg-hub
 CMD           := ./cmd/ecg-hub
-SWAGGER_TAGS  := ECG,Patients,health,uploads
+# Research = the curated API-key surface for external researchers (webhook → pull).
+# Only handlers annotated with this tag (all carry @Security ApiKeyAuth) are documented.
+SWAGGER_TAGS  := Research
 SWAGGER_OUT   := docs
 SWAG          := $(shell go env GOPATH)/bin/swag
 
@@ -56,7 +58,7 @@ $(FRONTEND_DIR)/node_modules: $(FRONTEND_DIR)/package.json
 	@touch $@
 
 # ── Swagger ──────────────────────────────────────────────────────────────────
-swagger: ## (Re)generate OpenAPI docs (ECG, Patients, health only)
+swagger: ## (Re)generate the researcher OpenAPI docs (Research tag = API-key endpoints only)
 	$(call log,Generating swagger ($(SWAGGER_TAGS)))
 	@command -v $(SWAG) >/dev/null 2>&1 || { \
 		printf "swag not found — installing…\n"; \

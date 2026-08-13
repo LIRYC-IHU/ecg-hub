@@ -27,6 +27,7 @@ import {
   type WebhookInput,
 } from "../../lib/api";
 import { Spinner } from "../ui/Spinner";
+import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { useNotification } from "../../context/NotificationContext";
 
 function WebhookDeliveries({ webhookId }: { webhookId: string }) {
@@ -165,7 +166,12 @@ export function WebhooksPage() {
   const [form, setForm] = useState<FormState>(emptyForm);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+
+  // Id of the webhook pending delete confirmation (null = dialog closed).
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
   const [historyId, setHistoryId] = useState<string | null>(null);
+
 
   const { data: hooks = [], isLoading } = useQuery({
     queryKey: ["webhooks"],
@@ -200,6 +206,7 @@ export function WebhooksPage() {
       notify("success", t("webhooks.deleted"));
     },
     onError: () => notify("error", t("webhooks.deleteError")),
+    onSettled: () => setDeletingId(null),
   });
 
   const testMutation = useMutation({
@@ -250,10 +257,7 @@ export function WebhooksPage() {
     saveMutation.mutate(toInput(form, editingId !== null));
   }
 
-  function handleDelete(id: string) {
-    if (!window.confirm(t("webhooks.confirmDelete"))) return;
-    deleteMutation.mutate(id);
-  }
+  const deletingHook = hooks.find((h) => h.id === deletingId) ?? null;
 
   function toggleList(list: string[], value: string): string[] {
     return list.includes(value)
@@ -626,11 +630,40 @@ export function WebhooksPage() {
                   <Trash2 className="w-4 h-4" />
                 </button>
               </div>
+
+              <button
+                onClick={() => testMutation.mutate(hook.id)}
+                disabled={testMutation.isPending}
+                className="p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0"
+                title={t("webhooks.test")}
+                aria-label={t("webhooks.test")}
+              >
+                <Send className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => openEdit(hook)}
+                className="p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0"
+                title={t("webhooks.edit")}
+                aria-label={t("webhooks.edit")}
+              >
+                <Pencil className="w-4 h-4" />
+              </button>
+              <button
+                onClick={() => setDeletingId(hook.id)}
+                disabled={deleteMutation.isPending}
+                className="p-2 rounded-md text-destructive hover:bg-destructive/5 transition-colors shrink-0"
+                title={t("webhooks.delete")}
+                aria-label={t("webhooks.delete")}
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+
               {historyId === hook.id && (
                 <div className="bg-background/50 border-t border-border">
                   <WebhookDeliveries webhookId={hook.id} />
                 </div>
               )}
+
             </div>
           ))
         )}
@@ -659,6 +692,21 @@ export function WebhooksPage() {
         </pre>
         <p className="text-xs text-muted-foreground">{t("webhooks.docAuth")}</p>
       </div>
+
+      <ConfirmDialog
+        open={deletingId !== null}
+        danger
+        busy={deleteMutation.isPending}
+        title={t("webhooks.delete")}
+        message={
+          deletingHook
+            ? t("webhooks.confirmDeleteNamed", { name: deletingHook.name })
+            : t("webhooks.confirmDelete")
+        }
+        confirmLabel={t("webhooks.delete")}
+        onConfirm={() => deletingId && deleteMutation.mutate(deletingId)}
+        onClose={() => setDeletingId(null)}
+      />
     </div>
   );
 }

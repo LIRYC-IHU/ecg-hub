@@ -1,0 +1,92 @@
+syntax = "proto3";
+package grpc.api.v1;
+
+// Per-user outbound webhooks. Protected — requires webhook.manage. Secrets and
+// auth-header values are encrypted at rest and NEVER returned; has_secret /
+// has_auth_header tell the UI whether they are configured.
+
+// Webhook is the API shape of a configured endpoint (no secret values).
+message Webhook {
+  string id = 1;
+  string name = 2;
+  string url = 3;
+  bool enabled = 4;
+  bool insecure_skip_verify = 5;
+  repeated string events = 6;   // empty = all
+  repeated string vendors = 7;  // empty = all
+  bool has_secret = 8;
+  bool has_auth_header = 9;
+  int32 last_status_code = 10;
+  string last_error = 11;
+  string last_delivered_at = 12; // ISO 8601 UTC; empty when never
+  string created_at = 13;
+  string updated_at = 14;
+}
+
+// WebhookInput is the create/update body. optional secret/auth_header are
+// tri-state: unset = leave unchanged, "" = clear, value = set (encrypted).
+message WebhookInput {
+  string name = 1;
+  string url = 2;
+  optional bool enabled = 3;
+  bool insecure_skip_verify = 4;
+  optional string secret = 5;
+  optional string auth_header = 6;
+  repeated string events = 7;
+  repeated string vendors = 8;
+}
+
+message ListWebhooksRequest {}
+message ListWebhooksResponse {
+  repeated Webhook webhooks = 1;
+}
+
+message CreateWebhookRequest {
+  WebhookInput input = 1;
+}
+message CreateWebhookResponse {
+  Webhook webhook = 1;
+}
+
+message UpdateWebhookRequest {
+  string id = 1;
+  WebhookInput input = 2;
+}
+message UpdateWebhookResponse {
+  Webhook webhook = 1;
+}
+
+message DeleteWebhookRequest {
+  string id = 1;
+}
+message DeleteWebhookResponse {}
+
+message TestWebhookRequest {
+  string id = 1;
+}
+message TestWebhookResponse {
+  bool ok = 1;
+  int32 status_code = 2;
+  string error = 3;
+}
+
+// Options drive the webhook editor: the selectable event types + the known
+// vendors (with their accepted file extensions).
+message VendorOption {
+  string name = 1;
+  repeated string extensions = 2;
+}
+message GetWebhookOptionsRequest {}
+message GetWebhookOptionsResponse {
+  repeated string events = 1;
+  repeated VendorOption vendors = 2;
+}
+
+service WebhookService {
+  rpc GetOptions(GetWebhookOptionsRequest) returns (GetWebhookOptionsResponse) {}
+  rpc ListWebhooks(ListWebhooksRequest) returns (ListWebhooksResponse) {}
+  rpc CreateWebhook(CreateWebhookRequest) returns (CreateWebhookResponse) {}
+  rpc UpdateWebhook(UpdateWebhookRequest) returns (UpdateWebhookResponse) {}
+  rpc DeleteWebhook(DeleteWebhookRequest) returns (DeleteWebhookResponse) {}
+  rpc TestWebhook(TestWebhookRequest) returns (TestWebhookResponse) {}
+}

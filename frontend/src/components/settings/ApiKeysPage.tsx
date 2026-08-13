@@ -17,6 +17,7 @@ import {
   type CreatedApiKey,
 } from "../../lib/api";
 import { Spinner } from "../ui/Spinner";
+import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { useNotification } from "../../context/NotificationContext";
 
 export function ApiKeysPage() {
@@ -28,6 +29,8 @@ export function ApiKeysPage() {
   // Holds the freshly created key with its one-time plaintext secret.
   const [createdKey, setCreatedKey] = useState<CreatedApiKey | null>(null);
   const [copied, setCopied] = useState(false);
+  // Id of the key pending delete confirmation (null = dialog closed).
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const { data: keys = [], isLoading } = useQuery({
     queryKey: ["api-keys"],
@@ -54,6 +57,7 @@ export function ApiKeysPage() {
       notify("success", t("apiKeys.deleted"));
     },
     onError: () => notify("error", t("apiKeys.deleteError")),
+    onSettled: () => setDeletingId(null),
   });
 
   function handleCreate(e: React.FormEvent) {
@@ -63,10 +67,7 @@ export function ApiKeysPage() {
     createMutation.mutate(name);
   }
 
-  function handleDelete(id: string) {
-    if (!window.confirm(t("apiKeys.confirmDelete"))) return;
-    deleteMutation.mutate(id);
-  }
+  const deletingKey = keys.find((k) => k.id === deletingId) ?? null;
 
   function copyKey() {
     if (!createdKey) return;
@@ -199,7 +200,7 @@ export function ApiKeysPage() {
                 </p>
               </div>
               <button
-                onClick={() => handleDelete(key.id)}
+                onClick={() => setDeletingId(key.id)}
                 disabled={deleteMutation.isPending}
                 className="p-2 rounded-md text-destructive hover:bg-destructive/5 transition-colors shrink-0"
                 aria-label={t("apiKeys.delete")}
@@ -210,6 +211,21 @@ export function ApiKeysPage() {
           ))
         )}
       </div>
+
+      <ConfirmDialog
+        open={deletingId !== null}
+        danger
+        busy={deleteMutation.isPending}
+        title={t("apiKeys.delete")}
+        message={
+          deletingKey
+            ? t("apiKeys.confirmDeleteNamed", { name: deletingKey.name })
+            : t("apiKeys.confirmDelete")
+        }
+        confirmLabel={t("apiKeys.delete")}
+        onConfirm={() => deletingId && deleteMutation.mutate(deletingId)}
+        onClose={() => setDeletingId(null)}
+      />
     </div>
   );
 }
