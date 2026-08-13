@@ -1936,6 +1936,7 @@ function webhookInputToProto(input: WebhookInput) {
     events: input.events,
     vendors: input.vendors,
   };
+}
 
 // WebhookDelivery is one logged delivery attempt (final outcome after retries).
 export interface WebhookDelivery {
