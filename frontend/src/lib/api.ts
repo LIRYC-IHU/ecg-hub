@@ -1768,6 +1768,16 @@ export interface WebhookTestResult {
   error: string;
 }
 
+// WebhookDelivery is one logged delivery attempt (final outcome after retries).
+export interface WebhookDelivery {
+  id: string;
+  event: string;
+  status_code: number;
+  error: string;
+  attempts: number;
+  delivered_at: string;
+}
+
 export async function fetchWebhooks(): Promise<UserWebhook[]> {
   const res = await fetch(`${BASE_URL}/api/v1/webhooks`);
   if (!res.ok) return [];
@@ -1823,6 +1833,32 @@ export async function testUserWebhook(id: string): Promise<WebhookTestResult> {
   const res = await fetch(`${BASE_URL}/api/v1/webhooks/${id}/test`, {
     method: "POST",
   });
+  if (!res.ok) {
+    const err: ErrorResponse = await res.json();
+    throw err;
+  }
+  return res.json();
+}
+
+export async function fetchWebhookDeliveries(
+  webhookId: string,
+  offset = 0,
+): Promise<WebhookDelivery[]> {
+  const res = await fetch(
+    `${BASE_URL}/api/v1/webhooks/${webhookId}/deliveries?offset=${offset}`,
+  );
+  if (!res.ok) return [];
+  return res.json();
+}
+
+export async function resendWebhookDelivery(
+  webhookId: string,
+  deliveryId: string,
+): Promise<WebhookTestResult> {
+  const res = await fetch(
+    `${BASE_URL}/api/v1/webhooks/${webhookId}/deliveries/${deliveryId}/resend`,
+    { method: "POST" },
+  );
   if (!res.ok) {
     const err: ErrorResponse = await res.json();
     throw err;

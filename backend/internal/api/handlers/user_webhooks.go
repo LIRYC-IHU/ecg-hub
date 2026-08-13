@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/labstack/echo/v4"
@@ -285,6 +286,136 @@ func TestUserWebhookHandler(repo *repository.UserWebhookRepository, dispatcher *
 			errMsg = deliverErr.Error()
 		}
 		_ = repo.RecordDelivery(hook.ID, status, errMsg)
+
+		return c.JSON(http.StatusOK, map[string]any{
+			"ok":          deliverErr == nil,
+			"status_code": status,
+			"error":       errMsg,
+		})
+	}
+}
+
+// deliveryResponse is the API shape of a logged webhook delivery.
+type deliveryResponse struct {
+	ID          string    `json:"id"`
+	Event       string    `json:"event"`
+	StatusCode  int       `json:"status_code"`
+	Error       string    `json:"error"`
+	Attempts    int       `json:"attempts"`
+	DeliveredAt time.Time `json:"delivered_at"`
+}
+
+func toDeliveryResponse(d models.WebhookDelivery) deliveryResponse {
+	return deliveryResponse{
+		ID:          d.ID,
+		Event:       d.Event,
+		StatusCode:  d.StatusCode,
+		Error:       d.Error,
+		Attempts:    d.Attempts,
+		DeliveredAt: d.DeliveredAt,
+	}
+}
+
+const deliveriesPageSize = 50
+
+// ListWebhookDeliveriesHandler returns the delivery history for one webhook
+// owned by the authenticated user.
+//
+//	@Summary		List webhook deliveries
+//	@Description	Returns the delivery history (payload result, not body) for a webhook, newest first.
+//	@Tags			Webhooks
+//	@Produce		json
+//	@Param			id		path	string	true	"Webhook ID"
+//	@Param			offset	query	int		false	"Pagination offset"
+//	@Success		200	{array}	deliveryResponse
+//	@Failure		404	{object}	map[string]string
+//	@Security		BearerAuth
+//	@Router			/api/v1/webhooks/{id}/deliveries [get]
+func ListWebhookDeliveriesHandler(webhookRepo *repository.UserWebhookRepository, deliveryRepo *repository.WebhookDeliveryRepository) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		userID, _ := c.Get(mw.CtxKeyUserID).(string)
+		hook, err := webhookRepo.GetByUser(userID, c.Param("id"))
+		if err != nil {
+			if errors.Is(err, repository.ErrWebhookNotFound) {
+				return c.JSON(http.StatusNotFound, mw.APIError("NOT_FOUND", "webhook not found"))
+			}
+			return c.JSON(http.StatusInternalServerError, mw.APIError("DB_ERROR", "failed to load webhook"))
+		}
+
+		offset := 0
+		if raw := c.QueryParam("offset"); raw != "" {
+			if v, err := strconv.Atoi(raw); err == nil && v > 0 {
+				offset = v
+			}
+		}
+		deliveries, err := deliveryRepo.ListByWebhook(hook.ID, deliveriesPageSize, offset)
+		if err != nil {
+			return c.JSON(http.StatusInternalServerError, mw.APIError("DB_ERROR", "failed to list deliveries"))
+		}
+		out := make([]deliveryResponse, 0, len(deliveries))
+		for _, d := range deliveries {
+			out = append(out, toDeliveryResponse(d))
+		}
+		return c.JSON(http.StatusOK, out)
+	}
+}
+
+// ResendWebhookDeliveryHandler replays a previously logged delivery's exact
+// payload against the webhook's current URL/secret, synchronously, and logs
+// the resend as a new delivery entry.
+//
+//	@Summary		Resend a webhook delivery
+//	@Description	Replays the stored payload of a past delivery (single attempt, synchronous).
+//	@Tags			Webhooks
+//	@Produce		json
+//	@Param			id			path		string	true	"Webhook ID"
+//	@Param			deliveryId	path		string	true	"Delivery ID"
+//	@Success		200			{object}	map[string]interface{}
+//	@Failure		404			{object}	map[string]string
+//	@Security		BearerAuth
+//	@Router			/api/v1/webhooks/{id}/deliveries/{deliveryId}/resend [post]
+func ResendWebhookDeliveryHandler(webhookRepo *repository.UserWebhookRepository, deliveryRepo *repository.WebhookDeliveryRepository, dispatcher *webhook.Dispatcher, db *gorm.DB) echo.HandlerFunc {
+	return func(c echo.Context) error {
+		userID, _ := c.Get(mw.CtxKeyUserID).(string)
+		hook, err := webhookRepo.GetByUser(userID, c.Param("id"))
+		if err != nil {
+			if errors.Is(err, repository.ErrWebhookNotFound) {
+				return c.JSON(http.StatusNotFound, mw.APIError("NOT_FOUND", "webhook not found"))
+			}
+			return c.JSON(http.StatusInternalServerError, mw.APIError("DB_ERROR", "failed to load webhook"))
+		}
+
+		delivery, err := deliveryRepo.Get(c.Param("deliveryId"))
+		if err != nil {
+			return c.JSON(http.StatusNotFound, mw.APIError("NOT_FOUND", "delivery not found"))
+		}
+		if delivery.WebhookID != hook.ID {
+			return c.JSON(http.StatusNotFound, mw.APIError("NOT_FOUND", "delivery not found"))
+		}
+
+		var payload webhook.Payload
+		if err := json.Unmarshal(delivery.Payload, &payload); err != nil {
+			return c.JSON(http.StatusInternalServerError, mw.APIError("INTERNAL_ERROR", "stored payload is corrupt"))
+		}
+
+		status, deliverErr := dispatcher.Deliver(*hook, payload)
+		errMsg := ""
+		if deliverErr != nil {
+			errMsg = deliverErr.Error()
+		}
+		_ = webhookRepo.RecordDelivery(hook.ID, status, errMsg)
+
+		_ = deliveryRepo.Create(&models.WebhookDelivery{
+			WebhookID:   hook.ID,
+			Event:       payload.Event,
+			Payload:     delivery.Payload,
+			StatusCode:  status,
+			Error:       errMsg,
+			Attempts:    1,
+			DeliveredAt: time.Now(),
+		})
+		_ = mw.WriteAuditLog(c.Request().Context(), db, userID, "webhook_delivery_resent", delivery.ID,
+			map[string]any{"webhook_id": hook.ID, "status_code": status})
 
 		return c.JSON(http.StatusOK, map[string]any{
 			"ok":          deliverErr == nil,

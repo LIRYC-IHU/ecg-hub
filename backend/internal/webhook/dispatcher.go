@@ -16,6 +16,7 @@ import (
 	"syscall"
 	"time"
 
+	"gorm.io/datatypes"
 	"gorm.io/gorm"
 
 	"github.com/LIRYC-IHU/ecg-hub/internal/auth"
@@ -35,10 +36,11 @@ var retryBackoff = []time.Duration{0, 5 * time.Second, 25 * time.Second}
 // the outcome (status code / error) is recorded on the webhook row for UI
 // feedback. A failing receiver never blocks ingestion.
 type Dispatcher struct {
-	repo    *repository.UserWebhookRepository
-	db      *gorm.DB // ECG lookup to enrich HL7 events with patient/vendor
-	encKey  string   // AES key for decrypting per-webhook secrets
-	baseURL string   // public base URL prefixed to payload links ("" = relative links)
+	repo         *repository.UserWebhookRepository
+	deliveryRepo *repository.WebhookDeliveryRepository // logs delivery history; nil disables logging
+	db           *gorm.DB                              // ECG lookup to enrich HL7 events with patient/vendor
+	encKey       string                                // AES key for decrypting per-webhook secrets
+	baseURL      string                                // public base URL prefixed to payload links ("" = relative links)
 
 	client         *http.Client
 	insecureClient *http.Client
@@ -49,16 +51,18 @@ type Dispatcher struct {
 
 // NewDispatcher builds a Dispatcher. baseURL is the public origin of this
 // server (e.g. "http://ecg-hub.chu.fr") used to build absolute callback links.
-func NewDispatcher(repo *repository.UserWebhookRepository, db *gorm.DB, encKey, baseURL string) *Dispatcher {
+// deliveryRepo may be nil to disable delivery history logging.
+func NewDispatcher(repo *repository.UserWebhookRepository, deliveryRepo *repository.WebhookDeliveryRepository, db *gorm.DB, encKey, baseURL string) *Dispatcher {
 	// Shared dialer with an SSRF guard: Control runs after DNS resolution with the
 	// IP about to be dialed, so disallowed targets are blocked even across DNS
 	// rebinding and HTTP redirects.
 	dialer := &net.Dialer{Timeout: 10 * time.Second, Control: webhookDialControl}
 	return &Dispatcher{
-		repo:    repo,
-		db:      db,
-		encKey:  encKey,
-		baseURL: baseURL,
+		repo:         repo,
+		deliveryRepo: deliveryRepo,
+		db:           db,
+		encKey:       encKey,
+		baseURL:      baseURL,
 		client: &http.Client{
 			Timeout:       10 * time.Second,
 			CheckRedirect: noWebhookRedirect,
@@ -257,10 +261,12 @@ func (d *Dispatcher) dispatch(p Payload) {
 }
 
 // deliverWithRetry attempts delivery up to len(retryBackoff) times, then
-// records the final outcome on the webhook row.
+// records the final outcome on the webhook row and in the delivery log.
 func (d *Dispatcher) deliverWithRetry(hook models.UserWebhook, p Payload) {
+	p.WebhookID = hook.ID // stored in the log even if every attempt fails before Deliver sets it
 	var status int
 	var lastErr error
+	attempts := 0
 	for attempt, wait := range retryBackoff {
 		if wait > 0 {
 			select {
@@ -269,12 +275,13 @@ func (d *Dispatcher) deliverWithRetry(hook models.UserWebhook, p Payload) {
 				return
 			}
 		}
+		attempts = attempt + 1
 		status, lastErr = d.Deliver(hook, p)
 		if lastErr == nil {
 			break
 		}
 		slog.Warn("webhook dispatcher: delivery failed",
-			"webhook", hook.Name, "event", p.Event, "attempt", attempt+1, "error", lastErr)
+			"webhook", hook.Name, "event", p.Event, "attempt", attempts, "error", lastErr)
 	}
 
 	errMsg := ""
@@ -286,6 +293,32 @@ func (d *Dispatcher) deliverWithRetry(hook models.UserWebhook, p Payload) {
 	}
 	if err := d.repo.RecordDelivery(hook.ID, status, errMsg); err != nil {
 		slog.Warn("webhook dispatcher: record delivery", "webhook", hook.ID, "error", err)
+	}
+	d.logDelivery(hook.ID, p, status, errMsg, attempts)
+}
+
+// logDelivery persists one delivery-history row (best-effort — a logging
+// failure never affects delivery itself). No-op when history is disabled.
+func (d *Dispatcher) logDelivery(webhookID string, p Payload, status int, errMsg string, attempts int) {
+	if d.deliveryRepo == nil {
+		return
+	}
+	body, err := json.Marshal(p)
+	if err != nil {
+		slog.Warn("webhook dispatcher: marshal delivery log payload", "webhook", webhookID, "error", err)
+		return
+	}
+	entry := &models.WebhookDelivery{
+		WebhookID:   webhookID,
+		Event:       p.Event,
+		Payload:     datatypes.JSON(body),
+		StatusCode:  status,
+		Error:       errMsg,
+		Attempts:    attempts,
+		DeliveredAt: time.Now(),
+	}
+	if err := d.deliveryRepo.Create(entry); err != nil {
+		slog.Warn("webhook dispatcher: log delivery", "webhook", webhookID, "error", err)
 	}
 }
 
