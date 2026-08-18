@@ -18,6 +18,7 @@ import {
   assignQuarantineEntry,
   fetchPatients,
 } from "../../lib/api";
+import { formatPatientName } from "../../lib/patient";
 import { Spinner } from "../ui/Spinner";
 import { EmptyState } from "../ui/EmptyState";
 import { useNotification } from "../../context/NotificationContext";
@@ -503,7 +504,7 @@ function AssignPanel({
               {t("admin.quarantine.assignConfirmQuestion")}
             </p>
             <p className="font-semibold text-foreground">
-              {selected.last_name} {selected.first_name}
+              {formatPatientName(selected)}
             </p>
             <p className="text-muted-foreground">
               {t("admin.quarantine.bornOn")} {fmtDob(selected.date_of_birth)}
@@ -601,7 +602,7 @@ function AssignPanel({
                 className="w-full text-left text-xs bg-card border border-border rounded-lg px-3 py-2 hover:bg-muted/40 transition-colors"
               >
                 <span className="font-medium text-foreground">
-                  {p.last_name} {p.first_name}
+                  {formatPatientName(p)}
                 </span>
                 <span className="text-muted-foreground">
                   {" — "}
