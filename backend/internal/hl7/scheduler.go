@@ -21,14 +21,11 @@ type settingsProvider interface {
 	Get() (*models.HL7Settings, error)
 }
 
-// usableQuerier reports whether q can actually be called.
+// usableQuerier reports whether q is safe to use as the scheduler's HL7 Querier.
 //
-// A plain q == nil is not enough. main() declares the client as *Client and
-// leaves it nil when no HL7 row exists at boot (a fresh install), then passes
-// it into the Querier interface parameter of NewScheduler — which yields a
-// NON-nil interface holding a nil pointer. The nil check then passes, the cron
-// starts, and the first tick dereferences the nil receiver and takes the whole
-// process down with a SIGSEGV.
+// A plain q == nil is not enough: main() can pass a nil *Client into the Querier
+// interface parameter of NewScheduler, yielding a NON-nil interface holding a nil pointer.
+// This helper treats that typed-nil *Client as unusable so the scheduler doesn't start.
 func usableQuerier(q Querier) bool {
 	if q == nil {
 		return false
