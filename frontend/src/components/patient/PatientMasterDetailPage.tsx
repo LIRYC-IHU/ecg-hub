@@ -50,6 +50,7 @@ import {
   type TagDTO,
   type ECGFilters,
 } from "../../lib/api";
+import { formatPatientName } from "../../lib/patient";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../../hooks/useAuth";
 import { useNotification } from "../../context/NotificationContext";
@@ -283,7 +284,7 @@ function PatientGrid({
             <PatientAvatar patient={patient} size={36} />
             <div className="min-w-0 w-48">
               <div className="text-sm font-medium text-foreground truncate">
-                {patient.last_name}, {patient.first_name}
+                {formatPatientName(patient)}
               </div>
               <div className="text-[11px] text-muted-foreground font-mono mt-0.5 inline-flex items-center gap-1">
                 {patient.patient_id}
@@ -368,7 +369,7 @@ function PatientRow({
       <div className="flex-1 min-w-0">
         <div className="text-sm font-medium text-foreground truncate flex items-center gap-1.5">
           <span className="truncate">
-            {patient.last_name}, {patient.first_name}
+            {formatPatientName(patient)}
           </span>
           {(patient.unviewed_count ?? 0) > 0 && (
             <span
@@ -793,7 +794,7 @@ function PatientDetail({
         <PatientAvatar patient={patient} size={56} />
         <div className="flex-1 min-w-0">
           <h2 className="font-display text-2xl font-semibold tracking-tight text-foreground">
-            {patient.last_name}, {patient.first_name}
+            {formatPatientName(patient)}
           </h2>
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1.5 text-sm text-muted-foreground">
             <span className="inline-flex items-center gap-1 font-mono text-foreground text-xs">
