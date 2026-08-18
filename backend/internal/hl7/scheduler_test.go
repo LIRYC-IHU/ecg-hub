@@ -1,6 +1,7 @@
 package hl7
 
 import (
+	"net"
 	"testing"
 
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
@@ -17,10 +18,17 @@ func (s *stubSettingsProvider) Get() (*models.HL7Settings, error) {
 	return s.settings, s.err
 }
 
-// closedPort is a port nothing listens on, so QueryPatient fails on dial
-// instead of hanging — the point of these tests is that it fails rather than
-// taking the process down.
-const closedPort = 9
+// closedPort is chosen at test init to be unused at that moment; the listener is
+// immediately closed so QueryPatient should fail on dial instead of hanging.
+var closedPort = func() int {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		panic(err)
+	}
+	port := l.Addr().(*net.TCPAddr).Port
+	_ = l.Close()
+	return port
+}()
 
 func enabledSettings() *models.HL7Settings {
 	return &models.HL7Settings{
