@@ -22,5 +22,5 @@ export function formatPatientName(patient: NameablePatient): string {
   if (last && first) return `${last}, ${first}`;
   if (last) return last;
   if (first) return first;
-  return patient.patient_id?.trim() || "—";
+  return patient.patient_id.trim() || "—";
 }
