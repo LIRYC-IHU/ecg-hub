@@ -83,7 +83,14 @@ function MetricCard() {
               </div>
 
               {!unlimited && (
-                <div className="w-full h-3 bg-blue-500 rounded-full overflow-hidden border-border border-2 ">
+                <div
+                  role="progressbar"
+                  aria-label={v.name}
+                  aria-valuenow={percent}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  className="w-full h-3 bg-muted rounded-full overflow-hidden border-2 border-border"
+                >
                   <div
                     className={`h-full transition-all duration-500 ${
                       percent > 85
