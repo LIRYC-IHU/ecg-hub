@@ -621,7 +621,7 @@ export function WebhooksPage() {
                   <Pencil className="w-4 h-4" />
                 </button>
                 <button
-                  onClick={() => handleDelete(hook.id)}
+                  onClick={() => setDeletingId(hook.id)}
                   disabled={deleteMutation.isPending}
                   className="p-2 rounded-md text-destructive hover:bg-destructive/5 transition-colors shrink-0"
                   title={t("webhooks.delete")}
@@ -630,33 +630,6 @@ export function WebhooksPage() {
                   <Trash2 className="w-4 h-4" />
                 </button>
               </div>
-
-              <button
-                onClick={() => testMutation.mutate(hook.id)}
-                disabled={testMutation.isPending}
-                className="p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0"
-                title={t("webhooks.test")}
-                aria-label={t("webhooks.test")}
-              >
-                <Send className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => openEdit(hook)}
-                className="p-2 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors shrink-0"
-                title={t("webhooks.edit")}
-                aria-label={t("webhooks.edit")}
-              >
-                <Pencil className="w-4 h-4" />
-              </button>
-              <button
-                onClick={() => setDeletingId(hook.id)}
-                disabled={deleteMutation.isPending}
-                className="p-2 rounded-md text-destructive hover:bg-destructive/5 transition-colors shrink-0"
-                title={t("webhooks.delete")}
-                aria-label={t("webhooks.delete")}
-              >
-                <Trash2 className="w-4 h-4" />
-              </button>
 
               {historyId === hook.id && (
                 <div className="bg-background/50 border-t border-border">
