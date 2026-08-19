@@ -3,8 +3,10 @@ package repository
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
@@ -45,8 +47,8 @@ type AppUser struct {
 
 // UserRepo provides access to the ecg_hub_users table.
 type UserRepo struct {
-	db              *gorm.DB
-	settingsRepo    *ModuleSettingsRepository
+	db           *gorm.DB
+	settingsRepo *ModuleSettingsRepository
 }
 
 // NewUserRepo creates a UserRepo backed by db.
@@ -186,13 +188,35 @@ func (r *UserRepo) List(ctx context.Context) ([]AppUser, error) {
 	return users, nil
 }
 
+// filterUUIDs keeps only the well-formed UUIDs in ids.
+//
+// Callers pass whatever audit_logs.user_id holds, and that column legitimately
+// carries non-UUID values too: "system" for automatic events, and the raw
+// username for login_success / login_failed, which are written before the
+// internal id is known.
+func filterUUIDs(ids []string) []string {
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if uuid.Validate(id) == nil {
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
 // UsernamesByIDs maps internal user IDs (ecg_hub_users.id) to their display name
 // (external_id — the username for local accounts, the JWT subject for OIDC).
 // Used to render audit logs with names instead of raw UUIDs. IDs with no matching
 // row (e.g. system-generated audit entries) are simply absent from the result.
 func (r *UserRepo) UsernamesByIDs(ctx context.Context, ids []string) map[string]string {
 	out := make(map[string]string, len(ids))
-	if len(ids) == 0 {
+
+	// ecg_hub_users.id is a uuid column, so a single non-UUID value makes
+	// Postgres reject the whole statement ("invalid input syntax for type
+	// uuid"). Left unfiltered, one "system" row would cost every other row on
+	// the page its username.
+	uuids := filterUUIDs(ids)
+	if len(uuids) == 0 {
 		return out
 	}
 	type row struct {
@@ -203,9 +227,10 @@ func (r *UserRepo) UsernamesByIDs(ctx context.Context, ids []string) map[string]
 	if err := r.db.WithContext(ctx).
 		Table("ecg_hub_users").
 		Select("id, external_id").
-		Where("id IN ?", ids).
+		Where("id IN ?", uuids).
 		Find(&rows).Error; err != nil {
 		// Best-effort enrichment: on error, callers fall back to the raw UUID.
+		slog.Warn("db: resolve usernames for display", "error", err)
 		return out
 	}
 	for _, rec := range rows {
