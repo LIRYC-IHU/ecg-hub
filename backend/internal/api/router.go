@@ -269,7 +269,12 @@ func (r *RouterConfig) RegisterRoutes() {
 	// auth interceptor (JWT cookie/Bearer + API key) shared by every protected
 	// gRPC service as the migration proceeds.
 	sessionPath, sessionHandler := apiv1connect.NewSessionServiceHandler(
-		&handlers.SessionServiceHandler{Perms: r.checker},
+		&handlers.SessionServiceHandler{
+			Perms:     r.checker,
+			UserRepo:  r.userRepo,
+			LocalRepo: repository.NewLocalUserRepository(r.gormDB),
+			DB:        r.gormDB,
+		},
 		connect.WithInterceptors(metricsInterceptor,
 			validateInterceptor,
 			mw.ConnectRequireAuth(r.authProvider, r.userRepo, apiKeyRepo),
@@ -385,6 +390,7 @@ func (r *RouterConfig) RegisterRoutes() {
 				apiv1connect.AdminServiceListAppUsersProcedure:      auth.PermAdminUsers,
 				apiv1connect.AdminServiceSetAppUserRoleProcedure:    auth.PermAdminUsers,
 				apiv1connect.AdminServiceDeleteAppUserProcedure:     auth.PermAdminUsers,
+				apiv1connect.AdminServiceCreateLocalUserProcedure:   auth.PermAdminUsers,
 				apiv1connect.AdminServiceListQuarantineProcedure:    auth.PermQuarantineRead,
 				apiv1connect.AdminServiceDeleteQuarantineProcedure:  auth.PermQuarantineDelete,
 				apiv1connect.AdminServiceAssignQuarantineProcedure:  auth.PermQuarantineAssign,
@@ -713,7 +719,6 @@ func (r *RouterConfig) RegisterRoutes() {
 
 	// User pins (favourites) are now served over gRPC by PinService (wired above).
 
-
 	// Per-user webhooks are now served over gRPC by WebhookService (wired above).
 
 	// Per-user outbound webhooks — requires webhook.manage. Each user manages
@@ -730,7 +735,6 @@ func (r *RouterConfig) RegisterRoutes() {
 			apiV1.POST("/webhooks/:id/deliveries/:deliveryId/resend", handlers.ResendWebhookDeliveryHandler(r.userWebhookRepo, r.webhookDeliveryRepo, r.webhookDispatcher, r.gormDB), mw.RequirePermission(r.checker, auth.PermWebhookManage))
 		}
 	}
-
 
 	// Per-user API keys — requires apikey.manage: keys grant durable
 	// programmatic access, so handing them out is an explicit role decision.

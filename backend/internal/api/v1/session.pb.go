@@ -65,6 +65,7 @@ type GetCurrentUserResponse struct {
 	Username      string                 `protobuf:"bytes,2,opt,name=username,proto3" json:"username,omitempty"`           // human-readable identifier (display)
 	Role          string                 `protobuf:"bytes,3,opt,name=role,proto3" json:"role,omitempty"`
 	Permissions   []string               `protobuf:"bytes,4,rep,name=permissions,proto3" json:"permissions,omitempty"`
+	Provider      string                 `protobuf:"bytes,5,opt,name=provider,proto3" json:"provider,omitempty"` // "local", "oidc", "ldap" — only local accounts own a password
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -127,19 +128,123 @@ func (x *GetCurrentUserResponse) GetPermissions() []string {
 	return nil
 }
 
+func (x *GetCurrentUserResponse) GetProvider() string {
+	if x != nil {
+		return x.Provider
+	}
+	return ""
+}
+
+// ChangePassword updates the caller's own password. Self-service: authenticated
+// by the session, not by a permission. Rejected for accounts whose credentials
+// live in an identity provider.
+type ChangePasswordRequest struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	CurrentPassword string                 `protobuf:"bytes,1,opt,name=current_password,json=currentPassword,proto3" json:"current_password,omitempty"`
+	NewPassword     string                 `protobuf:"bytes,2,opt,name=new_password,json=newPassword,proto3" json:"new_password,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *ChangePasswordRequest) Reset() {
+	*x = ChangePasswordRequest{}
+	mi := &file_v1_session_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ChangePasswordRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ChangePasswordRequest) ProtoMessage() {}
+
+func (x *ChangePasswordRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_session_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ChangePasswordRequest.ProtoReflect.Descriptor instead.
+func (*ChangePasswordRequest) Descriptor() ([]byte, []int) {
+	return file_v1_session_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *ChangePasswordRequest) GetCurrentPassword() string {
+	if x != nil {
+		return x.CurrentPassword
+	}
+	return ""
+}
+
+func (x *ChangePasswordRequest) GetNewPassword() string {
+	if x != nil {
+		return x.NewPassword
+	}
+	return ""
+}
+
+type ChangePasswordResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ChangePasswordResponse) Reset() {
+	*x = ChangePasswordResponse{}
+	mi := &file_v1_session_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ChangePasswordResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ChangePasswordResponse) ProtoMessage() {}
+
+func (x *ChangePasswordResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_session_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ChangePasswordResponse.ProtoReflect.Descriptor instead.
+func (*ChangePasswordResponse) Descriptor() ([]byte, []int) {
+	return file_v1_session_proto_rawDescGZIP(), []int{3}
+}
+
 var File_v1_session_proto protoreflect.FileDescriptor
 
 const file_v1_session_proto_rawDesc = "" +
 	"\n" +
 	"\x10v1/session.proto\x12\vgrpc.api.v1\"\x17\n" +
-	"\x15GetCurrentUserRequest\"\x83\x01\n" +
+	"\x15GetCurrentUserRequest\"\x9f\x01\n" +
 	"\x16GetCurrentUserResponse\x12\x17\n" +
 	"\auser_id\x18\x01 \x01(\tR\x06userId\x12\x1a\n" +
 	"\busername\x18\x02 \x01(\tR\busername\x12\x12\n" +
 	"\x04role\x18\x03 \x01(\tR\x04role\x12 \n" +
-	"\vpermissions\x18\x04 \x03(\tR\vpermissions2m\n" +
+	"\vpermissions\x18\x04 \x03(\tR\vpermissions\x12\x1a\n" +
+	"\bprovider\x18\x05 \x01(\tR\bprovider\"e\n" +
+	"\x15ChangePasswordRequest\x12)\n" +
+	"\x10current_password\x18\x01 \x01(\tR\x0fcurrentPassword\x12!\n" +
+	"\fnew_password\x18\x02 \x01(\tR\vnewPassword\"\x18\n" +
+	"\x16ChangePasswordResponse2\xca\x01\n" +
 	"\x0eSessionService\x12[\n" +
-	"\x0eGetCurrentUser\x12\".grpc.api.v1.GetCurrentUserRequest\x1a#.grpc.api.v1.GetCurrentUserResponse\"\x00B\xa1\x01\n" +
+	"\x0eGetCurrentUser\x12\".grpc.api.v1.GetCurrentUserRequest\x1a#.grpc.api.v1.GetCurrentUserResponse\"\x00\x12[\n" +
+	"\x0eChangePassword\x12\".grpc.api.v1.ChangePasswordRequest\x1a#.grpc.api.v1.ChangePasswordResponse\"\x00B\xa1\x01\n" +
 	"\x0fcom.grpc.api.v1B\fSessionProtoP\x01Z2github.com/LIRYC-IHU/ecg-hub/internal/api/v1;apiv1\xa2\x02\x03GAX\xaa\x02\vGrpc.Api.V1\xca\x02\vGrpc\\Api\\V1\xe2\x02\x17Grpc\\Api\\V1\\GPBMetadata\xea\x02\rGrpc::Api::V1b\x06proto3"
 
 var (
@@ -154,16 +259,20 @@ func file_v1_session_proto_rawDescGZIP() []byte {
 	return file_v1_session_proto_rawDescData
 }
 
-var file_v1_session_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_v1_session_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_v1_session_proto_goTypes = []any{
 	(*GetCurrentUserRequest)(nil),  // 0: grpc.api.v1.GetCurrentUserRequest
 	(*GetCurrentUserResponse)(nil), // 1: grpc.api.v1.GetCurrentUserResponse
+	(*ChangePasswordRequest)(nil),  // 2: grpc.api.v1.ChangePasswordRequest
+	(*ChangePasswordResponse)(nil), // 3: grpc.api.v1.ChangePasswordResponse
 }
 var file_v1_session_proto_depIdxs = []int32{
 	0, // 0: grpc.api.v1.SessionService.GetCurrentUser:input_type -> grpc.api.v1.GetCurrentUserRequest
-	1, // 1: grpc.api.v1.SessionService.GetCurrentUser:output_type -> grpc.api.v1.GetCurrentUserResponse
-	1, // [1:2] is the sub-list for method output_type
-	0, // [0:1] is the sub-list for method input_type
+	2, // 1: grpc.api.v1.SessionService.ChangePassword:input_type -> grpc.api.v1.ChangePasswordRequest
+	1, // 2: grpc.api.v1.SessionService.GetCurrentUser:output_type -> grpc.api.v1.GetCurrentUserResponse
+	3, // 3: grpc.api.v1.SessionService.ChangePassword:output_type -> grpc.api.v1.ChangePasswordResponse
+	2, // [2:4] is the sub-list for method output_type
+	0, // [0:2] is the sub-list for method input_type
 	0, // [0:0] is the sub-list for extension type_name
 	0, // [0:0] is the sub-list for extension extendee
 	0, // [0:0] is the sub-list for field type_name
@@ -180,7 +289,7 @@ func file_v1_session_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_session_proto_rawDesc), len(file_v1_session_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   2,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

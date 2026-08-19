@@ -347,7 +347,13 @@
       "confirmDelete": "Supprimer {{user}} ? Ses webhooks, clés API, épingles et exports seront définitivement supprimés.",
       "deleted": "{{user}} supprimé (ressources nettoyées)",
       "selfDelete": "Impossible de supprimer votre propre compte",
-      "lastUser": "Impossible de supprimer le dernier utilisateur local"
+      "lastUser": "Impossible de supprimer le dernier utilisateur local",
+      "addTitle": "Ajouter un utilisateur local",
+      "addHint": "Crée un compte identifiant/mot de passe dans ECG Hub.",
+      "usernamePlaceholder": "identifiant",
+      "passwordPlaceholder": "mot de passe (8+ car., 1 chiffre)",
+      "addSubmit": "Créer",
+      "created": "Utilisateur « {{user}} » créé"
     },
     "audit": {
       "title": "Journal d'audit",
@@ -674,7 +680,14 @@
     "signingIn": "Connexion en cours…",
     "invalidCredentials": "Identifiants invalides",
     "tagline": "Gestion centralisée des électrocardiogrammes",
-    "loginSubtitle": "Accédez à votre espace de gestion ECG"
+    "loginSubtitle": "Accédez à votre espace de gestion ECG",
+    "changePassword": "Changer le mot de passe",
+    "changePasswordHint": "Votre mot de passe actuel est requis pour en définir un nouveau.",
+    "currentPassword": "Mot de passe actuel",
+    "newPassword": "Nouveau mot de passe",
+    "confirmPassword": "Confirmer le nouveau mot de passe",
+    "passwordMismatch": "Les deux mots de passe ne correspondent pas.",
+    "passwordChanged": "Mot de passe modifié. Utilisez-le à la prochaine connexion."
   },
   "setup": {
     "title": "Configuration initiale",
@@ -700,7 +713,8 @@
     "clearAll": "Tout effacer",
     "selected": "{{count}} sélectionné",
     "selected_other": "{{count}} sélectionnés",
-    "exportError": "Erreur lors de l'export"
+    "exportError": "Erreur lors de l'export",
+    "save": "Enregistrer"
   },
   "webhooks": {
     "title": "Webhooks",

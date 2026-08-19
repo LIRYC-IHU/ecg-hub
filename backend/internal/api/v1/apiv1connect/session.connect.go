@@ -36,11 +36,15 @@ const (
 	// SessionServiceGetCurrentUserProcedure is the fully-qualified name of the SessionService's
 	// GetCurrentUser RPC.
 	SessionServiceGetCurrentUserProcedure = "/grpc.api.v1.SessionService/GetCurrentUser"
+	// SessionServiceChangePasswordProcedure is the fully-qualified name of the SessionService's
+	// ChangePassword RPC.
+	SessionServiceChangePasswordProcedure = "/grpc.api.v1.SessionService/ChangePassword"
 )
 
 // SessionServiceClient is a client for the grpc.api.v1.SessionService service.
 type SessionServiceClient interface {
 	GetCurrentUser(context.Context, *v1.GetCurrentUserRequest) (*v1.GetCurrentUserResponse, error)
+	ChangePassword(context.Context, *v1.ChangePasswordRequest) (*v1.ChangePasswordResponse, error)
 }
 
 // NewSessionServiceClient constructs a client for the grpc.api.v1.SessionService service. By
@@ -60,12 +64,19 @@ func NewSessionServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(sessionServiceMethods.ByName("GetCurrentUser")),
 			connect.WithClientOptions(opts...),
 		),
+		changePassword: connect.NewClient[v1.ChangePasswordRequest, v1.ChangePasswordResponse](
+			httpClient,
+			baseURL+SessionServiceChangePasswordProcedure,
+			connect.WithSchema(sessionServiceMethods.ByName("ChangePassword")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // sessionServiceClient implements SessionServiceClient.
 type sessionServiceClient struct {
 	getCurrentUser *connect.Client[v1.GetCurrentUserRequest, v1.GetCurrentUserResponse]
+	changePassword *connect.Client[v1.ChangePasswordRequest, v1.ChangePasswordResponse]
 }
 
 // GetCurrentUser calls grpc.api.v1.SessionService.GetCurrentUser.
@@ -77,9 +88,19 @@ func (c *sessionServiceClient) GetCurrentUser(ctx context.Context, req *v1.GetCu
 	return nil, err
 }
 
+// ChangePassword calls grpc.api.v1.SessionService.ChangePassword.
+func (c *sessionServiceClient) ChangePassword(ctx context.Context, req *v1.ChangePasswordRequest) (*v1.ChangePasswordResponse, error) {
+	response, err := c.changePassword.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
 // SessionServiceHandler is an implementation of the grpc.api.v1.SessionService service.
 type SessionServiceHandler interface {
 	GetCurrentUser(context.Context, *v1.GetCurrentUserRequest) (*v1.GetCurrentUserResponse, error)
+	ChangePassword(context.Context, *v1.ChangePasswordRequest) (*v1.ChangePasswordResponse, error)
 }
 
 // NewSessionServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -95,10 +116,18 @@ func NewSessionServiceHandler(svc SessionServiceHandler, opts ...connect.Handler
 		connect.WithSchema(sessionServiceMethods.ByName("GetCurrentUser")),
 		connect.WithHandlerOptions(opts...),
 	)
+	sessionServiceChangePasswordHandler := connect.NewUnaryHandlerSimple(
+		SessionServiceChangePasswordProcedure,
+		svc.ChangePassword,
+		connect.WithSchema(sessionServiceMethods.ByName("ChangePassword")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/grpc.api.v1.SessionService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case SessionServiceGetCurrentUserProcedure:
 			sessionServiceGetCurrentUserHandler.ServeHTTP(w, r)
+		case SessionServiceChangePasswordProcedure:
+			sessionServiceChangePasswordHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -110,4 +139,8 @@ type UnimplementedSessionServiceHandler struct{}
 
 func (UnimplementedSessionServiceHandler) GetCurrentUser(context.Context, *v1.GetCurrentUserRequest) (*v1.GetCurrentUserResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("grpc.api.v1.SessionService.GetCurrentUser is not implemented"))
+}
+
+func (UnimplementedSessionServiceHandler) ChangePassword(context.Context, *v1.ChangePasswordRequest) (*v1.ChangePasswordResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("grpc.api.v1.SessionService.ChangePassword is not implemented"))
 }

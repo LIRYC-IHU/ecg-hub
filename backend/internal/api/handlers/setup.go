@@ -22,19 +22,36 @@ var (
 	errSetupAlreadyInit      = errors.New("system is already initialized")
 )
 
+// validateLocalUsername and validateLocalPassword hold the credential rules for
+// local accounts, shared by the setup wizard, admin user creation and the
+// self-service password change so all three agree.
+func validateLocalUsername(username string) error {
+	if len(username) < 3 {
+		return errSetupUsernameTooShort
+	}
+	return nil
+}
+
+func validateLocalPassword(password string) error {
+	if len(password) < 8 {
+		return errSetupPasswordTooShort
+	}
+	if !digitRegex.MatchString(password) {
+		return errSetupPasswordNoDigit
+	}
+	return nil
+}
+
 // createFirstAdmin validates the credentials and atomically creates the first
 // local admin account (advisory-lock guarded so two concurrent calls can't both
 // pass the "no identity yet" check). Returns errSetup* sentinels for the caller
 // to translate to a transport-specific status. Shared by the gRPC handler.
 func createFirstAdmin(db *gorm.DB, username, password string) (*models.LocalUser, error) {
-	if len(username) < 3 {
-		return nil, errSetupUsernameTooShort
+	if err := validateLocalUsername(username); err != nil {
+		return nil, err
 	}
-	if len(password) < 8 {
-		return nil, errSetupPasswordTooShort
-	}
-	if !digitRegex.MatchString(password) {
-		return nil, errSetupPasswordNoDigit
+	if err := validateLocalPassword(password); err != nil {
+		return nil, err
 	}
 
 	hash, err := auth.HashPassword(password)

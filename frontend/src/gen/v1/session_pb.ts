@@ -10,7 +10,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file v1/session.proto.
  */
 export const file_v1_session: GenFile = /*@__PURE__*/
-  fileDesc("ChB2MS9zZXNzaW9uLnByb3RvEgtncnBjLmFwaS52MSIXChVHZXRDdXJyZW50VXNlclJlcXVlc3QiXgoWR2V0Q3VycmVudFVzZXJSZXNwb25zZRIPCgd1c2VyX2lkGAEgASgJEhAKCHVzZXJuYW1lGAIgASgJEgwKBHJvbGUYAyABKAkSEwoLcGVybWlzc2lvbnMYBCADKAkybQoOU2Vzc2lvblNlcnZpY2USWwoOR2V0Q3VycmVudFVzZXISIi5ncnBjLmFwaS52MS5HZXRDdXJyZW50VXNlclJlcXVlc3QaIy5ncnBjLmFwaS52MS5HZXRDdXJyZW50VXNlclJlc3BvbnNlIgBCoQEKD2NvbS5ncnBjLmFwaS52MUIMU2Vzc2lvblByb3RvUAFaMmdpdGh1Yi5jb20vTElSWUMtSUhVL2VjZy1odWIvaW50ZXJuYWwvYXBpL3YxO2FwaXYxogIDR0FYqgILR3JwYy5BcGkuVjHKAgtHcnBjXEFwaVxWMeICF0dycGNcQXBpXFYxXEdQQk1ldGFkYXRh6gINR3JwYzo6QXBpOjpWMWIGcHJvdG8z");
+  fileDesc("ChB2MS9zZXNzaW9uLnByb3RvEgtncnBjLmFwaS52MSIXChVHZXRDdXJyZW50VXNlclJlcXVlc3QicAoWR2V0Q3VycmVudFVzZXJSZXNwb25zZRIPCgd1c2VyX2lkGAEgASgJEhAKCHVzZXJuYW1lGAIgASgJEgwKBHJvbGUYAyABKAkSEwoLcGVybWlzc2lvbnMYBCADKAkSEAoIcHJvdmlkZXIYBSABKAkiRwoVQ2hhbmdlUGFzc3dvcmRSZXF1ZXN0EhgKEGN1cnJlbnRfcGFzc3dvcmQYASABKAkSFAoMbmV3X3Bhc3N3b3JkGAIgASgJIhgKFkNoYW5nZVBhc3N3b3JkUmVzcG9uc2UyygEKDlNlc3Npb25TZXJ2aWNlElsKDkdldEN1cnJlbnRVc2VyEiIuZ3JwYy5hcGkudjEuR2V0Q3VycmVudFVzZXJSZXF1ZXN0GiMuZ3JwYy5hcGkudjEuR2V0Q3VycmVudFVzZXJSZXNwb25zZSIAElsKDkNoYW5nZVBhc3N3b3JkEiIuZ3JwYy5hcGkudjEuQ2hhbmdlUGFzc3dvcmRSZXF1ZXN0GiMuZ3JwYy5hcGkudjEuQ2hhbmdlUGFzc3dvcmRSZXNwb25zZSIAQqEBCg9jb20uZ3JwYy5hcGkudjFCDFNlc3Npb25Qcm90b1ABWjJnaXRodWIuY29tL0xJUllDLUlIVS9lY2ctaHViL2ludGVybmFsL2FwaS92MTthcGl2MaICA0dBWKoCC0dycGMuQXBpLlYxygILR3JwY1xBcGlcVjHiAhdHcnBjXEFwaVxWMVxHUEJNZXRhZGF0YeoCDUdycGM6OkFwaTo6VjFiBnByb3RvMw");
 
 /**
  * Current authenticated user — identity, role and resolved permissions. Used by
@@ -55,6 +55,13 @@ export type GetCurrentUserResponse = Message<"grpc.api.v1.GetCurrentUserResponse
    * @generated from field: repeated string permissions = 4;
    */
   permissions: string[];
+
+  /**
+   * "local", "oidc", "ldap" — only local accounts own a password
+   *
+   * @generated from field: string provider = 5;
+   */
+  provider: string;
 };
 
 /**
@@ -63,6 +70,45 @@ export type GetCurrentUserResponse = Message<"grpc.api.v1.GetCurrentUserResponse
  */
 export const GetCurrentUserResponseSchema: GenMessage<GetCurrentUserResponse> = /*@__PURE__*/
   messageDesc(file_v1_session, 1);
+
+/**
+ * ChangePassword updates the caller's own password. Self-service: authenticated
+ * by the session, not by a permission. Rejected for accounts whose credentials
+ * live in an identity provider.
+ *
+ * @generated from message grpc.api.v1.ChangePasswordRequest
+ */
+export type ChangePasswordRequest = Message<"grpc.api.v1.ChangePasswordRequest"> & {
+  /**
+   * @generated from field: string current_password = 1;
+   */
+  currentPassword: string;
+
+  /**
+   * @generated from field: string new_password = 2;
+   */
+  newPassword: string;
+};
+
+/**
+ * Describes the message grpc.api.v1.ChangePasswordRequest.
+ * Use `create(ChangePasswordRequestSchema)` to create a new message.
+ */
+export const ChangePasswordRequestSchema: GenMessage<ChangePasswordRequest> = /*@__PURE__*/
+  messageDesc(file_v1_session, 2);
+
+/**
+ * @generated from message grpc.api.v1.ChangePasswordResponse
+ */
+export type ChangePasswordResponse = Message<"grpc.api.v1.ChangePasswordResponse"> & {
+};
+
+/**
+ * Describes the message grpc.api.v1.ChangePasswordResponse.
+ * Use `create(ChangePasswordResponseSchema)` to create a new message.
+ */
+export const ChangePasswordResponseSchema: GenMessage<ChangePasswordResponse> = /*@__PURE__*/
+  messageDesc(file_v1_session, 3);
 
 /**
  * @generated from service grpc.api.v1.SessionService
@@ -75,6 +121,14 @@ export const SessionService: GenService<{
     methodKind: "unary";
     input: typeof GetCurrentUserRequestSchema;
     output: typeof GetCurrentUserResponseSchema;
+  },
+  /**
+   * @generated from rpc grpc.api.v1.SessionService.ChangePassword
+   */
+  changePassword: {
+    methodKind: "unary";
+    input: typeof ChangePasswordRequestSchema;
+    output: typeof ChangePasswordResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_v1_session, 0);

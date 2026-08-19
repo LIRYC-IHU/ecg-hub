@@ -347,7 +347,13 @@
       "confirmDelete": "Delete {{user}}? Their webhooks, API keys, pins and exports will be removed permanently.",
       "deleted": "{{user}} deleted (resources cleaned up)",
       "selfDelete": "You cannot delete your own account",
-      "lastUser": "Cannot delete the last local user"
+      "lastUser": "Cannot delete the last local user",
+      "addTitle": "Add a local user",
+      "addHint": "Creates a username/password account in ECG Hub.",
+      "usernamePlaceholder": "username",
+      "passwordPlaceholder": "password (8+ chars, 1 digit)",
+      "addSubmit": "Create",
+      "created": "User “{{user}}” created"
     },
     "audit": {
       "title": "Audit log",
@@ -673,7 +679,14 @@
     "signingIn": "Signing in…",
     "invalidCredentials": "Invalid credentials",
     "tagline": "Centralised electrocardiogram management",
-    "loginSubtitle": "Sign in to your ECG workspace"
+    "loginSubtitle": "Sign in to your ECG workspace",
+    "changePassword": "Change password",
+    "changePasswordHint": "Your current password is required to set a new one.",
+    "currentPassword": "Current password",
+    "newPassword": "New password",
+    "confirmPassword": "Confirm new password",
+    "passwordMismatch": "The two passwords do not match.",
+    "passwordChanged": "Password changed. Use it the next time you sign in."
   },
   "setup": {
     "title": "Initial Setup",
@@ -699,7 +712,8 @@
     "clearAll": "Clear all",
     "selected": "{{count}} selected",
     "selected_other": "{{count}} selected",
-    "exportError": "Export error"
+    "exportError": "Export error",
+    "save": "Save"
   },
   "webhooks": {
     "title": "Webhooks",
