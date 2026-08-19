@@ -165,7 +165,15 @@
       "receivedRecently": "Recently",
       "deleteConfirmTitle": "Confirm deletion",
       "deleteConfirmMany_one": "Permanently delete {{count}} file?",
-      "deleteConfirmMany_other": "Permanently delete {{count}} files?"
+      "deleteConfirmMany_other": "Permanently delete {{count}} files?",
+      "identityFromFile": "From the file",
+      "identityToPatient": "Assign to",
+      "identityField": {
+        "name": "Name",
+        "birth_date": "Date of birth",
+        "sex": "Sex"
+      },
+      "identityMismatchWarning": "The file disagrees with this patient on: {{fields}}. Check before confirming."
     },
     "system": {
       "title": "System state",

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { Fragment, useState, useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import {
@@ -45,6 +45,68 @@ function demographicsSummary(entry: QuarantineEntry): string {
     extraField(entry, "sex"),
   ].filter(Boolean);
   return parts.join(" · ");
+}
+
+
+// ── Identity comparison (anti wrong-patient) ────────────────────────────────
+//
+// Mirrors the server-side check in backend/internal/api/handlers/
+// quarantine_identity.go, which is what actually lands in the audit trail. Only
+// fields carrying a value on BOTH sides are compared: an unidentified file
+// usually has no demographics at all, and flagging those would train the
+// operator to ignore the warning that matters.
+
+function normName(s: string): string {
+  return s.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+function normDate(s: string): string {
+  const v = s.trim();
+  if (!v) return "";
+  const compact = /^(\d{4})(\d{2})(\d{2})$/.exec(v);
+  if (compact) return `${compact[1]}-${compact[2]}-${compact[3]}`;
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? "" : d.toISOString().slice(0, 10);
+}
+
+function normSex(s: string): string {
+  const v = s.trim().toUpperCase();
+  if (["M", "MALE", "H", "HOMME"].includes(v)) return "M";
+  if (["F", "FEMALE", "FEMME", "W"].includes(v)) return "F";
+  return "";
+}
+
+interface IdentityRow {
+  field: "name" | "birth_date" | "sex";
+  fromFile: string;
+  fromPatient: string;
+  mismatch: boolean;
+}
+
+function compareIdentity(entry: QuarantineEntry, patient: Patient): IdentityRow[] {
+  const fileName =
+    [extraField(entry, "last_name"), extraField(entry, "first_name")]
+      .filter(Boolean)
+      .join(" ") || extraField(entry, "patient_name");
+  const patientName = `${patient.last_name ?? ""} ${patient.first_name ?? ""}`.trim();
+
+  const fileDob = extraField(entry, "birth_date");
+  const patientDob = patient.date_of_birth ?? "";
+
+  const fileSex = extraField(entry, "sex");
+  const patientSex = patient.gender ?? "";
+
+  const differs = (a: string, b: string, norm: (v: string) => string) => {
+    const na = norm(a);
+    const nb = norm(b);
+    return na !== "" && nb !== "" && na !== nb;
+  };
+
+  return [
+    { field: "name", fromFile: fileName, fromPatient: patientName, mismatch: differs(fileName, patientName, normName) },
+    { field: "birth_date", fromFile: fileDob, fromPatient: patientDob, mismatch: differs(fileDob, patientDob, normDate) },
+    { field: "sex", fromFile: fileSex, fromPatient: patientSex, mismatch: differs(fileSex, patientSex, normSex) },
+  ];
 }
 
 // Anything under an hour is "recently"; beyond that the browser formats the
@@ -334,6 +396,7 @@ export function AdminQuarantinePage({ canDelete, canAssign }: Props) {
                 {/* Assign panel — search + confirm (anti wrong-patient) */}
                 {isUnidentified && assigningId === entry.id && (
                   <AssignPanel
+                    entry={entry}
                     isPending={assignMutation.isPending}
                     onConfirm={(patientId, createNew) =>
                       assignMutation.mutate({
@@ -453,15 +516,17 @@ export function AdminQuarantinePage({ canDelete, canAssign }: Props) {
 //     are filled later by HL7 enrichment from the HIS. This preserves the original
 //     unidentified-ECG workflow, which assigns to patient IDs not yet in ECG Hub.
 function AssignPanel({
+  entry,
   isPending,
   onConfirm,
   onCancel,
 }: {
+  entry: QuarantineEntry;
   isPending: boolean;
   onConfirm: (patientId: string, createNew: boolean) => void;
   onCancel: () => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [q, setQ] = useState("");
   const [debounced, setDebounced] = useState("");
   const [selected, setSelected] = useState<Patient | null>(null);
@@ -481,7 +546,10 @@ function AssignPanel({
   const results = data?.data ?? [];
 
   const fmtDob = (dob: string | null) =>
-    dob ? new Date(dob).toLocaleDateString("fr-FR") : "—";
+    dob ? new Date(dob).toLocaleDateString(i18n.language) : "—";
+
+  const identityRows = selected ? compareIdentity(entry, selected) : [];
+  const mismatchedFields = identityRows.filter((r) => r.mismatch).map((r) => r.field);
 
   // A new-patient ID candidate only makes sense when the query looks like an ID
   // (no spaces) and nothing matched — nudging the nurse to type the HIS ID.
@@ -512,6 +580,46 @@ function AssignPanel({
               {" · "}
               {selected.nda || selected.patient_id}
             </p>
+
+            {/* Side-by-side identity check — the operator must see what the
+                file itself claims, not just where it is going. */}
+            <div className="mt-2.5 pt-2.5 border-t border-border grid grid-cols-[auto_1fr_1fr] gap-x-3 gap-y-1">
+              <span />
+              <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                {t("admin.quarantine.identityFromFile")}
+              </span>
+              <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                {t("admin.quarantine.identityToPatient")}
+              </span>
+              {identityRows.map((row) => (
+                <Fragment key={row.field}>
+                  <span className="text-[11px] text-muted-foreground">
+                    {t(`admin.quarantine.identityField.${row.field}`)}
+                  </span>
+                  <span className={row.mismatch ? "text-warning font-medium" : "text-foreground"}>
+                    {row.fromFile || "—"}
+                  </span>
+                  <span className={row.mismatch ? "text-warning font-medium" : "text-foreground"}>
+                    {row.field === "birth_date" && row.fromPatient
+                      ? fmtDob(row.fromPatient)
+                      : row.fromPatient || "—"}
+                  </span>
+                </Fragment>
+              ))}
+            </div>
+
+            {mismatchedFields.length > 0 && (
+              <p className="mt-2.5 flex items-start gap-1.5 text-[11px] text-warning">
+                <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-px" />
+                <span>
+                  {t("admin.quarantine.identityMismatchWarning", {
+                    fields: mismatchedFields
+                      .map((f) => t(`admin.quarantine.identityField.${f}`).toLowerCase())
+                      .join(", "),
+                  })}
+                </span>
+              </p>
+            )}
           </div>
           <div className="flex items-center gap-2 mt-2">
             <button
