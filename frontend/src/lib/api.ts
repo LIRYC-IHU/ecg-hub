@@ -36,6 +36,7 @@ export interface MeResponse {
   username?: string; // human-readable login (display)
   role: string;
   permissions: string[];
+  provider?: string; // "local" | "oidc" | "ldap" — only local accounts own a password
 }
 
 export async function fetchSetupStatus(): Promise<{ initialized: boolean }> {
@@ -95,6 +96,7 @@ export async function fetchMe(): Promise<MeResponse> {
     username: res.username,
     role: res.role,
     permissions: res.permissions,
+    provider: res.provider,
   };
 }
 
@@ -933,6 +935,22 @@ export async function setAppUserRole(
 
 export async function deleteAppUser(id: string): Promise<void> {
   await adminClient.deleteAppUser({ id });
+}
+
+export async function createLocalUser(
+  username: string,
+  password: string,
+  role: string,
+): Promise<{ id: string; username: string; role: string }> {
+  const res = await adminClient.createLocalUser({ username, password, role });
+  return { id: res.id, username: res.username, role: res.role };
+}
+
+export async function changeOwnPassword(
+  currentPassword: string,
+  newPassword: string,
+): Promise<void> {
+  await sessionClient.changePassword({ currentPassword, newPassword });
 }
 
 export async function fetchUserDefaults(): Promise<{ default_role: string }> {

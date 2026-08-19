@@ -11,6 +11,7 @@ import {
   Webhook,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { ChangePasswordDialog } from "../settings/ChangePasswordDialog";
 import { useTheme } from "../../hooks/useTheme";
 import { useBranding } from "../../hooks/useBranding";
 
@@ -21,6 +22,8 @@ interface HeaderProps {
   onToggleLang: (lang: "fr" | "en") => void;
   canManageWebhooks?: boolean;
   canManageApiKeys?: boolean;
+  /** Only local accounts own a password here; IdP-backed ones change it there. */
+  canChangePassword?: boolean;
 }
 
 const BREADCRUMBS: Record<string, string> = {
@@ -51,11 +54,13 @@ export function Header({
   onToggleLang,
   canManageWebhooks = false,
   canManageApiKeys = false,
+  canChangePassword = false,
 }: HeaderProps) {
   const { t } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
+  const [passwordOpen, setPasswordOpen] = useState(false);
   const { theme, setTheme } = useTheme();
   const { logoBase64, hasLogo } = useBranding();
 
@@ -174,6 +179,18 @@ export function Header({
                     {t("nav.apiKeys")}
                   </button>
                 )}
+                {canChangePassword && (
+                  <button
+                    onClick={() => {
+                      setOpen(false);
+                      setPasswordOpen(true);
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs text-foreground hover:bg-muted transition-colors cursor-pointer"
+                  >
+                    <KeyRound className="w-3.5 h-3.5" />
+                    {t("auth.changePassword")}
+                  </button>
+                )}
                 {canManageWebhooks && (
                   <button
                     onClick={() => {
@@ -201,6 +218,10 @@ export function Header({
           )}
         </div>
       </div>
+
+      {passwordOpen && (
+        <ChangePasswordDialog onClose={() => setPasswordOpen(false)} />
+      )}
     </header>
   );
 }

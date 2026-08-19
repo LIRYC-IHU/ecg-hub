@@ -1,8 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { useState, useMemo } from 'react'
-import { Search, Check, Trash2, Users } from 'lucide-react'
-import { fetchAppUsers, setAppUserRole, deleteAppUser, fetchRoles, fetchUserDefaults, saveUserDefaults } from '../../lib/api'
+import { Search, Check, Trash2, Users, UserPlus } from 'lucide-react'
+import { fetchAppUsers, setAppUserRole, deleteAppUser, fetchRoles, fetchUserDefaults, saveUserDefaults, createLocalUser, fetchAuthProviders } from '../../lib/api'
 import { Spinner } from '../ui/Spinner'
 import { useNotification } from '../../context/NotificationContext'
 import { useConfirm } from '../../context/ConfirmContext'
@@ -28,6 +28,7 @@ export function AdminAppUsersPage() {
   const [pendingRole, setPendingRole] = useState<Record<string, string>>({})
   const [feedback, setFeedback] = useState<Record<string, 'success' | 'error'>>({})
   const [pendingDefault, setPendingDefault] = useState<string | undefined>(undefined)
+  const [newUser, setNewUser] = useState({ username: '', password: '', role: '' })
 
   const { data: users = [], isLoading, isError } = useQuery({
     queryKey: ['admin', 'app-users'],
@@ -40,6 +41,15 @@ export function AdminAppUsersPage() {
     queryFn: fetchRoles,
     staleTime: 30_000,
   })
+
+  // The Add-user form only makes sense where passwords live in ECG Hub;
+  // OIDC/LDAP sites provision accounts in their identity provider.
+  const { data: providers = [] } = useQuery({
+    queryKey: ['auth', 'providers'],
+    queryFn: fetchAuthProviders,
+    staleTime: 5 * 60_000,
+  })
+  const localEnabled = providers.includes('local')
 
   const { data: userDefaults } = useQuery({
     queryKey: ['admin', 'user-defaults'],
@@ -55,6 +65,19 @@ export function AdminAppUsersPage() {
       setPendingDefault(undefined)
     },
     onError: () => notify('error', t('common.error')),
+  })
+
+  const defaultRoleName = userDefaults?.default_role ?? 'reader'
+
+  const createMutation = useMutation({
+    mutationFn: () => createLocalUser(newUser.username.trim(), newUser.password, newUser.role || defaultRoleName),
+    onSuccess: (created) => {
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'app-users'] })
+      notify('success', t('admin.appUsers.created', { user: created.username }))
+      setNewUser({ username: '', password: '', role: '' })
+    },
+    onError: (err: unknown) =>
+      notify('error', (err as { message?: string })?.message ?? t('common.error')),
   })
 
   const filtered = useMemo(() => {
@@ -160,6 +183,51 @@ export function AdminAppUsersPage() {
           )}
         </div>
       </div>
+
+      {/* Add a local user — only where ECG Hub owns the credentials */}
+      {localEnabled && (
+        <form
+          onSubmit={(e) => { e.preventDefault(); createMutation.mutate() }}
+          className="bg-card border border-border rounded-xl px-4 py-3 mb-5"
+        >
+          <p className="text-sm font-medium text-foreground">{t('admin.appUsers.addTitle')}</p>
+          <p className="text-xs text-muted-foreground mt-0.5 mb-3">{t('admin.appUsers.addHint')}</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              value={newUser.username}
+              onChange={(e) => setNewUser((u) => ({ ...u, username: e.target.value }))}
+              placeholder={t('admin.appUsers.usernamePlaceholder')}
+              autoComplete="off"
+              className="flex-1 min-w-40 text-xs bg-background border border-border rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring/20"
+            />
+            <input
+              type="password"
+              value={newUser.password}
+              onChange={(e) => setNewUser((u) => ({ ...u, password: e.target.value }))}
+              placeholder={t('admin.appUsers.passwordPlaceholder')}
+              autoComplete="new-password"
+              className="flex-1 min-w-40 text-xs bg-background border border-border rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring/20"
+            />
+            <select
+              value={newUser.role || defaultRoleName}
+              onChange={(e) => setNewUser((u) => ({ ...u, role: e.target.value }))}
+              className="text-xs bg-background border border-border rounded px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-ring/20"
+            >
+              {roles.map((r) => (
+                <option key={r.name} value={r.name}>{r.name}</option>
+              ))}
+            </select>
+            <button
+              type="submit"
+              disabled={createMutation.isPending || newUser.username.trim() === '' || newUser.password === ''}
+              className="text-xs bg-primary text-primary-foreground px-3 py-1.5 rounded font-medium hover:bg-primary/90 transition-colors disabled:opacity-50 flex items-center gap-1.5"
+            >
+              {createMutation.isPending ? <Spinner size={11} className="text-primary-foreground" /> : <UserPlus className="w-3.5 h-3.5" />}
+              {t('admin.appUsers.addSubmit')}
+            </button>
+          </div>
+        </form>
+      )}
 
       {/* Search */}
       <div className="relative mb-4">

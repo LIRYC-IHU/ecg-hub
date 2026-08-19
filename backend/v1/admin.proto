@@ -79,6 +79,20 @@ message DeleteAppUserRequest {
 
 message DeleteAppUserResponse {}
 
+// CreateLocalUser adds a username/password account. Only meaningful when the
+// local provider is enabled; sites on OIDC/LDAP provision users there.
+message CreateLocalUserRequest {
+  string username = 1;
+  string password = 2;
+  string role = 3;
+}
+
+message CreateLocalUserResponse {
+  string id = 1;       // ecg_hub_users.id — the identity the app keys on
+  string username = 2;
+  string role = 3;
+}
+
 // ---- Audit logs ------------------------------------------------------------
 
 message AuditLog {
@@ -234,6 +248,7 @@ service AdminService {
   rpc ListAppUsers(ListAppUsersRequest) returns (ListAppUsersResponse) {}
   rpc SetAppUserRole(SetAppUserRoleRequest) returns (SetAppUserRoleResponse) {}
   rpc DeleteAppUser(DeleteAppUserRequest) returns (DeleteAppUserResponse) {}
+  rpc CreateLocalUser(CreateLocalUserRequest) returns (CreateLocalUserResponse) {}
 
   rpc ListQuarantine(ListQuarantineRequest) returns (ListQuarantineResponse) {}
   rpc DeleteQuarantine(DeleteQuarantineRequest) returns (DeleteQuarantineResponse) {}

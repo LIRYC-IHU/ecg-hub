@@ -10,8 +10,20 @@ message GetCurrentUserResponse {
   string username = 2;            // human-readable identifier (display)
   string role = 3;
   repeated string permissions = 4;
+  string provider = 5;            // "local", "oidc", "ldap" — only local accounts own a password
 }
+
+// ChangePassword updates the caller's own password. Self-service: authenticated
+// by the session, not by a permission. Rejected for accounts whose credentials
+// live in an identity provider.
+message ChangePasswordRequest {
+  string current_password = 1;
+  string new_password = 2;
+}
+
+message ChangePasswordResponse {}
 
 service SessionService {
   rpc GetCurrentUser(GetCurrentUserRequest) returns (GetCurrentUserResponse) {}
+  rpc ChangePassword(ChangePasswordRequest) returns (ChangePasswordResponse) {}
 }

@@ -67,6 +67,9 @@ const (
 	// AdminServiceDeleteAppUserProcedure is the fully-qualified name of the AdminService's
 	// DeleteAppUser RPC.
 	AdminServiceDeleteAppUserProcedure = "/grpc.api.v1.AdminService/DeleteAppUser"
+	// AdminServiceCreateLocalUserProcedure is the fully-qualified name of the AdminService's
+	// CreateLocalUser RPC.
+	AdminServiceCreateLocalUserProcedure = "/grpc.api.v1.AdminService/CreateLocalUser"
 	// AdminServiceListQuarantineProcedure is the fully-qualified name of the AdminService's
 	// ListQuarantine RPC.
 	AdminServiceListQuarantineProcedure = "/grpc.api.v1.AdminService/ListQuarantine"
@@ -93,6 +96,7 @@ type AdminServiceClient interface {
 	ListAppUsers(context.Context, *v1.ListAppUsersRequest) (*v1.ListAppUsersResponse, error)
 	SetAppUserRole(context.Context, *v1.SetAppUserRoleRequest) (*v1.SetAppUserRoleResponse, error)
 	DeleteAppUser(context.Context, *v1.DeleteAppUserRequest) (*v1.DeleteAppUserResponse, error)
+	CreateLocalUser(context.Context, *v1.CreateLocalUserRequest) (*v1.CreateLocalUserResponse, error)
 	ListQuarantine(context.Context, *v1.ListQuarantineRequest) (*v1.ListQuarantineResponse, error)
 	DeleteQuarantine(context.Context, *v1.DeleteQuarantineRequest) (*v1.DeleteQuarantineResponse, error)
 	AssignQuarantine(context.Context, *v1.AssignQuarantineRequest) (*v1.AssignQuarantineResponse, error)
@@ -187,6 +191,12 @@ func NewAdminServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(adminServiceMethods.ByName("DeleteAppUser")),
 			connect.WithClientOptions(opts...),
 		),
+		createLocalUser: connect.NewClient[v1.CreateLocalUserRequest, v1.CreateLocalUserResponse](
+			httpClient,
+			baseURL+AdminServiceCreateLocalUserProcedure,
+			connect.WithSchema(adminServiceMethods.ByName("CreateLocalUser")),
+			connect.WithClientOptions(opts...),
+		),
 		listQuarantine: connect.NewClient[v1.ListQuarantineRequest, v1.ListQuarantineResponse](
 			httpClient,
 			baseURL+AdminServiceListQuarantineProcedure,
@@ -223,6 +233,7 @@ type adminServiceClient struct {
 	listAppUsers      *connect.Client[v1.ListAppUsersRequest, v1.ListAppUsersResponse]
 	setAppUserRole    *connect.Client[v1.SetAppUserRoleRequest, v1.SetAppUserRoleResponse]
 	deleteAppUser     *connect.Client[v1.DeleteAppUserRequest, v1.DeleteAppUserResponse]
+	createLocalUser   *connect.Client[v1.CreateLocalUserRequest, v1.CreateLocalUserResponse]
 	listQuarantine    *connect.Client[v1.ListQuarantineRequest, v1.ListQuarantineResponse]
 	deleteQuarantine  *connect.Client[v1.DeleteQuarantineRequest, v1.DeleteQuarantineResponse]
 	assignQuarantine  *connect.Client[v1.AssignQuarantineRequest, v1.AssignQuarantineResponse]
@@ -345,6 +356,15 @@ func (c *adminServiceClient) DeleteAppUser(ctx context.Context, req *v1.DeleteAp
 	return nil, err
 }
 
+// CreateLocalUser calls grpc.api.v1.AdminService.CreateLocalUser.
+func (c *adminServiceClient) CreateLocalUser(ctx context.Context, req *v1.CreateLocalUserRequest) (*v1.CreateLocalUserResponse, error) {
+	response, err := c.createLocalUser.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
 // ListQuarantine calls grpc.api.v1.AdminService.ListQuarantine.
 func (c *adminServiceClient) ListQuarantine(ctx context.Context, req *v1.ListQuarantineRequest) (*v1.ListQuarantineResponse, error) {
 	response, err := c.listQuarantine.CallUnary(ctx, connect.NewRequest(req))
@@ -387,6 +407,7 @@ type AdminServiceHandler interface {
 	ListAppUsers(context.Context, *v1.ListAppUsersRequest) (*v1.ListAppUsersResponse, error)
 	SetAppUserRole(context.Context, *v1.SetAppUserRoleRequest) (*v1.SetAppUserRoleResponse, error)
 	DeleteAppUser(context.Context, *v1.DeleteAppUserRequest) (*v1.DeleteAppUserResponse, error)
+	CreateLocalUser(context.Context, *v1.CreateLocalUserRequest) (*v1.CreateLocalUserResponse, error)
 	ListQuarantine(context.Context, *v1.ListQuarantineRequest) (*v1.ListQuarantineResponse, error)
 	DeleteQuarantine(context.Context, *v1.DeleteQuarantineRequest) (*v1.DeleteQuarantineResponse, error)
 	AssignQuarantine(context.Context, *v1.AssignQuarantineRequest) (*v1.AssignQuarantineResponse, error)
@@ -477,6 +498,12 @@ func NewAdminServiceHandler(svc AdminServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(adminServiceMethods.ByName("DeleteAppUser")),
 		connect.WithHandlerOptions(opts...),
 	)
+	adminServiceCreateLocalUserHandler := connect.NewUnaryHandlerSimple(
+		AdminServiceCreateLocalUserProcedure,
+		svc.CreateLocalUser,
+		connect.WithSchema(adminServiceMethods.ByName("CreateLocalUser")),
+		connect.WithHandlerOptions(opts...),
+	)
 	adminServiceListQuarantineHandler := connect.NewUnaryHandlerSimple(
 		AdminServiceListQuarantineProcedure,
 		svc.ListQuarantine,
@@ -523,6 +550,8 @@ func NewAdminServiceHandler(svc AdminServiceHandler, opts ...connect.HandlerOpti
 			adminServiceSetAppUserRoleHandler.ServeHTTP(w, r)
 		case AdminServiceDeleteAppUserProcedure:
 			adminServiceDeleteAppUserHandler.ServeHTTP(w, r)
+		case AdminServiceCreateLocalUserProcedure:
+			adminServiceCreateLocalUserHandler.ServeHTTP(w, r)
 		case AdminServiceListQuarantineProcedure:
 			adminServiceListQuarantineHandler.ServeHTTP(w, r)
 		case AdminServiceDeleteQuarantineProcedure:
@@ -588,6 +617,10 @@ func (UnimplementedAdminServiceHandler) SetAppUserRole(context.Context, *v1.SetA
 
 func (UnimplementedAdminServiceHandler) DeleteAppUser(context.Context, *v1.DeleteAppUserRequest) (*v1.DeleteAppUserResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("grpc.api.v1.AdminService.DeleteAppUser is not implemented"))
+}
+
+func (UnimplementedAdminServiceHandler) CreateLocalUser(context.Context, *v1.CreateLocalUserRequest) (*v1.CreateLocalUserResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("grpc.api.v1.AdminService.CreateLocalUser is not implemented"))
 }
 
 func (UnimplementedAdminServiceHandler) ListQuarantine(context.Context, *v1.ListQuarantineRequest) (*v1.ListQuarantineResponse, error) {

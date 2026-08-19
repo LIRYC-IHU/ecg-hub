@@ -204,6 +204,7 @@ function App() {
         onToggleLang={toggleLang}
         canManageWebhooks={canManageWebhooks}
         canManageApiKeys={canManageApiKeys}
+        canChangePassword={user?.provider === "local"}
       />
 
       <div className="flex-1 min-h-0 flex overflow-hidden">
