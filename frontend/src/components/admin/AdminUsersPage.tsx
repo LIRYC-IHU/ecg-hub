@@ -39,13 +39,13 @@ export function AdminUsersPage() {
       setFeedback((f) => ({ ...f, [userId]: 'ok' }))
       void queryClient.invalidateQueries({ queryKey: ['admin', 'users'] })
       const user = users.find((u) => u.id === userId)
-      notify('success', `${user?.username ?? userId} — rôle "${role}" appliqué`)
+      notify('success', t('admin.users.roleApplied', { user: user?.username ?? userId, role }))
       setTimeout(() => setFeedback((f) => { const n = { ...f }; delete n[userId]; return n }), 2000)
     },
     onError: (_, { userId }) => {
       setFeedback((f) => ({ ...f, [userId]: 'err' }))
       const user = users.find((u) => u.id === userId)
-      notify('error', `Impossible de modifier le rôle de ${user?.username ?? userId}`)
+      notify('error', t('admin.users.roleApplyError', { user: user?.username ?? userId }))
       setTimeout(() => setFeedback((f) => { const n = { ...f }; delete n[userId]; return n }), 3000)
     },
   })

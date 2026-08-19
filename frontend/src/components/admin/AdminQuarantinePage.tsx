@@ -47,17 +47,20 @@ function demographicsSummary(entry: QuarantineEntry): string {
   return parts.join(" · ");
 }
 
-function timeAgo(dateStr: string): string {
+// Anything under an hour is "recently"; beyond that the browser formats the
+// distance in the active language.
+function timeAgo(dateStr: string, locale: string, recently: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
   const hours = Math.floor(diff / (1000 * 60 * 60));
   const days = Math.floor(hours / 24);
-  if (days > 0) return `Il y a ${days}j`;
-  if (hours > 0) return `Il y a ${hours}h`;
-  return "Récemment";
+  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
+  if (days > 0) return rtf.format(-days, "day");
+  if (hours > 0) return rtf.format(-hours, "hour");
+  return recently;
 }
 
 export function AdminQuarantinePage({ canDelete, canAssign }: Props) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { notify } = useNotification();
   const queryClient = useQueryClient();
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -259,7 +262,7 @@ export function AdminQuarantinePage({ canDelete, canAssign }: Props) {
                     className="text-xs text-muted-foreground"
                     title={new Date(entry.received_at).toLocaleString("fr-FR")}
                   >
-                    {timeAgo(entry.received_at)}
+                    {timeAgo(entry.received_at, i18n.language, t("admin.quarantine.receivedRecently"))}
                   </span>
 
                   {/* Error — expandable */}
@@ -409,14 +412,12 @@ export function AdminQuarantinePage({ canDelete, canAssign }: Props) {
             <div className="flex items-center gap-2 mb-3">
               <AlertTriangle className="w-5 h-5 text-destructive" />
               <h2 className="text-sm font-semibold">
-                {t("admin.quarantine.deleteConfirmTitle") ??
-                  "Confirmer la suppression"}
+                {t("admin.quarantine.deleteConfirmTitle")}
               </h2>
             </div>
 
             <p className="text-xs text-muted-foreground mb-5">
-              {t("admin.quarantine.deleteConfirmMany") ??
-                `Supprimer ${selected.size} fichier(s) définitivement ?`}
+              {t("admin.quarantine.deleteConfirmMany", { count: selected.size })}
             </p>
 
             <div className="flex justify-end gap-2">

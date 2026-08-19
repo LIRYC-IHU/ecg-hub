@@ -93,7 +93,17 @@
       "injectHint": "Overwrite patient ID, name and gender with the HIS-enriched data",
       "anonymize": "Anonymize",
       "anonymizeHint": "Strip name, patient ID and birth date from the output (research)"
-    }
+    },
+    "hl7": {
+      "sent": "Sent",
+      "pending": "Pending",
+      "exhausted": "Exhausted",
+      "rejected": "Error"
+    },
+    "hl7RetryQueued": "ECG #{{id}} — HL7 retry queued",
+    "hl7RetryError": "ECG #{{id}} — HL7 retry failed",
+    "deletedNamed": "ECG deleted — {{filename}}",
+    "deleteErrorNamed": "Could not delete — {{filename}}"
   },
   "export": {
     "selected": "{{count}} ECG selected",
@@ -151,7 +161,11 @@
       "assignChange": "Change",
       "assignConfirm": "Confirm assignment",
       "assigned": "ECG assigned and re-ingested",
-      "assignError": "Error assigning patient"
+      "assignError": "Error assigning patient",
+      "receivedRecently": "Recently",
+      "deleteConfirmTitle": "Confirm deletion",
+      "deleteConfirmMany_one": "Permanently delete {{count}} file?",
+      "deleteConfirmMany_other": "Permanently delete {{count}} files?"
     },
     "system": {
       "title": "System state",
@@ -277,6 +291,11 @@
           "error_message": "Error message",
           "source": "Source"
         }
+      },
+      "storage": {
+        "title": "Storage",
+        "ecg": "ECG storage",
+        "quarantine": "Quarantine"
       }
     },
     "users": {
@@ -300,7 +319,9 @@
         "reader": "Read-only — consultation and ECG download",
         "writer": "Read + ECG deletion",
         "admin": "Full access — administration, audit, role management"
-      }
+      },
+      "roleApplied": "{{user}} — role \"{{role}}\" applied",
+      "roleApplyError": "Could not change the role of {{user}}"
     },
     "appUsers": {
       "title": "Users — role assignment",
@@ -642,7 +663,9 @@
     "username": "Username",
     "password": "Password",
     "signingIn": "Signing in…",
-    "invalidCredentials": "Invalid credentials"
+    "invalidCredentials": "Invalid credentials",
+    "tagline": "Centralised electrocardiogram management",
+    "loginSubtitle": "Sign in to your ECG workspace"
   },
   "setup": {
     "title": "Initial Setup",
@@ -729,5 +752,37 @@
       "hl7.rejected": "HL7 rejected",
       "ecg.duplicate": "ECG duplicate (skipped)"
     }
+  },
+  "viewer": {
+    "theme": "Theme",
+    "themeRed": "Red",
+    "themeGreen": "Green",
+    "themeBw": "B&W",
+    "themeDark": "Dark",
+    "grid": "Grid",
+    "thickness": "Thickness",
+    "loading": "Loading the ECG trace…",
+    "screenScale": "screen scale",
+    "fitShrunk": "The ECG was scaled down to fit the window.",
+    "fitGrown": "The ECG was scaled up to fill the window.",
+    "resetZoom": "reset",
+    "calipers_one": "{{count}} measurement",
+    "calipers_other": "{{count}} measurements",
+    "clearCalipers": "clear",
+    "noRecord": "No ECG loaded."
+  },
+  "empty": {
+    "patients": "No patient found",
+    "ecg": "No ECG for this patient",
+    "audit": "No entry in this period",
+    "quarantine": "No file in quarantine ✓",
+    "users": "No user signed in"
+  },
+  "tags": {
+    "manage": "Manage tags",
+    "title": "Tags",
+    "empty": "No tag",
+    "newPlaceholder": "New tag…",
+    "add": "Add"
   }
 }
