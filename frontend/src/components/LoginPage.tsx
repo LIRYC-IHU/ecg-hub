@@ -282,7 +282,7 @@ export function LoginPage() {
             ECG Hub
           </h1>
           <p className="reveal mt-6 max-w-md text-base leading-relaxed text-slate-300/80">
-            Gestion centralisée des électrocardiogrammes
+            {t("auth.tagline")}
           </p>
         </div>
 
@@ -301,7 +301,7 @@ export function LoginPage() {
               {t("auth.login")}
             </h2>
             <p className="mt-1.5 text-sm text-muted-foreground">
-              Accédez à votre espace de gestion ECG
+              {t("auth.loginSubtitle")}
             </p>
           </div>
 

@@ -154,7 +154,7 @@ export function TagManager({ patientId, ecgId, canCreate = true, canDelete = fal
       <button
         onClick={() => setOpen(!open)}
         className="inline-flex items-center justify-center w-6 h-6 rounded-full border border-dashed border-border text-muted-foreground hover:text-foreground hover:border-foreground/40 transition-colors"
-        title={t("tags.manage", "Gérer les tags")}
+        title={t("tags.manage")}
       >
         <Plus className="w-3 h-3" />
       </button>
@@ -166,14 +166,14 @@ export function TagManager({ patientId, ecgId, canCreate = true, canDelete = fal
         >
           <div className="p-2 border-b border-border">
             <span className="text-xs font-semibold text-foreground">
-              {t("tags.title", "Tags")}
+              {t("tags.title")}
             </span>
           </div>
 
           <div className="max-h-48 overflow-y-auto p-1">
             {allTags.length === 0 && (
               <p className="text-xs text-muted-foreground text-center py-3">
-                {t("tags.empty", "Aucun tag")}
+                {t("tags.empty")}
               </p>
             )}
             {allTags.map((tag) => (
@@ -234,7 +234,7 @@ export function TagManager({ patientId, ecgId, canCreate = true, canDelete = fal
                   type="text"
                   value={newTagName}
                   onChange={(e) => setNewTagName(e.target.value)}
-                  placeholder={t("tags.newPlaceholder", "Nouveau tag…")}
+                  placeholder={t("tags.newPlaceholder")}
                   className="flex-1 text-xs px-2 py-1.5 rounded-md border border-border bg-background focus:outline-none focus:ring-1 focus:ring-ring/20"
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && newTagName.trim()) {
@@ -247,7 +247,7 @@ export function TagManager({ patientId, ecgId, canCreate = true, canDelete = fal
                   disabled={!newTagName.trim() || createMutation.isPending}
                   className="px-2 py-1.5 rounded-md text-xs font-medium bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50 transition-opacity"
                 >
-                  {t("tags.add", "Ajouter")}
+                  {t("tags.add")}
                 </button>
               </div>
               <div className="flex gap-1">

@@ -7,6 +7,7 @@ import React, {
   useRef,
   useState,
 } from 'react';
+import { useTranslation } from 'react-i18next';
 import type {
   Caliper,
   EcgRecord,
@@ -114,6 +115,7 @@ export const ECGViewer = forwardRef<ECGViewerHandle, ECGViewerProps>(function EC
   { record, initialOptions, className, style, onOptionsChange },
   ref,
 ) {
+  const { t } = useTranslation();
   const [options, setOptions] = useState<ViewerOptions>({
     ...DEFAULT_OPTIONS,
     ...initialOptions,
@@ -608,28 +610,28 @@ export const ECGViewer = forwardRef<ECGViewerHandle, ECGViewerProps>(function EC
         <span>{record.samplingFrequency} Hz</span>
         {info && Math.abs(info.fitScale - 1) > 0.01 && (
           <span title={info.fitScale < 1
-            ? "L'ECG a été réduit pour tenir dans la fenêtre."
-            : "L'ECG a été agrandi pour remplir la fenêtre."
+            ? t('viewer.fitShrunk')
+            : t('viewer.fitGrown')
           }>
-            échelle écran: {info.effectiveTimeScale.toFixed(1)} mm/s ·{' '}
+            {t('viewer.screenScale')}: {info.effectiveTimeScale.toFixed(1)} mm/s ·{' '}
             {info.effectiveAmplitudeScale.toFixed(1)} mm/mV
           </span>
         )}
         {zoomDisplay > 1.001 && (
           <span>
             zoom × {zoomDisplay.toFixed(2)}{' '}
-            <button onClick={resetZoom}>réinitialiser</button>
+            <button onClick={resetZoom}>{t('viewer.resetZoom')}</button>
           </span>
         )}
         {calipers.length > 0 && (
           <span>
-            {calipers.length} mesure{calipers.length > 1 ? 's' : ''}{' '}
-            <button onClick={clearCalipers}>effacer</button>
+            {t('viewer.calipers', { count: calipers.length })}{' '}
+            <button onClick={clearCalipers}>{t('viewer.clearCalipers')}</button>
           </span>
         )}
       </div>
     );
-  }, [record, info, zoomDisplay, calipers.length, resetZoom, clearCalipers]);
+  }, [record, info, zoomDisplay, calipers.length, resetZoom, clearCalipers, t]);
 
   return (
     <div ref={viewerRef} className={`ecg-viewer${className ? ` ${className}` : ''}`} style={style}>
@@ -638,7 +640,7 @@ export const ECGViewer = forwardRef<ECGViewerHandle, ECGViewerProps>(function EC
         <div className="ecg-canvas-stage" ref={stageRef}>
           {error && <div className="ecg-error">{error}</div>}
           {!record && !error && (
-            <div className="ecg-empty">Aucun ECG chargé.</div>
+            <div className="ecg-empty">{t('viewer.noRecord')}</div>
           )}
           <div className="ecg-canvas-wrap" ref={wrapRef}>
             <canvas

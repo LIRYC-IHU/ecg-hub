@@ -93,7 +93,17 @@
       "injectHint": "Remplacer IPP, nom et sexe par les données enrichies du SIH",
       "anonymize": "Anonymiser",
       "anonymizeHint": "Retirer nom, IPP et date de naissance de la sortie (recherche)"
-    }
+    },
+    "hl7": {
+      "sent": "Envoyé",
+      "pending": "En attente",
+      "exhausted": "Épuisé",
+      "rejected": "Erreur"
+    },
+    "hl7RetryQueued": "ECG #{{id}} — retry HL7 planifié",
+    "hl7RetryError": "ECG #{{id}} — échec du retry HL7",
+    "deletedNamed": "ECG supprimé — {{filename}}",
+    "deleteErrorNamed": "Erreur lors de la suppression — {{filename}}"
   },
   "export": {
     "selected": "{{count}} ECG sélectionné",
@@ -151,7 +161,11 @@
       "assignChange": "Changer",
       "assignConfirm": "Confirmer l'assignation",
       "assigned": "ECG assigné et réingéré",
-      "assignError": "Erreur lors de l'assignation"
+      "assignError": "Erreur lors de l'assignation",
+      "receivedRecently": "Récemment",
+      "deleteConfirmTitle": "Confirmer la suppression",
+      "deleteConfirmMany_one": "Supprimer définitivement {{count}} fichier ?",
+      "deleteConfirmMany_other": "Supprimer définitivement {{count}} fichiers ?"
     },
     "system": {
       "title": "État du système",
@@ -277,6 +291,11 @@
           "error_message": "Message d'erreur",
           "source": "Source"
         }
+      },
+      "storage": {
+        "title": "Stockage",
+        "ecg": "Stockage ECG",
+        "quarantine": "Quarantaine"
       }
     },
     "users": {
@@ -300,7 +319,9 @@
         "reader": "Lecture seule — consultation et téléchargement ECG",
         "writer": "Lecture + suppression d'ECG",
         "admin": "Accès complet — administration, audit, gestion des rôles"
-      }
+      },
+      "roleApplied": "{{user}} — rôle « {{role}} » appliqué",
+      "roleApplyError": "Impossible de modifier le rôle de {{user}}"
     },
     "appUsers": {
       "title": "Utilisateurs — attribution des rôles",
@@ -525,7 +546,7 @@
     "modulesConfig": "Modules",
     "branding": "Identité",
     "hl7": "HL7",
-    "authConfig": "Auth",
+    "authConfig": "Authentification",
     "quarantine": "Quarantaine",
     "apiKeys": "Clés API",
     "webhooks": "Webhooks"
@@ -643,7 +664,9 @@
     "username": "Nom d'utilisateur",
     "password": "Mot de passe",
     "signingIn": "Connexion en cours…",
-    "invalidCredentials": "Identifiants invalides"
+    "invalidCredentials": "Identifiants invalides",
+    "tagline": "Gestion centralisée des électrocardiogrammes",
+    "loginSubtitle": "Accédez à votre espace de gestion ECG"
   },
   "setup": {
     "title": "Configuration initiale",
@@ -730,5 +753,37 @@
       "hl7.rejected": "HL7 rejeté",
       "ecg.duplicate": "ECG doublon (ignoré)"
     }
+  },
+  "viewer": {
+    "theme": "Thème",
+    "themeRed": "Rouge",
+    "themeGreen": "Vert",
+    "themeBw": "N&B",
+    "themeDark": "Sombre",
+    "grid": "Grille",
+    "thickness": "Épaisseur",
+    "loading": "Chargement de la trace ECG…",
+    "screenScale": "échelle écran",
+    "fitShrunk": "L'ECG a été réduit pour tenir dans la fenêtre.",
+    "fitGrown": "L'ECG a été agrandi pour remplir la fenêtre.",
+    "resetZoom": "réinitialiser",
+    "calipers_one": "{{count}} mesure",
+    "calipers_other": "{{count}} mesures",
+    "clearCalipers": "effacer",
+    "noRecord": "Aucun ECG chargé."
+  },
+  "empty": {
+    "patients": "Aucun patient trouvé",
+    "ecg": "Aucun ECG pour ce patient",
+    "audit": "Aucune entrée dans cette période",
+    "quarantine": "Aucun fichier en quarantaine ✓",
+    "users": "Aucun utilisateur connecté"
+  },
+  "tags": {
+    "manage": "Gérer les tags",
+    "title": "Tags",
+    "empty": "Aucun tag",
+    "newPlaceholder": "Nouveau tag…",
+    "add": "Ajouter"
   }
 }

@@ -1,4 +1,5 @@
 import { useRef, useState, useEffect } from "react";
+import { useTranslation } from "react-i18next";
 import { X, Download, Maximize2, Settings } from "lucide-react";
 import { ECGViewer } from "../../ecg-viewer/ECGViewer";
 import type { ECGViewerHandle } from "../../ecg-viewer/ECGViewer";
@@ -12,11 +13,11 @@ const PREFS_KEY = "ecghub.ecgviewer.prefs";
 
 type Theme = "red" | "green" | "bw" | "dark";
 
-const THEMES: { id: Theme; label: string; className: string }[] = [
-  { id: "red",   label: "Rouge",   className: "" },
-  { id: "green", label: "Vert",    className: "ecg-theme-green" },
-  { id: "bw",    label: "N&B",     className: "ecg-theme-bw" },
-  { id: "dark",  label: "Sombre",  className: "ecg-theme-dark" },
+const THEMES: { id: Theme; labelKey: string; className: string }[] = [
+  { id: "red",   labelKey: "viewer.themeRed",   className: "" },
+  { id: "green", labelKey: "viewer.themeGreen", className: "ecg-theme-green" },
+  { id: "bw",    labelKey: "viewer.themeBw",    className: "ecg-theme-bw" },
+  { id: "dark",  labelKey: "viewer.themeDark",  className: "ecg-theme-dark" },
 ];
 
 interface ViewerPrefs {
@@ -46,6 +47,7 @@ interface Props {
 }
 
 export function ECGViewerModal({ ecgId, filename, onClose }: Props) {
+  const { t } = useTranslation();
   const viewerRef = useRef<ECGViewerHandle>(null);
   const [record, setRecord] = useState<EcgRecord | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -160,17 +162,17 @@ export function ECGViewerModal({ ecgId, filename, onClose }: Props) {
         <div className="shrink-0 flex items-center gap-6 px-4 py-2.5 border-b border-border bg-muted/30">
           {/* Theme */}
           <div className="flex items-center gap-2">
-            <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Thème</span>
+            <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">{t("viewer.theme")}</span>
             <div className="flex gap-1">
-              {THEMES.map((t) => (
+              {THEMES.map((theme) => (
                 <button
-                  key={t.id}
-                  onClick={() => setPrefs((p) => ({ ...p, theme: t.id }))}
+                  key={theme.id}
+                  onClick={() => setPrefs((p) => ({ ...p, theme: theme.id }))}
                   className={`px-2.5 py-1 rounded text-xs font-medium border transition-colors ${
-                    prefs.theme === t.id ? "bg-primary/10 text-primary border-primary/30" : "border-border text-muted-foreground hover:border-primary/20"
+                    prefs.theme === theme.id ? "bg-primary/10 text-primary border-primary/30" : "border-border text-muted-foreground hover:border-primary/20"
                   }`}
                 >
-                  {t.label}
+                  {t(theme.labelKey)}
                 </button>
               ))}
             </div>
@@ -178,7 +180,7 @@ export function ECGViewerModal({ ecgId, filename, onClose }: Props) {
 
           {/* Grid */}
           <div className="flex items-center gap-2">
-            <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Grille</span>
+            <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">{t("viewer.grid")}</span>
             <button
               onClick={() => setPrefs((p) => ({ ...p, showGrid: !p.showGrid }))}
               className={`relative w-9 h-5 rounded-full transition-colors ${prefs.showGrid ? "bg-primary" : "bg-muted-foreground/30"}`}
@@ -189,7 +191,7 @@ export function ECGViewerModal({ ecgId, filename, onClose }: Props) {
 
           {/* Trace thickness */}
           <div className="flex items-center gap-2">
-            <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">Épaisseur</span>
+            <span className="text-[11px] font-medium text-muted-foreground uppercase tracking-wide">{t("viewer.thickness")}</span>
             <div className="flex gap-1">
               {[0.75, 1, 1.5, 2].map((v) => (
                 <button
@@ -211,7 +213,7 @@ export function ECGViewerModal({ ecgId, filename, onClose }: Props) {
       <div className="flex-1 min-h-0" style={{ display: "flex", flexDirection: "column" }}>
         {loading && (
           <div className="flex-1 flex items-center justify-center">
-            <div className="text-sm text-muted-foreground">Chargement de la trace ECG…</div>
+            <div className="text-sm text-muted-foreground">{t("viewer.loading")}</div>
           </div>
         )}
         {error && (

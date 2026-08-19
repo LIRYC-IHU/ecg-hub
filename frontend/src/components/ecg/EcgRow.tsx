@@ -9,11 +9,11 @@ import { useNotification } from '../../context/NotificationContext'
 import { DownloadFormatPopup } from './DownloadFormatPopup'
 import type { ECG, ECGFieldDef } from '../../types'
 
-const hl7StatusConfig: Record<string, { dot: string; label: string }> = {
-  success:      { dot: 'bg-success',          label: 'Envoyé'     },
-  pending:      { dot: 'bg-muted-foreground',  label: 'En attente' },
-  hl7_exhausted:{ dot: 'bg-warning',           label: 'Épuisé'     },
-  hl7_rejected: { dot: 'bg-destructive',       label: 'Erreur'     },
+const hl7StatusConfig: Record<string, { dot: string; labelKey: string }> = {
+  success:      { dot: 'bg-success',           labelKey: 'ecg.hl7.sent'      },
+  pending:      { dot: 'bg-muted-foreground',  labelKey: 'ecg.hl7.pending'   },
+  hl7_exhausted:{ dot: 'bg-warning',           labelKey: 'ecg.hl7.exhausted' },
+  hl7_rejected: { dot: 'bg-destructive',       labelKey: 'ecg.hl7.rejected'  },
 }
 
 interface Props {
@@ -45,9 +45,9 @@ export function EcgRow({ ecg, isSelected, onToggle, canForceHL7, canDelete, canR
     onSuccess: () => {
       setForced(true)
       void queryClient.invalidateQueries({ queryKey: ['ecgs', patientId] })
-      notify('success', `ECG #${ecg.id} — retry HL7 planifié`)
+      notify('success', t('ecg.hl7RetryQueued', { id: ecg.id }))
     },
-    onError: () => notify('error', `ECG #${ecg.id} — échec du retry HL7`),
+    onError: () => notify('error', t('ecg.hl7RetryError', { id: ecg.id })),
   })
 
   const deleteMutation = useMutation({
@@ -56,17 +56,18 @@ export function EcgRow({ ecg, isSelected, onToggle, canForceHL7, canDelete, canR
       setDeleted(true)
       void queryClient.invalidateQueries({ queryKey: ['ecgs', patientId] })
       onDeleted?.(ecg.id)
-      notify('success', `ECG supprimé — ${ecg.original_filename}`)
+      notify('success', t('ecg.deletedNamed', { filename: ecg.original_filename }))
     },
     onError: () => {
       setConfirmDelete(false)
-      notify('error', `Erreur lors de la suppression — ${ecg.original_filename}`)
+      notify('error', t('ecg.deleteErrorNamed', { filename: ecg.original_filename }))
     },
   })
 
   if (deleted) return null
 
-  const hl7 = hl7StatusConfig[ecg.hl7_status] ?? { dot: 'bg-muted', label: ecg.hl7_status }
+  const hl7cfg = hl7StatusConfig[ecg.hl7_status]
+  const hl7 = { dot: hl7cfg?.dot ?? 'bg-muted', label: hl7cfg ? t(hl7cfg.labelKey) : ecg.hl7_status }
 
   return (
     <div className="border-b border-border last:border-0">

@@ -1,6 +1,14 @@
 import { type VolumeMetric, fetchStorageMetrics } from "@/lib/api";
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { Spinner } from "../ui/Spinner";
+
+// The API sends display names for the volumes; map the known ones to a
+// translation key and fall back to the raw name for anything new.
+const VOLUME_LABEL_KEYS: Record<string, string> = {
+  "ECG Storage": "admin.system.storage.ecg",
+  Quarantine: "admin.system.storage.quarantine",
+};
 
 function formatBytes(bytes: number) {
   const sizes = ["B", "KB", "MB", "GB", "TB"];
@@ -10,6 +18,9 @@ function formatBytes(bytes: number) {
 }
 
 function MetricCard() {
+  const { t } = useTranslation();
+  const volumeLabel = (name: string) =>
+    VOLUME_LABEL_KEYS[name] ? t(VOLUME_LABEL_KEYS[name]) : name;
   const [volumes, setVolumes] = useState<VolumeMetric[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -52,7 +63,7 @@ function MetricCard() {
   return (
     <div className="bg-card rounded-lg border border-border p-5 space-y-6">
       <div className="flex items-center gap-3">
-        <p className="font-semibold">Storage Metrics</p>
+        <p className="font-semibold">{t("admin.system.storage.title")}</p>
       </div>
 
       {error ? (
@@ -75,7 +86,7 @@ function MetricCard() {
           return (
             <div key={v.name} className="space-y-2">
               <div className="flex justify-between text-sm">
-                <span className="font-medium">{v.name}</span>
+                <span className="font-medium">{volumeLabel(v.name)}</span>
                 <span>
                   {formatBytes(used)} / {capLabel}
                   {!unlimited && ` (${percent}%)`}
@@ -85,7 +96,7 @@ function MetricCard() {
               {!unlimited && (
                 <div
                   role="progressbar"
-                  aria-label={v.name}
+                  aria-label={volumeLabel(v.name)}
                   aria-valuenow={percent}
                   aria-valuemin={0}
                   aria-valuemax={100}
