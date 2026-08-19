@@ -778,7 +778,9 @@
     "calipers_one": "{{count}} mesure",
     "calipers_other": "{{count}} mesures",
     "clearCalipers": "effacer",
-    "noRecord": "Aucun ECG chargé."
+    "noRecord": "Aucun ECG chargé.",
+    "nameInFile": "dans le fichier : {{name}}",
+    "nameInFileHint": "Nom inscrit dans le fichier source — l'ECG est rattaché au patient affiché avant."
   },
   "empty": {
     "patients": "Aucun patient trouvé",
