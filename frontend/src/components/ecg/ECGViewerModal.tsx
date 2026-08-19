@@ -4,6 +4,8 @@ import { X, Download, Maximize2, Settings } from "lucide-react";
 import { ECGViewer } from "../../ecg-viewer/ECGViewer";
 import type { ECGViewerHandle } from "../../ecg-viewer/ECGViewer";
 import type { EcgRecord } from "../../ecg-viewer/ecgTypes";
+import type { Patient } from "../../types";
+import { formatPatientName } from "../../lib/patient";
 import "../../ecg-viewer/ECGViewer.css";
 
 const BASE_URL = (import.meta.env as Record<string, string>).VITE_API_URL ?? "";
@@ -40,13 +42,30 @@ function savePrefs(p: ViewerPrefs) {
   localStorage.setItem(PREFS_KEY, JSON.stringify(p));
 }
 
+
+// De-identified exports (PatientIdentityRemoved) put a pseudonymisation UUID in
+// the PatientName tag. Surfacing that as "in file: <uuid>" is noise, and noise
+// next to a patient identity is exactly what this line exists to avoid.
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isPseudonym(name: string): boolean {
+  return UUID_RE.test(name);
+}
+
 interface Props {
   ecgId: string;
   filename?: string;
+  /**
+   * The patient this ECG is filed under. Required: the waveform payload only
+   * carries whatever demographics the source device wrote, which for a
+   * manually assigned ECG is somebody else entirely.
+   */
+  patient: Patient;
   onClose: () => void;
 }
 
-export function ECGViewerModal({ ecgId, filename, onClose }: Props) {
+export function ECGViewerModal({ ecgId, filename, patient, onClose }: Props) {
   const { t } = useTranslation();
   const viewerRef = useRef<ECGViewerHandle>(null);
   const [record, setRecord] = useState<EcgRecord | null>(null);
@@ -104,6 +123,21 @@ export function ECGViewerModal({ ecgId, filename, onClose }: Props) {
     a.href = url;
     a.download = `${filename ?? ecgId}.png`;
     a.click();
+  };
+
+  // The waveform payload carries the demographics the source device wrote.
+  // Show the patient the ECG is filed under instead, and keep the file's name
+  // only when it is a real name that disagrees — an ECG assigned by hand in
+  // Quarantine keeps the original device metadata.
+  const hubName = formatPatientName(patient);
+  const fileName = record?.patientName?.trim() ?? "";
+  const viewerRecord: EcgRecord | null = record && {
+    ...record,
+    patientName: `${hubName} · ${patient.patient_id}`,
+    filePatientName:
+      fileName !== "" && fileName !== hubName && !isPseudonym(fileName)
+        ? fileName
+        : undefined,
   };
 
   // Build CSS vars for grid visibility and trace thickness
@@ -225,7 +259,7 @@ export function ECGViewerModal({ ecgId, filename, onClose }: Props) {
           <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
             <ECGViewer
               ref={viewerRef}
-              record={record}
+              record={viewerRecord}
               initialOptions={{ layout: "3x4", timeScale: 25, amplitudeScale: 10 }}
               className={themeClass}
               style={inlineStyle}

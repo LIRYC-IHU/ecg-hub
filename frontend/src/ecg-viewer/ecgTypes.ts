@@ -18,7 +18,15 @@ export interface EcgRecord {
   samplingFrequency: number;
   /** Total duration in seconds. */
   durationSec: number;
+  /** Identity to display prominently — the patient the ECG is filed under. */
   patientName?: string;
+  /**
+   * Name embedded in the source file, when it differs from patientName.
+   * A manually assigned ECG keeps the demographics of whatever device wrote
+   * it, and showing that as the patient identity is how a trace ends up read
+   * against the wrong person.
+   */
+  filePatientName?: string;
   acquisitionDate?: string;
   /** Names of channels found in the raw DICOM, before reordering/derivation. */
   rawLeadOrder?: string[];

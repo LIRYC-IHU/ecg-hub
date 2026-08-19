@@ -101,6 +101,13 @@
   border-bottom: 1px solid #e5e7eb;
 }
 
+/* Secondary identity: the name the source file carries, when it is not the
+   patient the ECG is filed under. Deliberately dimmer than the real identity. */
+.ecg-viewer .ecg-meta-file-name {
+  font-style: italic;
+  opacity: 0.75;
+}
+
 .ecg-viewer .ecg-meta button {
   background: none;
   border: none;

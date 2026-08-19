@@ -1113,6 +1113,7 @@ function PatientDetail({
           filename={
             ecgs.find((e) => String(e.id) === viewerEcgId)?.original_filename
           }
+          patient={patient}
           onClose={() => setViewerEcgId(null)}
         />
       )}

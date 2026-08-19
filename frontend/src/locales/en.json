@@ -777,7 +777,9 @@
     "calipers_one": "{{count}} measurement",
     "calipers_other": "{{count}} measurements",
     "clearCalipers": "clear",
-    "noRecord": "No ECG loaded."
+    "noRecord": "No ECG loaded.",
+    "nameInFile": "in file: {{name}}",
+    "nameInFileHint": "Name embedded in the source file — the ECG is filed under the patient shown before it."
   },
   "empty": {
     "patients": "No patient found",

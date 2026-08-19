@@ -606,6 +606,11 @@ export const ECGViewer = forwardRef<ECGViewerHandle, ECGViewerProps>(function EC
     return (
       <div className="ecg-meta">
         {record.patientName && <span>{record.patientName}</span>}
+        {record.filePatientName && (
+          <span className="ecg-meta-file-name" title={t('viewer.nameInFileHint')}>
+            {t('viewer.nameInFile', { name: record.filePatientName })}
+          </span>
+        )}
         <span>{record.durationSec.toFixed(1)} s</span>
         <span>{record.samplingFrequency} Hz</span>
         {info && Math.abs(info.fitScale - 1) > 0.01 && (
