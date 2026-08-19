@@ -4,6 +4,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/LIRYC-IHU/ecg-hub/internal/auth"
 	"github.com/LIRYC-IHU/ecg-hub/internal/config"
 )
 
@@ -122,6 +123,24 @@ func TestRunMigrations_SeedsBuiltinRoles(t *testing.T) {
 		}
 		if count != 1 {
 			t.Errorf("role %s: expected 1, got %d", role, count)
+		}
+	}
+
+	// admin must hold every permission the application defines. The checker no
+	// longer short-circuits on the role name, so a permission missing here is a
+	// permission admin genuinely does not have.
+	for _, perm := range auth.AllPermissions {
+		var count int
+		row := sqlDB.QueryRow(`
+			SELECT COUNT(*) FROM role_permissions rp
+			JOIN roles r ON r.id = rp.role_id
+			WHERE r.name = 'admin' AND rp.permission = $1`, perm)
+		if err := row.Scan(&count); err != nil {
+			t.Errorf("checking admin permission %s: %v", perm, err)
+			continue
+		}
+		if count != 1 {
+			t.Errorf("admin role is missing permission %q", perm)
 		}
 	}
 }

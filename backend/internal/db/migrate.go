@@ -6,6 +6,7 @@ import (
 
 	"gorm.io/gorm"
 
+	"github.com/LIRYC-IHU/ecg-hub/internal/auth"
 	appmodels "github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
 )
@@ -133,16 +134,12 @@ func iniRole(db *gorm.DB) error {
 		{
 			name: "admin",
 			desc: "Accès complet — toutes les permissions",
-			perms: []string{
-				"patient.read",
-				"ecg.read", "ecg.write", "ecg.download", "ecg.delete", "ecg.force_hl7",
-				"hl7.config", "hl7.bulk_retry",
-				"tag.create", "tag.delete", "tag.apply",
-				"quarantine.read", "quarantine.delete", "quarantine.assign",
-				"admin.audit", "admin.system", "admin.users", "admin.roles", "admin.branding", "admin.auth_config",
-				"swagger.read",
-				"webhook.manage", "apikey.manage",
-			},
+			// Seeded from the canonical list rather than a copy of it: the copy
+			// had drifted (ecg.upload and ecg.send_result were missing), which
+			// the Roles screen faithfully showed as unchecked while the checker
+			// let admin do them anyway. Reading the list here also means a new
+			// permission reaches admin on the next start with no migration.
+			perms: auth.AllPermissions,
 		},
 		{
 			name:  "reader",
