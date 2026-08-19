@@ -12,8 +12,8 @@ import (
 	"connectrpc.com/connect"
 	"gorm.io/gorm"
 
-	apiv1 "github.com/LIRYC-IHU/ecg-hub/internal/api/v1"
 	mw "github.com/LIRYC-IHU/ecg-hub/internal/api/middleware"
+	apiv1 "github.com/LIRYC-IHU/ecg-hub/internal/api/v1"
 	"github.com/LIRYC-IHU/ecg-hub/internal/auth"
 	"github.com/LIRYC-IHU/ecg-hub/internal/config"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
@@ -539,16 +539,25 @@ func (h *AdminServiceHandler) AssignQuarantine(ctx context.Context, req *apiv1.A
 	if patientExists {
 		patientName = strings.TrimSpace(patient.LastName + " " + patient.FirstName)
 	}
-	_ = mw.WriteAuditLog(ctx, h.DB, mw.UserIDFromContext(ctx), "quarantine_decision", req.Id,
-		map[string]any{
-			"action":       "assign",
-			"id":           req.Id,
-			"patient_id":   patientID,
-			"patient_name": patientName,
-			"new_patient":  !patientExists,
-			"filename":     entry.Filename,
-			"vendor":       entry.Vendor,
-		})
+	details := map[string]any{
+		"action":       "assign",
+		"id":           req.Id,
+		"patient_id":   patientID,
+		"patient_name": patientName,
+		"new_patient":  !patientExists,
+		"filename":     entry.Filename,
+		"vendor":       entry.Vendor,
+	}
+	// Record when the operator confirmed an assignment despite the file's own
+	// demographics disagreeing with the destination patient. Computed here from
+	// the stored metadata rather than taken from the client, so the audit trail
+	// reflects the data and not what the UI claimed.
+	if mismatch := identityMismatch(meta, &patient, patientExists); len(mismatch) > 0 {
+		details["identity_mismatch"] = mismatch
+		slog.Warn("quarantine: assignment confirmed despite identity mismatch",
+			"quarantine_id", req.Id, "patient_id", patientID, "fields", mismatch)
+	}
+	_ = mw.WriteAuditLog(ctx, h.DB, mw.UserIDFromContext(ctx), "quarantine_decision", req.Id, details)
 
 	return &apiv1.AssignQuarantineResponse{Id: req.Id, PatientId: patientID, Status: "assigned"}, nil
 }

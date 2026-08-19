@@ -165,7 +165,15 @@
       "receivedRecently": "Récemment",
       "deleteConfirmTitle": "Confirmer la suppression",
       "deleteConfirmMany_one": "Supprimer définitivement {{count}} fichier ?",
-      "deleteConfirmMany_other": "Supprimer définitivement {{count}} fichiers ?"
+      "deleteConfirmMany_other": "Supprimer définitivement {{count}} fichiers ?",
+      "identityFromFile": "D'après le fichier",
+      "identityToPatient": "Patient de destination",
+      "identityField": {
+        "name": "Nom",
+        "birth_date": "Date de naissance",
+        "sex": "Sexe"
+      },
+      "identityMismatchWarning": "Le fichier ne correspond pas à ce patient sur : {{fields}}. Vérifiez avant de confirmer."
     },
     "system": {
       "title": "État du système",
