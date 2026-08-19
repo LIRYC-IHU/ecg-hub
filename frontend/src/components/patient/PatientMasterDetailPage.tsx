@@ -51,6 +51,7 @@ import {
   type ECGFilters,
 } from "../../lib/api";
 import { formatPatientName } from "../../lib/patient";
+import { ExamDate } from "../ecg/ExamDate";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../../hooks/useAuth";
 import { useNotification } from "../../context/NotificationContext";
@@ -182,16 +183,6 @@ function formatDate(iso: string | null): string {
   });
 }
 
-function formatDateTime(ecg: ECG): string {
-  const d = new Date((ecg.recorded_at ?? ecg.ingested_at) as string);
-  return d.toLocaleString("fr-FR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
 
 function ageFromDOB(dob: string | null): number | null {
   if (!dob) return null;
@@ -1004,9 +995,7 @@ function PatientDetail({
 
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-mono text-xs text-foreground">
-                      {formatDateTime(ecg)}
-                    </span>
+                    <ExamDate ecg={ecg} className="font-mono text-xs text-foreground" />
                     <VendorBadge vendor={ecg.vendor} />
                     <HL7Badge status={ecg.hl7_status} />
                     {!ecg.viewed && (

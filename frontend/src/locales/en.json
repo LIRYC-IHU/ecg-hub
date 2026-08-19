@@ -61,6 +61,8 @@
     "downloadFormatsTitle": "Formats to download",
     "vendor": "Vendor",
     "date": "Date",
+    "dateFromImport": "imported",
+    "dateFromImportHint": "The file carries no acquisition date — this is the date it was imported into ECG Hub.",
     "hl7Status": "HL7 Status",
     "status": {
       "pending": "Pending",
