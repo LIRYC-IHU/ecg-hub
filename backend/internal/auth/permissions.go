@@ -67,8 +67,7 @@ var AllPermissions = []string{
 	PermAPIKeyManage,
 }
 
-// PermissionChecker resolves a role name → set of permissions.
-// The admin role (by name, from config) bypasses DB and gets every permission.
+// PermissionChecker resolves a role name → set of permissions from the database.
 // Results are cached (see permCacheTTL) to avoid a DB round-trip on every request.
 type PermissionChecker struct {
 	db        *gorm.DB
@@ -82,8 +81,10 @@ type permEntry struct {
 	expiresAt time.Time
 }
 
-// NewPermissionChecker builds a checker. adminRole is the role name that always
-// gets all permissions (defaults to "admin" if empty).
+// NewPermissionChecker builds a checker. adminRole names the built-in
+// administrator role (defaults to "admin"); it is seeded with every permission
+// rather than bypassing the check, and the name is still used for ownership
+// rules outside the permission model — see AdminRole.
 func NewPermissionChecker(db *gorm.DB, adminRole string) *PermissionChecker {
 	if adminRole == "" {
 		adminRole = "admin"
@@ -99,20 +100,19 @@ func NewPermissionChecker(db *gorm.DB, adminRole string) *PermissionChecker {
 func (p *PermissionChecker) AdminRole() string { return p.adminRole }
 
 // HasPermission reports whether role has the given permission.
-// The configured admin role bypasses DB lookup and always returns true.
+//
+// Every role, admin included, is resolved from the database. The admin role
+// used to short-circuit to true here, which meant the Roles screen could show a
+// permission unchecked while admin exercised it anyway, and unchecking a box for
+// admin did nothing. The admin role is seeded with auth.AllPermissions instead
+// (see db.iniRole), so it still holds everything — the difference is that the
+// screen is now telling the truth.
 func (p *PermissionChecker) HasPermission(ctx context.Context, role, permission string) bool {
-	if role == p.adminRole {
-		return true
-	}
 	return p.load(ctx, role)[permission]
 }
 
-// GetPermissions returns all permissions held by role.
-// The configured admin role returns all known permissions.
+// GetPermissions returns all permissions held by role, as stored in the database.
 func (p *PermissionChecker) GetPermissions(ctx context.Context, role string) []string {
-	if role == p.adminRole {
-		return AllPermissions
-	}
 	m := p.load(ctx, role)
 	out := make([]string, 0, len(m))
 	for perm := range m {
