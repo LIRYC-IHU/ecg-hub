@@ -179,31 +179,87 @@ func extractString(ds dicomlib.Dataset, t tag.Tag) (string, error) {
 	return vals[0], nil
 }
 
-// parseStudyDateTime derives time.Time from StudyDate (0008,0020) and
-// StudyTime (0008,0030). Returns zero time if parsing fails.
+// dateTimeTagPair names a DICOM date tag and its companion time tag.
+type dateTimeTagPair struct {
+	name string
+	date tag.Tag
+	time tag.Tag // zero Tag when the date tag already carries a full DT value
+}
+
+// recordedAtTags is the order in which acquisition timestamps are looked up.
+// StudyDate is the intended source, but plenty of exports leave it empty while
+// still carrying the moment of acquisition elsewhere — reading the ingest date
+// as the exam date instead is worse than any of these fallbacks.
+var recordedAtTags = []dateTimeTagPair{
+	{"StudyDate (0008,0020)", tag.StudyDate, tag.StudyTime},
+	{"AcquisitionDateTime (0008,002A)", tag.AcquisitionDateTime, tag.Tag{}},
+	{"AcquisitionDate (0008,0022)", tag.AcquisitionDate, tag.AcquisitionTime},
+	{"ContentDate (0008,0023)", tag.ContentDate, tag.ContentTime},
+	{"SeriesDate (0008,0021)", tag.SeriesDate, tag.SeriesTime},
+}
+
+// parseStudyDateTime derives the acquisition time from the first populated tag
+// in recordedAtTags. Returns zero time when the file carries no usable date at
+// all — callers must render that as unknown rather than substituting a date of
+// their own.
 func parseStudyDateTime(ds dicomlib.Dataset) time.Time {
-	dateStr, err := extractString(ds, tag.StudyDate)
-	if err != nil || strings.TrimSpace(dateStr) == "" {
-		slog.Warn("dicom: StudyDate (0008,0020) absent or empty — RecordedAt will be zero")
-		return time.Time{}
-	}
-	dateStr = strings.TrimSpace(dateStr)
+	for _, src := range recordedAtTags {
+		dateStr, err := extractString(ds, src.date)
+		if err != nil {
+			continue
+		}
+		dateStr = strings.TrimSpace(dateStr)
+		if dateStr == "" {
+			continue
+		}
 
-	timeStr, _ := extractString(ds, tag.StudyTime)
-	timeStr = strings.TrimSpace(timeStr)
+		timeStr := ""
+		if src.time != (tag.Tag{}) {
+			raw, _ := extractString(ds, src.time)
+			timeStr = strings.TrimSpace(raw)
+		}
 
-	// DICOM TM format: HHMMSS.FFFFFF — use first 6 chars for HHMMSS.
-	if len(timeStr) >= 6 {
-		combined := dateStr + timeStr[:6]
-		if t, err := time.ParseInLocation("20060102150405", combined, time.UTC); err == nil {
+		if t, ok := parseDicomDateTime(dateStr, timeStr); ok {
+			if src.date != tag.StudyDate {
+				slog.Info("dicom: StudyDate empty — using fallback tag", "tag", src.name, "recorded_at", t)
+			}
 			return t
+		}
+		slog.Warn("dicom: could not parse date tag", "tag", src.name, "value", dateStr)
+	}
+
+	slog.Warn("dicom: no usable acquisition date (StudyDate, AcquisitionDateTime, AcquisitionDate, ContentDate, SeriesDate all absent or empty) — RecordedAt will be zero")
+	return time.Time{}
+}
+
+// parseDicomDateTime combines a DICOM DA value (YYYYMMDD) with an optional TM
+// value (HHMMSS[.FFFFFF]). A DT value (YYYYMMDDHHMMSS[.FFFFFF][&ZZXX]) may
+// arrive in dateStr on its own, so it is handled here too.
+func parseDicomDateTime(dateStr, timeStr string) (time.Time, bool) {
+	// Drop the fractional seconds and any UTC offset suffix of a DT value.
+	if i := strings.IndexAny(dateStr, ".+-&"); i != -1 {
+		dateStr = dateStr[:i]
+	}
+
+	// DT value carrying its own time component.
+	if len(dateStr) >= 14 {
+		if t, err := time.ParseInLocation("20060102150405", dateStr[:14], time.UTC); err == nil {
+			return t, true
+		}
+	}
+	if len(dateStr) != 8 {
+		return time.Time{}, false
+	}
+
+	// DICOM TM format: HHMMSS.FFFFFF — use the first 6 chars for HHMMSS.
+	if len(timeStr) >= 6 {
+		if t, err := time.ParseInLocation("20060102150405", dateStr+timeStr[:6], time.UTC); err == nil {
+			return t, true
 		}
 	}
 
 	if t, err := time.ParseInLocation("20060102", dateStr, time.UTC); err == nil {
-		return t
+		return t, true
 	}
-
-	slog.Warn("dicom: could not parse StudyDate", "value", dateStr)
-	return time.Time{}
+	return time.Time{}, false
 }

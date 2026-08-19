@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Download, RefreshCw, Trash2, ChevronDown, ChevronUp } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { downloadECGFormats, fetchECGMeta, forceHL7, deleteECG, patchECGMetadata } from '../../lib/api'
+import { ExamDate } from './ExamDate'
 import { Spinner } from '../ui/Spinner'
 import { useNotification } from '../../context/NotificationContext'
 import { DownloadFormatPopup } from './DownloadFormatPopup'
@@ -38,10 +39,6 @@ export function EcgRow({ ecg, isSelected, onToggle, canForceHL7, canDelete, canR
   const [downloadOpen, setDownloadOpen] = useState(false)
   const [downloading, setDownloading] = useState(false)
 
-  const date = new Date(ecg.recorded_at ?? ecg.ingested_at).toLocaleString('fr-FR', {
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit',
-  })
 
   const forceMutation = useMutation({
     mutationFn: () => forceHL7(ecg.id),
@@ -90,8 +87,8 @@ export function EcgRow({ ecg, isSelected, onToggle, canForceHL7, canDelete, canR
           aria-label={ecg.original_filename}
         />
 
-        {/* Date */}
-        <span className="text-xs font-mono text-muted-foreground">{date}</span>
+        {/* Date — flagged when it is the import date standing in for a missing one */}
+        <ExamDate ecg={ecg} className="text-xs font-mono text-muted-foreground" />
 
         {/* Vendor — DICOM sources get a distinct cyan badge */}
         <span className={`text-[11px] px-2 py-0.5 rounded w-fit font-medium ${
