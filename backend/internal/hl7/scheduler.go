@@ -274,6 +274,17 @@ func (s *Scheduler) tick() {
 
 // processPending fetches up to 50 pending ECGs and retries each one.
 func (s *Scheduler) processPending() {
+	// RunNow reaches here without passing the Start/Reload guards, so a
+	// scheduler left without a usable client — HL7 enabled but no host
+	// configured yet, the state a fresh install starts in — would dereference a
+	// typed-nil *Client and take the whole process down. Stopping here rather
+	// than in processOne also keeps the skipped run out of the metrics and
+	// leaves every pending ECG's retry count untouched.
+	if !usableQuerier(s.client) {
+		slog.Warn("hl7 scheduler: run skipped — no HL7 host is configured")
+		return
+	}
+
 	s.mu.Lock()
 	s.lastRun = time.Now()
 	s.mu.Unlock()

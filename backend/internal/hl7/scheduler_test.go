@@ -148,3 +148,26 @@ func TestScheduler_StartWithTypedNilClient_RefusesToStart(t *testing.T) {
 		t.Error("cron was scheduled despite the missing client")
 	}
 }
+
+// RunNow bypasses Start and Reload, so it reaches processPending on whatever
+// client the scheduler was built with. On a fresh install that is a typed-nil
+// *Client — HL7 enabled, host not configured yet — and pressing "Run now" in
+// the UI used to take the whole process down (issue #51).
+func TestScheduler_ProcessPendingWithTypedNilClient_DoesNotPanic(t *testing.T) {
+	settings := enabledSettings()
+	settings.Host = ""
+	settings.Port = 0
+
+	s, ecgRepo := newNilClientScheduler(settings, []models.ECG{
+		{ID: "ecg-1", PatientID: "P1", HL7RetryCount: 0},
+	})
+	defer s.Stop()
+
+	// No Reload/Start: exactly the state RunNow can reach.
+	s.processPending()
+
+	// The run is skipped whole: the pending ECG must not have burned a retry.
+	if len(ecgRepo.lifecycleCalls) != 0 {
+		t.Errorf("expected the run to be skipped, got %d lifecycle updates", len(ecgRepo.lifecycleCalls))
+	}
+}
