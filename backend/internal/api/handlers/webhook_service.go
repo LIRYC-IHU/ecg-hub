@@ -227,7 +227,9 @@ func (h *WebhookServiceHandler) TestWebhook(ctx context.Context, req *apiv1.Test
 		return nil, connect.NewError(connect.CodeInternal, errors.New("failed to load webhook"))
 	}
 
-	status, deliverErr := h.Dispatcher.Deliver(*hook, webhook.Payload{
+	// DeliverAndLog, not Deliver: a test event belongs in the delivery history
+	// like any other delivery, and must be resendable from it.
+	status, deliverErr := h.Dispatcher.DeliverAndLog(*hook, webhook.Payload{
 		Event:     "test",
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
 	})
@@ -235,7 +237,6 @@ func (h *WebhookServiceHandler) TestWebhook(ctx context.Context, req *apiv1.Test
 	if deliverErr != nil {
 		errMsg = deliverErr.Error()
 	}
-	_ = h.Repo.RecordDelivery(hook.ID, status, errMsg)
 
 	return &apiv1.TestWebhookResponse{
 		Ok:         deliverErr == nil,

@@ -277,7 +277,9 @@ func TestUserWebhookHandler(repo *repository.UserWebhookRepository, dispatcher *
 			return c.JSON(http.StatusInternalServerError, mw.APIError("DB_ERROR", "failed to load webhook"))
 		}
 
-		status, deliverErr := dispatcher.Deliver(*hook, webhook.Payload{
+		// DeliverAndLog, not Deliver: a test event belongs in the delivery
+		// history like any other delivery, and must be resendable from it.
+		status, deliverErr := dispatcher.DeliverAndLog(*hook, webhook.Payload{
 			Event:     "test",
 			Timestamp: time.Now().UTC().Format(time.RFC3339),
 		})
@@ -285,7 +287,6 @@ func TestUserWebhookHandler(repo *repository.UserWebhookRepository, dispatcher *
 		if deliverErr != nil {
 			errMsg = deliverErr.Error()
 		}
-		_ = repo.RecordDelivery(hook.ID, status, errMsg)
 
 		return c.JSON(http.StatusOK, map[string]any{
 			"ok":          deliverErr == nil,
