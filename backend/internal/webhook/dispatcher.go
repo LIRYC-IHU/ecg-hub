@@ -41,6 +41,7 @@ type Dispatcher struct {
 	db           *gorm.DB                              // ECG lookup to enrich HL7 events with patient/vendor
 	encKey       string                                // AES key for decrypting per-webhook secrets
 	baseURL      string                                // public base URL prefixed to payload links ("" = relative links)
+	retention    time.Duration                         // delivery-history retention; 0 = keep everything
 
 	client         *http.Client
 	insecureClient *http.Client
@@ -51,8 +52,9 @@ type Dispatcher struct {
 
 // NewDispatcher builds a Dispatcher. baseURL is the public origin of this
 // server (e.g. "http://ecg-hub.chu.fr") used to build absolute callback links.
-// deliveryRepo may be nil to disable delivery history logging.
-func NewDispatcher(repo *repository.UserWebhookRepository, deliveryRepo *repository.WebhookDeliveryRepository, db *gorm.DB, encKey, baseURL string) *Dispatcher {
+// deliveryRepo may be nil to disable delivery history logging. retention is how
+// long delivery history is kept; 0 keeps everything.
+func NewDispatcher(repo *repository.UserWebhookRepository, deliveryRepo *repository.WebhookDeliveryRepository, db *gorm.DB, encKey, baseURL string, retention time.Duration) *Dispatcher {
 	// Shared dialer with an SSRF guard: Control runs after DNS resolution with the
 	// IP about to be dialed, so disallowed targets are blocked even across DNS
 	// rebinding and HTTP redirects.
@@ -63,6 +65,7 @@ func NewDispatcher(repo *repository.UserWebhookRepository, deliveryRepo *reposit
 		db:           db,
 		encKey:       encKey,
 		baseURL:      baseURL,
+		retention:    retention,
 		client: &http.Client{
 			Timeout:       10 * time.Second,
 			CheckRedirect: noWebhookRedirect,
@@ -139,8 +142,20 @@ func validateWebhookURL(raw string) error {
 func (d *Dispatcher) Run(hub *events.Hub) {
 	ch, unsub := hub.Subscribe()
 	defer unsub()
+
+	// Retention runs on the same goroutine as dispatch: one delete statement a
+	// few times a day costs nothing, and sharing the loop means it stops with
+	// the dispatcher instead of needing its own lifecycle. The first pass is
+	// immediate so a server that was down past the retention window catches up
+	// on boot rather than at the next tick.
+	d.pruneDeliveries()
+	prune := time.NewTicker(pruneInterval)
+	defer prune.Stop()
+
 	for {
 		select {
+		case <-prune.C:
+			d.pruneDeliveries()
 		case e, ok := <-ch:
 			if !ok {
 				return
@@ -159,6 +174,30 @@ func (d *Dispatcher) Run(hub *events.Hub) {
 		case <-d.stop:
 			return
 		}
+	}
+}
+
+// pruneInterval is how often the delivery history is trimmed. Retention is
+// measured in days, so checking a few times a day is ample and keeps the delete
+// batches small.
+const pruneInterval = 6 * time.Hour
+
+// pruneDeliveries drops delivery history older than the configured retention.
+// Best-effort: a failed prune is logged and retried on the next tick — it must
+// never affect delivery.
+func (d *Dispatcher) pruneDeliveries() {
+	if d.deliveryRepo == nil || d.retention <= 0 {
+		return
+	}
+	cutoff := time.Now().Add(-d.retention)
+	n, err := d.deliveryRepo.DeleteOlderThan(cutoff)
+	if err != nil {
+		slog.Warn("webhook dispatcher: prune delivery history", "error", err)
+		return
+	}
+	if n > 0 {
+		slog.Info("webhook dispatcher: delivery history pruned",
+			"deleted", n, "older_than", cutoff.UTC().Format(time.RFC3339))
 	}
 }
 

@@ -95,6 +95,14 @@ func RunMigrations(db *gorm.DB) error {
 		return err
 	}
 
+	// Delivery history is read newest-first per webhook and pruned by age; both
+	// queries are served by this composite index.
+	if err := db.Exec(
+		`CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_webhook_delivered_at ` +
+			`ON webhook_deliveries (webhook_id, delivered_at DESC)`).Error; err != nil {
+		slog.Warn("db: create webhook delivery index failed", "error", err)
+	}
+
 	// Trigram indexes for substring search. Patient/ECG search uses ILIKE '%term%'
 	// (leading wildcard), which a B-tree index cannot serve — every search is a
 	// sequential scan. pg_trgm GIN indexes make these index-assisted. Idempotent;

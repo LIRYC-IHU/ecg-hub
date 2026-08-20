@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // validYAML is the minimal valid config.yaml content for tests.
@@ -95,5 +96,45 @@ func TestLoad_InvalidMaxSize(t *testing.T) {
 	cfgPath := writeConfig(t, validYAML+"  max_size: not-a-size\n")
 	if _, err := Load(cfgPath); err == nil {
 		t.Fatal("expected error for invalid max_size, got nil")
+	}
+}
+
+// Delivery retention has to survive three shapes: absent (default), an explicit
+// value, and an explicit 0 — which means "keep everything", not "use the
+// default".
+func TestLoad_WebhookDeliveryRetention(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://test:test@localhost/testdb")
+	t.Setenv("JWT_SECRET", "supersecret")
+
+	tests := []struct {
+		name     string
+		yaml     string
+		wantDays int
+		wantDur  time.Duration
+	}{
+		{"absent falls back to 30 days", validYAML, 30, 30 * 24 * time.Hour},
+		{
+			"explicit value is honoured",
+			validYAML + "webhooks:\n  delivery_retention_days: 7\n",
+			7, 7 * 24 * time.Hour,
+		},
+		{
+			"explicit 0 disables pruning",
+			validYAML + "webhooks:\n  delivery_retention_days: 0\n",
+			0, 0,
+		},
+	}
+
+	for _, tt := range tests {
+		cfg, err := Load(writeConfig(t, tt.yaml))
+		if err != nil {
+			t.Fatalf("%s: load: %v", tt.name, err)
+		}
+		if cfg.Webhooks.DeliveryRetentionDays != tt.wantDays {
+			t.Errorf("%s: days = %d, want %d", tt.name, cfg.Webhooks.DeliveryRetentionDays, tt.wantDays)
+		}
+		if got := cfg.Webhooks.DeliveryRetention(); got != tt.wantDur {
+			t.Errorf("%s: duration = %v, want %v", tt.name, got, tt.wantDur)
+		}
 	}
 }

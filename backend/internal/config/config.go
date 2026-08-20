@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"k8s.io/apimachinery/pkg/api/resource"
 )
@@ -17,12 +18,39 @@ type Config struct {
 	Storage  StorageConfig  `mapstructure:"storage"`
 	Export   ExportConfig   `mapstructure:"export"`
 	Metrics  MetricsConfig  `mapstructure:"metrics"`
+	Webhooks WebhooksConfig `mapstructure:"webhooks"`
 	// Secrets — populated via os.Getenv after Viper unmarshal. Never from config.yaml.
 
 	// DatabaseURL is the PostgreSQL connection string. Set via DATABASE_URL env var.
 	DatabaseURL string
 	// JWTSecret is the HMAC signing secret for JWT tokens. Set via JWT_SECRET env var.
 	JWTSecret string
+}
+
+// WebhooksConfig carries the webhook settings that are NOT user-editable.
+//
+// Webhook endpoints themselves are configured from the UI and stored in the
+// database; only the data-lifecycle knob lives here, next to storage.max_size,
+// because it governs how much the server keeps on disk rather than what any
+// single user wants.
+type WebhooksConfig struct {
+	// DeliveryRetentionDays is how long a webhook delivery stays in the history
+	// (webhook_deliveries). Every delivery stores its full payload, so the table
+	// grows with ingested ECGs × enabled webhooks and would otherwise grow
+	// forever — payloads carrying patient identifiers included.
+	//
+	// Unset defaults to 30 days (loader.go). An explicit 0 disables pruning and
+	// keeps every delivery — a deliberate opt-out, not the default.
+	DeliveryRetentionDays int `mapstructure:"delivery_retention_days"`
+}
+
+// DeliveryRetention returns the retention as a duration. Zero means "keep
+// everything" — the caller must not prune.
+func (w WebhooksConfig) DeliveryRetention() time.Duration {
+	if w.DeliveryRetentionDays <= 0 {
+		return 0
+	}
+	return time.Duration(w.DeliveryRetentionDays) * 24 * time.Hour
 }
 
 // PublicOrigin normalises the HOST_URL environment value into an origin URL,

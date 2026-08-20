@@ -2,6 +2,7 @@ package repository
 
 import (
 	"errors"
+	"time"
 
 	"gorm.io/gorm"
 
@@ -33,6 +34,15 @@ func (r *WebhookDeliveryRepository) ListByWebhook(webhookID string, limit, offse
 		Limit(limit).Offset(offset).
 		Find(&out).Error
 	return out, err
+}
+
+// DeleteOlderThan removes deliveries older than cutoff and returns how many
+// rows were dropped. Called by the dispatcher's retention loop: the history is
+// operational feedback, not a clinical record, and each row stores the full
+// payload — including patient identifiers — so it must not accumulate forever.
+func (r *WebhookDeliveryRepository) DeleteOlderThan(cutoff time.Time) (int64, error) {
+	res := r.db.Where("delivered_at < ?", cutoff).Delete(&models.WebhookDelivery{})
+	return res.RowsAffected, res.Error
 }
 
 // Get returns one delivery by ID. Ownership is enforced by the caller
