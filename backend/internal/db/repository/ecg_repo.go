@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
@@ -27,6 +28,11 @@ func NewECGRepository(db *gorm.DB) *ECGRepository {
 // FindByID returns the ECG with the given primary key.
 // Returns ErrECGNotFound if no record matches.
 func (r *ECGRepository) FindByID(id string) (*models.ECG, error) {
+	// ecgs.id is a uuid column: a malformed id makes Postgres reject the
+	// statement, which would surface as a 500 for what is a client typo.
+	if uuid.Validate(id) != nil {
+		return nil, ErrECGNotFound
+	}
 	var ecg models.ECG
 	if err := r.db.First(&ecg, "id = ?", id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -120,6 +126,9 @@ func (r *ECGRepository) FindPendingHL7(limit int) ([]models.ECG, error) {
 // DeleteByID removes the ECG record and returns the file path for physical deletion.
 // This is an admin/writer-only operation (NFR-R4 explicit administrator exception).
 func (r *ECGRepository) DeleteByID(id string) (string, error) {
+	if uuid.Validate(id) != nil {
+		return "", ErrECGNotFound
+	}
 	var ecg models.ECG
 	if err := r.db.First(&ecg, "id = ?", id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {

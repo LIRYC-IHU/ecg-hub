@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
@@ -33,6 +34,10 @@ func (r *ExportJobRepository) Create(job *models.ExportJob) error {
 // FindByID returns the ExportJob with the given primary key.
 // Returns ErrExportJobNotFound if no record matches.
 func (r *ExportJobRepository) FindByID(id string) (*models.ExportJob, error) {
+	// export_jobs.id is a uuid column — see ECGRepository.FindByID.
+	if uuid.Validate(id) != nil {
+		return nil, ErrExportJobNotFound
+	}
 	var job models.ExportJob
 	if err := r.db.First(&job, "id = ?", id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {

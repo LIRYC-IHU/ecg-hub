@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
@@ -83,6 +84,12 @@ func (r *TagRepository) UntagECG(ecgID, tagID string) error {
 }
 
 func (r *TagRepository) ListECGTags(ecgID string) ([]models.Tag, error) {
+	// ecg_tags.ecg_id is a uuid column; an unparsable id has no tags rather
+	// than being a server error. (patient_id is a free-form business id, so
+	// ListPatientTags needs no such guard.)
+	if uuid.Validate(ecgID) != nil {
+		return []models.Tag{}, nil
+	}
 	var tags []models.Tag
 	err := r.db.Joins("JOIN ecg_tags ON ecg_tags.tag_id = tags.id").
 		Where("ecg_tags.ecg_id = ?", ecgID).
