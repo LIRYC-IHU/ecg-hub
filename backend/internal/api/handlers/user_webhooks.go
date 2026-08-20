@@ -24,10 +24,13 @@ import (
 // Secret and AuthHeader use tri-state semantics on update:
 // absent (nil) = keep current value, "" = clear, non-empty = replace.
 type webhookRequest struct {
-	Name               string   `json:"name"`
-	URL                string   `json:"url"`
-	Enabled            *bool    `json:"enabled"`
-	InsecureSkipVerify bool     `json:"insecure_skip_verify"`
+	Name    string `json:"name"`
+	URL     string `json:"url"`
+	Enabled *bool  `json:"enabled"`
+	// InsecureSkipVerify is tri-state like Enabled: absent leaves the stored
+	// value alone. A partial update must not silently re-enable certificate
+	// verification on a webhook pointing at a self-signed receiver.
+	InsecureSkipVerify *bool    `json:"insecure_skip_verify"`
 	Secret             *string  `json:"secret"`
 	AuthHeader         *string  `json:"auth_header"`
 	Events             []string `json:"events"`
@@ -168,7 +171,7 @@ func CreateUserWebhookHandler(repo *repository.UserWebhookRepository, encKey str
 			Name:               req.Name,
 			URL:                req.URL,
 			Enabled:            req.Enabled == nil || *req.Enabled,
-			InsecureSkipVerify: req.InsecureSkipVerify,
+			InsecureSkipVerify: req.InsecureSkipVerify != nil && *req.InsecureSkipVerify,
 			Events:             jsonArray(req.Events),
 			Vendors:            jsonArray(req.Vendors),
 		}
@@ -199,7 +202,7 @@ func CreateUserWebhookHandler(repo *repository.UserWebhookRepository, encKey str
 // UpdateUserWebhookHandler updates a webhook owned by the authenticated user.
 //
 //	@Summary		Update webhook
-//	@Description	Updates an outbound webhook. Omit secret/auth_header to keep the stored values; send "" to clear them.
+//	@Description	Updates an outbound webhook. Optional fields keep their stored value when omitted: enabled, insecure_skip_verify, secret and auth_header. Send "" in secret/auth_header to clear them.
 //	@Tags			Webhooks
 //	@Accept			json
 //	@Produce		json
@@ -233,7 +236,9 @@ func UpdateUserWebhookHandler(repo *repository.UserWebhookRepository, encKey str
 		if req.Enabled != nil {
 			hook.Enabled = *req.Enabled
 		}
-		hook.InsecureSkipVerify = req.InsecureSkipVerify
+		if req.InsecureSkipVerify != nil {
+			hook.InsecureSkipVerify = *req.InsecureSkipVerify
+		}
 		hook.Events = jsonArray(req.Events)
 		hook.Vendors = jsonArray(req.Vendors)
 		if req.Secret != nil {
