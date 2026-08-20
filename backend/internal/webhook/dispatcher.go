@@ -377,6 +377,24 @@ func (d *Dispatcher) Deliver(hook models.UserWebhook, p Payload) (int, error) {
 	return resp.StatusCode, nil
 }
 
+// DeliverAndLog performs one synchronous delivery and records it exactly as an
+// event-driven delivery would: the feedback columns on the webhook row *and* a
+// delivery-history entry. The "test webhook" handlers use it so a test event is
+// as visible — and as resendable — as any other delivery.
+func (d *Dispatcher) DeliverAndLog(hook models.UserWebhook, p Payload) (int, error) {
+	p.WebhookID = hook.ID // Deliver sets it on its own copy; the log needs it too
+	status, err := d.Deliver(hook, p)
+	errMsg := ""
+	if err != nil {
+		errMsg = err.Error()
+	}
+	if recErr := d.repo.RecordDelivery(hook.ID, status, errMsg); recErr != nil {
+		slog.Warn("webhook dispatcher: record delivery", "webhook", hook.ID, "error", recErr)
+	}
+	d.logDelivery(hook.ID, p, status, errMsg, 1)
+	return status, err
+}
+
 // sign returns the HMAC-SHA256 hex signature of body using secret.
 // Delivered in the X-ECG-Hub-Signature header as "sha256=<hex>".
 func sign(body []byte, secret string) string {
