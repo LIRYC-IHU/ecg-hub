@@ -16,6 +16,7 @@ import (
 	"github.com/LIRYC-IHU/ecg-hub/internal/auth"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
+	"github.com/LIRYC-IHU/ecg-hub/internal/module"
 	"github.com/LIRYC-IHU/ecg-hub/internal/webhook"
 )
 
@@ -33,9 +34,13 @@ type webhookRequest struct {
 	Vendors            []string `json:"vendors"`
 }
 
-// validateWebhookRequest checks name, URL and event types.
+// validateWebhookRequest checks name, URL, event types and vendor filters.
 // Returns an error message ("" = valid).
-func validateWebhookRequest(req *webhookRequest) string {
+//
+// knownVendors lists every vendor a webhook may filter on — module.All() in
+// production. An empty list skips the vendor check: refusing every vendor
+// would be worse than accepting one.
+func validateWebhookRequest(req *webhookRequest, knownVendors []string) string {
 	if req.Name == "" || len(req.Name) > 100 {
 		return "name is required (max 100 characters)"
 	}
@@ -50,6 +55,37 @@ func validateWebhookRequest(req *webhookRequest) string {
 	for _, e := range req.Events {
 		if !valid[e] {
 			return "unknown event type: " + e
+		}
+	}
+	if msg := validateVendors(req.Vendors, knownVendors); msg != "" {
+		return msg
+	}
+	return ""
+}
+
+// validateVendors rejects vendor filters no loaded module provides.
+//
+// The list is an allow-list: the dispatcher delivers only to webhooks whose
+// vendor filter contains the event's vendor (empty = all). A typo therefore
+// matches nothing and silently stops every delivery — no error, no failed
+// delivery, no history entry — so it has to be caught on write, like an
+// unknown event type.
+//
+// The allow-list is every compiled-in module (module.All()), not the modules
+// currently active: an admin may deactivate a vendor at runtime, and a webhook
+// already filtering on it must stay editable. Only a name no build of the
+// server knows is a typo.
+func validateVendors(vendors, knownVendors []string) string {
+	if len(vendors) == 0 || len(knownVendors) == 0 {
+		return ""
+	}
+	known := make(map[string]bool, len(knownVendors))
+	for _, name := range knownVendors {
+		known[name] = true
+	}
+	for _, v := range vendors {
+		if !known[v] {
+			return "unknown vendor: " + v
 		}
 	}
 	return ""
@@ -123,7 +159,7 @@ func CreateUserWebhookHandler(repo *repository.UserWebhookRepository, encKey str
 		if err := c.Bind(&req); err != nil {
 			return c.JSON(http.StatusBadRequest, mw.APIError("BAD_REQUEST", "invalid request body"))
 		}
-		if msg := validateWebhookRequest(&req); msg != "" {
+		if msg := validateWebhookRequest(&req, module.All()); msg != "" {
 			return c.JSON(http.StatusBadRequest, mw.APIError("VALIDATION_ERROR", msg))
 		}
 
@@ -188,7 +224,7 @@ func UpdateUserWebhookHandler(repo *repository.UserWebhookRepository, encKey str
 		if err := c.Bind(&req); err != nil {
 			return c.JSON(http.StatusBadRequest, mw.APIError("BAD_REQUEST", "invalid request body"))
 		}
-		if msg := validateWebhookRequest(&req); msg != "" {
+		if msg := validateWebhookRequest(&req, module.All()); msg != "" {
 			return c.JSON(http.StatusBadRequest, mw.APIError("VALIDATION_ERROR", msg))
 		}
 

@@ -14,6 +14,7 @@ import (
 	"github.com/LIRYC-IHU/ecg-hub/internal/auth"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
+	"github.com/LIRYC-IHU/ecg-hub/internal/module"
 	"github.com/LIRYC-IHU/ecg-hub/internal/webhook"
 )
 
@@ -114,7 +115,7 @@ func (h *WebhookServiceHandler) ListWebhooks(ctx context.Context, _ *apiv1.ListW
 func (h *WebhookServiceHandler) CreateWebhook(ctx context.Context, req *apiv1.CreateWebhookRequest) (*apiv1.CreateWebhookResponse, error) {
 	userID := mw.UserIDFromContext(ctx)
 	in := inputToRequest(req.Input)
-	if msg := validateWebhookRequest(in); msg != "" {
+	if msg := validateWebhookRequest(in, module.All()); msg != "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New(msg))
 	}
 
@@ -163,7 +164,7 @@ func (h *WebhookServiceHandler) UpdateWebhook(ctx context.Context, req *apiv1.Up
 	}
 
 	in := inputToRequest(req.Input)
-	if msg := validateWebhookRequest(in); msg != "" {
+	if msg := validateWebhookRequest(in, module.All()); msg != "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New(msg))
 	}
 
