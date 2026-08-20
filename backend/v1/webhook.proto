@@ -23,13 +23,14 @@ message Webhook {
   string updated_at = 14;
 }
 
-// WebhookInput is the create/update body. optional secret/auth_header are
-// tri-state: unset = leave unchanged, "" = clear, value = set (encrypted).
+// WebhookInput is the create/update body. The optional fields are tri-state on
+// update: unset = leave unchanged, and for secret/auth_header "" = clear,
+// value = set (encrypted).
 message WebhookInput {
   string name = 1;
   string url = 2;
   optional bool enabled = 3;
-  bool insecure_skip_verify = 4;
+  optional bool insecure_skip_verify = 4;
   optional string secret = 5;
   optional string auth_header = 6;
   repeated string events = 7;

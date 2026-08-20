@@ -170,14 +170,15 @@ func (x *Webhook) GetUpdatedAt() string {
 	return ""
 }
 
-// WebhookInput is the create/update body. optional secret/auth_header are
-// tri-state: unset = leave unchanged, "" = clear, value = set (encrypted).
+// WebhookInput is the create/update body. The optional fields are tri-state on
+// update: unset = leave unchanged, and for secret/auth_header "" = clear,
+// value = set (encrypted).
 type WebhookInput struct {
 	state              protoimpl.MessageState `protogen:"open.v1"`
 	Name               string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Url                string                 `protobuf:"bytes,2,opt,name=url,proto3" json:"url,omitempty"`
 	Enabled            *bool                  `protobuf:"varint,3,opt,name=enabled,proto3,oneof" json:"enabled,omitempty"`
-	InsecureSkipVerify bool                   `protobuf:"varint,4,opt,name=insecure_skip_verify,json=insecureSkipVerify,proto3" json:"insecure_skip_verify,omitempty"`
+	InsecureSkipVerify *bool                  `protobuf:"varint,4,opt,name=insecure_skip_verify,json=insecureSkipVerify,proto3,oneof" json:"insecure_skip_verify,omitempty"`
 	Secret             *string                `protobuf:"bytes,5,opt,name=secret,proto3,oneof" json:"secret,omitempty"`
 	AuthHeader         *string                `protobuf:"bytes,6,opt,name=auth_header,json=authHeader,proto3,oneof" json:"auth_header,omitempty"`
 	Events             []string               `protobuf:"bytes,7,rep,name=events,proto3" json:"events,omitempty"`
@@ -238,8 +239,8 @@ func (x *WebhookInput) GetEnabled() bool {
 }
 
 func (x *WebhookInput) GetInsecureSkipVerify() bool {
-	if x != nil {
-		return x.InsecureSkipVerify
+	if x != nil && x.InsecureSkipVerify != nil {
+		return *x.InsecureSkipVerify
 	}
 	return false
 }
@@ -886,19 +887,20 @@ const file_v1_webhook_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\r \x01(\tR\tcreatedAt\x12\x1d\n" +
 	"\n" +
-	"updated_at\x18\x0e \x01(\tR\tupdatedAt\"\xa1\x02\n" +
+	"updated_at\x18\x0e \x01(\tR\tupdatedAt\"\xbf\x02\n" +
 	"\fWebhookInput\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x10\n" +
 	"\x03url\x18\x02 \x01(\tR\x03url\x12\x1d\n" +
-	"\aenabled\x18\x03 \x01(\bH\x00R\aenabled\x88\x01\x01\x120\n" +
-	"\x14insecure_skip_verify\x18\x04 \x01(\bR\x12insecureSkipVerify\x12\x1b\n" +
-	"\x06secret\x18\x05 \x01(\tH\x01R\x06secret\x88\x01\x01\x12$\n" +
-	"\vauth_header\x18\x06 \x01(\tH\x02R\n" +
+	"\aenabled\x18\x03 \x01(\bH\x00R\aenabled\x88\x01\x01\x125\n" +
+	"\x14insecure_skip_verify\x18\x04 \x01(\bH\x01R\x12insecureSkipVerify\x88\x01\x01\x12\x1b\n" +
+	"\x06secret\x18\x05 \x01(\tH\x02R\x06secret\x88\x01\x01\x12$\n" +
+	"\vauth_header\x18\x06 \x01(\tH\x03R\n" +
 	"authHeader\x88\x01\x01\x12\x16\n" +
 	"\x06events\x18\a \x03(\tR\x06events\x12\x18\n" +
 	"\avendors\x18\b \x03(\tR\avendorsB\n" +
 	"\n" +
-	"\b_enabledB\t\n" +
+	"\b_enabledB\x17\n" +
+	"\x15_insecure_skip_verifyB\t\n" +
 	"\a_secretB\x0e\n" +
 	"\f_auth_header\"\x15\n" +
 	"\x13ListWebhooksRequest\"H\n" +

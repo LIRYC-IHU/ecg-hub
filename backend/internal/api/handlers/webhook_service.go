@@ -72,8 +72,8 @@ func inputToRequest(in *apiv1.WebhookInput) *webhookRequest {
 	return &webhookRequest{
 		Name:               in.Name,
 		URL:                in.Url,
-		Enabled:            in.Enabled,    // *bool (proto optional)
-		InsecureSkipVerify: in.InsecureSkipVerify,
+		Enabled:            in.Enabled,            // *bool (proto optional)
+		InsecureSkipVerify: in.InsecureSkipVerify, // *bool (proto optional)
 		Secret:             in.Secret,     // *string
 		AuthHeader:         in.AuthHeader, // *string
 		Events:             in.Events,
@@ -124,7 +124,7 @@ func (h *WebhookServiceHandler) CreateWebhook(ctx context.Context, req *apiv1.Cr
 		Name:               in.Name,
 		URL:                in.URL,
 		Enabled:            in.Enabled == nil || *in.Enabled,
-		InsecureSkipVerify: in.InsecureSkipVerify,
+		InsecureSkipVerify: in.InsecureSkipVerify != nil && *in.InsecureSkipVerify,
 		Events:             jsonArray(in.Events),
 		Vendors:            jsonArray(in.Vendors),
 	}
@@ -173,7 +173,9 @@ func (h *WebhookServiceHandler) UpdateWebhook(ctx context.Context, req *apiv1.Up
 	if in.Enabled != nil {
 		hook.Enabled = *in.Enabled
 	}
-	hook.InsecureSkipVerify = in.InsecureSkipVerify
+	if in.InsecureSkipVerify != nil {
+		hook.InsecureSkipVerify = *in.InsecureSkipVerify
+	}
 	hook.Events = jsonArray(in.Events)
 	hook.Vendors = jsonArray(in.Vendors)
 	if in.Secret != nil {

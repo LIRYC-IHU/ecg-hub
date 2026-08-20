@@ -307,6 +307,20 @@ def test_crud():
                               key=ARGS.api_key, body={**base, "secret": ""})
     check('update with secret "" clears it', payload.get("has_secret") is False, str(payload))
 
+    # insecure_skip_verify is tri-state like enabled and secret: a partial
+    # update must not silently turn certificate verification back on. Issue #44.
+    _, tls = create_hook(name="tls", url="https://example.invalid/hook",
+                         insecure_skip_verify=True)
+    tls_base = {"name": "tls", "url": "https://example.invalid/hook"}
+    _, payload, _ = call("PUT", f"/api/v1/webhooks/{tls['id']}",
+                         key=ARGS.api_key, body=tls_base)
+    check("update without insecure_skip_verify keeps it",
+          payload.get("insecure_skip_verify") is True, str(payload))
+    _, payload, _ = call("PUT", f"/api/v1/webhooks/{tls['id']}", key=ARGS.api_key,
+                         body={**tls_base, "insecure_skip_verify": False})
+    check("update with insecure_skip_verify false clears it",
+          payload.get("insecure_skip_verify") is False, str(payload))
+
     status, payload, _ = call("PUT", "/api/v1/webhooks/" + str(uuid.uuid4()),
                               key=ARGS.api_key, body=base)
     check("update of an unknown id → 404", status == 404, f"got {status} {payload}")
