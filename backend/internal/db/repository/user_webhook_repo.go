@@ -4,6 +4,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
@@ -32,7 +33,15 @@ func (r *UserWebhookRepository) ListByUser(userID string) ([]models.UserWebhook,
 }
 
 // GetByUser returns one webhook owned by userID.
+//
+// A malformed id is reported as "not found", not as a database error: id comes
+// straight from a URL path segment, and user_webhooks.id is a uuid column, so
+// Postgres rejects the statement ("invalid input syntax for type uuid") before
+// any row is looked at. Without this guard a client typo surfaces as a 500.
 func (r *UserWebhookRepository) GetByUser(userID, id string) (*models.UserWebhook, error) {
+	if uuid.Validate(id) != nil {
+		return nil, ErrWebhookNotFound
+	}
 	var hook models.UserWebhook
 	err := r.db.Where("id = ? AND user_id = ?", id, userID).First(&hook).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -63,8 +72,12 @@ func (r *UserWebhookRepository) Update(hook *models.UserWebhook) error {
 	return r.db.Save(hook).Error
 }
 
-// DeleteByUser removes one webhook owned by userID.
+// DeleteByUser removes one webhook owned by userID. A malformed id is "not
+// found" for the same reason as in GetByUser.
 func (r *UserWebhookRepository) DeleteByUser(userID, id string) error {
+	if uuid.Validate(id) != nil {
+		return ErrWebhookNotFound
+	}
 	res := r.db.Where("id = ? AND user_id = ?", id, userID).Delete(&models.UserWebhook{})
 	if res.Error != nil {
 		return res.Error
