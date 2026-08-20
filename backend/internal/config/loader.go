@@ -26,6 +26,9 @@ func Load(cfgPath string) (*Config, error) {
 	// without a metrics section keeps the historical behaviour (server on :9091).
 	v.SetDefault("metrics.enabled", true)
 	v.SetDefault("metrics.port", 9091)
+	// Webhook delivery history is pruned after 30 days unless config.yaml says
+	// otherwise. An explicit 0 keeps every delivery.
+	v.SetDefault("webhooks.delivery_retention_days", 30)
 	// Note: AutomaticEnv is intentionally omitted. Without SetEnvKeyReplacer("." → "_"),
 	// Viper cannot map env vars like SERVER_PORT to nested YAML keys like server.port.
 	// All secrets are read explicitly via os.Getenv after unmarshal (see below).

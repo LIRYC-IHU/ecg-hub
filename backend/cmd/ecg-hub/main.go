@@ -384,7 +384,7 @@ func main() {
 	// (research servers etc.). Subscribed to the event hub further down.
 	userWebhookRepo := repository.NewUserWebhookRepository(gormDB)
 	webhookDeliveryRepo := repository.NewWebhookDeliveryRepository(gormDB)
-	webhookDispatcher := webhook.NewDispatcher(userWebhookRepo, webhookDeliveryRepo, gormDB, authEncKey, publicBaseURL())
+	webhookDispatcher := webhook.NewDispatcher(userWebhookRepo, webhookDeliveryRepo, gormDB, authEncKey, publicBaseURL(), cfg.Webhooks.DeliveryRetention())
 	hl7Notifier := webhook.NewMultiNotifier(webhookDispatcher)
 
 	// HL7 Scheduler: always created so it can be started from the UI via Reload().

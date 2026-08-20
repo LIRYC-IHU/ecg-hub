@@ -115,6 +115,7 @@ Three layers, by design:
      }
    export: { workers: 2, tmp_ttl: 2h }
    metrics: { enabled: true, port: 9091 } # dedicated Prometheus scrape port
+   webhooks: { delivery_retention_days: 30 } # 0 keeps every delivery forever
    ```
 3. **Database (via the admin UI)** — everything else: auth providers, modules,
    FTP/DICOM/HL7, connectors, webhooks. Hot-reloaded, no restart needed.

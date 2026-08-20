@@ -76,7 +76,7 @@ func TestDeliver_SignatureAndHeaders(t *testing.T) {
 		t.Fatalf("encrypt: %v", err)
 	}
 
-	d := NewDispatcher(nil, nil, nil, encKey, "http://hub.local")
+	d := NewDispatcher(nil, nil, nil, encKey, "http://hub.local", 0)
 	hook := models.UserWebhook{
 		ID:                  "hook-1",
 		URL:                 srv.URL,
@@ -139,7 +139,7 @@ func TestDeliver_Non2xxIsError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	d := NewDispatcher(nil, nil, nil, "k", "")
+	d := NewDispatcher(nil, nil, nil, "k", "", 0)
 	status, err := d.Deliver(models.UserWebhook{URL: srv.URL}, Payload{Event: "test"})
 	if err == nil {
 		t.Fatal("want error for HTTP 502")
