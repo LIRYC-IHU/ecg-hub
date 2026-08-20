@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A superseded run on the same branch is wasted CI time.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Frontend (typecheck + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: yarn
+          cache-dependency-path: frontend/yarn.lock
+
+      # Same yarn as frontend/Dockerfile, so CI and the production image
+      # resolve the lockfile identically.
+      - run: corepack enable && corepack prepare yarn@1.22.22 --activate
+
+      - run: yarn --frozen-lockfile
+
+      # Build mode, not `tsc --noEmit`: tsconfig.json is a solution file
+      # (`"files": []` + project references), so plain `tsc --noEmit` checks
+      # nothing at all and reports success on code that cannot compile.
+      # Only `tsc -b` walks the referenced projects. See issue #17.
+      - name: Typecheck (tsc -b)
+        run: yarn typecheck
+
+      # Guards the rest of `yarn build`, which is what frontend/Dockerfile runs.
+      - name: Build
+        run: yarn build
+
+  backend:
+    name: Backend (build + vet)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - run: go build ./...
+
+      - run: go vet ./...
+
+      # `go test ./...` is deliberately not run yet: three tests are red on
+      # main (TestPersister_Persist_Success, TestLoginHandler_OIDCProvider,
+      # TestDownloadECGHandler_XMLFDA_Success) and internal/db tests bind a
+      # fixed port. A required job that is red from day one gets ignored.
+      # Add the step once those are fixed.
