@@ -6,6 +6,8 @@ import { fetchRoles, createRole, updateRole, deleteRole } from '../../lib/api'
 import type { AppRole } from '../../lib/api'
 import { Spinner } from '../ui/Spinner'
 import { useNotification } from '../../context/NotificationContext'
+import { Code } from '@connectrpc/connect'
+import { errorMessage, hasCode } from '../../lib/errors'
 import { useConfirm } from '../../context/ConfirmContext'
 
 // Shape of a role entry in an exported/imported JSON file. The id is intentionally
@@ -66,8 +68,11 @@ export function AdminRolesPage() {
       notify('success', t('admin.roles.saved'))
     },
     onError: (err: unknown) => {
-      const code = (err as { code?: string })?.code
-      notify('error', code === 'LAST_ADMIN_ROLE' ? t('admin.roles.errorLastAdminRole') : t('admin.roles.saveError'))
+      // FailedPrecondition on this endpoint means one thing: the change would
+      // leave no role holding admin.roles.
+      notify('error', hasCode(err, Code.FailedPrecondition)
+        ? t('admin.roles.errorLastAdminRole')
+        : errorMessage(err, t('admin.roles.saveError')))
     },
   })
 
@@ -92,8 +97,11 @@ export function AdminRolesPage() {
       notify('success', t('admin.roles.deleted'))
     },
     onError: (err: unknown) => {
-      const code = (err as { code?: string })?.code
-      notify('error', code === 'ROLE_HAS_USERS' ? t('admin.roles.errorHasUsers') : t('admin.roles.deleteError'))
+      // FailedPrecondition on this endpoint means one thing: users are still
+      // assigned to the role, and they have to be reassigned first.
+      notify('error', hasCode(err, Code.FailedPrecondition)
+        ? t('admin.roles.errorHasUsers')
+        : errorMessage(err, t('admin.roles.deleteError')))
     },
   })
 
