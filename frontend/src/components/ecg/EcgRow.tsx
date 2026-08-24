@@ -8,6 +8,7 @@ import { Spinner } from '../ui/Spinner'
 import { useNotification } from '../../context/NotificationContext'
 import { DownloadFormatPopup } from './DownloadFormatPopup'
 import type { ECG, ECGFieldDef } from '../../types'
+import { errorMessage } from '../../lib/errors';
 
 const hl7StatusConfig: Record<string, { dot: string; labelKey: string }> = {
   success:      { dot: 'bg-success',           labelKey: 'ecg.hl7.sent'      },
@@ -139,7 +140,7 @@ export function EcgRow({ ecg, isSelected, onToggle, canForceHL7, canDelete, canR
                 // come back as one ZIP from the backend.
                 await downloadECGFormats(ecg.id, formats, mode)
               } catch (err) {
-                notify('error', (err as { message?: string })?.message ?? t('ecg.downloadError'))
+                notify('error', errorMessage(err, t('ecg.downloadError')))
               } finally {
                 setDownloading(false)
               }
