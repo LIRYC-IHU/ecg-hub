@@ -165,12 +165,30 @@ func iniRole(db *gorm.DB) error {
 			},
 		},
 	}
-	// Upsert seeded roles and sync permissions idempotently.
-	// Creates the role if missing, then adds any permissions not yet present.
-	// Never removes permissions set via the admin UI.
+	// Seeding happens on the first start only: an empty roles table means a
+	// brand-new install, anything else means an operator already owns the role
+	// model. Without this an admin/reader/writer deleted on purpose — a site
+	// running its own named roles instead — came back with every permission at
+	// the next restart.
+	//
+	// Deleting *every* role therefore re-seeds on the next start. That is the
+	// deliberate recovery path for an install that has locked itself out.
+	var roleCount int64
+	if err := db.Model(&repository.RoleRecord{}).Count(&roleCount).Error; err != nil {
+		return fmt.Errorf("db: count roles: %w", err)
+	}
+	firstStart := roleCount == 0
+
+	// Sync permissions idempotently on the roles that exist: a permission added
+	// to the canonical list reaches them on the next start with no migration.
+	// Never removes permissions set via the admin UI, and never re-creates a
+	// role that was deleted.
 	for _, s := range seeds {
 		var existing repository.RoleRecord
 		if err := db.Where("name = ?", s.name).First(&existing).Error; err != nil {
+			if !firstStart {
+				continue // deleted on purpose — leave it deleted
+			}
 			slog.Info("db: creating seeded role", "role", s.name)
 			existing = repository.RoleRecord{Name: s.name, Description: s.desc}
 			if err := db.Create(&existing).Error; err != nil {
