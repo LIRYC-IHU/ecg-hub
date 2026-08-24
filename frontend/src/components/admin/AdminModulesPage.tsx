@@ -1001,21 +1001,12 @@ function PacsCard({
         <Toggle checked={cfg.enabled} onChange={(v) => set("enabled", v)} />
       </div>
 
-      {/* Common identity fields */}
+      {/* Common identity fields.
+          One field on purpose: ConnectorConfig has a single `name`, which is
+          also what logs and metrics carry ("connector":"orthanc"). It used to be
+          rendered twice — as "Name" and "Name / label" — with both inputs bound
+          to cfg.name, so typing in either updated the other. */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
-        <div>
-          <label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-            Name
-          </label>
-          <input
-            type="text"
-            value={cfg.name}
-            readOnly={!isNew}
-            onChange={(e) => set("name", e.target.value)}
-            className={`mt-1 ${inputClass} ${!isNew ? "opacity-60 cursor-not-allowed" : ""}`}
-            placeholder="orthanc"
-          />
-        </div>
         <div>
           <label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
             {t("modules.connectors.label")}
@@ -1026,7 +1017,7 @@ function PacsCard({
             readOnly={!isNew}
             onChange={(e) => set("name", e.target.value)}
             className={`mt-1 ${inputClass} ${!isNew ? "opacity-60 cursor-not-allowed" : ""}`}
-            placeholder="Orthanc (CHU Bordeaux)"
+            placeholder="orthanc"
           />
         </div>
       </div>
