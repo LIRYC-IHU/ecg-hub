@@ -10,7 +10,6 @@ import (
 
 	"connectrpc.com/connect"
 	"connectrpc.com/validate"
-	echoSwagger "github.com/swaggo/echo-swagger"
 	"golang.org/x/time/rate"
 	"gorm.io/gorm"
 
@@ -181,7 +180,7 @@ func mountConnect(e *echo.Echo, path string, h http.Handler) {
 
 // RegisterRoutes mounts all HTTP routes onto e.
 // Route security model (NFR-S3):
-//   - Public:    /healthz, /swagger/*
+//   - Public:    /healthz
 //   - Auth-only: /api/v1/auth/login (issues the token — no prior token needed)
 //   - Protected: all other /api/v1/* routes require a valid Bearer JWT
 func (r *RouterConfig) RegisterRoutes() {
@@ -611,15 +610,9 @@ func (r *RouterConfig) RegisterRoutes() {
 		mountConnect(r.e, webhookPath, webhookHandler)
 	}
 
-	// Swagger UI — requires authentication + swagger.read permission.
-	// The spec itself is generated restricted to the Patients, ECG and health
-	// tags (swag init --tags) — the endpoints a machine client (webhook
-	// receiver) needs. Everything else is simply absent from the document.
-	swaggerHandler := echoSwagger.EchoWrapHandler(
-		echoSwagger.URL("/swagger/doc.json"),
-		echoSwagger.DocExpansion("list"),
-	)
-	r.e.GET("/swagger/*", swaggerHandler, mw.AuthMiddleware(r.authProvider, r.userRepo, apiKeyRepo), mw.RequirePermission(r.checker, auth.PermSwaggerRead))
+	// API reference: served by the SPA at /api-docs, from the endpoint catalogue
+	// in frontend/src/lib/apiDocs.ts. The Swagger UI it replaced shipped its own
+	// bundle to describe a subset of the same routes.
 
 	// === Public API group (no auth required) ===
 	publicV1 := r.e.Group("/api/v1")
@@ -660,8 +653,8 @@ func (r *RouterConfig) RegisterRoutes() {
 	// Read-only REST surface for external researchers (webhook → pull details),
 	// authenticated by API key (X-API-Key, handled by AuthMiddleware on apiV1)
 	// or JWT. The frontend itself consumes the gRPC/Connect services above;
-	// these REST endpoints are kept — identical to the ones documented in the
-	// Swagger spec on main — so machine clients keep a simple HTTP/JSON surface.
+	// these REST endpoints are kept — and documented at /api-docs — so machine
+	// clients keep a simple HTTP/JSON surface.
 	apiV1.GET("/patients", handlers.SearchPatientsHandler(r.gormDB), mw.RequirePermission(r.checker, auth.PermPatientRead))
 	apiV1.GET("/patients/:id/ecgs", handlers.ListPatientECGsHandler(r.gormDB), mw.RequirePermission(r.checker, auth.PermPatientRead))
 	apiV1.GET("/patients/:id/tags", handlers.ListPatientTagsHandler(tagSvcRepo), mw.RequirePermission(r.checker, auth.PermPatientRead))

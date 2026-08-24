@@ -416,8 +416,8 @@
         "tag": "Tags",
         "quarantine": "Quarantine",
         "admin": "Administration",
-        "swagger": "API",
-        "webhook": "Webhooks"
+        "webhook": "Webhooks",
+        "api": "API"
       },
       "perm": {
         "patient_read": "View patients",
@@ -442,7 +442,6 @@
         "admin_audit": "View audit logs",
         "admin_system": "System status & module control",
         "admin_auth_config": "Configure auth providers",
-        "swagger_read": "Access API documentation",
         "webhook_manage": "Configure personal webhooks",
         "apikey_manage": "Create and manage API keys"
       }
@@ -568,7 +567,6 @@
   "apiKeys": {
     "title": "API Keys",
     "subtitle": "Generate personal keys to access the API (e.g. Swagger).",
-    "swaggerLink": "API docs",
     "nameLabel": "Key name",
     "namePlaceholder": "e.g. My integration",
     "generate": "Generate key",
@@ -586,7 +584,8 @@
     "dismiss": "Dismiss",
     "createdOn": "Created on",
     "lastUsed": "Used on {{date}}",
-    "neverUsed": "Never used"
+    "neverUsed": "Never used",
+    "docsLink": "API docs"
   },
   "modules": {
     "title": "Module Control",
@@ -809,5 +808,25 @@
     "empty": "No tag",
     "newPlaceholder": "New tag…",
     "add": "Add"
+  },
+  "apiDocs": {
+    "title": "REST API",
+    "subtitle": "Everything a receiver needs: authenticate with an API key, read the webhook payload, call back for the data.",
+    "searchPlaceholder": "Search endpoints…",
+    "gettingStarted": "Getting started",
+    "authIntro": "Machine clients authenticate with an API key generated from the API Keys page. Send it as X-API-Key, or as a Bearer token — both are accepted on every endpoint below. Keys inherit the permissions of the user who created them and never expire until deleted.",
+    "permIntro": "Each endpoint lists the permission it requires. A call made with a key whose role lacks that permission answers 403 FORBIDDEN; an unknown or deleted key answers 401.",
+    "payloadTitle": "Webhook payload",
+    "payloadIntro": "ECG Hub POSTs a JSON body to your endpoint whenever a subscribed event occurs. The payload identifies the resource and carries ready-made links back to the API — a receiver never has to build a URL itself.",
+    "delivery": "delivery",
+    "signatureIntro": "When the webhook has a signing secret, the body is signed with HMAC-SHA256 and sent as X-ECG-Hub-Signature: sha256=<hex>. Verify it against the raw request body, before any JSON parsing — re-serialising changes the bytes and breaks the comparison.",
+    "retryIntro": "Delivery is best-effort: 3 attempts (immediately, +5s, +25s), then the outcome is recorded in the delivery history where it can be replayed. Any 2xx counts as delivered; redirects are not followed. Answer quickly and do the work asynchronously — the sender times out after 10 seconds.",
+    "request": "request",
+    "response": "response",
+    "paramName": "Name",
+    "paramIn": "In",
+    "paramType": "Type",
+    "paramDesc": "Description",
+    "noMatch": "No endpoint matches this search."
   }
 }

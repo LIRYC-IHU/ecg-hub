@@ -92,7 +92,7 @@ func extractAPIKey(c echo.Context) string {
 // On success it injects CtxKeyUserID, CtxKeyUsername and CtxKeyRole.
 // On failure it returns 401 {"code":"UNAUTHENTICATED","message":"..."}.
 //
-// Apply to protected route groups only — /healthz and /swagger must remain public.
+// Apply to protected route groups only — /healthz must remain public.
 func AuthMiddleware(provider auth.Provider, roleResolver RoleResolver, apiKeys APIKeyAuthenticator) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {

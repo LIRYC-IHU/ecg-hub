@@ -33,7 +33,6 @@ const (
 	PermAdminAudit       = "admin.audit"
 	PermAdminSystem      = "admin.system"
 	PermAdminAuthConfig  = "admin.auth_config"
-	PermSwaggerRead      = "swagger.read"
 	PermWebhookManage    = "webhook.manage" // configure personal outbound webhooks
 	PermAPIKeyManage     = "apikey.manage"  // create and manage personal API keys
 )
@@ -62,7 +61,6 @@ var AllPermissions = []string{
 	PermAdminAudit,
 	PermAdminSystem,
 	PermAdminAuthConfig,
-	PermSwaggerRead,
 	PermWebhookManage,
 	PermAPIKeyManage,
 }

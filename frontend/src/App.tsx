@@ -36,6 +36,7 @@ import { AdminModulesPage } from "./components/admin/AdminModulesPage";
 import { AdminHL7Page } from "./components/admin/AdminHL7Page";
 import { AdminBrandingPage } from "./components/admin/AdminBrandingPage";
 import { ApiKeysPage } from "./components/settings/ApiKeysPage";
+import { ApiDocsPage } from "./components/docs/ApiDocsPage";
 import { WebhooksPage } from "./components/settings/WebhooksPage";
 import { UploadPage } from "./components/uploads/UploadPage";
 import {
@@ -481,6 +482,14 @@ function App() {
                 }
               />
             )}
+            <Route
+              path="/api-docs"
+              element={
+                <div className="overflow-auto flex-1">
+                  <ApiDocsPage />
+                </div>
+              }
+            />
             {canManageApiKeys && (
               <Route
                 path="/api-keys"
