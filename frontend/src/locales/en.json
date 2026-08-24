@@ -353,7 +353,8 @@
       "usernamePlaceholder": "username",
       "passwordPlaceholder": "password (8+ chars, 1 digit)",
       "addSubmit": "Create",
-      "created": "User “{{user}}” created"
+      "created": "User “{{user}}” created",
+      "selfRoleChanged": "Your role is now “{{role}}” — signing you out so the change takes effect"
     },
     "audit": {
       "title": "Audit log",

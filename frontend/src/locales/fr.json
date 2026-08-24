@@ -353,7 +353,8 @@
       "usernamePlaceholder": "identifiant",
       "passwordPlaceholder": "mot de passe (8+ car., 1 chiffre)",
       "addSubmit": "Créer",
-      "created": "Utilisateur « {{user}} » créé"
+      "created": "Utilisateur « {{user}} » créé",
+      "selfRoleChanged": "Votre rôle est maintenant « {{role}} » — déconnexion pour appliquer le changement"
     },
     "audit": {
       "title": "Journal d'audit",
