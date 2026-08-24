@@ -24,6 +24,7 @@ import {
 import { Spinner } from "../ui/Spinner";
 import { useNotification } from "../../context/NotificationContext";
 import { useAuth } from "../../hooks/useAuth";
+import { errorMessage } from "../../lib/errors";
 
 const MASKED_PASSWORD = "••••••";
 
@@ -175,8 +176,7 @@ function FTPCard({ ftpStatus }: { ftpStatus: "running" | "stopped" | "error" | u
       setPortModified(false);
       notify("success", t("modules.ftp.saveOk"));
     },
-    onError: (err: { message?: string; error?: string }) =>
-      notify("error", err.error ?? err.message ?? t("modules.ftp.saveError")),
+    onError: (err: unknown) => notify("error", errorMessage(err, t("modules.ftp.saveError"))),
   });
 
   const startMutation = useMutation({
@@ -186,8 +186,7 @@ function FTPCard({ ftpStatus }: { ftpStatus: "running" | "stopped" | "error" | u
       void queryClient.refetchQueries({ queryKey: ["admin", "modules", "status"] });
       notify("success", t("modules.ftp.startOk"));
     },
-    onError: (err: { message?: string }) =>
-      notify("error", err.message ?? t("modules.ftp.saveError")),
+    onError: (err: unknown) => notify("error", errorMessage(err, t("modules.ftp.saveError"))),
   });
 
   const stopMutation = useMutation({
@@ -197,8 +196,7 @@ function FTPCard({ ftpStatus }: { ftpStatus: "running" | "stopped" | "error" | u
       void queryClient.refetchQueries({ queryKey: ["admin", "modules", "status"] });
       notify("success", t("modules.ftp.stopOk"));
     },
-    onError: (err: { message?: string }) =>
-      notify("error", err.message ?? t("modules.ftp.saveError")),
+    onError: (err: unknown) => notify("error", errorMessage(err, t("modules.ftp.saveError"))),
   });
 
   const inputClass =
@@ -402,8 +400,7 @@ function DICOMCard({ dicomStatus }: { dicomStatus: "running" | "stopped" | "erro
       void queryClient.invalidateQueries({ queryKey: ["admin", "modules", "dicom", "config"] });
       notify("success", t("modules.dicom.saveOk"));
     },
-    onError: (err: { message?: string; error?: string }) =>
-      notify("error", err.error ?? err.message ?? t("modules.dicom.saveError")),
+    onError: (err: unknown) => notify("error", errorMessage(err, t("modules.dicom.saveError"))),
   });
 
   const startMutation = useMutation({
@@ -413,8 +410,7 @@ function DICOMCard({ dicomStatus }: { dicomStatus: "running" | "stopped" | "erro
       void queryClient.refetchQueries({ queryKey: ["admin", "modules", "status"] });
       notify("success", t("modules.dicom.startOk"));
     },
-    onError: (err: { message?: string; error?: string }) =>
-      notify("error", err.error ?? err.message ?? t("modules.dicom.saveError")),
+    onError: (err: unknown) => notify("error", errorMessage(err, t("modules.dicom.saveError"))),
   });
 
   const stopMutation = useMutation({
@@ -424,8 +420,7 @@ function DICOMCard({ dicomStatus }: { dicomStatus: "running" | "stopped" | "erro
       void queryClient.refetchQueries({ queryKey: ["admin", "modules", "status"] });
       notify("success", t("modules.dicom.stopOk"));
     },
-    onError: (err: { message?: string }) =>
-      notify("error", err.message ?? t("modules.dicom.saveError")),
+    onError: (err: unknown) => notify("error", errorMessage(err, t("modules.dicom.saveError"))),
   });
 
   const inputClass =
@@ -613,8 +608,7 @@ function useConnectorCardLogic({
       setTestResult(null);
       onSaved();
     },
-    onError: (err: { message?: string; error?: string }) =>
-      notify("error", err.error ?? err.message ?? t("modules.connectors.saveError")),
+    onError: (err: unknown) => notify("error", errorMessage(err, t("modules.connectors.saveError"))),
   });
 
   const deleteMutation = useMutation({
@@ -623,8 +617,7 @@ function useConnectorCardLogic({
       notify("success", t("modules.connectors.deleteOk"));
       onDeleted();
     },
-    onError: (err: { message?: string; error?: string }) =>
-      notify("error", err.error ?? err.message ?? t("modules.connectors.saveError")),
+    onError: (err: unknown) => notify("error", errorMessage(err, t("modules.connectors.saveError"))),
   });
 
   const testMutation = useMutation({
@@ -637,10 +630,10 @@ function useConnectorCardLogic({
         notify("error", t("modules.connectors.testFail", { error: res.error ?? "unknown" }));
       }
     },
-    onError: (err: { message?: string; error?: string }) =>
+    onError: (err: unknown) =>
       notify(
         "error",
-        err.error ?? err.message ?? t("modules.connectors.testFail", { error: "unknown" }),
+        errorMessage(err, t("modules.connectors.testFail", { error: "unknown" })),
       ),
   });
 
@@ -1353,8 +1346,8 @@ function ModuleActivationSection() {
       void queryClient.invalidateQueries({ queryKey: ["admin", "settings", "modules"] });
       setRestartNeeded(true);
     },
-    onError: (err: { message?: string; error?: string }) =>
-      notify("error", err.error ?? err.message ?? "Error saving module settings"),
+    onError: (err: unknown) =>
+      notify("error", errorMessage(err, "Error saving module settings")),
   });
 
   const handleToggle = (moduleName: string, checked: boolean) => {

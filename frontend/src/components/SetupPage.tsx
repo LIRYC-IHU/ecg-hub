@@ -6,6 +6,7 @@ import { Activity, Lock, User, Loader2, ShieldCheck } from "lucide-react";
 import { setupAdmin } from "../lib/api";
 import { useNotification } from "../context/NotificationContext";
 import { useBranding } from "../hooks/useBranding";
+import { errorMessage } from "../lib/errors";
 
 export function SetupPage() {
   const { t } = useTranslation();
@@ -53,11 +54,7 @@ export function SetupPage() {
       notify("success", t("setup.success"));
       navigate("/login", { replace: true });
     } catch (err: unknown) {
-      const message =
-        err && typeof err === "object" && "message" in err
-          ? String((err as { message: string }).message)
-          : t("common.error");
-      setServerError(message);
+      setServerError(errorMessage(err, t("common.error")));
     } finally {
       setLoading(false);
     }
