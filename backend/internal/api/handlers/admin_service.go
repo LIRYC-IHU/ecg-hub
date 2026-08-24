@@ -327,13 +327,24 @@ func (h *AdminServiceHandler) SetAppUserRole(ctx context.Context, req *apiv1.Set
 	if req.Id == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("invalid id"))
 	}
-	if err := h.UserRepo.SetRole(ctx, req.Id, req.Role); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+	// Validate before the write: an empty or unknown role is a client mistake,
+	// and letting it reach the database returned a 500 carrying the raw
+	// constraint error — schema details in the response, and a fake incident in
+	// the admin "recent errors" panel.
+	role := strings.TrimSpace(req.Role)
+	if role == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("role is required"))
+	}
+	if err := h.UserRepo.SetRole(ctx, req.Id, role); err != nil {
+		if errors.Is(err, repository.ErrRoleNotFound) {
+			return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("unknown role: "+role))
+		}
+		return nil, connect.NewError(connect.CodeInternal, errors.New("failed to set the role"))
 	}
 	// Invalidate all existing sessions for this user so they pick up the new role.
 	_ = h.UserRepo.SetUpdateJWT(ctx, req.Id, true)
 	_ = mw.WriteAuditLog(ctx, h.DB, mw.UserIDFromContext(ctx), "role_change", req.Id,
-		map[string]any{"target_user": req.Id, "new_role": req.Role})
+		map[string]any{"target_user": req.Id, "new_role": role})
 	return &apiv1.SetAppUserRoleResponse{}, nil
 }
 
