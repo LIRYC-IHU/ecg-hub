@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -291,17 +292,28 @@ func (r *UserRepo) GetCurrentRole(ctx context.Context, externalID string) (strin
 	return role.Name, nil
 }
 
+// ErrRoleNotFound is returned by SetRole when the requested role name does not
+// exist. Callers map it to a client error: an unknown role is a bad request,
+// not a server fault.
+var ErrRoleNotFound = errors.New("role not found")
+
 // SetRole assigns a role to a user by name through the admin UX. This pins the role:
 // role_manually_set is set so the IdP groups/roles claim no longer overrides it on
-// login. Passing an empty string clears the role and resets the pin, letting the
-// identity provider drive the role again on the next login.
+// login.
+//
+// An empty name is not a way to clear the role: ecg_hub_users.role_id is NOT NULL,
+// so the UPDATE would be rejected by the database. Callers must validate before
+// calling (see AdminService.SetAppUserRole).
 func (r *UserRepo) SetRole(ctx context.Context, id string, roleName string) error {
 	var roleID *string
 	manuallySet := false
 	if roleName != "" {
 		var rec RoleRecord
 		if err := r.db.WithContext(ctx).Where("name = ?", roleName).First(&rec).Error; err != nil {
-			return fmt.Errorf("user_repo: role %q not found: %w", roleName, err)
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return fmt.Errorf("%w: %q", ErrRoleNotFound, roleName)
+			}
+			return fmt.Errorf("user_repo: look up role %q: %w", roleName, err)
 		}
 		roleID = &rec.ID
 		manuallySet = true
