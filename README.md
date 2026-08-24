@@ -16,6 +16,11 @@ forwarding a copy to an external PACS.
 
 ---
 
+## Contributing & security
+
+Bug reports and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
+Found a vulnerability? Do not open an issue: follow [SECURITY.md](SECURITY.md).
+
 ## How it works
 
 ```

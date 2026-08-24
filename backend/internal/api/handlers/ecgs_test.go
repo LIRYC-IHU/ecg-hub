@@ -284,9 +284,13 @@ func TestDownloadECGHandler_XMLFDA_Success(t *testing.T) {
 	if !strings.HasPrefix(ct, "application/xml") {
 		t.Errorf("Content-Type = %q, want application/xml", ct)
 	}
+	// A converted download is named after the patient identifier, not after the
+	// source filename: the clinician recognises "P001.xml", not the vendor's
+	// export name. The anonymised variant is covered by the next test, which
+	// asserts the identifier is replaced by a UUID.
 	disp := rec.Header().Get("Content-Disposition")
-	if !strings.Contains(disp, "patient_001.xml") {
-		t.Errorf("Content-Disposition = %q, want to contain patient_001.xml", disp)
+	if !strings.Contains(disp, "P001.xml") {
+		t.Errorf("Content-Disposition = %q, want to contain P001.xml", disp)
 	}
 	if !strings.Contains(rec.Body.String(), "converted") {
 		t.Errorf("body missing converted XML content")

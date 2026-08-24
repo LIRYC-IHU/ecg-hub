@@ -273,7 +273,7 @@ function FTPCard({ ftpStatus }: { ftpStatus: "running" | "stopped" | "error" | u
                 value={publicHost}
                 onChange={(e) => setPublicHost(e.target.value)}
                 className={`mt-1 ${inputClass}`}
-                placeholder="10.33.70.32"
+                placeholder="192.0.2.10"
               />
             </div>
             <div>
