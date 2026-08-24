@@ -4,6 +4,7 @@ import { KeyRound, X } from "lucide-react";
 import { useMutation } from "@tanstack/react-query";
 import { changeOwnPassword } from "../../lib/api";
 import { useNotification } from "../../context/NotificationContext";
+import { errorMessage } from "../../lib/errors";
 import { Spinner } from "../ui/Spinner";
 
 interface Props {
@@ -32,7 +33,7 @@ export function ChangePasswordDialog({ onClose }: Props) {
       onClose();
     },
     onError: (err: unknown) =>
-      notify("error", (err as { message?: string })?.message ?? t("common.error")),
+      notify("error", errorMessage(err, t("common.error"))),
   });
 
   return (

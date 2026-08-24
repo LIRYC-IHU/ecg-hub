@@ -58,6 +58,7 @@ import { useNotification } from "../../context/NotificationContext";
 import { useConfirm } from "../../context/ConfirmContext";
 import { DownloadFormatPopup } from "../ecg/DownloadFormatPopup";
 import { TagBadge } from "../ui/TagBadge";
+import { errorMessage } from "../../lib/errors";
 import { TagManager } from "../tags/TagManager";
 import { ECGViewerModal } from "../ecg/ECGViewerModal";
 import type { Patient, ECG } from "../../types";
@@ -623,8 +624,7 @@ function OruSendButton({ ecgId }: { ecgId: number }) {
       notify("success", t("ecg.oruSent"));
       void queryClient.invalidateQueries({ queryKey: ["oru-status", ecgId] });
     },
-    onError: (err: { message?: string }) =>
-      notify("error", err?.message ?? t("ecg.oruError")),
+    onError: (err: unknown) => notify("error", errorMessage(err, t("ecg.oruError"))),
   });
 
   const dot =

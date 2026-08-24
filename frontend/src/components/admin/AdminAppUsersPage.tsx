@@ -6,6 +6,7 @@ import { fetchAppUsers, setAppUserRole, deleteAppUser, fetchRoles, fetchUserDefa
 import { Spinner } from '../ui/Spinner'
 import { useNotification } from '../../context/NotificationContext'
 import { useConfirm } from '../../context/ConfirmContext'
+import { errorMessage } from '../../lib/errors';
 
 const providerColors: Record<string, string> = {
   oidc:  'bg-primary/10 text-primary',
@@ -77,7 +78,7 @@ export function AdminAppUsersPage() {
       setNewUser({ username: '', password: '', role: '' })
     },
     onError: (err: unknown) =>
-      notify('error', (err as { message?: string })?.message ?? t('common.error')),
+      notify('error', errorMessage(err, t('common.error'))),
   })
 
   const filtered = useMemo(() => {
