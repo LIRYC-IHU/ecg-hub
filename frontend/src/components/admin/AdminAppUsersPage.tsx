@@ -328,7 +328,13 @@ export function AdminAppUsersPage() {
                   isDirty ? 'border-primary' : 'border-border'
                 }`}
               >
-                <option value="">{t('admin.users.noRole')}</option>
+                {/* Placeholder only — a role is mandatory (ecg_hub_users.role_id
+                    is NOT NULL), so it is never a selectable target. Shown only
+                    when the user somehow has no role, so the select still has a
+                    value to render. */}
+                {!user.role_name && (
+                  <option value="" disabled>{t('admin.users.noRole')}</option>
+                )}
                 {roles.map((r) => (
                   <option key={r.name} value={r.name}>{r.name}</option>
                 ))}
