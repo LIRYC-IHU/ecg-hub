@@ -7,6 +7,7 @@ import { Spinner } from '../ui/Spinner'
 import { useNotification } from '../../context/NotificationContext'
 import { useConfirm } from '../../context/ConfirmContext'
 import { errorMessage } from '../../lib/errors';
+import { useAuth } from '../../hooks/useAuth'
 
 const providerColors: Record<string, string> = {
   oidc:  'bg-primary/10 text-primary',
@@ -22,6 +23,10 @@ const roleColors: Record<string, string> = {
 
 export function AdminAppUsersPage() {
   const { t } = useTranslation()
+  // Who is looking: changing your own role invalidates your session server-side,
+  // so the page has to end it deliberately instead of letting the next request
+  // fail on a token the backend has already retired.
+  const { user: me, logout } = useAuth()
   const queryClient = useQueryClient()
   const { notify } = useNotification()
   const confirm = useConfirm()
@@ -95,6 +100,14 @@ export function AdminAppUsersPage() {
   const mutation = useMutation({
     mutationFn: ({ id, role }: { id: string; role: string }) => setAppUserRole(id, role),
     onSuccess: (_, { id, role }) => {
+      // Changing your own role: the backend has invalidated every session for
+      // this user, so refetching would 401 and the table would keep showing the
+      // old role with no explanation. Say what happened and sign out instead.
+      if (me && id === me.user_id) {
+        notify('success', t('admin.appUsers.selfRoleChanged', { role }))
+        setTimeout(logout, 1500)
+        return
+      }
       void queryClient.invalidateQueries({ queryKey: ['admin', 'app-users'] })
       const user = users.find((u) => u.id === id)
       notify('success', `${user?.external_id ?? id} → "${role}"`)
@@ -102,8 +115,8 @@ export function AdminAppUsersPage() {
       setFeedback((p) => ({ ...p, [id]: 'success' }))
       setTimeout(() => setFeedback((p) => { const n = { ...p }; delete n[id]; return n }), 2000)
     },
-    onError: (_, { id }) => {
-      notify('error', t('common.error'))
+    onError: (err: unknown, { id }) => {
+      notify('error', errorMessage(err, t('common.error')))
       setFeedback((p) => ({ ...p, [id]: 'error' }))
       setTimeout(() => setFeedback((p) => { const n = { ...p }; delete n[id]; return n }), 3000)
     },
