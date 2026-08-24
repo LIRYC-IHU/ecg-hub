@@ -1,3 +1,5 @@
+import { Code, ConnectError } from "@connectrpc/connect";
+
 /**
  * User-facing text for an error coming back from the API.
  *
@@ -13,4 +15,16 @@ export function errorMessage(err: unknown, fallback: string): string {
   const source = err as { error?: unknown; message?: unknown } | null | undefined;
   const raw = String(source?.error ?? source?.message ?? "");
   return raw.replace(/^\[[a-z_]+\]\s*/i, "").trim() || fallback;
+}
+
+/**
+ * True when the error is a Connect error carrying `code`.
+ *
+ * ConnectError.code is the numeric Code enum, not the wire string, so a
+ * comparison against a literal like "failed_precondition" — or against a
+ * REST-era code such as "ROLE_HAS_USERS" — silently never matches and the
+ * caller falls through to its generic message.
+ */
+export function hasCode(err: unknown, code: Code): boolean {
+  return err instanceof ConnectError && err.code === code;
 }
