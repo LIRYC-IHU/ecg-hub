@@ -126,6 +126,7 @@ func TestLoad_WebhookDeliveryRetention(t *testing.T) {
 	}
 
 	for _, tt := range tests {
+		os.Unsetenv("WEBHOOKS_RETENTION_DAYS")
 		cfg, err := Load(writeConfig(t, tt.yaml))
 		if err != nil {
 			t.Fatalf("%s: load: %v", tt.name, err)
@@ -135,6 +136,110 @@ func TestLoad_WebhookDeliveryRetention(t *testing.T) {
 		}
 		if got := cfg.Webhooks.DeliveryRetention(); got != tt.wantDur {
 			t.Errorf("%s: duration = %v, want %v", tt.name, got, tt.wantDur)
+		}
+	}
+}
+
+// Metrics are the one section a container can set without templating
+// config.yaml, so the env overrides have to win — and a malformed value must
+// not stop the server from booting.
+func TestLoad_MetricsFromEnv(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://test:test@localhost/testdb")
+	t.Setenv("JWT_SECRET", "supersecret")
+
+	const yamlWithMetrics = validYAML + "metrics:\n  enabled: false\n  port: 9091\n"
+
+	tests := []struct {
+		name        string
+		enabled     string
+		port        string
+		wantEnabled bool
+		wantPort    int
+	}{
+		{"file wins when the env is unset", "", "", false, 9091},
+		{"METRICS_ENABLED overrides the file", "true", "", true, 9091},
+		{"METRICS_PORT overrides the file", "", "9200", false, 9200},
+		{"both override the file", "1", "9300", true, 9300},
+		{"a malformed value is ignored", "yes-please", "not-a-port", false, 9091},
+	}
+
+	for _, tt := range tests {
+		t.Setenv("METRICS_ENABLED", tt.enabled)
+		t.Setenv("METRICS_PORT", tt.port)
+		if tt.enabled == "" {
+			os.Unsetenv("METRICS_ENABLED")
+		}
+		if tt.port == "" {
+			os.Unsetenv("METRICS_PORT")
+		}
+
+		cfg, err := Load(writeConfig(t, yamlWithMetrics))
+		if err != nil {
+			t.Fatalf("%s: load: %v", tt.name, err)
+		}
+		if cfg.Metrics.Enabled != tt.wantEnabled {
+			t.Errorf("%s: enabled = %v, want %v", tt.name, cfg.Metrics.Enabled, tt.wantEnabled)
+		}
+		if cfg.Metrics.Port != tt.wantPort {
+			t.Errorf("%s: port = %d, want %d", tt.name, cfg.Metrics.Port, tt.wantPort)
+		}
+	}
+}
+
+// The listen port left config.yaml: everything around the server already
+// assumes 4444 (Dockerfile, nginx, compose). A file that still sets one is
+// honoured, for a bare-metal deployment that needs a different port.
+func TestLoad_ServerPortDefault(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://test:test@localhost/testdb")
+	t.Setenv("JWT_SECRET", "supersecret")
+
+	cfg, err := Load(writeConfig(t, "storage:\n  volume_path: /data/ecg\n"))
+	if err != nil {
+		t.Fatalf("load without a server section: %v", err)
+	}
+	if cfg.Server.Port != 4444 {
+		t.Errorf("server.port = %d, want the 4444 default", cfg.Server.Port)
+	}
+
+	cfg, err = Load(writeConfig(t, validYAML)) // still carries server.port: 8080
+	if err != nil {
+		t.Fatalf("load with an explicit port: %v", err)
+	}
+	if cfg.Server.Port != 8080 {
+		t.Errorf("explicit server.port = %d, want 8080 to still be honoured", cfg.Server.Port)
+	}
+}
+
+// Retention moved to the environment when config.yaml lost its webhooks
+// section. A file that still carries one keeps working — covered by
+// TestLoad_WebhookDeliveryRetention above.
+func TestLoad_WebhookRetentionFromEnv(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://test:test@localhost/testdb")
+	t.Setenv("JWT_SECRET", "supersecret")
+
+	tests := []struct {
+		name string
+		env  string
+		want int
+	}{
+		{"unset falls back to 30 days", "", 30},
+		{"explicit value wins", "7", 7},
+		{"explicit 0 disables pruning", "0", 0},
+		{"a malformed value is ignored", "a-fortnight", 30},
+	}
+
+	for _, tt := range tests {
+		if tt.env == "" {
+			os.Unsetenv("WEBHOOKS_RETENTION_DAYS")
+		} else {
+			t.Setenv("WEBHOOKS_RETENTION_DAYS", tt.env)
+		}
+		cfg, err := Load(writeConfig(t, validYAML))
+		if err != nil {
+			t.Fatalf("%s: load: %v", tt.name, err)
+		}
+		if cfg.Webhooks.DeliveryRetentionDays != tt.want {
+			t.Errorf("%s: days = %d, want %d", tt.name, cfg.Webhooks.DeliveryRetentionDays, tt.want)
 		}
 	}
 }

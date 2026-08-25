@@ -39,8 +39,9 @@ type WebhooksConfig struct {
 	// grows with ingested ECGs × enabled webhooks and would otherwise grow
 	// forever — payloads carrying patient identifiers included.
 	//
-	// Unset defaults to 30 days (loader.go). An explicit 0 disables pruning and
-	// keeps every delivery — a deliberate opt-out, not the default.
+	// Set it with WEBHOOKS_RETENTION_DAYS; it is no longer a config.yaml section.
+	// Unset defaults to 30 days. An explicit 0 disables pruning and keeps every
+	// delivery — a deliberate opt-out, not the default.
 	DeliveryRetentionDays int `mapstructure:"delivery_retention_days"`
 }
 
@@ -70,10 +71,16 @@ func PublicOrigin(hostURL string) string {
 	return "http://" + strings.TrimRight(hostURL, "/")
 }
 
+// defaultServerPort is the port everything around the server already assumes:
+// the Dockerfile exposes it, nginx proxies to it, compose binds it. It is no
+// longer written in config.yaml.
+const defaultServerPort = 4444
+
 // ServerConfig holds HTTP server settings.
 type ServerConfig struct {
-	// Port is the TCP port the Echo server listens on (e.g., 4444).
-	// When 0, the server falls back to the default port 4444.
+	// Port is the TCP port the Echo server listens on. Defaults to 4444; a
+	// config.yaml that still sets it is honoured, for a bare-metal deployment
+	// that needs a different one.
 	Port int `mapstructure:"port"`
 	// TLS enables TLS directly on the Echo server. Required in production (NFR-S1)
 	// for bare-metal deployments. When the server runs behind a TLS-terminating

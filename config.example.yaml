@@ -8,8 +8,9 @@
 # sections below.
 
 server:
-  # TCP port the Go server listens on. 0 → defaults to 4444.
-  port: 4444
+  # The listen port is fixed at 4444: the Dockerfile exposes it, nginx proxies
+  # to it, and the compose stack binds it. Nothing to set here.
+  #
   # tls: terminate TLS directly on the Go server (bare-metal). Behind nginx
   # (the default prod deployment) keep false — TLS terminates at the proxy.
   tls: false
@@ -30,14 +31,6 @@ storage:
   # Accepts Ki/Mi/Gi (binary) or k/m/g (decimal). Empty / "0" disables rotation
   # (not recommended in production).
   max_size: "50Gi"
-
-webhooks:
-  # How long a webhook delivery stays in the history (webhook_deliveries),
-  # in days. Every delivery stores its full payload — patient identifiers
-  # included — so the table grows with ingested ECGs × enabled webhooks.
-  # Omit the section to keep the 30-day default. 0 disables pruning entirely
-  # and keeps every delivery forever.
-  delivery_retention_days: 30
 
 export:
   # Number of background export workers (PDF / FDA aECG / DICOM generation).
