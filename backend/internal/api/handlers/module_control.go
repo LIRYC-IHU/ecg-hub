@@ -133,6 +133,14 @@ func StartFTPFromDB(
 		settings.PublicHost = os.Getenv("FTP_PUBLIC_HOST")
 	}
 
+	// Force enabled, like the DICOM path does: pressing Start IS the intent, and
+	// the stored flag is boot-time policy, not a veto on a manual start. Without
+	// this, a Start right after a Stop read back the enabled=false that Stop had
+	// persisted, ingestion.Server.Start() returned nil without listening, and the
+	// wrapper below still registered the module as running — the UI said Running
+	// while nothing was bound to the port.
+	settings.Enabled = true
+
 	server := ingestion.New(settings, queue)
 
 	// Re-wire the FTP file-received hook: a UI-triggered restart builds a fresh
