@@ -44,7 +44,7 @@ jobs:
         run: yarn build
 
   backend:
-    name: Backend (build + vet)
+    name: Backend (build + vet + test)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -61,8 +61,9 @@ jobs:
 
       - run: go vet ./...
 
-      # `go test ./...` is deliberately not run yet: three tests are red on
-      # main (TestPersister_Persist_Success, TestLoginHandler_OIDCProvider,
-      # TestDownloadECGHandler_XMLFDA_Success) and internal/db tests bind a
-      # fixed port. A required job that is red from day one gets ignored.
-      # Add the step once those are fixed.
+      - run: go test ./...
+
+      # `yarn lint` is still missing from the frontend job: 18 pre-existing
+      # eslint errors (mostly setState-in-effect) would make it red from day
+      # one, and a check that is always red is a check everyone learns to
+      # ignore. Add the step with the cleanup that fixes them.

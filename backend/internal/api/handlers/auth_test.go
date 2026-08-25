@@ -93,7 +93,12 @@ func TestLoginHandler_InvalidCredentials(t *testing.T) {
 	}
 }
 
-func TestLoginHandler_OIDCProvider(t *testing.T) {
+// A provider that cannot check a password — OIDC, where the browser flow lives
+// elsewhere — used to answer 400 UNSUPPORTED_PROVIDER. It now falls through to
+// the same 401 as a wrong password: the login endpoint must not tell an
+// anonymous caller which providers a deployment runs, and password spraying
+// should look identical whatever the backend.
+func TestLoginHandler_NonAuthenticatingProvider(t *testing.T) {
 	c, rec := newLoginContext(`{"username":"jdupont","password":"secret"}`)
 
 	// mockProvider does NOT implement auth.Authenticator → simulates OIDC
@@ -102,11 +107,14 @@ func TestLoginHandler_OIDCProvider(t *testing.T) {
 	if err := handler(c); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if rec.Code != http.StatusBadRequest {
-		t.Errorf("status: want 400, got %d", rec.Code)
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("status: want 401, got %d", rec.Code)
 	}
-	if !strings.Contains(rec.Body.String(), "UNSUPPORTED_PROVIDER") {
-		t.Errorf("body should contain UNSUPPORTED_PROVIDER, got: %s", rec.Body.String())
+	if !strings.Contains(rec.Body.String(), "UNAUTHENTICATED") {
+		t.Errorf("body should contain UNAUTHENTICATED, got: %s", rec.Body.String())
+	}
+	if strings.Contains(rec.Body.String(), "PROVIDER") {
+		t.Errorf("response must not name the provider, got: %s", rec.Body.String())
 	}
 }
 

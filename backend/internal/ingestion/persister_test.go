@@ -174,8 +174,10 @@ func TestPersister_Persist_Success(t *testing.T) {
 	if ecg.Vendor != "philips" {
 		t.Errorf("ECG.Vendor = %q, want %q", ecg.Vendor, "philips")
 	}
-	if ecg.FilePath != wantKey {
-		t.Errorf("ECG.FilePath = %q, want %q", ecg.FilePath, wantKey)
+	// The row stores the path the volume resolved, not the relative key: readers
+	// (download, waveform, integrity check) open it directly.
+	if wantPath := vol.GetPath(wantKey); ecg.FilePath != wantPath {
+		t.Errorf("ECG.FilePath = %q, want %q", ecg.FilePath, wantPath)
 	}
 	if ecg.OriginalFilename != "ecg.xml" {
 		t.Errorf("ECG.OriginalFilename = %q, want %q", ecg.OriginalFilename, "ecg.xml")

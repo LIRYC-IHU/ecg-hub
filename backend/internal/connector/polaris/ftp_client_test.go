@@ -18,8 +18,8 @@ func TestParsePASV_Success(t *testing.T) {
 		wantPort int
 	}{
 		{
-			resp:     "227 Entering Passive Mode (10,33,35,69,230,105)",
-			wantHost: "10.33.35.69",
+			resp:     "227 Entering Passive Mode (198,51,100,69,230,105)",
+			wantHost: "198.51.100.69",
 			wantPort: 230*256 + 105, // 58985
 		},
 		{
