@@ -546,8 +546,10 @@
       "unidentified": "À assigner",
       "quarantined": "Erreur",
       "duplicate": "Doublon",
-      "rejected": "Rejeté"
-    }
+      "rejected": "Rejeté",
+      "accepted": "Envoyé"
+    },
+    "noLiveUpdates": "Fichiers envoyés au traitement, mais le suivi en direct est indisponible — ouvrez Patients ou Quarantaine pour voir le résultat."
   },
   "nav": {
     "patients": "Patients",

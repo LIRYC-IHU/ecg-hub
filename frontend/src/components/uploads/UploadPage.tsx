@@ -10,6 +10,7 @@ import {
   XCircle,
   Copy,
   Loader2,
+  Send,
   UserPlus,
   RotateCcw,
 } from "lucide-react";
@@ -25,7 +26,10 @@ type RowStatus =
   | "unidentified"
   | "quarantined"
   | "duplicate"
-  | "rejected";
+  | "rejected"
+  // Handed to the pipeline, outcome unknown: the live stream was unavailable,
+  // so no terminal event can reach this page.
+  | "accepted";
 
 interface UploadRow {
   key: string;
@@ -61,6 +65,10 @@ function statusFromEvent(type: IngestionEvent["type"]): RowStatus {
 function StatusBadge({ status }: { status: RowStatus }) {
   const { t } = useTranslation();
   const map: Record<RowStatus, { cls: string; icon: React.ReactNode }> = {
+    accepted: {
+      cls: "text-muted-foreground bg-muted/50",
+      icon: <Send className="w-3.5 h-3.5" />,
+    },
     queued: {
       cls: "text-muted-foreground bg-muted/50",
       icon: <Loader2 className="w-3.5 h-3.5 animate-spin" />,
@@ -194,10 +202,14 @@ export function UploadPage() {
     }));
 
     // Open the live stream first (best-effort — proceed even if it fails).
+    let liveUpdates = true;
     try {
       await openEventStream();
     } catch {
-      /* no live updates; rows may stay "processing" until refresh */
+      // No stream: nothing will ever resolve these rows, so say so instead of
+      // spinning forever. Ingestion itself is unaffected — the files are
+      // processed server-side either way.
+      liveUpdates = false;
     }
 
     setRows(initial);
@@ -210,11 +222,17 @@ export function UploadPage() {
       setRows((prev) =>
         prev.map((r, i) => {
           const sr: UploadFileResult | undefined = res.files[i];
-          return sr && sr.status === "rejected"
-            ? { ...r, status: "rejected", reason: sr.error }
-            : r;
+          if (sr && sr.status === "rejected") {
+            return { ...r, status: "rejected", reason: sr.error };
+          }
+          // Without the stream the row has no terminal state to wait for.
+          return liveUpdates ? r : { ...r, status: "accepted" };
         }),
       );
+      if (!liveUpdates) {
+        notify("warn", t("uploads.noLiveUpdates"));
+        void queryClient.invalidateQueries({ queryKey: ["patients"] });
+      }
     } catch {
       notify("error", t("uploads.uploadError"));
       abortRef.current?.abort();
