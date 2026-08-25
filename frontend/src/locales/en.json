@@ -545,8 +545,10 @@
       "unidentified": "To assign",
       "quarantined": "Error",
       "duplicate": "Duplicate",
-      "rejected": "Rejected"
-    }
+      "rejected": "Rejected",
+      "accepted": "Sent"
+    },
+    "noLiveUpdates": "Files were sent for processing, but live status is unavailable — open Patients or Quarantine to see the outcome."
   },
   "nav": {
     "patients": "Patients",

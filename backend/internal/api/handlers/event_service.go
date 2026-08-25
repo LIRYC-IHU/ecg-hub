@@ -41,6 +41,15 @@ func eventToProto(e events.Event) *apiv1.Event {
 // intermediary proxies from idling the long-lived response out between real
 // events; the frontend ignores it.
 func (h *EventServiceHandler) Subscribe(ctx context.Context, _ *apiv1.SubscribeRequest, stream *connect.ServerStream[apiv1.Event]) error {
+	// Tell every intermediary not to buffer this response. A proxy that holds
+	// the body until the handler returns turns a live stream into a request that
+	// never answers: the upload page waits 5s for the first frame, gives up, and
+	// its rows stay on "processing" even though ingestion succeeded.
+	//   X-Accel-Buffering — nginx (and ingress controllers built on it)
+	//   no-transform      — CDNs, which may otherwise buffer to transform
+	stream.ResponseHeader().Set("X-Accel-Buffering", "no")
+	stream.ResponseHeader().Set("Cache-Control", "no-cache, no-store, no-transform")
+
 	sub, unsubscribe := h.Hub.Subscribe()
 	defer unsubscribe()
 
