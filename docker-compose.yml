@@ -98,6 +98,11 @@ services:
       # mounted file. Unset here → whatever config.yaml says.
       METRICS_ENABLED: ${METRICS_ENABLED:-false}
       METRICS_PORT: ${METRICS_PORT:-9091}
+      # ─── Webhooks ────────────────────────────────────────────────────────
+      # Delivery-history retention in days. 0 keeps every delivery forever;
+      # unset means 30. Each row holds the full payload, patient identifiers
+      # included, so this is a data-retention decision as much as a disk one.
+      WEBHOOKS_RETENTION_DAYS: ${WEBHOOKS_RETENTION_DAYS:-30}
     volumes:
       - ./config.yaml:/app/config.yaml:ro
       - ecg-storage:/data/ecg

@@ -24,6 +24,10 @@ import (
 func Load(cfgPath string) (*Config, error) {
 	v := viper.New()
 	v.SetConfigFile(cfgPath)
+	// The listen port is not a deployment knob: the Dockerfile exposes 4444,
+	// nginx proxies to it and compose binds it. config.yaml no longer carries
+	// it; a file that still does keeps working.
+	v.SetDefault("server.port", defaultServerPort)
 	// Metrics defaults: enabled on the dedicated scrape port. A config.yaml
 	// without a metrics section keeps the historical behaviour (server on :9091).
 	v.SetDefault("metrics.enabled", true)
@@ -53,7 +57,7 @@ func Load(cfgPath string) (*Config, error) {
 	// them: compose, Kubernetes and secret injectors (Infisical, Vault) all pass
 	// env vars, and config.yaml is a mounted file nobody wants to template per
 	// deployment. Env wins over the file when both are set.
-	applyMetricsEnv(&cfg)
+	applyEnvOverrides(&cfg)
 
 	// Parse storage.max_size as a Kubernetes resource quantity (e.g. "500Mi", "50Gi").
 	// Empty string is treated as 0 (rotation disabled).
@@ -68,14 +72,14 @@ func Load(cfgPath string) (*Config, error) {
 	return &cfg, nil
 }
 
-// applyMetricsEnv overrides the metrics section from METRICS_ENABLED and
-// METRICS_PORT when they are set.
+// applyEnvOverrides applies the environment variables that override config.yaml:
+// METRICS_ENABLED, METRICS_PORT and WEBHOOKS_RETENTION_DAYS.
 //
-// An unparsable value is ignored with a warning rather than fatal: metrics are
-// observability, and refusing to boot the ECG pipeline over a malformed scrape
-// port would trade a monitoring gap for an outage. validate() still rejects an
-// out-of-range or conflicting port, whichever source it came from.
-func applyMetricsEnv(cfg *Config) {
+// An unparsable value is ignored with a warning rather than fatal: none of these
+// is worth refusing to boot an ECG pipeline over — a monitoring gap or a default
+// retention beats an outage. validate() still rejects an out-of-range or
+// conflicting metrics port, whichever source it came from.
+func applyEnvOverrides(cfg *Config) {
 	if raw, ok := os.LookupEnv("METRICS_ENABLED"); ok {
 		if enabled, err := strconv.ParseBool(strings.TrimSpace(raw)); err == nil {
 			cfg.Metrics.Enabled = enabled
@@ -90,6 +94,13 @@ func applyMetricsEnv(cfg *Config) {
 			slog.Warn("config: ignoring METRICS_PORT — not a number", "value", raw)
 		}
 	}
+	if raw, ok := os.LookupEnv("WEBHOOKS_RETENTION_DAYS"); ok {
+		if days, err := strconv.Atoi(strings.TrimSpace(raw)); err == nil {
+			cfg.Webhooks.DeliveryRetentionDays = days
+		} else {
+			slog.Warn("config: ignoring WEBHOOKS_RETENTION_DAYS — not a number", "value", raw)
+		}
+	}
 }
 
 // validate checks that all required fields are present and valid.
@@ -97,8 +108,8 @@ func applyMetricsEnv(cfg *Config) {
 func validate(cfg *Config) error {
 	var errs []string
 
-	if cfg.Server.Port == 0 {
-		errs = append(errs, "server.port is required")
+	if cfg.Server.Port < 1 || cfg.Server.Port > 65535 {
+		errs = append(errs, "server.port must be between 1 and 65535")
 	}
 
 	if cfg.DatabaseURL == "" {

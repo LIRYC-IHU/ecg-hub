@@ -29,6 +29,7 @@ services:
       # config.yaml, so the scrape endpoint can move without editing the file.
       METRICS_ENABLED: ${METRICS_ENABLED:-true}
       METRICS_PORT: ${METRICS_PORT:-9091}
+      WEBHOOKS_RETENTION_DAYS: ${WEBHOOKS_RETENTION_DAYS:-30}
     volumes:
       - ./config.yaml:/app/config.yaml:ro
       # IT: replace named volumes below with bind mounts to mount external storage, e.g.:

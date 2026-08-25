@@ -109,7 +109,7 @@ Three layers, by design:
    `APP_ENV=development`.
 2. **`config.yaml` — infrastructure only.** Copy from `config.example.yaml`.
    ```yaml
-   server: { port: 4444, tls: false } # TLS here only for bare-metal; behind nginx keep false
+   server: { tls: false } # TLS here only for bare-metal; behind nginx keep false
    database: { max_open_conns: 10, max_idle_conns: 5 }
    storage:
      {
@@ -120,12 +120,13 @@ Three layers, by design:
      }
    export: { workers: 2, tmp_ttl: 2h }
    metrics: { enabled: true, port: 9091 } # dedicated Prometheus scrape port
-   webhooks: { delivery_retention_days: 30 } # 0 keeps every delivery forever
    ```
 
-   `METRICS_ENABLED` and `METRICS_PORT` override the `metrics:` section from the
-   environment, so a container can move or disable the scrape endpoint without
-   templating this file.
+   The listen port is fixed at 4444 (Dockerfile, nginx and compose all assume
+   it), and three knobs come from the environment instead of this file:
+   `METRICS_ENABLED`, `METRICS_PORT` and `WEBHOOKS_RETENTION_DAYS` — a container
+   can move the scrape endpoint or change delivery retention without templating
+   a mounted file.
 3. **Database (via the admin UI)** — everything else: auth providers, modules,
    FTP/DICOM/HL7, connectors, webhooks. Hot-reloaded, no restart needed.
 
