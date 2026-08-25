@@ -1,7 +1,11 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Copy, Check, Search } from "lucide-react";
-import { API_SECTIONS, type ApiEndpoint, type HttpMethod } from "../../lib/apiDocs";
+import {
+  API_SECTIONS,
+  type ApiEndpoint,
+  type HttpMethod,
+} from "../../lib/apiDocs";
 
 /**
  * REST API reference for machine clients — the page that replaced the Swagger UI.
@@ -38,7 +42,11 @@ function CodeBlock({ code, label }: { code: string; label?: string }) {
         className="absolute top-2 right-2 p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-muted/60"
         aria-label="copy"
       >
-        {copied ? <Check className="w-3.5 h-3.5 text-success" /> : <Copy className="w-3.5 h-3.5" />}
+        {copied ? (
+          <Check className="w-3.5 h-3.5 text-success" />
+        ) : (
+          <Copy className="w-3.5 h-3.5" />
+        )}
       </button>
       <pre className="overflow-x-auto px-3 py-2.5 text-[11px] leading-relaxed font-mono text-foreground/90">
         {code}
@@ -47,28 +55,49 @@ function CodeBlock({ code, label }: { code: string; label?: string }) {
   );
 }
 
-function EndpointCard({ endpoint, origin }: { endpoint: ApiEndpoint; origin: string }) {
+function EndpointCard({
+  endpoint,
+  origin,
+}: {
+  endpoint: ApiEndpoint;
+  origin: string;
+}) {
   const { t } = useTranslation();
   const sample = `curl -H "X-API-Key: $ECG_HUB_KEY" \\\n  "${origin}${endpoint.path.replace(/\{(\w+)\}/g, "<$1>")}"`;
   return (
-    <section id={endpoint.id} className="scroll-mt-6 rounded-xl border border-border bg-card p-5">
+    <section
+      id={endpoint.id}
+      className="scroll-mt-6 rounded-xl border border-border bg-card p-5"
+    >
       <div className="flex flex-wrap items-center gap-2">
         <span
           className={`px-2 py-0.5 rounded text-[11px] font-bold ring-1 ${methodColors[endpoint.method]}`}
         >
           {endpoint.method}
         </span>
-        <code className="text-sm font-mono text-foreground">{endpoint.path}</code>
+        <code className="text-sm font-mono text-foreground">
+          {endpoint.path}
+        </code>
         {endpoint.permission && (
-          <span className="ml-auto text-[10px] font-mono px-2 py-0.5 rounded bg-muted text-muted-foreground">
-            {endpoint.permission}
+          <span
+            className="ml-auto inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-muted text-muted-foreground"
+            title={t("apiDocs.permissionHint")}
+          >
+            {t("apiDocs.permission")}
+            <code className="font-mono text-foreground/90">
+              {endpoint.permission}
+            </code>
           </span>
         )}
       </div>
 
-      <h3 className="mt-3 text-sm font-semibold text-foreground">{endpoint.summary}</h3>
+      <h3 className="mt-3 text-sm font-semibold text-foreground">
+        {endpoint.summary}
+      </h3>
       {endpoint.description && (
-        <p className="mt-1 text-xs text-muted-foreground leading-relaxed">{endpoint.description}</p>
+        <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
+          {endpoint.description}
+        </p>
       )}
 
       {endpoint.params && endpoint.params.length > 0 && (
@@ -76,10 +105,18 @@ function EndpointCard({ endpoint, origin }: { endpoint: ApiEndpoint; origin: str
           <table className="w-full text-xs">
             <thead>
               <tr className="text-left text-[10px] uppercase tracking-wide text-muted-foreground">
-                <th className="pb-1.5 pr-3 font-semibold">{t("apiDocs.paramName")}</th>
-                <th className="pb-1.5 pr-3 font-semibold">{t("apiDocs.paramIn")}</th>
-                <th className="pb-1.5 pr-3 font-semibold">{t("apiDocs.paramType")}</th>
-                <th className="pb-1.5 font-semibold">{t("apiDocs.paramDesc")}</th>
+                <th className="pb-1.5 pr-3 font-semibold">
+                  {t("apiDocs.paramName")}
+                </th>
+                <th className="pb-1.5 pr-3 font-semibold">
+                  {t("apiDocs.paramIn")}
+                </th>
+                <th className="pb-1.5 pr-3 font-semibold">
+                  {t("apiDocs.paramType")}
+                </th>
+                <th className="pb-1.5 font-semibold">
+                  {t("apiDocs.paramDesc")}
+                </th>
               </tr>
             </thead>
             <tbody className="align-top">
@@ -90,8 +127,12 @@ function EndpointCard({ endpoint, origin }: { endpoint: ApiEndpoint; origin: str
                     {p.required && <span className="text-destructive"> *</span>}
                   </td>
                   <td className="py-1.5 pr-3 text-muted-foreground">{p.in}</td>
-                  <td className="py-1.5 pr-3 font-mono text-muted-foreground">{p.type}</td>
-                  <td className="py-1.5 text-muted-foreground">{p.description}</td>
+                  <td className="py-1.5 pr-3 font-mono text-muted-foreground">
+                    {p.type}
+                  </td>
+                  <td className="py-1.5 text-muted-foreground">
+                    {p.description}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -109,13 +150,17 @@ function EndpointCard({ endpoint, origin }: { endpoint: ApiEndpoint; origin: str
               <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                 {t("apiDocs.response")}
               </div>
-              <p className="mt-1 text-xs text-muted-foreground">{endpoint.responseNote}</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {endpoint.responseNote}
+              </p>
             </div>
           )
         )}
       </div>
       {endpoint.response && endpoint.responseNote && (
-        <p className="mt-2 text-[11px] text-muted-foreground">{endpoint.responseNote}</p>
+        <p className="mt-2 text-[11px] text-muted-foreground">
+          {endpoint.responseNote}
+        </p>
       )}
     </section>
   );
@@ -124,7 +169,10 @@ function EndpointCard({ endpoint, origin }: { endpoint: ApiEndpoint; origin: str
 export function ApiDocsPage() {
   const { t } = useTranslation();
   const [query, setQuery] = useState("");
-  const origin = typeof window === "undefined" ? "https://ecg-hub.example.org" : window.location.origin;
+  const origin =
+    typeof window === "undefined"
+      ? "https://ecg-hub.example.org"
+      : window.location.origin;
 
   const sections = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -190,10 +238,16 @@ curl -H "Authorization: Bearer ecghub_…" ${origin}/api/v1/ecgs`;
             className="w-full pl-8 pr-2 py-1.5 text-xs bg-background border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-ring/20"
           />
         </div>
-        <a href="#getting-started" className="block px-2 py-1 text-xs text-muted-foreground hover:text-foreground rounded hover:bg-muted/50">
+        <a
+          href="#getting-started"
+          className="block px-2 py-1 text-xs text-muted-foreground hover:text-foreground rounded hover:bg-muted/50"
+        >
           {t("apiDocs.gettingStarted")}
         </a>
-        <a href="#webhook-payload" className="block px-2 py-1 text-xs text-muted-foreground hover:text-foreground rounded hover:bg-muted/50">
+        <a
+          href="#webhook-payload"
+          className="block px-2 py-1 text-xs text-muted-foreground hover:text-foreground rounded hover:bg-muted/50"
+        >
           {t("apiDocs.payloadTitle")}
         </a>
         {sections.map((s) => (
@@ -207,7 +261,9 @@ curl -H "Authorization: Bearer ecghub_…" ${origin}/api/v1/ecgs`;
                 href={`#${e.id}`}
                 className="flex items-center gap-1.5 px-2 py-1 rounded hover:bg-muted/50 group"
               >
-                <span className={`text-[9px] font-bold w-10 shrink-0 ${methodColors[e.method].split(" ")[1]}`}>
+                <span
+                  className={`text-[9px] font-bold w-10 shrink-0 ${methodColors[e.method].split(" ")[1]}`}
+                >
                   {e.method}
                 </span>
                 <span className="text-[11px] text-muted-foreground group-hover:text-foreground truncate">
@@ -222,31 +278,61 @@ curl -H "Authorization: Bearer ecghub_…" ${origin}/api/v1/ecgs`;
       {/* Content */}
       <div className="flex-1 min-w-0 p-6 space-y-5 max-w-5xl">
         <header>
-          <h1 className="text-2xl font-bold text-foreground">{t("apiDocs.title")}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{t("apiDocs.subtitle")}</p>
+          <h1 className="text-2xl font-bold text-foreground">
+            {t("apiDocs.title")}
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {t("apiDocs.subtitle")}
+          </p>
         </header>
 
-        <section id="getting-started" className="scroll-mt-6 rounded-xl border border-border bg-card p-5 space-y-3">
-          <h2 className="text-sm font-semibold text-foreground">{t("apiDocs.gettingStarted")}</h2>
-          <p className="text-xs text-muted-foreground leading-relaxed">{t("apiDocs.authIntro")}</p>
+        <section
+          id="getting-started"
+          className="scroll-mt-6 rounded-xl border border-border bg-card p-5 space-y-3"
+        >
+          <h2 className="text-sm font-semibold text-foreground">
+            {t("apiDocs.gettingStarted")}
+          </h2>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            {t("apiDocs.authIntro")}
+          </p>
           <CodeBlock code={authSample} />
-          <p className="text-xs text-muted-foreground leading-relaxed">{t("apiDocs.permIntro")}</p>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            {t("apiDocs.permIntro")}
+          </p>
         </section>
 
-        <section id="webhook-payload" className="scroll-mt-6 rounded-xl border border-border bg-card p-5 space-y-3">
-          <h2 className="text-sm font-semibold text-foreground">{t("apiDocs.payloadTitle")}</h2>
-          <p className="text-xs text-muted-foreground leading-relaxed">{t("apiDocs.payloadIntro")}</p>
+        <section
+          id="webhook-payload"
+          className="scroll-mt-6 rounded-xl border border-border bg-card p-5 space-y-3"
+        >
+          <h2 className="text-sm font-semibold text-foreground">
+            {t("apiDocs.payloadTitle")}
+          </h2>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            {t("apiDocs.payloadIntro")}
+          </p>
           <CodeBlock label={t("apiDocs.delivery")} code={payloadSample} />
-          <p className="text-xs text-muted-foreground leading-relaxed">{t("apiDocs.signatureIntro")}</p>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            {t("apiDocs.signatureIntro")}
+          </p>
           <CodeBlock label="python" code={verifySample} />
-          <p className="text-xs text-muted-foreground leading-relaxed">{t("apiDocs.retryIntro")}</p>
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            {t("apiDocs.retryIntro")}
+          </p>
         </section>
 
         {sections.map((s) => (
           <div key={s.id} className="space-y-3">
             <div className="pt-2">
-              <h2 className="text-lg font-semibold text-foreground">{s.title}</h2>
-              {s.blurb && <p className="mt-1 text-xs text-muted-foreground leading-relaxed">{s.blurb}</p>}
+              <h2 className="text-lg font-semibold text-foreground">
+                {s.title}
+              </h2>
+              {s.blurb && (
+                <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
+                  {s.blurb}
+                </p>
+              )}
             </div>
             {s.endpoints.map((e) => (
               <EndpointCard key={e.id} endpoint={e} origin={origin} />
@@ -255,7 +341,9 @@ curl -H "Authorization: Bearer ecghub_…" ${origin}/api/v1/ecgs`;
         ))}
 
         {sections.length === 0 && (
-          <p className="text-sm text-muted-foreground">{t("apiDocs.noMatch")}</p>
+          <p className="text-sm text-muted-foreground">
+            {t("apiDocs.noMatch")}
+          </p>
         )}
       </div>
     </div>

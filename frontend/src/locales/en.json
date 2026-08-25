@@ -827,6 +827,8 @@
     "paramIn": "In",
     "paramType": "Type",
     "paramDesc": "Description",
-    "noMatch": "No endpoint matches this search."
+    "noMatch": "No endpoint matches this search.",
+    "permission": "Permission:",
+    "permissionHint": "The role of the account or API key making the call must carry this permission, otherwise the request answers 403."
   }
 }

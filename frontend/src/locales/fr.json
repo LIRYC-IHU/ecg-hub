@@ -828,6 +828,8 @@
     "paramIn": "Dans",
     "paramType": "Type",
     "paramDesc": "Description",
-    "noMatch": "Aucun endpoint ne correspond à cette recherche."
+    "noMatch": "Aucun endpoint ne correspond à cette recherche.",
+    "permission": "Permission :",
+    "permissionHint": "Le rôle du compte ou de la clé API qui appelle doit porter cette permission, sinon la requête répond 403."
   }
 }
