@@ -30,7 +30,6 @@ import (
 	"syscall"
 	"time"
 
-	_ "github.com/LIRYC-IHU/ecg-hub/docs"
 	"github.com/LIRYC-IHU/ecg-hub/internal/api"
 	apihandlers "github.com/LIRYC-IHU/ecg-hub/internal/api/handlers"
 	"github.com/LIRYC-IHU/ecg-hub/internal/auth"
@@ -149,8 +148,8 @@ func main() {
 	e.Use(middleware.Recover())
 
 	// Security headers (NFR-S1). CSP is intentionally left to nginx for HTML
-	// responses (the SPA) — the API serves JSON and Swagger needs inline assets,
-	// so a strict CSP here would break Swagger UI without protecting much.
+	// responses (the SPA); this server answers JSON, where a CSP protects
+	// little.
 	e.Use(middleware.SecureWithConfig(middleware.SecureConfig{
 		XFrameOptions:      "DENY",
 		ContentTypeNosniff: "nosniff",

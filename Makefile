@@ -3,7 +3,6 @@
 #
 #   make            → build everything (backend + frontend) locally
 #   make init       → create .env and config.yaml from the example files
-#   make swagger    → (re)generate the researcher OpenAPI docs (Research tag = API-key endpoints only)
 #   make docker     → build images and start the prod stack (detached)
 #   make dev        → start the local dev stack (air + vite hot-reload)
 #   make clean      → remove build artefacts and stop containers
@@ -18,9 +17,6 @@ BIN           := $(BACKEND_DIR)/ecg-hub
 CMD           := ./cmd/ecg-hub
 # Research = the curated API-key surface for external researchers (webhook → pull).
 # Only handlers annotated with this tag (all carry @Security ApiKeyAuth) are documented.
-SWAGGER_TAGS  := Research
-SWAGGER_OUT   := docs
-SWAG          := $(shell go env GOPATH)/bin/swag
 
 COMPOSE       := docker compose
 COMPOSE_DEV   := docker compose -f docker-compose.dev.yml
@@ -34,7 +30,7 @@ define log
 endef
 
 .DEFAULT_GOAL := all
-.PHONY: all help init build build-backend build-frontend swagger \
+.PHONY: all help init build build-backend build-frontend \
         docker up down dev logs clean fclean re
 
 # ── Build ────────────────────────────────────────────────────────────────────
@@ -56,15 +52,6 @@ $(FRONTEND_DIR)/node_modules: $(FRONTEND_DIR)/package.json
 	$(call log,Installing frontend dependencies)
 	@cd $(FRONTEND_DIR) && yarn install --frozen-lockfile
 	@touch $@
-
-# ── Swagger ──────────────────────────────────────────────────────────────────
-swagger: ## (Re)generate the researcher OpenAPI docs (Research tag = API-key endpoints only)
-	$(call log,Generating swagger ($(SWAGGER_TAGS)))
-	@command -v $(SWAG) >/dev/null 2>&1 || { \
-		printf "swag not found — installing…\n"; \
-		go install github.com/swaggo/swag/cmd/swag@latest; }
-	@cd $(BACKEND_DIR) && $(SWAG) init -g $(CMD)/main.go -o $(SWAGGER_OUT) --tags "$(SWAGGER_TAGS)"
-	@printf "$(GREEN)✓ swagger generated → $(BACKEND_DIR)/$(SWAGGER_OUT)$(RESET)\n"
 
 # ── Init (.env + config) ─────────────────────────────────────────────────────
 init: .env config.yaml ## Create .env and config.yaml from the example files

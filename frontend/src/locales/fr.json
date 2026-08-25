@@ -416,8 +416,8 @@
         "tag": "Tags",
         "quarantine": "Quarantaine",
         "admin": "Administration",
-        "swagger": "API",
-        "webhook": "Webhooks"
+        "webhook": "Webhooks",
+        "api": "API"
       },
       "perm": {
         "patient_read": "Consulter les patients",
@@ -442,7 +442,6 @@
         "admin_audit": "Voir les audits",
         "admin_system": "État système & contrôle des modules",
         "admin_auth_config": "Configurer les fournisseurs d'auth",
-        "swagger_read": "Accéder à la documentation API",
         "webhook_manage": "Configurer ses webhooks",
         "apikey_manage": "Créer et gérer ses clés API"
       }
@@ -569,7 +568,6 @@
   "apiKeys": {
     "title": "Clés API",
     "subtitle": "Générez des clés personnelles pour accéder à l'API (ex. Swagger).",
-    "swaggerLink": "Doc API",
     "nameLabel": "Nom de la clé",
     "namePlaceholder": "ex. Mon intégration",
     "generate": "Générer la clé",
@@ -587,7 +585,8 @@
     "dismiss": "Fermer",
     "createdOn": "Créée le",
     "lastUsed": "Utilisée le {{date}}",
-    "neverUsed": "Jamais utilisée"
+    "neverUsed": "Jamais utilisée",
+    "docsLink": "Doc API"
   },
   "modules": {
     "title": "Contrôle des modules",
@@ -810,5 +809,25 @@
     "empty": "Aucun tag",
     "newPlaceholder": "Nouveau tag…",
     "add": "Ajouter"
+  },
+  "apiDocs": {
+    "title": "API REST",
+    "subtitle": "Tout ce qu'un receveur doit savoir : s'authentifier avec une clé API, lire le payload webhook, rappeler l'API pour les données.",
+    "searchPlaceholder": "Rechercher un endpoint…",
+    "gettingStarted": "Démarrer",
+    "authIntro": "Les clients machine s'authentifient avec une clé API générée depuis la page Clés API. Envoyez-la dans X-API-Key ou comme jeton Bearer — les deux sont acceptés sur tous les endpoints ci-dessous. Une clé hérite des permissions de l'utilisateur qui l'a créée et reste valable jusqu'à sa suppression.",
+    "permIntro": "Chaque endpoint indique la permission requise. Un appel avec une clé dont le rôle ne l'a pas répond 403 FORBIDDEN ; une clé inconnue ou supprimée répond 401.",
+    "payloadTitle": "Payload des webhooks",
+    "payloadIntro": "ECG Hub envoie un POST JSON à votre endpoint à chaque événement souscrit. Le payload identifie la ressource et fournit les liens de rappel vers l'API — le receveur n'a jamais à construire une URL lui-même.",
+    "delivery": "livraison",
+    "signatureIntro": "Si le webhook a un secret de signature, le corps est signé en HMAC-SHA256 et envoyé dans X-ECG-Hub-Signature: sha256=<hex>. Vérifiez-le sur le corps brut, avant tout parsing JSON — re-sérialiser change les octets et casse la comparaison.",
+    "retryIntro": "La livraison est best-effort : 3 tentatives (immédiate, +5 s, +25 s), puis le résultat est consigné dans l'historique où il peut être rejoué. Tout 2xx vaut livraison ; les redirections ne sont pas suivies. Répondez vite et traitez en asynchrone — l'émetteur coupe à 10 secondes.",
+    "request": "requête",
+    "response": "réponse",
+    "paramName": "Nom",
+    "paramIn": "Dans",
+    "paramType": "Type",
+    "paramDesc": "Description",
+    "noMatch": "Aucun endpoint ne correspond à cette recherche."
   }
 }

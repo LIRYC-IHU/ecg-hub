@@ -91,13 +91,11 @@ export function ApiKeysPage() {
           </p>
         </div>
         <a
-          href="/swagger/index.html"
-          target="_blank"
-          rel="noopener noreferrer"
+          href="/api-docs"
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium border border-border text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors shrink-0"
         >
           <ExternalLink className="w-3.5 h-3.5" />
-          {t("apiKeys.swaggerLink")}
+          {t("apiKeys.docsLink")}
         </a>
       </div>
 
