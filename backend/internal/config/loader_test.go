@@ -138,3 +138,49 @@ func TestLoad_WebhookDeliveryRetention(t *testing.T) {
 		}
 	}
 }
+
+// Metrics are the one section a container can set without templating
+// config.yaml, so the env overrides have to win — and a malformed value must
+// not stop the server from booting.
+func TestLoad_MetricsFromEnv(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://test:test@localhost/testdb")
+	t.Setenv("JWT_SECRET", "supersecret")
+
+	const yamlWithMetrics = validYAML + "metrics:\n  enabled: false\n  port: 9091\n"
+
+	tests := []struct {
+		name        string
+		enabled     string
+		port        string
+		wantEnabled bool
+		wantPort    int
+	}{
+		{"file wins when the env is unset", "", "", false, 9091},
+		{"METRICS_ENABLED overrides the file", "true", "", true, 9091},
+		{"METRICS_PORT overrides the file", "", "9200", false, 9200},
+		{"both override the file", "1", "9300", true, 9300},
+		{"a malformed value is ignored", "yes-please", "not-a-port", false, 9091},
+	}
+
+	for _, tt := range tests {
+		t.Setenv("METRICS_ENABLED", tt.enabled)
+		t.Setenv("METRICS_PORT", tt.port)
+		if tt.enabled == "" {
+			os.Unsetenv("METRICS_ENABLED")
+		}
+		if tt.port == "" {
+			os.Unsetenv("METRICS_PORT")
+		}
+
+		cfg, err := Load(writeConfig(t, yamlWithMetrics))
+		if err != nil {
+			t.Fatalf("%s: load: %v", tt.name, err)
+		}
+		if cfg.Metrics.Enabled != tt.wantEnabled {
+			t.Errorf("%s: enabled = %v, want %v", tt.name, cfg.Metrics.Enabled, tt.wantEnabled)
+		}
+		if cfg.Metrics.Port != tt.wantPort {
+			t.Errorf("%s: port = %d, want %d", tt.name, cfg.Metrics.Port, tt.wantPort)
+		}
+	}
+}

@@ -122,6 +122,10 @@ Three layers, by design:
    metrics: { enabled: true, port: 9091 } # dedicated Prometheus scrape port
    webhooks: { delivery_retention_days: 30 } # 0 keeps every delivery forever
    ```
+
+   `METRICS_ENABLED` and `METRICS_PORT` override the `metrics:` section from the
+   environment, so a container can move or disable the scrape endpoint without
+   templating this file.
 3. **Database (via the admin UI)** — everything else: auth providers, modules,
    FTP/DICOM/HL7, connectors, webhooks. Hot-reloaded, no restart needed.
 

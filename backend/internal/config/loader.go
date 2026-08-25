@@ -2,7 +2,9 @@ package config
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/viper"
@@ -47,6 +49,12 @@ func Load(cfgPath string) (*Config, error) {
 	cfg.DatabaseURL = os.Getenv("DATABASE_URL")
 	cfg.JWTSecret = os.Getenv("JWT_SECRET")
 
+	// Metrics can also come from the environment, which is how a container gets
+	// them: compose, Kubernetes and secret injectors (Infisical, Vault) all pass
+	// env vars, and config.yaml is a mounted file nobody wants to template per
+	// deployment. Env wins over the file when both are set.
+	applyMetricsEnv(&cfg)
+
 	// Parse storage.max_size as a Kubernetes resource quantity (e.g. "500Mi", "50Gi").
 	// Empty string is treated as 0 (rotation disabled).
 	if err := cfg.Storage.SetMaxSize(cfg.Storage.MaxSize); err != nil {
@@ -58,6 +66,30 @@ func Load(cfgPath string) (*Config, error) {
 	}
 
 	return &cfg, nil
+}
+
+// applyMetricsEnv overrides the metrics section from METRICS_ENABLED and
+// METRICS_PORT when they are set.
+//
+// An unparsable value is ignored with a warning rather than fatal: metrics are
+// observability, and refusing to boot the ECG pipeline over a malformed scrape
+// port would trade a monitoring gap for an outage. validate() still rejects an
+// out-of-range or conflicting port, whichever source it came from.
+func applyMetricsEnv(cfg *Config) {
+	if raw, ok := os.LookupEnv("METRICS_ENABLED"); ok {
+		if enabled, err := strconv.ParseBool(strings.TrimSpace(raw)); err == nil {
+			cfg.Metrics.Enabled = enabled
+		} else {
+			slog.Warn("config: ignoring METRICS_ENABLED — not a boolean", "value", raw)
+		}
+	}
+	if raw, ok := os.LookupEnv("METRICS_PORT"); ok {
+		if port, err := strconv.Atoi(strings.TrimSpace(raw)); err == nil {
+			cfg.Metrics.Port = port
+		} else {
+			slog.Warn("config: ignoring METRICS_PORT — not a number", "value", raw)
+		}
+	}
 }
 
 // validate checks that all required fields are present and valid.

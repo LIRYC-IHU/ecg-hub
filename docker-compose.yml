@@ -6,27 +6,71 @@
 # client IPs and FTP passive mode "just works" (PublicHost becomes trivial).
 #
 # Requirements:
-#   - Linux host (host networking is a no-op on Docker Desktop Mac/Windows).
+#   - Linux host. `network_mode: host` is a no-op on Docker Desktop (macOS,
+#     Windows): the containers get their own network namespace and nothing is
+#     reachable. On those machines, see "NON-LINUX HOSTS" below.
 #   - Nothing else on the host may already use these ports (80, 443, 4444, the
 #     FTP/DICOM/ECTP/metrics ports, and 5432 if Postgres runs on the host).
-#   - DATABASE_URL in .env points at the DB as reachable from the host, e.g.
+#   - DATABASE_URL points at the DB as reachable from the host, e.g.
 #     postgres://ecghub_user:...@127.0.0.1:5432/ecghub?sslmode=disable
 #
-# For bridge networking instead, use the published-ports variant (see git
-# history / nginx.conf) — but you then must publish every port and configure
-# the FTP passive range + PublicHost manually.
+# ─── ENVIRONMENT ─────────────────────────────────────────────────────────────
+# Every variable the server reads is listed explicitly under `environment:`,
+# not pulled in with `env_file:`. That is deliberate: the list documents the
+# contract, and a secret injector (Infisical, Vault, SOPS, Kubernetes secrets)
+# can provide the values without a .env file existing at all —
+#
+#   infisical run --env=prod -- docker compose up -d
+#
+# With plain compose the same names are read from .env in this directory.
+# A variable left unset resolves to an empty string; the server fails fast on
+# the ones that must not be empty (JWT_SECRET, AUTH_ENCRYPTION_KEY).
 
 services:
+  # ─── Bundled PostgreSQL (optional) ─────────────────────────────────────────
+  # Comment this service out — and the `depends_on` below, and the
+  # `postgres-data` volume — when the site provides its own database (a managed
+  # instance, a DBA-run cluster, another host). Then point DATABASE_URL at it.
+  #
+  # Kept in host networking for consistency with the rest of the stack: the
+  # server listens on 127.0.0.1:5432 of the host, which is exactly what the
+  # DATABASE_URL above expects. It is NOT exposed to the network by Docker —
+  # bind the host's firewall accordingly if the host has a public interface.
+  db:
+    image: postgres:16-alpine
+    network_mode: host
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      POSTGRES_DB: ${DB_NAME:-ecghub}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      # Host networking: postgres binds the host's :5432. Change it here and in
+      # DATABASE_URL if that port is already taken on the machine.
+      PGPORT: ${DB_PORT:-5432}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME:-ecghub}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    env_file: .env
     network_mode: host
     restart: unless-stopped
-    # Hardening (NFR-S1): drop all Linux capabilities, forbid privilege escalation.
+    # Remove this block together with the `db` service when using an external
+    # database — otherwise compose waits for a service that no longer exists.
+    depends_on:
+      db:
+        condition: service_healthy
     security_opt:
       - no-new-privileges:true
+    # Hardening (NFR-S1): drop all Linux capabilities, forbid privilege escalation.
     cap_drop:
       - ALL
     # The default FTP/DICOM/ECTP ports are all > 1024, so no capability is needed.
@@ -34,11 +78,49 @@ services:
     # capability and set the FTP port to 21 in Admin > Modules > FTP.
     # cap_add:
     #   - NET_BIND_SERVICE
+    environment:
+      # ─── Required ────────────────────────────────────────────────────────
+      DATABASE_URL: ${DATABASE_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      AUTH_ENCRYPTION_KEY: ${AUTH_ENCRYPTION_KEY}
+      # Anything other than development/dev/test/local means production, which
+      # is where the weak-secret checks are enforced. Leave it unset in prod.
+      APP_ENV: ${APP_ENV}
+      # ─── Optional ────────────────────────────────────────────────────────
+      # Public origin (https://ecg.chu.example). Used for CORS and for the
+      # absolute callback links inside webhook payloads.
+      HOST_URL: ${HOST_URL}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      CONFIG_PATH: ${CONFIG_PATH:-/app/config.yaml}
+      # ─── Metrics ─────────────────────────────────────────────────────────
+      # Both override the `metrics:` section of config.yaml, so a deployment
+      # can turn the Prometheus endpoint on or move it without templating the
+      # mounted file. Unset here → whatever config.yaml says.
+      METRICS_ENABLED: ${METRICS_ENABLED:-false}
+      METRICS_PORT: ${METRICS_PORT:-9091}
     volumes:
       - ./config.yaml:/app/config.yaml:ro
       - ecg-storage:/data/ecg
       - ecg-quarantine:/data/ecg-quarantine
-    # No `ports:` / `expose:` — host networking binds listeners on the host directly.
+    # ─── NON-LINUX HOSTS ────────────────────────────────────────────────────
+    # Under `network_mode: host` Docker ignores `ports:` — publishing them here
+    # would do nothing on Linux and hide the fact that the mode is what binds
+    # the listeners. On Docker Desktop (macOS, Windows) host mode does not work
+    # at all: remove `network_mode: host` from this service AND from frontend,
+    # then uncomment the block below and switch nginx to the bridge config
+    # (nginx.conf, upstream backend:4444, instead of nginx.host.conf).
+    #
+    # FTP passive mode then needs the advertised host set to the machine's LAN
+    # address in Admin > Modules > FTP, and the passive range must match.
+    #
+    # ports:
+    #   - "4444:4444"                       # HTTP API (nginx upstream)
+    #   - "${FTP_PORT:-2121}:2121"          # FTP control
+    #   - "${DICOM_PORT:-4242}:4242"        # DICOM C-STORE
+    #   - "30003:30003"                     # ECTP (Nihon Kohden)
+    #   - "30000-30002:30000-30002"         # FTP passive range, split around ECTP
+    #   - "30004-30010:30004-30010"         # FTP passive range
+    #   - "${METRICS_PORT:-9091}:9091"      # Prometheus scrape
 
   frontend:
     build:
@@ -57,16 +139,21 @@ services:
     # these would fail, so grant back exactly the capabilities it needs at boot.
     cap_add:
       - NET_BIND_SERVICE # bind the privileged port 80
-      - CHOWN            # chown cache/temp dirs to the nginx user
-      - SETUID           # drop worker processes to uid nginx
-      - SETGID           # drop worker processes to gid nginx
-      - DAC_OVERRIDE     # write pid/cache regardless of dir perms
+      - CHOWN # chown cache/temp dirs to the nginx user
+      - SETUID # drop worker processes to uid nginx
+      - SETGID # drop worker processes to gid nginx
+      - DAC_OVERRIDE # write pid/cache regardless of dir perms
     volumes:
       # Host-mode nginx (upstream = 127.0.0.1:4444, no Docker DNS resolver).
       # TLS is terminated by an external Traefik that forwards HTTP to :80, so
       # no certificates are mounted here.
       - ./nginx.host.conf:/etc/nginx/conf.d/default.conf:ro
+    # On a non-Linux host, drop `network_mode: host` above and publish instead:
+    # ports:
+    #   - "80:80"
 
 volumes:
   ecg-storage:
   ecg-quarantine:
+  # Only needed with the bundled `db` service — remove it with the service.
+  postgres-data:
