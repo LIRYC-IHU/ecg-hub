@@ -62,6 +62,21 @@ storage:
     # How often the spool is drained. Default 10.
     upload_interval_seconds: 10
 
+# TLS certificate presented by the device-facing servers (FTPS, DICOM TLS).
+#
+# One pair for the installation, read from a mounted directory — there is no
+# certificate field in the admin UI on purpose. Whoever already manages
+# certificates (certbot, an internal PKI, a CHU wildcard) keeps managing them:
+# the files are rewritten in place and the module is restarted, and nothing in
+# the database ever holds a path.
+#
+# The defaults are certbot's filenames, so mounting
+# /etc/letsencrypt/live/<host> at /certs needs no configuration at all.
+# Overridable with TLS_CERT_FILE / TLS_KEY_FILE.
+certs:
+  cert_file: /certs/fullchain.pem
+  key_file: /certs/privkey.pem
+
 export:
   # Number of background export workers (PDF / FDA aECG / DICOM generation).
   workers: 2

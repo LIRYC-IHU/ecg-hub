@@ -118,6 +118,11 @@ func StartFTPFromDB(
 				settings.TLS = stored.TLS
 				settings.Username = stored.Username
 				settings.Password = stored.Password
+				// The certificate is installation-wide and comes from the
+				// mounted volume, never from the module record: IT renews the
+				// files upstream and nothing in the database has to change.
+				settings.CertFile = cfg.Certs.CertFile
+				settings.KeyFile = cfg.Certs.KeyFile
 			}
 		}
 	}
@@ -247,6 +252,9 @@ func StartDICOMFromDB(
 				settings.AETitle = stored.AETitle
 				settings.EchoEnabled = stored.EchoEnabled
 				settings.TLS = stored.TLS
+				// Same installation-wide pair as FTPS (see StartFTPFromDB).
+				settings.CertFile = cfg.Certs.CertFile
+				settings.KeyFile = cfg.Certs.KeyFile
 			}
 		}
 	}

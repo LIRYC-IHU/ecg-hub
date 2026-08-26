@@ -676,6 +676,10 @@
         "dicom": "DICOM C-STORE",
         "nihon-kohden": "Nihon Kohden DAT"
       }
+    },
+    "tls": {
+      "unavailable": "Aucun certificat TLS exploitable n'est monté",
+      "validUntil": "valide jusqu'au {{date}}"
     }
   },
   "auth": {

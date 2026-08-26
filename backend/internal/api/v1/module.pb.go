@@ -1789,6 +1789,128 @@ func (x *ListConnectorsResponse) GetConnectors() []*ConnectorStatus {
 	return nil
 }
 
+type GetTLSStatusRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetTLSStatusRequest) Reset() {
+	*x = GetTLSStatusRequest{}
+	mi := &file_v1_module_proto_msgTypes[33]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetTLSStatusRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetTLSStatusRequest) ProtoMessage() {}
+
+func (x *GetTLSStatusRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_module_proto_msgTypes[33]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetTLSStatusRequest.ProtoReflect.Descriptor instead.
+func (*GetTLSStatusRequest) Descriptor() ([]byte, []int) {
+	return file_v1_module_proto_rawDescGZIP(), []int{33}
+}
+
+type TLSStatus struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Available bool                   `protobuf:"varint,1,opt,name=available,proto3" json:"available,omitempty"`
+	CertPath  string                 `protobuf:"bytes,2,opt,name=cert_path,json=certPath,proto3" json:"cert_path,omitempty"`
+	KeyPath   string                 `protobuf:"bytes,3,opt,name=key_path,json=keyPath,proto3" json:"key_path,omitempty"`
+	// Set only when available.
+	Subject  string `protobuf:"bytes,4,opt,name=subject,proto3" json:"subject,omitempty"`
+	NotAfter string `protobuf:"bytes,5,opt,name=not_after,json=notAfter,proto3" json:"not_after,omitempty"` // RFC3339
+	// One sentence explaining why the pair cannot be served.
+	Error         string `protobuf:"bytes,6,opt,name=error,proto3" json:"error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TLSStatus) Reset() {
+	*x = TLSStatus{}
+	mi := &file_v1_module_proto_msgTypes[34]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TLSStatus) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TLSStatus) ProtoMessage() {}
+
+func (x *TLSStatus) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_module_proto_msgTypes[34]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TLSStatus.ProtoReflect.Descriptor instead.
+func (*TLSStatus) Descriptor() ([]byte, []int) {
+	return file_v1_module_proto_rawDescGZIP(), []int{34}
+}
+
+func (x *TLSStatus) GetAvailable() bool {
+	if x != nil {
+		return x.Available
+	}
+	return false
+}
+
+func (x *TLSStatus) GetCertPath() string {
+	if x != nil {
+		return x.CertPath
+	}
+	return ""
+}
+
+func (x *TLSStatus) GetKeyPath() string {
+	if x != nil {
+		return x.KeyPath
+	}
+	return ""
+}
+
+func (x *TLSStatus) GetSubject() string {
+	if x != nil {
+		return x.Subject
+	}
+	return ""
+}
+
+func (x *TLSStatus) GetNotAfter() string {
+	if x != nil {
+		return x.NotAfter
+	}
+	return ""
+}
+
+func (x *TLSStatus) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
 var File_v1_module_proto protoreflect.FileDescriptor
 
 const file_v1_module_proto_rawDesc = "" +
@@ -1911,14 +2033,22 @@ const file_v1_module_proto_rawDesc = "" +
 	"\x16ListConnectorsResponse\x12<\n" +
 	"\n" +
 	"connectors\x18\x01 \x03(\v2\x1c.grpc.api.v1.ConnectorStatusR\n" +
-	"connectors2\xff\n" +
-	"\n" +
+	"connectors\"\x15\n" +
+	"\x13GetTLSStatusRequest\"\xae\x01\n" +
+	"\tTLSStatus\x12\x1c\n" +
+	"\tavailable\x18\x01 \x01(\bR\tavailable\x12\x1b\n" +
+	"\tcert_path\x18\x02 \x01(\tR\bcertPath\x12\x19\n" +
+	"\bkey_path\x18\x03 \x01(\tR\akeyPath\x12\x18\n" +
+	"\asubject\x18\x04 \x01(\tR\asubject\x12\x1b\n" +
+	"\tnot_after\x18\x05 \x01(\tR\bnotAfter\x12\x14\n" +
+	"\x05error\x18\x06 \x01(\tR\x05error2\xcb\v\n" +
 	"\rModuleService\x12R\n" +
 	"\vListModules\x12\x1f.grpc.api.v1.ListModulesRequest\x1a .grpc.api.v1.ListModulesResponse\"\x00\x12a\n" +
 	"\x10ListModuleStatus\x12$.grpc.api.v1.ListModuleStatusRequest\x1a%.grpc.api.v1.ListModuleStatusResponse\"\x00\x12T\n" +
 	"\vStartModule\x12\x1f.grpc.api.v1.StartModuleRequest\x1a\".grpc.api.v1.ModuleControlResponse\"\x00\x12R\n" +
 	"\n" +
 	"StopModule\x12\x1e.grpc.api.v1.StopModuleRequest\x1a\".grpc.api.v1.ModuleControlResponse\"\x00\x12J\n" +
+	"\fGetTLSStatus\x12 .grpc.api.v1.GetTLSStatusRequest\x1a\x16.grpc.api.v1.TLSStatus\"\x00\x12J\n" +
 	"\fGetFTPConfig\x12 .grpc.api.v1.GetFTPConfigRequest\x1a\x16.grpc.api.v1.FTPConfig\"\x00\x12[\n" +
 	"\rSaveFTPConfig\x12!.grpc.api.v1.SaveFTPConfigRequest\x1a%.grpc.api.v1.SaveModuleConfigResponse\"\x00\x12P\n" +
 	"\x0eGetDICOMConfig\x12\".grpc.api.v1.GetDICOMConfigRequest\x1a\x18.grpc.api.v1.DICOMConfig\"\x00\x12_\n" +
@@ -1944,7 +2074,7 @@ func file_v1_module_proto_rawDescGZIP() []byte {
 	return file_v1_module_proto_rawDescData
 }
 
-var file_v1_module_proto_msgTypes = make([]protoimpl.MessageInfo, 33)
+var file_v1_module_proto_msgTypes = make([]protoimpl.MessageInfo, 35)
 var file_v1_module_proto_goTypes = []any{
 	(*ExportFormat)(nil),                 // 0: grpc.api.v1.ExportFormat
 	(*ModuleInfo)(nil),                   // 1: grpc.api.v1.ModuleInfo
@@ -1979,6 +2109,8 @@ var file_v1_module_proto_goTypes = []any{
 	(*ConnectorStatus)(nil),              // 30: grpc.api.v1.ConnectorStatus
 	(*ListConnectorsRequest)(nil),        // 31: grpc.api.v1.ListConnectorsRequest
 	(*ListConnectorsResponse)(nil),       // 32: grpc.api.v1.ListConnectorsResponse
+	(*GetTLSStatusRequest)(nil),          // 33: grpc.api.v1.GetTLSStatusRequest
+	(*TLSStatus)(nil),                    // 34: grpc.api.v1.TLSStatus
 }
 var file_v1_module_proto_depIdxs = []int32{
 	0,  // 0: grpc.api.v1.ModuleInfo.formats:type_name -> grpc.api.v1.ExportFormat
@@ -1994,34 +2126,36 @@ var file_v1_module_proto_depIdxs = []int32{
 	5,  // 10: grpc.api.v1.ModuleService.ListModuleStatus:input_type -> grpc.api.v1.ListModuleStatusRequest
 	7,  // 11: grpc.api.v1.ModuleService.StartModule:input_type -> grpc.api.v1.StartModuleRequest
 	8,  // 12: grpc.api.v1.ModuleService.StopModule:input_type -> grpc.api.v1.StopModuleRequest
-	11, // 13: grpc.api.v1.ModuleService.GetFTPConfig:input_type -> grpc.api.v1.GetFTPConfigRequest
-	12, // 14: grpc.api.v1.ModuleService.SaveFTPConfig:input_type -> grpc.api.v1.SaveFTPConfigRequest
-	14, // 15: grpc.api.v1.ModuleService.GetDICOMConfig:input_type -> grpc.api.v1.GetDICOMConfigRequest
-	15, // 16: grpc.api.v1.ModuleService.SaveDICOMConfig:input_type -> grpc.api.v1.SaveDICOMConfigRequest
-	17, // 17: grpc.api.v1.ModuleService.GetModuleSettings:input_type -> grpc.api.v1.GetModuleSettingsRequest
-	19, // 18: grpc.api.v1.ModuleService.SaveModuleSettings:input_type -> grpc.api.v1.SaveModuleSettingsRequest
-	23, // 19: grpc.api.v1.ModuleService.ListConnectorConfigs:input_type -> grpc.api.v1.ListConnectorConfigsRequest
-	25, // 20: grpc.api.v1.ModuleService.SaveConnectorConfig:input_type -> grpc.api.v1.SaveConnectorConfigRequest
-	26, // 21: grpc.api.v1.ModuleService.DeleteConnector:input_type -> grpc.api.v1.DeleteConnectorRequest
-	28, // 22: grpc.api.v1.ModuleService.TestConnector:input_type -> grpc.api.v1.TestConnectorRequest
-	31, // 23: grpc.api.v1.ModuleService.ListConnectors:input_type -> grpc.api.v1.ListConnectorsRequest
-	3,  // 24: grpc.api.v1.ModuleService.ListModules:output_type -> grpc.api.v1.ListModulesResponse
-	6,  // 25: grpc.api.v1.ModuleService.ListModuleStatus:output_type -> grpc.api.v1.ListModuleStatusResponse
-	9,  // 26: grpc.api.v1.ModuleService.StartModule:output_type -> grpc.api.v1.ModuleControlResponse
-	9,  // 27: grpc.api.v1.ModuleService.StopModule:output_type -> grpc.api.v1.ModuleControlResponse
-	10, // 28: grpc.api.v1.ModuleService.GetFTPConfig:output_type -> grpc.api.v1.FTPConfig
-	16, // 29: grpc.api.v1.ModuleService.SaveFTPConfig:output_type -> grpc.api.v1.SaveModuleConfigResponse
-	13, // 30: grpc.api.v1.ModuleService.GetDICOMConfig:output_type -> grpc.api.v1.DICOMConfig
-	16, // 31: grpc.api.v1.ModuleService.SaveDICOMConfig:output_type -> grpc.api.v1.SaveModuleConfigResponse
-	18, // 32: grpc.api.v1.ModuleService.GetModuleSettings:output_type -> grpc.api.v1.ModuleSettings
-	20, // 33: grpc.api.v1.ModuleService.SaveModuleSettings:output_type -> grpc.api.v1.SaveModuleSettingsResponse
-	24, // 34: grpc.api.v1.ModuleService.ListConnectorConfigs:output_type -> grpc.api.v1.ListConnectorConfigsResponse
-	16, // 35: grpc.api.v1.ModuleService.SaveConnectorConfig:output_type -> grpc.api.v1.SaveModuleConfigResponse
-	27, // 36: grpc.api.v1.ModuleService.DeleteConnector:output_type -> grpc.api.v1.DeleteConnectorResponse
-	29, // 37: grpc.api.v1.ModuleService.TestConnector:output_type -> grpc.api.v1.TestConnectorResponse
-	32, // 38: grpc.api.v1.ModuleService.ListConnectors:output_type -> grpc.api.v1.ListConnectorsResponse
-	24, // [24:39] is the sub-list for method output_type
-	9,  // [9:24] is the sub-list for method input_type
+	33, // 13: grpc.api.v1.ModuleService.GetTLSStatus:input_type -> grpc.api.v1.GetTLSStatusRequest
+	11, // 14: grpc.api.v1.ModuleService.GetFTPConfig:input_type -> grpc.api.v1.GetFTPConfigRequest
+	12, // 15: grpc.api.v1.ModuleService.SaveFTPConfig:input_type -> grpc.api.v1.SaveFTPConfigRequest
+	14, // 16: grpc.api.v1.ModuleService.GetDICOMConfig:input_type -> grpc.api.v1.GetDICOMConfigRequest
+	15, // 17: grpc.api.v1.ModuleService.SaveDICOMConfig:input_type -> grpc.api.v1.SaveDICOMConfigRequest
+	17, // 18: grpc.api.v1.ModuleService.GetModuleSettings:input_type -> grpc.api.v1.GetModuleSettingsRequest
+	19, // 19: grpc.api.v1.ModuleService.SaveModuleSettings:input_type -> grpc.api.v1.SaveModuleSettingsRequest
+	23, // 20: grpc.api.v1.ModuleService.ListConnectorConfigs:input_type -> grpc.api.v1.ListConnectorConfigsRequest
+	25, // 21: grpc.api.v1.ModuleService.SaveConnectorConfig:input_type -> grpc.api.v1.SaveConnectorConfigRequest
+	26, // 22: grpc.api.v1.ModuleService.DeleteConnector:input_type -> grpc.api.v1.DeleteConnectorRequest
+	28, // 23: grpc.api.v1.ModuleService.TestConnector:input_type -> grpc.api.v1.TestConnectorRequest
+	31, // 24: grpc.api.v1.ModuleService.ListConnectors:input_type -> grpc.api.v1.ListConnectorsRequest
+	3,  // 25: grpc.api.v1.ModuleService.ListModules:output_type -> grpc.api.v1.ListModulesResponse
+	6,  // 26: grpc.api.v1.ModuleService.ListModuleStatus:output_type -> grpc.api.v1.ListModuleStatusResponse
+	9,  // 27: grpc.api.v1.ModuleService.StartModule:output_type -> grpc.api.v1.ModuleControlResponse
+	9,  // 28: grpc.api.v1.ModuleService.StopModule:output_type -> grpc.api.v1.ModuleControlResponse
+	34, // 29: grpc.api.v1.ModuleService.GetTLSStatus:output_type -> grpc.api.v1.TLSStatus
+	10, // 30: grpc.api.v1.ModuleService.GetFTPConfig:output_type -> grpc.api.v1.FTPConfig
+	16, // 31: grpc.api.v1.ModuleService.SaveFTPConfig:output_type -> grpc.api.v1.SaveModuleConfigResponse
+	13, // 32: grpc.api.v1.ModuleService.GetDICOMConfig:output_type -> grpc.api.v1.DICOMConfig
+	16, // 33: grpc.api.v1.ModuleService.SaveDICOMConfig:output_type -> grpc.api.v1.SaveModuleConfigResponse
+	18, // 34: grpc.api.v1.ModuleService.GetModuleSettings:output_type -> grpc.api.v1.ModuleSettings
+	20, // 35: grpc.api.v1.ModuleService.SaveModuleSettings:output_type -> grpc.api.v1.SaveModuleSettingsResponse
+	24, // 36: grpc.api.v1.ModuleService.ListConnectorConfigs:output_type -> grpc.api.v1.ListConnectorConfigsResponse
+	16, // 37: grpc.api.v1.ModuleService.SaveConnectorConfig:output_type -> grpc.api.v1.SaveModuleConfigResponse
+	27, // 38: grpc.api.v1.ModuleService.DeleteConnector:output_type -> grpc.api.v1.DeleteConnectorResponse
+	29, // 39: grpc.api.v1.ModuleService.TestConnector:output_type -> grpc.api.v1.TestConnectorResponse
+	32, // 40: grpc.api.v1.ModuleService.ListConnectors:output_type -> grpc.api.v1.ListConnectorsResponse
+	25, // [25:41] is the sub-list for method output_type
+	9,  // [9:25] is the sub-list for method input_type
 	9,  // [9:9] is the sub-list for extension type_name
 	9,  // [9:9] is the sub-list for extension extendee
 	0,  // [0:9] is the sub-list for field type_name
@@ -2038,7 +2172,7 @@ func file_v1_module_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_module_proto_rawDesc), len(file_v1_module_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   33,
+			NumMessages:   35,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

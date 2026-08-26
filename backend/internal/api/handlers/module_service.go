@@ -17,6 +17,7 @@ import (
 	mw "github.com/LIRYC-IHU/ecg-hub/internal/api/middleware"
 	apiv1 "github.com/LIRYC-IHU/ecg-hub/internal/api/v1"
 	"github.com/LIRYC-IHU/ecg-hub/internal/auth"
+	"github.com/LIRYC-IHU/ecg-hub/internal/certs"
 	"github.com/LIRYC-IHU/ecg-hub/internal/config"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
@@ -174,6 +175,9 @@ func (h *ModuleServiceHandler) SaveFTPConfig(_ context.Context, req *apiv1.SaveF
 			return nil, connect.NewError(connect.CodeInvalidArgument, err)
 		}
 	}
+	if err := h.checkTLSAvailable(c.Tls); err != nil {
+		return nil, err
+	}
 
 	password := c.Password
 	// Masked or empty password: preserve the existing stored value.
@@ -263,6 +267,9 @@ func (h *ModuleServiceHandler) SaveDICOMConfig(_ context.Context, req *apiv1.Sav
 	c := req.Config
 	if c == nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("config is required"))
+	}
+	if err := h.checkTLSAvailable(c.Tls); err != nil {
+		return nil, err
 	}
 	if c.Port < 1 || c.Port > 65535 {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("port must be between 1 and 65535"))
@@ -569,4 +576,46 @@ func (h *ModuleServiceHandler) ListConnectors(_ context.Context, _ *apiv1.ListCo
 		}
 	}
 	return &apiv1.ListConnectorsResponse{Connectors: out}, nil
+}
+
+// GetTLSStatus reports the installation-wide certificate the device-facing
+// servers would present.
+func (h *ModuleServiceHandler) GetTLSStatus(_ context.Context, _ *apiv1.GetTLSStatusRequest) (*apiv1.TLSStatus, error) {
+	st := h.tlsStatus()
+	out := &apiv1.TLSStatus{
+		Available: st.Available,
+		CertPath:  st.CertPath,
+		KeyPath:   st.KeyPath,
+		Subject:   st.Subject,
+		Error:     st.Error,
+	}
+	if !st.NotAfter.IsZero() {
+		out.NotAfter = st.NotAfter.Format(time.RFC3339)
+	}
+	return out, nil
+}
+
+// checkTLSAvailable refuses to store tls=true while the certificate is
+// unusable.
+//
+// The alternative is worse than an error message: the module is saved, the
+// operator presses Start, and the server either refuses to boot or — before
+// this change — bound its port and rejected every device twice over. Catching
+// it here means the reason is shown next to the switch that caused it.
+func (h *ModuleServiceHandler) checkTLSAvailable(enabled bool) error {
+	if !enabled {
+		return nil
+	}
+	if st := h.tlsStatus(); !st.Available {
+		return connect.NewError(connect.CodeFailedPrecondition,
+			fmt.Errorf("TLS cannot be enabled: %s", st.Error))
+	}
+	return nil
+}
+
+func (h *ModuleServiceHandler) tlsStatus() certs.Status {
+	if h.Cfg == nil {
+		return certs.Status{Error: "no configuration is loaded"}
+	}
+	return certs.Check(h.Cfg.Certs.CertFile, h.Cfg.Certs.KeyFile)
 }

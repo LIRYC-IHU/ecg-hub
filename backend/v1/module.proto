@@ -193,6 +193,12 @@ service ModuleService {
   rpc StartModule(StartModuleRequest) returns (ModuleControlResponse) {}
   rpc StopModule(StopModuleRequest) returns (ModuleControlResponse) {}
 
+  // TLS certificate available to the device-facing servers (FTPS, DICOM TLS).
+  // One installation-wide pair, read from a mounted volume — the admin screen
+  // uses this to explain why the TLS toggle is unavailable instead of letting
+  // an operator turn on a module that cannot start.
+  rpc GetTLSStatus(GetTLSStatusRequest) returns (TLSStatus) {}
+
   rpc GetFTPConfig(GetFTPConfigRequest) returns (FTPConfig) {}
   rpc SaveFTPConfig(SaveFTPConfigRequest) returns (SaveModuleConfigResponse) {}
   rpc GetDICOMConfig(GetDICOMConfigRequest) returns (DICOMConfig) {}
@@ -206,4 +212,17 @@ service ModuleService {
   rpc DeleteConnector(DeleteConnectorRequest) returns (DeleteConnectorResponse) {}
   rpc TestConnector(TestConnectorRequest) returns (TestConnectorResponse) {}
   rpc ListConnectors(ListConnectorsRequest) returns (ListConnectorsResponse) {}
+}
+
+message GetTLSStatusRequest {}
+
+message TLSStatus {
+  bool available = 1;
+  string cert_path = 2;
+  string key_path = 3;
+  // Set only when available.
+  string subject = 4;
+  string not_after = 5; // RFC3339
+  // One sentence explaining why the pair cannot be served.
+  string error = 6;
 }

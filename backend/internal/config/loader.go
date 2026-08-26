@@ -35,6 +35,10 @@ func Load(cfgPath string) (*Config, error) {
 	// Webhook delivery history is pruned after 30 days unless config.yaml says
 	// otherwise. An explicit 0 keeps every delivery.
 	v.SetDefault("webhooks.delivery_retention_days", 30)
+	// Certbot's filenames, so mounting /etc/letsencrypt/live/<host> at /certs
+	// works with no configuration at all.
+	v.SetDefault("certs.cert_file", "/certs/fullchain.pem")
+	v.SetDefault("certs.key_file", "/certs/privkey.pem")
 	// Note: AutomaticEnv is intentionally omitted. Without SetEnvKeyReplacer("." → "_"),
 	// Viper cannot map env vars like SERVER_PORT to nested YAML keys like server.port.
 	// All secrets are read explicitly via os.Getenv after unmarshal (see below).
@@ -93,6 +97,12 @@ func applyEnvOverrides(cfg *Config) {
 		} else {
 			slog.Warn("config: ignoring METRICS_PORT — not a number", "value", raw)
 		}
+	}
+	if raw, ok := os.LookupEnv("TLS_CERT_FILE"); ok {
+		cfg.Certs.CertFile = strings.TrimSpace(raw)
+	}
+	if raw, ok := os.LookupEnv("TLS_KEY_FILE"); ok {
+		cfg.Certs.KeyFile = strings.TrimSpace(raw)
 	}
 	if raw, ok := os.LookupEnv("STORAGE_BACKEND"); ok {
 		cfg.Storage.Backend = strings.TrimSpace(raw)

@@ -46,6 +46,9 @@ services:
       - ./data/ecg:/data/ecg
       - ./data/ecg-quarantine:/data/ecg-quarantine
       - ./backend:/app
+      # Certificates for FTPS and DICOM TLS. Generate a self-signed pair here to
+      # exercise the TLS paths locally; production mounts the real ones.
+      - ./certs:/certs:ro
       # - ecg-storage:/data/ecg
       # - ecg-quarantine:/data/ecg-quarantine
     expose:

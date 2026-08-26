@@ -109,6 +109,14 @@ services:
       # mounted file. Unset here → whatever config.yaml says.
       METRICS_ENABLED: ${METRICS_ENABLED:-false}
       METRICS_PORT: ${METRICS_PORT:-9091}
+      # ─── TLS for the device-facing servers (FTPS, DICOM TLS) ─────────────
+      # The certificate is read from the mounted ./certs directory, so renewal
+      # stays with whoever already does it (certbot, internal PKI): the files
+      # are rewritten in place and the module is restarted. Defaults match
+      # certbot's names, so mounting /etc/letsencrypt/live/<host> needs nothing
+      # here. Override only for a different layout.
+      TLS_CERT_FILE: ${TLS_CERT_FILE:-/certs/fullchain.pem}
+      TLS_KEY_FILE: ${TLS_KEY_FILE:-/certs/privkey.pem}
       # ─── Object storage (optional) ───────────────────────────────────────
       # STORAGE_BACKEND=s3 turns it on. Files are still written to the local
       # volume first and uploaded from there, so keep the volume mounted and
@@ -130,6 +138,9 @@ services:
       # included, so this is a data-retention decision as much as a disk one.
       WEBHOOKS_RETENTION_DAYS: ${WEBHOOKS_RETENTION_DAYS:-30}
     volumes:
+      # Certificates for FTPS and DICOM TLS, managed outside the app.
+      # Point the left side at /etc/letsencrypt/live/<host> to use certbot directly.
+      - ./certs:/certs:ro
       - ./config.yaml:/app/config.yaml:ro
       - ecg-storage:/data/ecg
       - ecg-quarantine:/data/ecg-quarantine
