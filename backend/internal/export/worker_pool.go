@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"context"
 	"fmt"
+	"github.com/LIRYC-IHU/ecg-hub/internal/storage"
 	"io"
 	"log/slog"
 	"os"
@@ -12,10 +13,10 @@ import (
 	"sync"
 	"time"
 
-	appmetrics "github.com/LIRYC-IHU/ecg-hub/internal/metrics"
 	"github.com/LIRYC-IHU/ecg-hub/internal/config"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
+	appmetrics "github.com/LIRYC-IHU/ecg-hub/internal/metrics"
 )
 
 // batchConverter converts a single ECG file to the requested format.
@@ -230,10 +231,15 @@ func buildZIP(job Job, ecgs []models.ECG, zipPath string, exportRepo *repository
 				patient, _ = pf.FindByPatientID(ecg.PatientID)
 			}
 
-			converted, convErr := bridge.Convert(context.Background(), ecg.FilePath, ecg.Vendor, fmtID, patient, ConvertOptions{
+			localPath, cleanup, matErr := storage.Materialize(context.Background(), ecg.FilePath)
+			if matErr != nil {
+				return fmt.Errorf("materialize ecg %s (%s): %w", ecg.ID, ecg.FilePath, matErr)
+			}
+			converted, convErr := bridge.Convert(context.Background(), localPath, ecg.Vendor, fmtID, patient, ConvertOptions{
 				Anonymize:     job.Anonymize,
 				InjectPatient: job.Inject,
 			})
+			cleanup()
 			if convErr != nil {
 				return fmt.Errorf("convert ecg %s (%s) to %s: %w", ecg.ID, ecg.FilePath, fmtID, convErr)
 			}
@@ -273,7 +279,7 @@ func zipEntryName(ecg models.ECG, format string, multiFormat bool, counter map[s
 
 // copyOriginalToZip streams the on-disk ECG file into the ZIP writer under entryName.
 func copyOriginalToZip(zw *zip.Writer, ecg models.ECG, entryName string) error {
-	src, openErr := os.Open(ecg.FilePath)
+	src, openErr := storage.Open(context.Background(), ecg.FilePath)
 	if openErr != nil {
 		return fmt.Errorf("open ecg %s (%s): %w", ecg.ID, ecg.FilePath, openErr)
 	}

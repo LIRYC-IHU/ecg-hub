@@ -42,8 +42,20 @@ func ECGWaveformHandler(db *gorm.DB, volumePath string, bridge export.Converter)
 			filePath = filepath.Join(volumePath, filePath)
 		}
 
+		// Everything below (hashing, reading, converting) works on a local path,
+		// so resolve the ref to one once and leave the rest of the handler alone.
+		ctx := c.Request().Context()
+		filePath, cleanup, matErr := storage.Materialize(ctx, filePath)
+		if matErr != nil {
+			return c.JSON(http.StatusBadGateway, map[string]string{
+				"code":    "STORAGE_UNAVAILABLE",
+				"message": "ECG storage is unreachable",
+			})
+		}
+		defer cleanup()
+
 		// Integrity check before serving waveform data.
-		if err := storage.VerifyFile(filePath, ecg.ContentHash); err != nil {
+		if err := storage.Verify(ctx, filePath, ecg.ContentHash); err != nil {
 			return c.JSON(http.StatusUnprocessableEntity, map[string]string{
 				"code":    "INTEGRITY_FAILURE",
 				"message": "ECG file integrity check failed — the file may have been modified",

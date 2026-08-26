@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/LIRYC-IHU/ecg-hub/internal/storage"
 	"log/slog"
-	"os"
 	"strings"
 	"time"
 
@@ -388,8 +388,8 @@ func (h *AdminServiceHandler) DeleteAppUser(ctx context.Context, req *apiv1.Dele
 // ---- Quarantine ------------------------------------------------------------
 
 // readQuarantineFile loads a quarantined raw file for re-ingestion.
-func readQuarantineFile(path string) ([]byte, error) {
-	data, err := os.ReadFile(path) //nolint:gosec // path comes from the trusted quarantine record
+func readQuarantineFile(ctx context.Context, path string) ([]byte, error) {
+	data, err := storage.ReadFile(ctx, path)
 	if err != nil {
 		slog.Error("quarantine: assign read file failed", "path", path, "error", err)
 	}
@@ -398,11 +398,11 @@ func readQuarantineFile(path string) ([]byte, error) {
 
 // removeQuarantineFile best-effort removes a quarantined raw file after a
 // delete/assign decision. Missing files are not an error.
-func removeQuarantineFile(path string) {
+func removeQuarantineFile(ctx context.Context, path string) {
 	if path == "" {
 		return
 	}
-	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+	if err := storage.Remove(ctx, path); err != nil {
 		slog.Warn("quarantine: file removal failed", "path", path, "error", err)
 	}
 }
@@ -465,7 +465,7 @@ func (h *AdminServiceHandler) DeleteQuarantine(ctx context.Context, req *apiv1.D
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	// Best-effort physical file removal.
-	removeQuarantineFile(filePath)
+	removeQuarantineFile(ctx, filePath)
 	_ = mw.WriteAuditLog(ctx, h.DB, mw.UserIDFromContext(ctx), "quarantine_decision", req.Id,
 		map[string]any{"action": "delete", "id": req.Id, "file": filePath})
 	return &apiv1.DeleteQuarantineResponse{}, nil
@@ -510,7 +510,7 @@ func (h *AdminServiceHandler) AssignQuarantine(ctx context.Context, req *apiv1.A
 		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("raw file unavailable; cannot re-ingest"))
 	}
 
-	data, err := readQuarantineFile(entry.FilePath)
+	data, err := readQuarantineFile(ctx, entry.FilePath)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("raw file unreadable; cannot re-ingest"))
 	}
@@ -543,7 +543,7 @@ func (h *AdminServiceHandler) AssignQuarantine(ctx context.Context, req *apiv1.A
 
 	// Re-ingestion succeeded — remove the quarantine entry and its raw file.
 	if filePath, delErr := repo.DeleteByID(req.Id); delErr == nil && filePath != "" {
-		removeQuarantineFile(filePath)
+		removeQuarantineFile(ctx, filePath)
 	}
 
 	patientName := ""
