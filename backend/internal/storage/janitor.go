@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	appmetrics "github.com/LIRYC-IHU/ecg-hub/internal/metrics"
 	"github.com/LIRYC-IHU/ecg-hub/internal/config"
+	appmetrics "github.com/LIRYC-IHU/ecg-hub/internal/metrics"
 )
 
 // Janitor periodically watches the storage soft cap defined by storage.max_size.
@@ -117,7 +117,10 @@ func (j *Janitor) rotateOnce() {
 		}
 		if limit > 0 && total > limit {
 			appmetrics.StorageOverCap.WithLabelValues(path).Set(1)
-			if !j.cfg.AllowRotation {
+			if j.cfg.IsS3() {
+				slog.Error("janitor: the upload spool is over max_size — files are not reaching object storage, and none of them will be deleted while the volume holds the only copy",
+					"volume_path", path, "current_bytes", total, "limit", j.cfg.MaxSize)
+			} else if !j.cfg.AllowRotation {
 				slog.Error("janitor: volume over max_size — no files are deleted (allow_rotation=false); free space or extend the volume",
 					"volume_path", path, "current_bytes", total, "limit", j.cfg.MaxSize, "limit_bytes", limit)
 			}
@@ -131,6 +134,16 @@ func (j *Janitor) rotateOnce() {
 // until the volume is within the max_size soft cap.
 // Returns the number of deleted files and the total bytes freed.
 func (j *Janitor) Rotate(path string) (deleted int, freedBytes int64, err error) {
+	// In s3 mode the files left on the volume ARE the upload spool: the oldest
+	// ones, which rotation would delete first, are precisely those that have not
+	// reached the bucket yet. Deleting them would destroy the only copy of an
+	// ECG. Retention on the object store belongs to the bucket's lifecycle
+	// rules, which is the tool that can tell an archived object from a pending
+	// one.
+	if j.cfg.IsS3() {
+		return 0, 0, nil
+	}
+
 	limit := j.cfg.GetBytesSize()
 	if limit <= 0 {
 		return 0, 0, nil

@@ -103,6 +103,20 @@ func RunMigrations(db *gorm.DB) error {
 		slog.Warn("db: create webhook delivery index failed", "error", err)
 	}
 
+	// The upload spool. In s3 mode the rows whose file_path is still a local
+	// path are the backlog, and the uploader scans for them on every tick. A
+	// partial index keeps that scan proportional to the backlog instead of to
+	// the table, which grows for the life of the installation.
+	spoolIndexes := []string{
+		`CREATE INDEX IF NOT EXISTS idx_ecgs_upload_spool ON ecgs (ingested_at) WHERE file_path NOT LIKE 's3://%'`,
+		`CREATE INDEX IF NOT EXISTS idx_quarantine_upload_spool ON quarantine_entries (received_at) WHERE file_path NOT LIKE 's3://%'`,
+	}
+	for _, ddl := range spoolIndexes {
+		if err := db.Exec(ddl).Error; err != nil {
+			slog.Warn("db: create upload spool index failed", "error", err)
+		}
+	}
+
 	// Trigram indexes for substring search. Patient/ECG search uses ILIKE '%term%'
 	// (leading wildcard), which a B-tree index cannot serve — every search is a
 	// sequential scan. pg_trgm GIN indexes make these index-assisted. Idempotent;

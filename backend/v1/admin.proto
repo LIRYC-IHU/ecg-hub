@@ -148,6 +148,21 @@ message GetStorageMetricsRequest {}
 message GetStorageMetricsResponse {
   repeated VolumeMetric volumes = 1;
   string error = 2;
+  StorageBackendInfo backend = 3;
+}
+
+// StorageBackendInfo tells the admin screen where files actually live. With an
+// object-storage backend the local volume above is only the upload spool, so
+// showing its size as "ECG storage" would misreport both what is stored and
+// what the free space means.
+message StorageBackendInfo {
+  string kind = 1; // "local" | "s3"
+  string bucket = 2;
+  string endpoint = 3;
+  // Files written locally and not yet uploaded, and the age of the oldest.
+  // A backlog that does not shrink means the bucket is unreachable.
+  int64 pending_uploads = 4;
+  int64 oldest_pending_seconds = 5;
 }
 
 // ---- Recent errors ---------------------------------------------------------

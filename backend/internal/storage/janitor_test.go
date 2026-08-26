@@ -163,3 +163,23 @@ func TestJanitor_RotateOnce_RotatesWhenOptedIn(t *testing.T) {
 		t.Errorf("new.xml should still exist: %v", err)
 	}
 }
+
+// In s3 mode the files still on the volume are the upload backlog, and the
+// oldest — the ones rotation deletes first — are exactly those that have not
+// reached the bucket. Rotating there would destroy the only copy of an ECG.
+func TestJanitor_Rotate_NeverRunsInS3Mode(t *testing.T) {
+	dir := t.TempDir()
+	writeTestFile(t, dir, "spooled.xml", 4096)
+
+	cfg := newStorage(t, dir, "1Ki") // well over the cap on purpose
+	cfg.Backend = "s3"
+	cfg.AllowRotation = true // even when the operator opted into rotation
+
+	deleted, freed, err := NewJanitor(cfg).Rotate(dir)
+	if err != nil || deleted != 0 || freed != 0 {
+		t.Errorf("rotation ran in s3 mode: deleted=%d freed=%d err=%v", deleted, freed, err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "spooled.xml")); err != nil {
+		t.Fatalf("rotation deleted a file that had not been uploaded yet: %v", err)
+	}
+}

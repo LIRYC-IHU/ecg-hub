@@ -79,24 +79,40 @@ func (h *AdminServiceHandler) GetStats(_ context.Context, _ *apiv1.GetStatsReque
 
 // ---- Storage metrics -------------------------------------------------------
 
-func (h *AdminServiceHandler) GetStorageMetrics(_ context.Context, _ *apiv1.GetStorageMetricsRequest) (*apiv1.GetStorageMetricsResponse, error) {
-	storage := h.Cfg.Storage
+func (h *AdminServiceHandler) GetStorageMetrics(ctx context.Context, _ *apiv1.GetStorageMetricsRequest) (*apiv1.GetStorageMetricsResponse, error) {
+	storageCfg := h.Cfg.Storage
 
-	storageSize, err := dirSize(storage.VolumePath)
+	storageSize, err := dirSize(storageCfg.VolumePath)
 	if err != nil {
 		return &apiv1.GetStorageMetricsResponse{Error: "error getting storage metrics"}, nil
 	}
-	quarantineSize, err := dirSize(storage.QuarantinePath)
+	quarantineSize, err := dirSize(storageCfg.QuarantinePath)
 	if err != nil {
 		return &apiv1.GetStorageMetricsResponse{Error: "error getting storage metrics"}, nil
 	}
 
-	total := storage.GetBytesSize()
+	backend := &apiv1.StorageBackendInfo{Kind: "local"}
+	if storageCfg.IsS3() {
+		// With object storage the volume holds only what has not been uploaded
+		// yet, so the numbers above describe the spool, not the archive. The
+		// screen has to say which it is showing.
+		pending, oldest := storage.SpoolStats(ctx, h.DB)
+		backend = &apiv1.StorageBackendInfo{
+			Kind:                 "s3",
+			Bucket:               storageCfg.S3.Bucket,
+			Endpoint:             storageCfg.S3.Endpoint,
+			PendingUploads:       pending,
+			OldestPendingSeconds: oldest,
+		}
+	}
+
+	total := storageCfg.GetBytesSize()
 	return &apiv1.GetStorageMetricsResponse{
 		Volumes: []*apiv1.VolumeMetric{
-			{Name: "ECG Storage", Total: total, Available: total - storageSize, MaxSize: storage.MaxSize},
-			{Name: "Quarantine", Total: total, Available: total - quarantineSize, MaxSize: storage.MaxSize},
+			{Name: "ECG Storage", Total: total, Available: total - storageSize, MaxSize: storageCfg.MaxSize},
+			{Name: "Quarantine", Total: total, Available: total - quarantineSize, MaxSize: storageCfg.MaxSize},
 		},
+		Backend: backend,
 	}, nil
 }
 

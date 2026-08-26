@@ -1488,6 +1488,17 @@ export interface VolumeMetric {
 export interface StorageMetricsResp {
   volumes: VolumeMetric[];
   error?: string;
+  backend: StorageBackendInfo;
+}
+
+// Where ECG files actually live. With an object-storage backend the volumes
+// above measure the upload spool, not the archive.
+export interface StorageBackendInfo {
+  kind: "local" | "s3";
+  bucket: string;
+  endpoint: string;
+  pendingUploads: number;
+  oldestPendingSeconds: number;
 }
 // Api for get Metric volume storage place
 export async function fetchStorageMetrics(): Promise<StorageMetricsResp> {
@@ -1500,6 +1511,13 @@ export async function fetchStorageMetrics(): Promise<StorageMetricsResp> {
       max_size: v.maxSize || undefined,
     })),
     error: res.error || undefined,
+    backend: {
+      kind: res.backend?.kind === "s3" ? "s3" : "local",
+      bucket: res.backend?.bucket ?? "",
+      endpoint: res.backend?.endpoint ?? "",
+      pendingUploads: Number(res.backend?.pendingUploads ?? 0),
+      oldestPendingSeconds: Number(res.backend?.oldestPendingSeconds ?? 0),
+    },
   };
 }
 

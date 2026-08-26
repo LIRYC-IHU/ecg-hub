@@ -94,6 +94,31 @@ func applyEnvOverrides(cfg *Config) {
 			slog.Warn("config: ignoring METRICS_PORT — not a number", "value", raw)
 		}
 	}
+	if raw, ok := os.LookupEnv("STORAGE_BACKEND"); ok {
+		cfg.Storage.Backend = strings.TrimSpace(raw)
+	}
+	if raw, ok := os.LookupEnv("S3_ENDPOINT"); ok {
+		cfg.Storage.S3.Endpoint = strings.TrimSpace(raw)
+	}
+	if raw, ok := os.LookupEnv("S3_BUCKET"); ok {
+		cfg.Storage.S3.Bucket = strings.TrimSpace(raw)
+	}
+	if raw, ok := os.LookupEnv("S3_REGION"); ok {
+		cfg.Storage.S3.Region = strings.TrimSpace(raw)
+	}
+	if raw, ok := os.LookupEnv("S3_PREFIX"); ok {
+		cfg.Storage.S3.Prefix = strings.TrimSpace(raw)
+	}
+	if raw, ok := os.LookupEnv("S3_PATH_STYLE"); ok {
+		if v, err := strconv.ParseBool(strings.TrimSpace(raw)); err == nil {
+			cfg.Storage.S3.PathStyle = v
+		} else {
+			slog.Warn("config: ignoring S3_PATH_STYLE — not a boolean", "value", raw)
+		}
+	}
+	// Credentials are environment-only: see S3Config.
+	cfg.Storage.S3.AccessKey = strings.TrimSpace(os.Getenv("S3_ACCESS_KEY"))
+	cfg.Storage.S3.SecretKey = strings.TrimSpace(os.Getenv("S3_SECRET_KEY"))
 	if raw, ok := os.LookupEnv("WEBHOOKS_RETENTION_DAYS"); ok {
 		if days, err := strconv.Atoi(strings.TrimSpace(raw)); err == nil {
 			cfg.Webhooks.DeliveryRetentionDays = days
@@ -122,6 +147,25 @@ func validate(cfg *Config) error {
 
 	if cfg.Storage.VolumePath == "" {
 		errs = append(errs, "storage.volume_path is required")
+	}
+
+	switch {
+	case cfg.Storage.Backend == "" || strings.EqualFold(cfg.Storage.Backend, "local"):
+		// local is the default
+	case cfg.Storage.IsS3():
+		// Fail at boot rather than on the first upload: a half-configured
+		// bucket would look like a working install until the spool filled up.
+		if cfg.Storage.S3.Endpoint == "" {
+			errs = append(errs, "storage.s3.endpoint (or S3_ENDPOINT) is required when storage.backend is s3")
+		}
+		if cfg.Storage.S3.Bucket == "" {
+			errs = append(errs, "storage.s3.bucket (or S3_BUCKET) is required when storage.backend is s3")
+		}
+		if cfg.Storage.S3.AccessKey == "" || cfg.Storage.S3.SecretKey == "" {
+			errs = append(errs, "S3_ACCESS_KEY and S3_SECRET_KEY are required when storage.backend is s3")
+		}
+	default:
+		errs = append(errs, fmt.Sprintf("storage.backend %q is not supported (use \"local\" or \"s3\")", cfg.Storage.Backend))
 	}
 
 	if cfg.Metrics.Port < 0 || cfg.Metrics.Port > 65535 {

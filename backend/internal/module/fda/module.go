@@ -311,6 +311,10 @@ var genderTail = []string{"subjectDemographicPerson", "administrativeGenderCode"
 // applyUpdates performs streaming XML token replacement. Text content updates
 // (patient_id, name) and the gender attribute are applied in a single pass.
 // Targets not present in the document are skipped (best-effort).
+// utf8BOM is the byte order mark Fukuda's exporter writes ahead of the XML
+// declaration.
+var utf8BOM = []byte{0xEF, 0xBB, 0xBF}
+
 func applyUpdates(data []byte, fields map[string]string) ([]byte, error) {
 	contentUpdates := map[string]struct{ value string }{}
 	for key, val := range fields {
@@ -333,6 +337,16 @@ func applyUpdates(data []byte, fields map[string]string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("fda: apply_updates: %w", err)
 	}
+
+	// A UTF-8 BOM is decoded as character data, so re-encoding would emit it
+	// before the <?xml?> declaration and the encoder would refuse the whole
+	// document ("EncodeToken of ProcInst xml target only valid for xml
+	// declaration, first token encoded"). Fukuda exports do carry one, which
+	// made every metadata edit on those files fail. Strip it here and put it
+	// back on the way out, so the file keeps the byte signature the vendor's
+	// own tools expect.
+	hadBOM := bytes.HasPrefix(data, utf8BOM)
+	data = bytes.TrimPrefix(data, utf8BOM)
 
 	dec := xml.NewDecoder(bytes.NewReader(data))
 	var buf bytes.Buffer
@@ -406,6 +420,9 @@ func applyUpdates(data []byte, fields map[string]string) ([]byte, error) {
 
 	if err := enc.Flush(); err != nil {
 		return nil, fmt.Errorf("encode flush: %w", err)
+	}
+	if hadBOM {
+		return append(append([]byte{}, utf8BOM...), buf.Bytes()...), nil
 	}
 	return buf.Bytes(), nil
 }
