@@ -23,6 +23,13 @@ database:
   max_idle_conns: 5
 
 storage:
+  # Where ECG files live: "local" (default) or "s3".
+  #
+  # In s3 mode the local volume is still used, as a spool: files are written to
+  # disk first and uploaded by a background worker, so ingestion never waits on
+  # the network and a bucket outage costs a backlog instead of a lost ECG. Size
+  # volume_path for the longest outage you are willing to ride out.
+  backend: local
   # Mount point for the main ECG file volume.
   volume_path: /data/ecg
   # Separate volume for quarantined files (may need a different retention policy).
@@ -31,6 +38,29 @@ storage:
   # Accepts Ki/Mi/Gi (binary) or k/m/g (decimal). Empty / "0" disables rotation
   # (not recommended in production).
   max_size: "50Gi"
+  # Object storage — only read when backend is "s3". Credentials are NEVER in
+  # this file: they come from S3_ACCESS_KEY and S3_SECRET_KEY in the
+  # environment. Every field below also has an env override (S3_ENDPOINT,
+  # S3_BUCKET, S3_REGION, S3_PREFIX, S3_PATH_STYLE) so an injected deployment
+  # needs no templating of this file.
+  #
+  # Note: with backend "s3", max_size above stops being a rotation trigger and
+  # becomes an alert on the upload backlog. Nothing on the volume is ever
+  # deleted while it is the only copy of a record; retention on the bucket
+  # belongs to its lifecycle rules.
+  s3:
+    # host[:port], or a full URL — its scheme then decides use_ssl.
+    endpoint: ""
+    bucket: ecg-hub
+    region: ""
+    # Optional key prefix, e.g. "prod/".
+    prefix: ""
+    use_ssl: true
+    # Address buckets as <endpoint>/<bucket> instead of <bucket>.<endpoint>.
+    # Required by MinIO, RustFS and Ceph unless wildcard DNS is set up.
+    path_style: true
+    # How often the spool is drained. Default 10.
+    upload_interval_seconds: 10
 
 export:
   # Number of background export workers (PDF / FDA aECG / DICOM generation).

@@ -98,6 +98,21 @@ services:
       # mounted file. Unset here → whatever config.yaml says.
       METRICS_ENABLED: ${METRICS_ENABLED:-false}
       METRICS_PORT: ${METRICS_PORT:-9091}
+      # ─── Object storage (optional) ───────────────────────────────────────
+      # STORAGE_BACKEND=s3 turns it on. Files are still written to the local
+      # volume first and uploaded from there, so keep the volume mounted and
+      # sized for the longest bucket outage you are willing to ride out.
+      # Leave STORAGE_BACKEND unset (or "local") to store on disk only.
+      STORAGE_BACKEND: ${STORAGE_BACKEND:-local}
+      S3_ENDPOINT: ${S3_ENDPOINT:-}
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_REGION: ${S3_REGION:-}
+      S3_PREFIX: ${S3_PREFIX:-}
+      # MinIO/RustFS/Ceph need path-style addressing; AWS accepts either.
+      S3_PATH_STYLE: ${S3_PATH_STYLE:-true}
+      # Credentials — inject them, never write them here.
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-}
       # ─── Webhooks ────────────────────────────────────────────────────────
       # Delivery-history retention in days. 0 keeps every delivery forever;
       # unset means 30. Each row holds the full payload, patient identifiers

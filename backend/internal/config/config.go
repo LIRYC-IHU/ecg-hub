@@ -101,6 +101,16 @@ type DatabaseConfig struct {
 
 // StorageConfig holds file volume settings (FR10).
 type StorageConfig struct {
+	// Backend selects where ECG files live: "local" (default) or "s3".
+	//
+	// In s3 mode the local volume is still used, as the spool an upload worker
+	// drains: files are always written to disk first so ingestion never depends
+	// on a network round-trip, and only then moved to the bucket. Size the
+	// volume for the longest outage you are willing to ride out.
+	Backend string `mapstructure:"backend"`
+	// S3 configures the object store. Only read when Backend is "s3"; the
+	// credentials come from the environment, never from the file.
+	S3 S3Config `mapstructure:"s3"`
 	// VolumePath is the root directory for ECG file storage (e.g., /data/ecg).
 	// Mount a dedicated volume here so IT can manage storage independently of the application.
 	VolumePath string `mapstructure:"volume_path"`
@@ -120,6 +130,32 @@ type StorageConfig struct {
 	AllowRotation bool  `mapstructure:"allow_rotation"`
 	bytesSize     int64 // parsed from MaxSize, used internally for size checks
 }
+
+// S3Config points at an S3-compatible endpoint (AWS, MinIO, RustFS, Ceph...).
+type S3Config struct {
+	// Endpoint is host[:port]; a full URL is accepted and split, in which case
+	// its scheme decides UseSSL.
+	Endpoint string `mapstructure:"endpoint"`
+	Region   string `mapstructure:"region"`
+	Bucket   string `mapstructure:"bucket"`
+	// Prefix optionally namespaces every key, e.g. "prod/".
+	Prefix string `mapstructure:"prefix"`
+	UseSSL bool   `mapstructure:"use_ssl"`
+	// PathStyle addresses buckets as <endpoint>/<bucket> instead of
+	// <bucket>.<endpoint>. Required by MinIO, RustFS and Ceph unless a wildcard
+	// DNS record exists; AWS accepts either.
+	PathStyle bool `mapstructure:"path_style"`
+	// AccessKey and SecretKey come from S3_ACCESS_KEY / S3_SECRET_KEY only.
+	// They are deliberately not mapstructure fields: config.yaml is committed
+	// and mounted, and a credential in it is a credential in a backup.
+	AccessKey string `mapstructure:"-"`
+	SecretKey string `mapstructure:"-"`
+	// UploadIntervalSeconds is how often the spool is drained. Default 10.
+	UploadIntervalSeconds int `mapstructure:"upload_interval_seconds"`
+}
+
+// IsS3 reports whether files should be uploaded to the object store.
+func (s StorageConfig) IsS3() bool { return strings.EqualFold(s.Backend, "s3") }
 
 // GetBytesSize returns the parsed MaxSize in bytes. 0 means rotation is disabled.
 func (s StorageConfig) GetBytesSize() int64 {

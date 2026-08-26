@@ -36,15 +36,31 @@ func ECGWaveformHandler(db *gorm.DB, volumePath string, bridge export.Converter)
 			})
 		}
 
-		// Resolve file path
+		// Resolve file path. Legacy rows hold a path relative to the volume; a
+		// ref on object storage is neither absolute nor relative to it, and
+		// joining one to the volume root yields a local path that cannot exist.
 		filePath := ecg.FilePath
-		if !filepath.IsAbs(filePath) {
+		if !storage.IsRemoteRef(filePath) && !filepath.IsAbs(filePath) {
 			filePath = filepath.Join(volumePath, filePath)
+		}
+
+		ctx := c.Request().Context()
+		switch found, existsErr := storage.Exists(ctx, filePath); {
+		case existsErr != nil:
+			return c.JSON(http.StatusBadGateway, map[string]string{
+				"code":    "STORAGE_UNAVAILABLE",
+				"message": "ECG storage is unreachable",
+			})
+		case !found:
+			// Not an integrity failure: the file is absent, not altered.
+			return c.JSON(http.StatusNotFound, map[string]string{
+				"code":    "FILE_NOT_FOUND",
+				"message": "ECG file not found on storage",
+			})
 		}
 
 		// Everything below (hashing, reading, converting) works on a local path,
 		// so resolve the ref to one once and leave the rest of the handler alone.
-		ctx := c.Request().Context()
 		filePath, cleanup, matErr := storage.Materialize(ctx, filePath)
 		if matErr != nil {
 			return c.JSON(http.StatusBadGateway, map[string]string{

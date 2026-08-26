@@ -470,6 +470,38 @@ func main() {
 	// "assign" route can re-ingest unidentified ECGs through the same pipeline.
 	routedQueue := ingestion.NewRoutedQueue(100)
 	vol := storage.NewVolume(cfg.Storage.VolumePath)
+
+	// Optional object storage. Files are always written to the local volume
+	// first; the uploader moves them to the bucket and rewrites the ref. See
+	// internal/storage/uploader.go for why the spool is the normal path.
+	if cfg.Storage.IsS3() {
+		s3Store, s3Err := storage.NewS3Store(shutdownCtx, storage.S3Config{
+			Endpoint:  cfg.Storage.S3.Endpoint,
+			Region:    cfg.Storage.S3.Region,
+			Bucket:    cfg.Storage.S3.Bucket,
+			Prefix:    cfg.Storage.S3.Prefix,
+			AccessKey: cfg.Storage.S3.AccessKey,
+			SecretKey: cfg.Storage.S3.SecretKey,
+			UseSSL:    cfg.Storage.S3.UseSSL,
+			PathStyle: cfg.Storage.S3.PathStyle,
+		})
+		if s3Err != nil {
+			// Refuse to start rather than silently spooling to a disk nobody
+			// sized for it: the operator asked for S3 and must know it is not there.
+			slog.Error("storage: s3 backend is configured but unusable", "error", s3Err)
+			os.Exit(1)
+		}
+		storage.SetRemote(s3Store)
+
+		uploader := storage.NewUploader(gormDB, s3Store, cfg.Storage.VolumePath, cfg.Storage.QuarantinePath).
+			WithInterval(time.Duration(cfg.Storage.S3.UploadIntervalSeconds) * time.Second)
+		go uploader.Run(shutdownCtx)
+
+		slog.Info("storage: s3 backend enabled",
+			"endpoint", cfg.Storage.S3.Endpoint,
+			"bucket", cfg.Storage.S3.Bucket,
+			"prefix", cfg.Storage.S3.Prefix)
+	}
 	persister := ingestion.NewPersister(routedQueue, vol, ecgRepo, patRepo).
 		WithAuditWriter(repository.NewAuditRepository(gormDB)).
 		WithEventPublisher(eventHub)

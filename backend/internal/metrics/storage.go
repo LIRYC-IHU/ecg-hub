@@ -19,6 +19,16 @@ var (
 		Buckets: []float64{.001, .005, .01, .05, .1, .5, 1, 2.5},
 	}, []string{"op"})
 
+	StorageSpoolFiles = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "storage_spool_files",
+		Help: "Files written locally and still waiting to be uploaded to object storage. Non-zero for long means the bucket is unreachable.",
+	}, []string{"table"})
+
+	StorageSpoolOldestSeconds = prometheus.NewGaugeVec(prometheus.GaugeOpts{
+		Name: "storage_spool_oldest_seconds",
+		Help: "Age of the oldest file still waiting to be uploaded. Alert on it: it is the real measure of how far behind the spool is.",
+	}, []string{"table"})
+
 	StorageOverCap = prometheus.NewGaugeVec(prometheus.GaugeOpts{
 		Name: "storage_over_cap",
 		Help: "1 when the volume exceeds storage.max_size, 0 otherwise. Alert on it — files are never purged unless allow_rotation is set.",
@@ -31,5 +41,7 @@ func init() {
 		StorageFilesTotal,
 		StorageOpDuration,
 		StorageOverCap,
+		StorageSpoolFiles,
+		StorageSpoolOldestSeconds,
 	)
 }
