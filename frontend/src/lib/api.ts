@@ -2060,3 +2060,30 @@ export async function resendWebhookDelivery(
   }
   return res.json();
 }
+
+
+// ─── TLS certificate (device-facing servers) ────────────────────────────────
+
+// One installation-wide pair, read from a mounted volume. The admin screen uses
+// it to explain why the TLS switch is unavailable rather than letting an
+// operator enable a module that cannot start.
+export interface TLSStatusDTO {
+  available: boolean;
+  certPath: string;
+  keyPath: string;
+  subject: string;
+  notAfter: string; // RFC3339, empty when unavailable
+  error: string;
+}
+
+export async function fetchTLSStatus(): Promise<TLSStatusDTO> {
+  const s = await moduleClient.getTLSStatus({});
+  return {
+    available: s.available,
+    certPath: s.certPath,
+    keyPath: s.keyPath,
+    subject: s.subject,
+    notAfter: s.notAfter,
+    error: s.error,
+  };
+}

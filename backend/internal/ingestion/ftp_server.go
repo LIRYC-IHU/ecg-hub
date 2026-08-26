@@ -13,6 +13,8 @@ import (
 	"time"
 
 	ftpserver "github.com/fclairamb/ftpserverlib"
+
+	"github.com/LIRYC-IHU/ecg-hub/internal/certs"
 	"github.com/spf13/afero"
 
 	appmetrics "github.com/LIRYC-IHU/ecg-hub/internal/metrics"
@@ -66,7 +68,16 @@ func (s *Server) Start() error {
 		return nil
 	}
 	if s.cfg.TLS {
-		slog.Info("ftp: TLS enforcement active (MandatoryEncryption)")
+		// Without a usable certificate the server would still bind the port and
+		// then refuse every client twice over: AUTH TLS fails for want of a
+		// certificate, and cleartext is rejected because encryption is
+		// mandatory. Refusing to start says what is wrong, once, where someone
+		// will read it.
+		if st := certs.Check(s.cfg.CertFile, s.cfg.KeyFile); !st.Available {
+			return fmt.Errorf("ftp: TLS is enabled but the certificate is unusable: %s", st.Error)
+		}
+		slog.Info("ftp: TLS enforcement active (MandatoryEncryption)",
+			"cert_file", s.cfg.CertFile)
 	} else {
 		slog.Warn("ftp: tls disabled — non-production mode")
 	}

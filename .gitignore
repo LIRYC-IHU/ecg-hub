@@ -144,8 +144,11 @@ _docs/
 .rtk/
 _bmad/
 
-# TLS certificates / private keys — never commit
-certs/
+# TLS certificates / private keys — never commit.
+# Anchored to the repository root on purpose: an unanchored "certs/" also
+# matches backend/internal/certs, the Go package that reads them, and git
+# silently drops it from the commit — the build then fails only in CI.
+/certs/
 *.pem
 *.key
 *.crt

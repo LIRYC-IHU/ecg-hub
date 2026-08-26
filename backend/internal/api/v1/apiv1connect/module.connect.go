@@ -45,6 +45,9 @@ const (
 	// ModuleServiceStopModuleProcedure is the fully-qualified name of the ModuleService's StopModule
 	// RPC.
 	ModuleServiceStopModuleProcedure = "/grpc.api.v1.ModuleService/StopModule"
+	// ModuleServiceGetTLSStatusProcedure is the fully-qualified name of the ModuleService's
+	// GetTLSStatus RPC.
+	ModuleServiceGetTLSStatusProcedure = "/grpc.api.v1.ModuleService/GetTLSStatus"
 	// ModuleServiceGetFTPConfigProcedure is the fully-qualified name of the ModuleService's
 	// GetFTPConfig RPC.
 	ModuleServiceGetFTPConfigProcedure = "/grpc.api.v1.ModuleService/GetFTPConfig"
@@ -86,6 +89,11 @@ type ModuleServiceClient interface {
 	ListModuleStatus(context.Context, *v1.ListModuleStatusRequest) (*v1.ListModuleStatusResponse, error)
 	StartModule(context.Context, *v1.StartModuleRequest) (*v1.ModuleControlResponse, error)
 	StopModule(context.Context, *v1.StopModuleRequest) (*v1.ModuleControlResponse, error)
+	// TLS certificate available to the device-facing servers (FTPS, DICOM TLS).
+	// One installation-wide pair, read from a mounted volume — the admin screen
+	// uses this to explain why the TLS toggle is unavailable instead of letting
+	// an operator turn on a module that cannot start.
+	GetTLSStatus(context.Context, *v1.GetTLSStatusRequest) (*v1.TLSStatus, error)
 	GetFTPConfig(context.Context, *v1.GetFTPConfigRequest) (*v1.FTPConfig, error)
 	SaveFTPConfig(context.Context, *v1.SaveFTPConfigRequest) (*v1.SaveModuleConfigResponse, error)
 	GetDICOMConfig(context.Context, *v1.GetDICOMConfigRequest) (*v1.DICOMConfig, error)
@@ -132,6 +140,12 @@ func NewModuleServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+ModuleServiceStopModuleProcedure,
 			connect.WithSchema(moduleServiceMethods.ByName("StopModule")),
+			connect.WithClientOptions(opts...),
+		),
+		getTLSStatus: connect.NewClient[v1.GetTLSStatusRequest, v1.TLSStatus](
+			httpClient,
+			baseURL+ModuleServiceGetTLSStatusProcedure,
+			connect.WithSchema(moduleServiceMethods.ByName("GetTLSStatus")),
 			connect.WithClientOptions(opts...),
 		),
 		getFTPConfig: connect.NewClient[v1.GetFTPConfigRequest, v1.FTPConfig](
@@ -209,6 +223,7 @@ type moduleServiceClient struct {
 	listModuleStatus     *connect.Client[v1.ListModuleStatusRequest, v1.ListModuleStatusResponse]
 	startModule          *connect.Client[v1.StartModuleRequest, v1.ModuleControlResponse]
 	stopModule           *connect.Client[v1.StopModuleRequest, v1.ModuleControlResponse]
+	getTLSStatus         *connect.Client[v1.GetTLSStatusRequest, v1.TLSStatus]
 	getFTPConfig         *connect.Client[v1.GetFTPConfigRequest, v1.FTPConfig]
 	saveFTPConfig        *connect.Client[v1.SaveFTPConfigRequest, v1.SaveModuleConfigResponse]
 	getDICOMConfig       *connect.Client[v1.GetDICOMConfigRequest, v1.DICOMConfig]
@@ -252,6 +267,15 @@ func (c *moduleServiceClient) StartModule(ctx context.Context, req *v1.StartModu
 // StopModule calls grpc.api.v1.ModuleService.StopModule.
 func (c *moduleServiceClient) StopModule(ctx context.Context, req *v1.StopModuleRequest) (*v1.ModuleControlResponse, error) {
 	response, err := c.stopModule.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
+// GetTLSStatus calls grpc.api.v1.ModuleService.GetTLSStatus.
+func (c *moduleServiceClient) GetTLSStatus(ctx context.Context, req *v1.GetTLSStatusRequest) (*v1.TLSStatus, error) {
+	response, err := c.getTLSStatus.CallUnary(ctx, connect.NewRequest(req))
 	if response != nil {
 		return response.Msg, err
 	}
@@ -363,6 +387,11 @@ type ModuleServiceHandler interface {
 	ListModuleStatus(context.Context, *v1.ListModuleStatusRequest) (*v1.ListModuleStatusResponse, error)
 	StartModule(context.Context, *v1.StartModuleRequest) (*v1.ModuleControlResponse, error)
 	StopModule(context.Context, *v1.StopModuleRequest) (*v1.ModuleControlResponse, error)
+	// TLS certificate available to the device-facing servers (FTPS, DICOM TLS).
+	// One installation-wide pair, read from a mounted volume — the admin screen
+	// uses this to explain why the TLS toggle is unavailable instead of letting
+	// an operator turn on a module that cannot start.
+	GetTLSStatus(context.Context, *v1.GetTLSStatusRequest) (*v1.TLSStatus, error)
 	GetFTPConfig(context.Context, *v1.GetFTPConfigRequest) (*v1.FTPConfig, error)
 	SaveFTPConfig(context.Context, *v1.SaveFTPConfigRequest) (*v1.SaveModuleConfigResponse, error)
 	GetDICOMConfig(context.Context, *v1.GetDICOMConfigRequest) (*v1.DICOMConfig, error)
@@ -405,6 +434,12 @@ func NewModuleServiceHandler(svc ModuleServiceHandler, opts ...connect.HandlerOp
 		ModuleServiceStopModuleProcedure,
 		svc.StopModule,
 		connect.WithSchema(moduleServiceMethods.ByName("StopModule")),
+		connect.WithHandlerOptions(opts...),
+	)
+	moduleServiceGetTLSStatusHandler := connect.NewUnaryHandlerSimple(
+		ModuleServiceGetTLSStatusProcedure,
+		svc.GetTLSStatus,
+		connect.WithSchema(moduleServiceMethods.ByName("GetTLSStatus")),
 		connect.WithHandlerOptions(opts...),
 	)
 	moduleServiceGetFTPConfigHandler := connect.NewUnaryHandlerSimple(
@@ -483,6 +518,8 @@ func NewModuleServiceHandler(svc ModuleServiceHandler, opts ...connect.HandlerOp
 			moduleServiceStartModuleHandler.ServeHTTP(w, r)
 		case ModuleServiceStopModuleProcedure:
 			moduleServiceStopModuleHandler.ServeHTTP(w, r)
+		case ModuleServiceGetTLSStatusProcedure:
+			moduleServiceGetTLSStatusHandler.ServeHTTP(w, r)
 		case ModuleServiceGetFTPConfigProcedure:
 			moduleServiceGetFTPConfigHandler.ServeHTTP(w, r)
 		case ModuleServiceSaveFTPConfigProcedure:
@@ -528,6 +565,10 @@ func (UnimplementedModuleServiceHandler) StartModule(context.Context, *v1.StartM
 
 func (UnimplementedModuleServiceHandler) StopModule(context.Context, *v1.StopModuleRequest) (*v1.ModuleControlResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("grpc.api.v1.ModuleService.StopModule is not implemented"))
+}
+
+func (UnimplementedModuleServiceHandler) GetTLSStatus(context.Context, *v1.GetTLSStatusRequest) (*v1.TLSStatus, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("grpc.api.v1.ModuleService.GetTLSStatus is not implemented"))
 }
 
 func (UnimplementedModuleServiceHandler) GetFTPConfig(context.Context, *v1.GetFTPConfigRequest) (*v1.FTPConfig, error) {

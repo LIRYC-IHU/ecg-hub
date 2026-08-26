@@ -12,13 +12,14 @@ import (
 	"bytes"
 	"crypto/tls"
 	"fmt"
+	"github.com/LIRYC-IHU/ecg-hub/internal/certs"
 	"log/slog"
 	"net"
 	"strings"
 	"time"
 
-	dicomio "github.com/apaladiychuk/go-dicom/dicomio"
 	legacydicom "github.com/apaladiychuk/go-dicom"
+	dicomio "github.com/apaladiychuk/go-dicom/dicomio"
 	legacytag "github.com/apaladiychuk/go-dicom/dicomtag"
 	netdicom "github.com/apaladiychuk/go-netdicom"
 	"github.com/apaladiychuk/go-netdicom/dimse"
@@ -43,7 +44,7 @@ type Settings struct {
 type Server struct {
 	cfg      Settings
 	queue    ingestion.IngestQueue
-	listener net.Listener // our own listener — closed in Stop() to break accept loop
+	listener net.Listener  // our own listener — closed in Stop() to break accept loop
 	done     chan struct{} // closed when accept loop exits
 }
 
@@ -62,12 +63,15 @@ func (s *Server) Start() error {
 
 	var tlsCfg *tls.Config
 	if s.cfg.TLS {
+		if st := certs.Check(s.cfg.CertFile, s.cfg.KeyFile); !st.Available {
+			return fmt.Errorf("dicom: TLS is enabled but the certificate is unusable: %s", st.Error)
+		}
 		cert, err := tls.LoadX509KeyPair(s.cfg.CertFile, s.cfg.KeyFile)
 		if err != nil {
 			return fmt.Errorf("dicom: load TLS cert: %w", err)
 		}
-		tlsCfg = &tls.Config{Certificates: []tls.Certificate{cert}}
-		slog.Info("dicom: TLS enforcement active")
+		tlsCfg = &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12}
+		slog.Info("dicom: TLS enforcement active", "cert_file", s.cfg.CertFile)
 	} else {
 		slog.Warn("dicom: tls disabled — non-production mode")
 	}

@@ -424,6 +424,7 @@ func (r *RouterConfig) RegisterRoutes() {
 				apiv1connect.ModuleServiceListModuleStatusProcedure:     auth.PermAdminSystem,
 				apiv1connect.ModuleServiceStartModuleProcedure:          auth.PermAdminSystem,
 				apiv1connect.ModuleServiceStopModuleProcedure:           auth.PermAdminSystem,
+				apiv1connect.ModuleServiceGetTLSStatusProcedure:         auth.PermAdminSystem,
 				apiv1connect.ModuleServiceGetFTPConfigProcedure:         auth.PermAdminSystem,
 				apiv1connect.ModuleServiceSaveFTPConfigProcedure:        auth.PermAdminSystem,
 				apiv1connect.ModuleServiceGetDICOMConfigProcedure:       auth.PermAdminSystem,

@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { Eye, EyeOff, Settings2, Play, Square, AlertCircle, Plus, Trash2, Wifi, Radio, Database } from "lucide-react";
+import { Eye, EyeOff, Settings2, Play, Square, AlertCircle, Plus, Trash2, Wifi, Radio, Database, ShieldAlert, ShieldCheck } from "lucide-react";
 import {
   fetchFTPConfig,
+  fetchTLSStatus,
   saveFTPConfig,
   fetchDICOMConfig,
   saveDICOMConfig,
@@ -64,17 +65,102 @@ function PasswordInput({
 
 // ─── Toggle Switch ───────────────────────────────────────────────────────────
 
-function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+function Toggle({
+  checked,
+  onChange,
+  disabled = false,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  disabled?: boolean;
+}) {
   return (
     <button
       type="button"
+      disabled={disabled}
       onClick={() => onChange(!checked)}
-      className={`relative w-10 h-5 rounded-full transition-colors ${checked ? "bg-primary" : "bg-muted-foreground/30"}`}
+      className={`relative w-10 h-5 rounded-full transition-colors ${checked ? "bg-primary" : "bg-muted-foreground/30"} ${disabled ? "opacity-40 cursor-not-allowed" : ""}`}
     >
       <span
         className={`absolute left-0.5 top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${checked ? "translate-x-5" : "translate-x-0"}`}
       />
     </button>
+  );
+}
+
+// ─── TLS Switch ──────────────────────────────────────────────────────────────
+
+// Days below which a certificate is worth flagging. Certbot renews at 30 by
+// default, so anything under that means renewal is not running.
+const EXPIRY_WARNING_DAYS = 30;
+
+/**
+ * TLS switch shared by the device-facing servers (FTPS, DICOM TLS).
+ *
+ * The certificate is installation-wide and mounted, never configured here — IT
+ * renews it upstream with certbot or an internal PKI. What this adds is the
+ * reason: with no usable pair the switch is disabled and names the missing
+ * file, instead of letting an operator turn on a module that then refuses every
+ * device it is supposed to serve.
+ */
+function TlsToggle({
+  checked,
+  onChange,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  const { t, i18n } = useTranslation();
+  const { data: status, isLoading } = useQuery({
+    queryKey: ["admin", "tls", "status"],
+    queryFn: fetchTLSStatus,
+    staleTime: 60_000,
+  });
+
+  const usable = status?.available ?? false;
+  const expiresAt = status?.notAfter ? new Date(status.notAfter) : null;
+  const daysLeft = expiresAt
+    ? Math.round((expiresAt.getTime() - Date.now()) / 86_400_000)
+    : null;
+
+  return (
+    <div className="mt-2 space-y-1.5">
+      <Toggle
+        checked={checked && usable}
+        onChange={onChange}
+        disabled={isLoading || !usable}
+      />
+
+      {!isLoading && !usable && (
+        <p className="flex items-start gap-1.5 text-[10px] text-destructive max-w-xs">
+          <ShieldAlert className="w-3 h-3 shrink-0 mt-px" />
+          <span>
+            {t("modules.tls.unavailable")}
+            {status?.error ? ` — ${status.error}` : ""}
+          </span>
+        </p>
+      )}
+
+      {usable && (
+        <p
+          className={`flex items-start gap-1.5 text-[10px] max-w-xs ${
+            daysLeft !== null && daysLeft < EXPIRY_WARNING_DAYS
+              ? "text-orange-600"
+              : "text-muted-foreground"
+          }`}
+        >
+          <ShieldCheck className="w-3 h-3 shrink-0 mt-px" />
+          <span>
+            {status?.subject || status?.certPath}
+            {expiresAt
+              ? ` — ${t("modules.tls.validUntil", {
+                  date: expiresAt.toLocaleDateString(i18n.language),
+                })}`
+              : ""}
+          </span>
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -301,9 +387,7 @@ function FTPCard({ ftpStatus }: { ftpStatus: "running" | "stopped" | "error" | u
               <label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                 {t("modules.ftp.tls")}
               </label>
-              <div className="mt-2">
-                <Toggle checked={tls} onChange={setTls} />
-              </div>
+              <TlsToggle checked={tls} onChange={setTls} />
             </div>
           </div>
 
@@ -488,9 +572,7 @@ function DICOMCard({ dicomStatus }: { dicomStatus: "running" | "stopped" | "erro
               <label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                 {t("modules.dicom.tls")}
               </label>
-              <div className="mt-2">
-                <Toggle checked={tls} onChange={setTls} />
-              </div>
+              <TlsToggle checked={tls} onChange={setTls} />
             </div>
           </div>
 

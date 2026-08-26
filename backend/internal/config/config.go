@@ -16,6 +16,7 @@ type Config struct {
 	Server   ServerConfig   `mapstructure:"server"`
 	Database DatabaseConfig `mapstructure:"database"`
 	Storage  StorageConfig  `mapstructure:"storage"`
+	Certs    CertsConfig    `mapstructure:"certs"`
 	Export   ExportConfig   `mapstructure:"export"`
 	Metrics  MetricsConfig  `mapstructure:"metrics"`
 	Webhooks WebhooksConfig `mapstructure:"webhooks"`
@@ -97,6 +98,22 @@ type ServerConfig struct {
 type DatabaseConfig struct {
 	MaxOpenConns int `mapstructure:"max_open_conns"`
 	MaxIdleConns int `mapstructure:"max_idle_conns"`
+}
+
+// CertsConfig points at the TLS certificate the device-facing servers present
+// (FTPS, DICOM TLS).
+//
+// One pair for the installation, read from a mounted directory — deliberately
+// not configurable from the admin UI. Hospital IT already manages certificates
+// (certbot, an internal PKI, a CHU wildcard); all the application needs is
+// somewhere to read them. Renewal then stays entirely upstream: the files are
+// rewritten in place and the module is restarted.
+type CertsConfig struct {
+	// CertFile is the certificate chain in PEM. Defaults to certbot's layout so
+	// that mounting /etc/letsencrypt/live/<host> at /certs needs no config.
+	CertFile string `mapstructure:"cert_file"`
+	// KeyFile is the matching private key in PEM.
+	KeyFile string `mapstructure:"key_file"`
 }
 
 // StorageConfig holds file volume settings (FR10).
