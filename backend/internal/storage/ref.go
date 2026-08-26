@@ -134,6 +134,24 @@ func Remove(ctx context.Context, ref string) error {
 	return nil
 }
 
+// WriteBack overwrites ref with data.
+//
+// It exists for the one consumer that edits a stored file rather than reading
+// it: a vendor metadata patch, which rewrites the source file in place. On a
+// local ref that is what the module already did by itself; on a remote one the
+// module patched a temp copy, and without this the edit would be thrown away
+// with the copy.
+func WriteBack(ctx context.Context, ref string, data []byte) error {
+	s, err := remoteFor(ref)
+	if err != nil {
+		return err
+	}
+	if s == nil {
+		return os.WriteFile(ref, data, 0o644) //nolint:gosec // same mode the volume writer uses
+	}
+	return s.putRef(ctx, ref, data)
+}
+
 // Materialize returns a path at which ref can be read from the local
 // filesystem, together with a cleanup function the caller must always call
 // (defer it immediately, even on the error-free path).

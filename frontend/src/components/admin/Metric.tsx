@@ -1,4 +1,9 @@
-import { type VolumeMetric, fetchStorageMetrics } from "@/lib/api";
+import {
+  type StorageBackendInfo,
+  type VolumeMetric,
+  fetchStorageMetrics,
+} from "@/lib/api";
+import { Cloud, HardDrive } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Spinner } from "../ui/Spinner";
@@ -10,6 +15,14 @@ const VOLUME_LABEL_KEYS: Record<string, string> = {
   Quarantine: "admin.system.storage.quarantine",
 };
 
+// With object storage the same volumes hold only what has not been uploaded
+// yet. Labelling them "ECG storage" would misreport both what is stored and
+// what the remaining space means.
+const SPOOL_LABEL_KEYS: Record<string, string> = {
+  "ECG Storage": "admin.system.storage.ecgSpool",
+  Quarantine: "admin.system.storage.quarantineSpool",
+};
+
 function formatBytes(bytes: number) {
   const sizes = ["B", "KB", "MB", "GB", "TB"];
   if (bytes === 0) return "0 B";
@@ -17,11 +30,23 @@ function formatBytes(bytes: number) {
   return (bytes / Math.pow(1024, i)).toFixed(1) + " " + sizes[i];
 }
 
+// formatAge keeps the backlog age readable without pulling in a date library
+// for one string.
+function formatAge(seconds: number) {
+  if (seconds < 60) return `${Math.round(seconds)}s`;
+  if (seconds < 3600) return `${Math.round(seconds / 60)}m`;
+  if (seconds < 86400) return `${Math.round(seconds / 3600)}h`;
+  return `${Math.round(seconds / 86400)}d`;
+}
+
 function MetricCard() {
   const { t } = useTranslation();
-  const volumeLabel = (name: string) =>
-    VOLUME_LABEL_KEYS[name] ? t(VOLUME_LABEL_KEYS[name]) : name;
   const [volumes, setVolumes] = useState<VolumeMetric[]>([]);
+  const [backend, setBackend] = useState<StorageBackendInfo | null>(null);
+  const volumeLabel = (name: string) => {
+    const keys = backend?.kind === "s3" ? SPOOL_LABEL_KEYS : VOLUME_LABEL_KEYS;
+    return keys[name] ? t(keys[name]) : name;
+  };
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -41,6 +66,7 @@ function MetricCard() {
           setError("Failed to load metrics:" + data.error);
         } else {
           setVolumes(data.volumes);
+          setBackend(data.backend);
         }
       }
     } catch (err) {
@@ -65,6 +91,40 @@ function MetricCard() {
       <div className="flex items-center gap-3">
         <p className="font-semibold">{t("admin.system.storage.title")}</p>
       </div>
+
+      {backend?.kind === "s3" && (
+        <div className="rounded-lg border border-border bg-muted/30 px-3 py-2 space-y-1">
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <Cloud className="w-4 h-4 text-primary" />
+            <span>{t("admin.system.storage.objectStorage")}</span>
+          </div>
+          <p className="text-xs text-muted-foreground break-all">
+            {backend.bucket}
+            {backend.endpoint ? ` — ${backend.endpoint}` : ""}
+          </p>
+          <p className="text-xs flex items-center gap-1.5">
+            <HardDrive className="w-3 h-3 text-muted-foreground shrink-0" />
+            {backend.pendingUploads === 0 ? (
+              <span className="text-muted-foreground">
+                {t("admin.system.storage.spoolEmpty")}
+              </span>
+            ) : (
+              <span
+                className={
+                  backend.oldestPendingSeconds > 3600
+                    ? "text-destructive font-medium"
+                    : "text-muted-foreground"
+                }
+              >
+                {t("admin.system.storage.spoolPending", {
+                  count: backend.pendingUploads,
+                  age: formatAge(backend.oldestPendingSeconds),
+                })}
+              </span>
+            )}
+          </p>
+        </div>
+      )}
 
       {error ? (
         <div className="bg-destructive/5 border border-destructive/20 rounded-lg px-3 py-2">

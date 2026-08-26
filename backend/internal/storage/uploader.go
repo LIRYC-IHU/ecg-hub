@@ -225,3 +225,32 @@ func objectKey(root, path string) string {
 	}
 	return filepath.Base(path)
 }
+
+// SpoolStats reports the upload backlog across every table that references a
+// stored file: how many are still local, and how old the oldest one is.
+//
+// The admin screen needs it for the same reason the metrics do — a spool that
+// stops draining is invisible until the volume fills and ingestion stops.
+func SpoolStats(ctx context.Context, db *gorm.DB) (pending int64, oldestSeconds int64) {
+	for _, src := range []spoolSource{
+		{table: "ecgs", orderCol: "ingested_at"},
+		{table: "quarantine_entries", orderCol: "received_at"},
+	} {
+		var stat struct {
+			N             int64
+			OldestSeconds float64
+		}
+		query := fmt.Sprintf(
+			`SELECT COUNT(*) AS n, COALESCE(EXTRACT(EPOCH FROM now() - MIN(%s)), 0) AS oldest_seconds
+			 FROM %s WHERE file_path NOT LIKE 's3://%%'`, src.orderCol, src.table)
+		if err := db.WithContext(ctx).Raw(query).Scan(&stat).Error; err != nil {
+			slog.Warn("storage: spool stats query failed", "table", src.table, "error", err)
+			continue
+		}
+		pending += stat.N
+		if int64(stat.OldestSeconds) > oldestSeconds {
+			oldestSeconds = int64(stat.OldestSeconds)
+		}
+	}
+	return pending, oldestSeconds
+}

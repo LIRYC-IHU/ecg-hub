@@ -160,6 +160,25 @@ func isPlainMD5(etag string) bool {
 	return err == nil
 }
 
+// putRef overwrites an existing ref, keeping its bucket and key rather than
+// deriving a new one from the configured bucket and prefix — the ref is what
+// the database points at, and the object it names is the one to replace.
+func (s *S3Store) putRef(ctx context.Context, ref string, data []byte) error {
+	bucket, key, ok := parseS3Ref(ref)
+	if !ok {
+		return fmt.Errorf("storage: malformed object ref %q", ref)
+	}
+	info, err := s.client.PutObject(ctx, bucket, key, bytes.NewReader(data), int64(len(data)),
+		minio.PutObjectOptions{ContentType: "application/octet-stream", SendContentMd5: true})
+	if err != nil {
+		return fmt.Errorf("storage: s3 put %s: %w", ref, err)
+	}
+	if err := verifyUpload(info, data); err != nil {
+		return fmt.Errorf("storage: s3 put %s: %w", ref, err)
+	}
+	return nil
+}
+
 // parseS3Ref splits "s3://bucket/key" into its parts.
 func parseS3Ref(ref string) (bucket, key string, ok bool) {
 	if !strings.HasPrefix(ref, s3Scheme) {

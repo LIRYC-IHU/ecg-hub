@@ -303,7 +303,12 @@
       "storage": {
         "title": "Storage",
         "ecg": "ECG storage",
-        "quarantine": "Quarantine"
+        "quarantine": "Quarantine",
+        "ecgSpool": "ECG upload spool",
+        "quarantineSpool": "Quarantine upload spool",
+        "objectStorage": "Object storage",
+        "spoolEmpty": "Everything uploaded",
+        "spoolPending": "{{count}} file(s) awaiting upload — oldest {{age}}"
       }
     },
     "users": {

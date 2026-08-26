@@ -303,7 +303,12 @@
       "storage": {
         "title": "Stockage",
         "ecg": "Stockage ECG",
-        "quarantine": "Quarantaine"
+        "quarantine": "Quarantaine",
+        "ecgSpool": "File d'envoi ECG",
+        "quarantineSpool": "File d'envoi quarantaine",
+        "objectStorage": "Stockage objet",
+        "spoolEmpty": "Tout est envoyé",
+        "spoolPending": "{{count}} fichier(s) en attente d'envoi — le plus ancien {{age}}"
       }
     },
     "users": {

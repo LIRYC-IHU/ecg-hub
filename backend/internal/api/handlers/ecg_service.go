@@ -2,10 +2,13 @@ package handlers
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
 	"strings"
 	"time"
 
@@ -19,6 +22,7 @@ import (
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
 	"github.com/LIRYC-IHU/ecg-hub/internal/ecgmeta"
 	"github.com/LIRYC-IHU/ecg-hub/internal/module"
+	"github.com/LIRYC-IHU/ecg-hub/internal/storage"
 )
 
 // ecgToProto maps a GORM ECG model to the wire message (mirrors dto.EcgToDTO).
@@ -297,7 +301,7 @@ func (h *ECGServiceHandler) UpdateMetadata(ctx context.Context, req *apiv1.Updat
 
 	// Best-effort file update — log on failure but do not fail the request.
 	if mod, ok := module.Get(ecg.Vendor); ok {
-		if fErr := mod.UpdateFile(ecg.FilePath, patch); fErr != nil {
+		if fErr := h.patchSourceFile(ctx, ecg, mod, patch); fErr != nil {
 			slog.Warn("ecg-metadata: file update failed",
 				"ecg_id", ecg.ID, "vendor", ecg.Vendor, "error", fErr)
 		}
@@ -324,4 +328,41 @@ func (h *ECGServiceHandler) MarkViewed(_ context.Context, req *apiv1.MarkViewedR
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	return &apiv1.MarkViewedResponse{Id: req.Id, Viewed: true}, nil
+}
+
+// patchSourceFile applies a vendor metadata patch to the stored file and keeps
+// the integrity hash in step with it.
+//
+// Vendor modules edit a file in place and only know how to work on a local
+// path, so on object storage the file is fetched, patched, and put back under
+// the same ref. The stored SHA-256 is then recomputed — it is verified on every
+// download, so leaving it stale would make each metadata edit report the ECG as
+// tampered with, permanently, for a file that is exactly what it should be.
+func (h *ECGServiceHandler) patchSourceFile(ctx context.Context, ecg *models.ECG, mod module.Module, patch module.MetadataPatch) error {
+	localPath, cleanup, err := storage.Materialize(ctx, ecg.FilePath)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+
+	if err := mod.UpdateFile(localPath, patch); err != nil {
+		return err
+	}
+
+	data, err := os.ReadFile(localPath) //nolint:gosec // path is ours, from the ref we just materialised
+	if err != nil {
+		return fmt.Errorf("read patched file: %w", err)
+	}
+	if storage.IsRemoteRef(ecg.FilePath) {
+		if err := storage.WriteBack(ctx, ecg.FilePath, data); err != nil {
+			return err
+		}
+	}
+
+	sum := sha256.Sum256(data)
+	hash := hex.EncodeToString(sum[:])
+	if hash == ecg.ContentHash {
+		return nil
+	}
+	return repository.NewECGRepository(h.DB).UpdateContentHash(ecg.ID, hash)
 }

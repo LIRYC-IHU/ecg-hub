@@ -1399,6 +1399,7 @@ type GetStorageMetricsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Volumes       []*VolumeMetric        `protobuf:"bytes,1,rep,name=volumes,proto3" json:"volumes,omitempty"`
 	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
+	Backend       *StorageBackendInfo    `protobuf:"bytes,3,opt,name=backend,proto3" json:"backend,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1447,6 +1448,95 @@ func (x *GetStorageMetricsResponse) GetError() string {
 	return ""
 }
 
+func (x *GetStorageMetricsResponse) GetBackend() *StorageBackendInfo {
+	if x != nil {
+		return x.Backend
+	}
+	return nil
+}
+
+// StorageBackendInfo tells the admin screen where files actually live. With an
+// object-storage backend the local volume above is only the upload spool, so
+// showing its size as "ECG storage" would misreport both what is stored and
+// what the free space means.
+type StorageBackendInfo struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Kind     string                 `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"` // "local" | "s3"
+	Bucket   string                 `protobuf:"bytes,2,opt,name=bucket,proto3" json:"bucket,omitempty"`
+	Endpoint string                 `protobuf:"bytes,3,opt,name=endpoint,proto3" json:"endpoint,omitempty"`
+	// Files written locally and not yet uploaded, and the age of the oldest.
+	// A backlog that does not shrink means the bucket is unreachable.
+	PendingUploads       int64 `protobuf:"varint,4,opt,name=pending_uploads,json=pendingUploads,proto3" json:"pending_uploads,omitempty"`
+	OldestPendingSeconds int64 `protobuf:"varint,5,opt,name=oldest_pending_seconds,json=oldestPendingSeconds,proto3" json:"oldest_pending_seconds,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
+}
+
+func (x *StorageBackendInfo) Reset() {
+	*x = StorageBackendInfo{}
+	mi := &file_v1_admin_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StorageBackendInfo) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StorageBackendInfo) ProtoMessage() {}
+
+func (x *StorageBackendInfo) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_admin_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StorageBackendInfo.ProtoReflect.Descriptor instead.
+func (*StorageBackendInfo) Descriptor() ([]byte, []int) {
+	return file_v1_admin_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *StorageBackendInfo) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *StorageBackendInfo) GetBucket() string {
+	if x != nil {
+		return x.Bucket
+	}
+	return ""
+}
+
+func (x *StorageBackendInfo) GetEndpoint() string {
+	if x != nil {
+		return x.Endpoint
+	}
+	return ""
+}
+
+func (x *StorageBackendInfo) GetPendingUploads() int64 {
+	if x != nil {
+		return x.PendingUploads
+	}
+	return 0
+}
+
+func (x *StorageBackendInfo) GetOldestPendingSeconds() int64 {
+	if x != nil {
+		return x.OldestPendingSeconds
+	}
+	return 0
+}
+
 type ErrorEntry struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Timestamp     string                 `protobuf:"bytes,1,opt,name=timestamp,proto3" json:"timestamp,omitempty"` // RFC3339
@@ -1463,7 +1553,7 @@ type ErrorEntry struct {
 
 func (x *ErrorEntry) Reset() {
 	*x = ErrorEntry{}
-	mi := &file_v1_admin_proto_msgTypes[26]
+	mi := &file_v1_admin_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1475,7 +1565,7 @@ func (x *ErrorEntry) String() string {
 func (*ErrorEntry) ProtoMessage() {}
 
 func (x *ErrorEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_admin_proto_msgTypes[26]
+	mi := &file_v1_admin_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1488,7 +1578,7 @@ func (x *ErrorEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ErrorEntry.ProtoReflect.Descriptor instead.
 func (*ErrorEntry) Descriptor() ([]byte, []int) {
-	return file_v1_admin_proto_rawDescGZIP(), []int{26}
+	return file_v1_admin_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *ErrorEntry) GetTimestamp() string {
@@ -1556,7 +1646,7 @@ type GetRecentErrorsRequest struct {
 
 func (x *GetRecentErrorsRequest) Reset() {
 	*x = GetRecentErrorsRequest{}
-	mi := &file_v1_admin_proto_msgTypes[27]
+	mi := &file_v1_admin_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1568,7 +1658,7 @@ func (x *GetRecentErrorsRequest) String() string {
 func (*GetRecentErrorsRequest) ProtoMessage() {}
 
 func (x *GetRecentErrorsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_admin_proto_msgTypes[27]
+	mi := &file_v1_admin_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1581,7 +1671,7 @@ func (x *GetRecentErrorsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetRecentErrorsRequest.ProtoReflect.Descriptor instead.
 func (*GetRecentErrorsRequest) Descriptor() ([]byte, []int) {
-	return file_v1_admin_proto_rawDescGZIP(), []int{27}
+	return file_v1_admin_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *GetRecentErrorsRequest) GetLimit() int32 {
@@ -1600,7 +1690,7 @@ type GetRecentErrorsResponse struct {
 
 func (x *GetRecentErrorsResponse) Reset() {
 	*x = GetRecentErrorsResponse{}
-	mi := &file_v1_admin_proto_msgTypes[28]
+	mi := &file_v1_admin_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1612,7 +1702,7 @@ func (x *GetRecentErrorsResponse) String() string {
 func (*GetRecentErrorsResponse) ProtoMessage() {}
 
 func (x *GetRecentErrorsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_admin_proto_msgTypes[28]
+	mi := &file_v1_admin_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1625,7 +1715,7 @@ func (x *GetRecentErrorsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetRecentErrorsResponse.ProtoReflect.Descriptor instead.
 func (*GetRecentErrorsResponse) Descriptor() ([]byte, []int) {
-	return file_v1_admin_proto_rawDescGZIP(), []int{28}
+	return file_v1_admin_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *GetRecentErrorsResponse) GetErrors() []*ErrorEntry {
@@ -1643,7 +1733,7 @@ type GetUserDefaultsRequest struct {
 
 func (x *GetUserDefaultsRequest) Reset() {
 	*x = GetUserDefaultsRequest{}
-	mi := &file_v1_admin_proto_msgTypes[29]
+	mi := &file_v1_admin_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1655,7 +1745,7 @@ func (x *GetUserDefaultsRequest) String() string {
 func (*GetUserDefaultsRequest) ProtoMessage() {}
 
 func (x *GetUserDefaultsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_admin_proto_msgTypes[29]
+	mi := &file_v1_admin_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1668,7 +1758,7 @@ func (x *GetUserDefaultsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetUserDefaultsRequest.ProtoReflect.Descriptor instead.
 func (*GetUserDefaultsRequest) Descriptor() ([]byte, []int) {
-	return file_v1_admin_proto_rawDescGZIP(), []int{29}
+	return file_v1_admin_proto_rawDescGZIP(), []int{30}
 }
 
 type GetUserDefaultsResponse struct {
@@ -1680,7 +1770,7 @@ type GetUserDefaultsResponse struct {
 
 func (x *GetUserDefaultsResponse) Reset() {
 	*x = GetUserDefaultsResponse{}
-	mi := &file_v1_admin_proto_msgTypes[30]
+	mi := &file_v1_admin_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1692,7 +1782,7 @@ func (x *GetUserDefaultsResponse) String() string {
 func (*GetUserDefaultsResponse) ProtoMessage() {}
 
 func (x *GetUserDefaultsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_admin_proto_msgTypes[30]
+	mi := &file_v1_admin_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1705,7 +1795,7 @@ func (x *GetUserDefaultsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetUserDefaultsResponse.ProtoReflect.Descriptor instead.
 func (*GetUserDefaultsResponse) Descriptor() ([]byte, []int) {
-	return file_v1_admin_proto_rawDescGZIP(), []int{30}
+	return file_v1_admin_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *GetUserDefaultsResponse) GetDefaultRole() string {
@@ -1724,7 +1814,7 @@ type SetUserDefaultsRequest struct {
 
 func (x *SetUserDefaultsRequest) Reset() {
 	*x = SetUserDefaultsRequest{}
-	mi := &file_v1_admin_proto_msgTypes[31]
+	mi := &file_v1_admin_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1736,7 +1826,7 @@ func (x *SetUserDefaultsRequest) String() string {
 func (*SetUserDefaultsRequest) ProtoMessage() {}
 
 func (x *SetUserDefaultsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_admin_proto_msgTypes[31]
+	mi := &file_v1_admin_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1749,7 +1839,7 @@ func (x *SetUserDefaultsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetUserDefaultsRequest.ProtoReflect.Descriptor instead.
 func (*SetUserDefaultsRequest) Descriptor() ([]byte, []int) {
-	return file_v1_admin_proto_rawDescGZIP(), []int{31}
+	return file_v1_admin_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *SetUserDefaultsRequest) GetDefaultRole() string {
@@ -1768,7 +1858,7 @@ type SetUserDefaultsResponse struct {
 
 func (x *SetUserDefaultsResponse) Reset() {
 	*x = SetUserDefaultsResponse{}
-	mi := &file_v1_admin_proto_msgTypes[32]
+	mi := &file_v1_admin_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1780,7 +1870,7 @@ func (x *SetUserDefaultsResponse) String() string {
 func (*SetUserDefaultsResponse) ProtoMessage() {}
 
 func (x *SetUserDefaultsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_admin_proto_msgTypes[32]
+	mi := &file_v1_admin_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1793,7 +1883,7 @@ func (x *SetUserDefaultsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetUserDefaultsResponse.ProtoReflect.Descriptor instead.
 func (*SetUserDefaultsResponse) Descriptor() ([]byte, []int) {
-	return file_v1_admin_proto_rawDescGZIP(), []int{32}
+	return file_v1_admin_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *SetUserDefaultsResponse) GetDefaultRole() string {
@@ -1820,7 +1910,7 @@ type QuarantineEntry struct {
 
 func (x *QuarantineEntry) Reset() {
 	*x = QuarantineEntry{}
-	mi := &file_v1_admin_proto_msgTypes[33]
+	mi := &file_v1_admin_proto_msgTypes[34]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1832,7 +1922,7 @@ func (x *QuarantineEntry) String() string {
 func (*QuarantineEntry) ProtoMessage() {}
 
 func (x *QuarantineEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_admin_proto_msgTypes[33]
+	mi := &file_v1_admin_proto_msgTypes[34]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1845,7 +1935,7 @@ func (x *QuarantineEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QuarantineEntry.ProtoReflect.Descriptor instead.
 func (*QuarantineEntry) Descriptor() ([]byte, []int) {
-	return file_v1_admin_proto_rawDescGZIP(), []int{33}
+	return file_v1_admin_proto_rawDescGZIP(), []int{34}
 }
 
 func (x *QuarantineEntry) GetId() string {
@@ -1922,7 +2012,7 @@ type ListQuarantineRequest struct {
 
 func (x *ListQuarantineRequest) Reset() {
 	*x = ListQuarantineRequest{}
-	mi := &file_v1_admin_proto_msgTypes[34]
+	mi := &file_v1_admin_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1934,7 +2024,7 @@ func (x *ListQuarantineRequest) String() string {
 func (*ListQuarantineRequest) ProtoMessage() {}
 
 func (x *ListQuarantineRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_admin_proto_msgTypes[34]
+	mi := &file_v1_admin_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1947,7 +2037,7 @@ func (x *ListQuarantineRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListQuarantineRequest.ProtoReflect.Descriptor instead.
 func (*ListQuarantineRequest) Descriptor() ([]byte, []int) {
-	return file_v1_admin_proto_rawDescGZIP(), []int{34}
+	return file_v1_admin_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *ListQuarantineRequest) GetPage() int32 {
@@ -1983,7 +2073,7 @@ type ListQuarantineResponse struct {
 
 func (x *ListQuarantineResponse) Reset() {
 	*x = ListQuarantineResponse{}
-	mi := &file_v1_admin_proto_msgTypes[35]
+	mi := &file_v1_admin_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1995,7 +2085,7 @@ func (x *ListQuarantineResponse) String() string {
 func (*ListQuarantineResponse) ProtoMessage() {}
 
 func (x *ListQuarantineResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_admin_proto_msgTypes[35]
+	mi := &file_v1_admin_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2008,7 +2098,7 @@ func (x *ListQuarantineResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListQuarantineResponse.ProtoReflect.Descriptor instead.
 func (*ListQuarantineResponse) Descriptor() ([]byte, []int) {
-	return file_v1_admin_proto_rawDescGZIP(), []int{35}
+	return file_v1_admin_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *ListQuarantineResponse) GetData() []*QuarantineEntry {
@@ -2048,7 +2138,7 @@ type DeleteQuarantineRequest struct {
 
 func (x *DeleteQuarantineRequest) Reset() {
 	*x = DeleteQuarantineRequest{}
-	mi := &file_v1_admin_proto_msgTypes[36]
+	mi := &file_v1_admin_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2060,7 +2150,7 @@ func (x *DeleteQuarantineRequest) String() string {
 func (*DeleteQuarantineRequest) ProtoMessage() {}
 
 func (x *DeleteQuarantineRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_admin_proto_msgTypes[36]
+	mi := &file_v1_admin_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2073,7 +2163,7 @@ func (x *DeleteQuarantineRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteQuarantineRequest.ProtoReflect.Descriptor instead.
 func (*DeleteQuarantineRequest) Descriptor() ([]byte, []int) {
-	return file_v1_admin_proto_rawDescGZIP(), []int{36}
+	return file_v1_admin_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *DeleteQuarantineRequest) GetId() string {
@@ -2091,7 +2181,7 @@ type DeleteQuarantineResponse struct {
 
 func (x *DeleteQuarantineResponse) Reset() {
 	*x = DeleteQuarantineResponse{}
-	mi := &file_v1_admin_proto_msgTypes[37]
+	mi := &file_v1_admin_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2103,7 +2193,7 @@ func (x *DeleteQuarantineResponse) String() string {
 func (*DeleteQuarantineResponse) ProtoMessage() {}
 
 func (x *DeleteQuarantineResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_admin_proto_msgTypes[37]
+	mi := &file_v1_admin_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2116,7 +2206,7 @@ func (x *DeleteQuarantineResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteQuarantineResponse.ProtoReflect.Descriptor instead.
 func (*DeleteQuarantineResponse) Descriptor() ([]byte, []int) {
-	return file_v1_admin_proto_rawDescGZIP(), []int{37}
+	return file_v1_admin_proto_rawDescGZIP(), []int{38}
 }
 
 type AssignQuarantineRequest struct {
@@ -2130,7 +2220,7 @@ type AssignQuarantineRequest struct {
 
 func (x *AssignQuarantineRequest) Reset() {
 	*x = AssignQuarantineRequest{}
-	mi := &file_v1_admin_proto_msgTypes[38]
+	mi := &file_v1_admin_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2142,7 +2232,7 @@ func (x *AssignQuarantineRequest) String() string {
 func (*AssignQuarantineRequest) ProtoMessage() {}
 
 func (x *AssignQuarantineRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_admin_proto_msgTypes[38]
+	mi := &file_v1_admin_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2155,7 +2245,7 @@ func (x *AssignQuarantineRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AssignQuarantineRequest.ProtoReflect.Descriptor instead.
 func (*AssignQuarantineRequest) Descriptor() ([]byte, []int) {
-	return file_v1_admin_proto_rawDescGZIP(), []int{38}
+	return file_v1_admin_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *AssignQuarantineRequest) GetId() string {
@@ -2190,7 +2280,7 @@ type AssignQuarantineResponse struct {
 
 func (x *AssignQuarantineResponse) Reset() {
 	*x = AssignQuarantineResponse{}
-	mi := &file_v1_admin_proto_msgTypes[39]
+	mi := &file_v1_admin_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2202,7 +2292,7 @@ func (x *AssignQuarantineResponse) String() string {
 func (*AssignQuarantineResponse) ProtoMessage() {}
 
 func (x *AssignQuarantineResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_admin_proto_msgTypes[39]
+	mi := &file_v1_admin_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2215,7 +2305,7 @@ func (x *AssignQuarantineResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AssignQuarantineResponse.ProtoReflect.Descriptor instead.
 func (*AssignQuarantineResponse) Descriptor() ([]byte, []int) {
-	return file_v1_admin_proto_rawDescGZIP(), []int{39}
+	return file_v1_admin_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *AssignQuarantineResponse) GetId() string {
@@ -2334,10 +2424,17 @@ const file_v1_admin_proto_rawDesc = "" +
 	"\x05total\x18\x02 \x01(\x03R\x05total\x12\x1c\n" +
 	"\tavailable\x18\x03 \x01(\x03R\tavailable\x12\x19\n" +
 	"\bmax_size\x18\x04 \x01(\tR\amaxSize\"\x1a\n" +
-	"\x18GetStorageMetricsRequest\"f\n" +
+	"\x18GetStorageMetricsRequest\"\xa1\x01\n" +
 	"\x19GetStorageMetricsResponse\x123\n" +
 	"\avolumes\x18\x01 \x03(\v2\x19.grpc.api.v1.VolumeMetricR\avolumes\x12\x14\n" +
-	"\x05error\x18\x02 \x01(\tR\x05error\"\xe1\x01\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\x129\n" +
+	"\abackend\x18\x03 \x01(\v2\x1f.grpc.api.v1.StorageBackendInfoR\abackend\"\xbb\x01\n" +
+	"\x12StorageBackendInfo\x12\x12\n" +
+	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x16\n" +
+	"\x06bucket\x18\x02 \x01(\tR\x06bucket\x12\x1a\n" +
+	"\bendpoint\x18\x03 \x01(\tR\bendpoint\x12'\n" +
+	"\x0fpending_uploads\x18\x04 \x01(\x03R\x0ependingUploads\x124\n" +
+	"\x16oldest_pending_seconds\x18\x05 \x01(\x03R\x14oldestPendingSeconds\"\xe1\x01\n" +
 	"\n" +
 	"ErrorEntry\x12\x1c\n" +
 	"\ttimestamp\x18\x01 \x01(\tR\ttimestamp\x12\x16\n" +
@@ -2432,7 +2529,7 @@ func file_v1_admin_proto_rawDescGZIP() []byte {
 	return file_v1_admin_proto_rawDescData
 }
 
-var file_v1_admin_proto_msgTypes = make([]protoimpl.MessageInfo, 40)
+var file_v1_admin_proto_msgTypes = make([]protoimpl.MessageInfo, 41)
 var file_v1_admin_proto_goTypes = []any{
 	(*Role)(nil),                      // 0: grpc.api.v1.Role
 	(*ListRolesRequest)(nil),          // 1: grpc.api.v1.ListRolesRequest
@@ -2460,20 +2557,21 @@ var file_v1_admin_proto_goTypes = []any{
 	(*VolumeMetric)(nil),              // 23: grpc.api.v1.VolumeMetric
 	(*GetStorageMetricsRequest)(nil),  // 24: grpc.api.v1.GetStorageMetricsRequest
 	(*GetStorageMetricsResponse)(nil), // 25: grpc.api.v1.GetStorageMetricsResponse
-	(*ErrorEntry)(nil),                // 26: grpc.api.v1.ErrorEntry
-	(*GetRecentErrorsRequest)(nil),    // 27: grpc.api.v1.GetRecentErrorsRequest
-	(*GetRecentErrorsResponse)(nil),   // 28: grpc.api.v1.GetRecentErrorsResponse
-	(*GetUserDefaultsRequest)(nil),    // 29: grpc.api.v1.GetUserDefaultsRequest
-	(*GetUserDefaultsResponse)(nil),   // 30: grpc.api.v1.GetUserDefaultsResponse
-	(*SetUserDefaultsRequest)(nil),    // 31: grpc.api.v1.SetUserDefaultsRequest
-	(*SetUserDefaultsResponse)(nil),   // 32: grpc.api.v1.SetUserDefaultsResponse
-	(*QuarantineEntry)(nil),           // 33: grpc.api.v1.QuarantineEntry
-	(*ListQuarantineRequest)(nil),     // 34: grpc.api.v1.ListQuarantineRequest
-	(*ListQuarantineResponse)(nil),    // 35: grpc.api.v1.ListQuarantineResponse
-	(*DeleteQuarantineRequest)(nil),   // 36: grpc.api.v1.DeleteQuarantineRequest
-	(*DeleteQuarantineResponse)(nil),  // 37: grpc.api.v1.DeleteQuarantineResponse
-	(*AssignQuarantineRequest)(nil),   // 38: grpc.api.v1.AssignQuarantineRequest
-	(*AssignQuarantineResponse)(nil),  // 39: grpc.api.v1.AssignQuarantineResponse
+	(*StorageBackendInfo)(nil),        // 26: grpc.api.v1.StorageBackendInfo
+	(*ErrorEntry)(nil),                // 27: grpc.api.v1.ErrorEntry
+	(*GetRecentErrorsRequest)(nil),    // 28: grpc.api.v1.GetRecentErrorsRequest
+	(*GetRecentErrorsResponse)(nil),   // 29: grpc.api.v1.GetRecentErrorsResponse
+	(*GetUserDefaultsRequest)(nil),    // 30: grpc.api.v1.GetUserDefaultsRequest
+	(*GetUserDefaultsResponse)(nil),   // 31: grpc.api.v1.GetUserDefaultsResponse
+	(*SetUserDefaultsRequest)(nil),    // 32: grpc.api.v1.SetUserDefaultsRequest
+	(*SetUserDefaultsResponse)(nil),   // 33: grpc.api.v1.SetUserDefaultsResponse
+	(*QuarantineEntry)(nil),           // 34: grpc.api.v1.QuarantineEntry
+	(*ListQuarantineRequest)(nil),     // 35: grpc.api.v1.ListQuarantineRequest
+	(*ListQuarantineResponse)(nil),    // 36: grpc.api.v1.ListQuarantineResponse
+	(*DeleteQuarantineRequest)(nil),   // 37: grpc.api.v1.DeleteQuarantineRequest
+	(*DeleteQuarantineResponse)(nil),  // 38: grpc.api.v1.DeleteQuarantineResponse
+	(*AssignQuarantineRequest)(nil),   // 39: grpc.api.v1.AssignQuarantineRequest
+	(*AssignQuarantineResponse)(nil),  // 40: grpc.api.v1.AssignQuarantineResponse
 }
 var file_v1_admin_proto_depIdxs = []int32{
 	0,  // 0: grpc.api.v1.ListRolesResponse.roles:type_name -> grpc.api.v1.Role
@@ -2481,47 +2579,48 @@ var file_v1_admin_proto_depIdxs = []int32{
 	9,  // 2: grpc.api.v1.ListAppUsersResponse.users:type_name -> grpc.api.v1.AppUser
 	18, // 3: grpc.api.v1.ListAuditLogsResponse.data:type_name -> grpc.api.v1.AuditLog
 	23, // 4: grpc.api.v1.GetStorageMetricsResponse.volumes:type_name -> grpc.api.v1.VolumeMetric
-	26, // 5: grpc.api.v1.GetRecentErrorsResponse.errors:type_name -> grpc.api.v1.ErrorEntry
-	33, // 6: grpc.api.v1.ListQuarantineResponse.data:type_name -> grpc.api.v1.QuarantineEntry
-	21, // 7: grpc.api.v1.AdminService.GetStats:input_type -> grpc.api.v1.GetStatsRequest
-	24, // 8: grpc.api.v1.AdminService.GetStorageMetrics:input_type -> grpc.api.v1.GetStorageMetricsRequest
-	27, // 9: grpc.api.v1.AdminService.GetRecentErrors:input_type -> grpc.api.v1.GetRecentErrorsRequest
-	19, // 10: grpc.api.v1.AdminService.ListAuditLogs:input_type -> grpc.api.v1.ListAuditLogsRequest
-	29, // 11: grpc.api.v1.AdminService.GetUserDefaults:input_type -> grpc.api.v1.GetUserDefaultsRequest
-	31, // 12: grpc.api.v1.AdminService.SetUserDefaults:input_type -> grpc.api.v1.SetUserDefaultsRequest
-	1,  // 13: grpc.api.v1.AdminService.ListRoles:input_type -> grpc.api.v1.ListRolesRequest
-	3,  // 14: grpc.api.v1.AdminService.CreateRole:input_type -> grpc.api.v1.CreateRoleRequest
-	5,  // 15: grpc.api.v1.AdminService.UpdateRole:input_type -> grpc.api.v1.UpdateRoleRequest
-	7,  // 16: grpc.api.v1.AdminService.DeleteRole:input_type -> grpc.api.v1.DeleteRoleRequest
-	10, // 17: grpc.api.v1.AdminService.ListAppUsers:input_type -> grpc.api.v1.ListAppUsersRequest
-	12, // 18: grpc.api.v1.AdminService.SetAppUserRole:input_type -> grpc.api.v1.SetAppUserRoleRequest
-	14, // 19: grpc.api.v1.AdminService.DeleteAppUser:input_type -> grpc.api.v1.DeleteAppUserRequest
-	16, // 20: grpc.api.v1.AdminService.CreateLocalUser:input_type -> grpc.api.v1.CreateLocalUserRequest
-	34, // 21: grpc.api.v1.AdminService.ListQuarantine:input_type -> grpc.api.v1.ListQuarantineRequest
-	36, // 22: grpc.api.v1.AdminService.DeleteQuarantine:input_type -> grpc.api.v1.DeleteQuarantineRequest
-	38, // 23: grpc.api.v1.AdminService.AssignQuarantine:input_type -> grpc.api.v1.AssignQuarantineRequest
-	22, // 24: grpc.api.v1.AdminService.GetStats:output_type -> grpc.api.v1.GetStatsResponse
-	25, // 25: grpc.api.v1.AdminService.GetStorageMetrics:output_type -> grpc.api.v1.GetStorageMetricsResponse
-	28, // 26: grpc.api.v1.AdminService.GetRecentErrors:output_type -> grpc.api.v1.GetRecentErrorsResponse
-	20, // 27: grpc.api.v1.AdminService.ListAuditLogs:output_type -> grpc.api.v1.ListAuditLogsResponse
-	30, // 28: grpc.api.v1.AdminService.GetUserDefaults:output_type -> grpc.api.v1.GetUserDefaultsResponse
-	32, // 29: grpc.api.v1.AdminService.SetUserDefaults:output_type -> grpc.api.v1.SetUserDefaultsResponse
-	2,  // 30: grpc.api.v1.AdminService.ListRoles:output_type -> grpc.api.v1.ListRolesResponse
-	4,  // 31: grpc.api.v1.AdminService.CreateRole:output_type -> grpc.api.v1.CreateRoleResponse
-	6,  // 32: grpc.api.v1.AdminService.UpdateRole:output_type -> grpc.api.v1.UpdateRoleResponse
-	8,  // 33: grpc.api.v1.AdminService.DeleteRole:output_type -> grpc.api.v1.DeleteRoleResponse
-	11, // 34: grpc.api.v1.AdminService.ListAppUsers:output_type -> grpc.api.v1.ListAppUsersResponse
-	13, // 35: grpc.api.v1.AdminService.SetAppUserRole:output_type -> grpc.api.v1.SetAppUserRoleResponse
-	15, // 36: grpc.api.v1.AdminService.DeleteAppUser:output_type -> grpc.api.v1.DeleteAppUserResponse
-	17, // 37: grpc.api.v1.AdminService.CreateLocalUser:output_type -> grpc.api.v1.CreateLocalUserResponse
-	35, // 38: grpc.api.v1.AdminService.ListQuarantine:output_type -> grpc.api.v1.ListQuarantineResponse
-	37, // 39: grpc.api.v1.AdminService.DeleteQuarantine:output_type -> grpc.api.v1.DeleteQuarantineResponse
-	39, // 40: grpc.api.v1.AdminService.AssignQuarantine:output_type -> grpc.api.v1.AssignQuarantineResponse
-	24, // [24:41] is the sub-list for method output_type
-	7,  // [7:24] is the sub-list for method input_type
-	7,  // [7:7] is the sub-list for extension type_name
-	7,  // [7:7] is the sub-list for extension extendee
-	0,  // [0:7] is the sub-list for field type_name
+	26, // 5: grpc.api.v1.GetStorageMetricsResponse.backend:type_name -> grpc.api.v1.StorageBackendInfo
+	27, // 6: grpc.api.v1.GetRecentErrorsResponse.errors:type_name -> grpc.api.v1.ErrorEntry
+	34, // 7: grpc.api.v1.ListQuarantineResponse.data:type_name -> grpc.api.v1.QuarantineEntry
+	21, // 8: grpc.api.v1.AdminService.GetStats:input_type -> grpc.api.v1.GetStatsRequest
+	24, // 9: grpc.api.v1.AdminService.GetStorageMetrics:input_type -> grpc.api.v1.GetStorageMetricsRequest
+	28, // 10: grpc.api.v1.AdminService.GetRecentErrors:input_type -> grpc.api.v1.GetRecentErrorsRequest
+	19, // 11: grpc.api.v1.AdminService.ListAuditLogs:input_type -> grpc.api.v1.ListAuditLogsRequest
+	30, // 12: grpc.api.v1.AdminService.GetUserDefaults:input_type -> grpc.api.v1.GetUserDefaultsRequest
+	32, // 13: grpc.api.v1.AdminService.SetUserDefaults:input_type -> grpc.api.v1.SetUserDefaultsRequest
+	1,  // 14: grpc.api.v1.AdminService.ListRoles:input_type -> grpc.api.v1.ListRolesRequest
+	3,  // 15: grpc.api.v1.AdminService.CreateRole:input_type -> grpc.api.v1.CreateRoleRequest
+	5,  // 16: grpc.api.v1.AdminService.UpdateRole:input_type -> grpc.api.v1.UpdateRoleRequest
+	7,  // 17: grpc.api.v1.AdminService.DeleteRole:input_type -> grpc.api.v1.DeleteRoleRequest
+	10, // 18: grpc.api.v1.AdminService.ListAppUsers:input_type -> grpc.api.v1.ListAppUsersRequest
+	12, // 19: grpc.api.v1.AdminService.SetAppUserRole:input_type -> grpc.api.v1.SetAppUserRoleRequest
+	14, // 20: grpc.api.v1.AdminService.DeleteAppUser:input_type -> grpc.api.v1.DeleteAppUserRequest
+	16, // 21: grpc.api.v1.AdminService.CreateLocalUser:input_type -> grpc.api.v1.CreateLocalUserRequest
+	35, // 22: grpc.api.v1.AdminService.ListQuarantine:input_type -> grpc.api.v1.ListQuarantineRequest
+	37, // 23: grpc.api.v1.AdminService.DeleteQuarantine:input_type -> grpc.api.v1.DeleteQuarantineRequest
+	39, // 24: grpc.api.v1.AdminService.AssignQuarantine:input_type -> grpc.api.v1.AssignQuarantineRequest
+	22, // 25: grpc.api.v1.AdminService.GetStats:output_type -> grpc.api.v1.GetStatsResponse
+	25, // 26: grpc.api.v1.AdminService.GetStorageMetrics:output_type -> grpc.api.v1.GetStorageMetricsResponse
+	29, // 27: grpc.api.v1.AdminService.GetRecentErrors:output_type -> grpc.api.v1.GetRecentErrorsResponse
+	20, // 28: grpc.api.v1.AdminService.ListAuditLogs:output_type -> grpc.api.v1.ListAuditLogsResponse
+	31, // 29: grpc.api.v1.AdminService.GetUserDefaults:output_type -> grpc.api.v1.GetUserDefaultsResponse
+	33, // 30: grpc.api.v1.AdminService.SetUserDefaults:output_type -> grpc.api.v1.SetUserDefaultsResponse
+	2,  // 31: grpc.api.v1.AdminService.ListRoles:output_type -> grpc.api.v1.ListRolesResponse
+	4,  // 32: grpc.api.v1.AdminService.CreateRole:output_type -> grpc.api.v1.CreateRoleResponse
+	6,  // 33: grpc.api.v1.AdminService.UpdateRole:output_type -> grpc.api.v1.UpdateRoleResponse
+	8,  // 34: grpc.api.v1.AdminService.DeleteRole:output_type -> grpc.api.v1.DeleteRoleResponse
+	11, // 35: grpc.api.v1.AdminService.ListAppUsers:output_type -> grpc.api.v1.ListAppUsersResponse
+	13, // 36: grpc.api.v1.AdminService.SetAppUserRole:output_type -> grpc.api.v1.SetAppUserRoleResponse
+	15, // 37: grpc.api.v1.AdminService.DeleteAppUser:output_type -> grpc.api.v1.DeleteAppUserResponse
+	17, // 38: grpc.api.v1.AdminService.CreateLocalUser:output_type -> grpc.api.v1.CreateLocalUserResponse
+	36, // 39: grpc.api.v1.AdminService.ListQuarantine:output_type -> grpc.api.v1.ListQuarantineResponse
+	38, // 40: grpc.api.v1.AdminService.DeleteQuarantine:output_type -> grpc.api.v1.DeleteQuarantineResponse
+	40, // 41: grpc.api.v1.AdminService.AssignQuarantine:output_type -> grpc.api.v1.AssignQuarantineResponse
+	25, // [25:42] is the sub-list for method output_type
+	8,  // [8:25] is the sub-list for method input_type
+	8,  // [8:8] is the sub-list for extension type_name
+	8,  // [8:8] is the sub-list for extension extendee
+	0,  // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_v1_admin_proto_init() }
@@ -2535,7 +2634,7 @@ func file_v1_admin_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_admin_proto_rawDesc), len(file_v1_admin_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   40,
+			NumMessages:   41,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

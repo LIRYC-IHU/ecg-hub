@@ -160,6 +160,20 @@ func (r *ECGRepository) UpdateMetadata(ecgID string, extra map[string]any, recor
 
 // FindByIDs returns all ECGs whose primary key is in ids.
 // Order is not guaranteed. Returns an empty slice (not an error) if ids is empty.
+// UpdateContentHash rewrites the stored SHA-256 after the source file has been
+// legitimately modified by a vendor metadata patch.
+//
+// 4th permitted UPDATE on ecgs (NFR-R4 exception). It is not optional: the hash
+// is verified on every download, so a patched file with its old hash reads as
+// tampered with for the rest of its life.
+func (r *ECGRepository) UpdateContentHash(ecgID, hash string) error {
+	result := r.db.Model(&models.ECG{}).Where("id = ?", ecgID).Update("content_hash", hash)
+	if result.Error != nil {
+		return fmt.Errorf("ecg_repo: update_content_hash: %w", result.Error)
+	}
+	return nil
+}
+
 func (r *ECGRepository) FindByIDs(ids []string) ([]models.ECG, error) {
 	if len(ids) == 0 {
 		return nil, nil
