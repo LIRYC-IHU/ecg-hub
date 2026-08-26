@@ -3,6 +3,7 @@ package connector
 import (
 	"context"
 	"errors"
+	"github.com/LIRYC-IHU/ecg-hub/internal/storage"
 	"log/slog"
 	"sync"
 	"time"
@@ -207,7 +208,11 @@ func (j *RetryJob) processOne(job models.ConnectorJob) {
 		"max_attempts", job.MaxAttempts,
 	)
 
-	fwdErr := s.Connector.Forward(j.ctx, ecg, filePath)
+	localPath, cleanup, fwdErr := storage.Materialize(j.ctx, filePath)
+	if fwdErr == nil {
+		fwdErr = s.Connector.Forward(j.ctx, ecg, localPath)
+		cleanup()
+	}
 	if fwdErr == nil {
 		if markErr := j.jobRepo.MarkSent(job.ID); markErr != nil {
 			slog.Warn("connector: retry mark_sent failed",

@@ -88,12 +88,18 @@ func downloadECGHandler(repo ecgByIDFinder, patRepo patientByIDFinder, bridge ex
 		}
 
 		// Verify file exists before streaming — returns JSON 404, not an HTML error page.
-		if _, statErr := os.Stat(ecg.FilePath); os.IsNotExist(statErr) {
+		ctx := c.Request().Context()
+		switch found, existsErr := stor.Exists(ctx, ecg.FilePath); {
+		case existsErr != nil:
+			// "the store is unreachable" is not "your ECG is gone" — say so.
+			slog.Error("ecg: storage unreachable on download", "ecg_id", id, "file", ecg.FilePath, "error", existsErr)
+			return c.JSON(http.StatusBadGateway, mw.APIError("STORAGE_UNAVAILABLE", "ECG storage is unreachable"))
+		case !found:
 			return c.JSON(http.StatusNotFound, mw.APIError("ECG_FILE_NOT_FOUND", "ECG file not found on storage volume"))
 		}
 
 		// Integrity check: verify the file has not been tampered with since ingestion.
-		if err := stor.VerifyFile(ecg.FilePath, ecg.ContentHash); err != nil {
+		if err := stor.Verify(ctx, ecg.FilePath, ecg.ContentHash); err != nil {
 			slog.Error("ecg: integrity check failed on download",
 				"ecg_id", id,
 				"file", ecg.FilePath,
@@ -144,8 +150,15 @@ func downloadECGHandler(repo ecgByIDFinder, patRepo patientByIDFinder, bridge ex
 				})
 		}
 
+		localPath, cleanup, matErr := stor.Materialize(ctx, ecg.FilePath)
+		if matErr != nil {
+			slog.Error("ecg: materialize failed on download", "ecg_id", id, "file", ecg.FilePath, "error", matErr)
+			return c.JSON(http.StatusBadGateway, mw.APIError("STORAGE_UNAVAILABLE", "ECG storage is unreachable"))
+		}
+		defer cleanup()
+
 		c.Response().Header().Set("Cache-Control", "no-store")
-		return c.Attachment(ecg.FilePath, ecg.OriginalFilename)
+		return c.Attachment(localPath, ecg.OriginalFilename)
 	}
 }
 
@@ -353,7 +366,7 @@ func DeleteECGHandler(db *gorm.DB) echo.HandlerFunc {
 		}
 
 		// Remove physical file — best-effort, don't fail the request if already gone.
-		if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
+		if err := stor.Remove(c.Request().Context(), filePath); err != nil {
 			slog.Warn("ecg-delete: file removal failed", "path", filePath, "error", err)
 		}
 
@@ -443,7 +456,15 @@ func handleConvertDownload(
 			"patient_id", ecg.PatientID, "error", patErr)
 	}
 
-	outData, convErr := bridge.Convert(c.Request().Context(), ecg.FilePath, ecg.Vendor, format, patient, opts)
+	// The converters exec a binary on a path, so the file has to exist locally.
+	localPath, cleanup, matErr := stor.Materialize(c.Request().Context(), ecg.FilePath)
+	if matErr != nil {
+		slog.Error("ecg-download: materialize failed", "ecg_id", id, "file", ecg.FilePath, "error", matErr)
+		return c.JSON(http.StatusBadGateway, mw.APIError("STORAGE_UNAVAILABLE", "ECG storage is unreachable"))
+	}
+	defer cleanup()
+
+	outData, convErr := bridge.Convert(c.Request().Context(), localPath, ecg.Vendor, format, patient, opts)
 	if convErr != nil {
 		if errors.Is(convErr, export.ErrFormatNotSupported) {
 			return c.JSON(http.StatusUnprocessableEntity,
@@ -556,6 +577,16 @@ func handleZipDownload(
 	opts export.ConvertOptions,
 	db *gorm.DB,
 ) error {
+	// One materialisation for the whole archive: every format below reads the
+	// same source file, so fetching it once is the difference between one and
+	// N round-trips on a remote backend.
+	localPath, cleanup, matErr := stor.Materialize(c.Request().Context(), ecg.FilePath)
+	if matErr != nil {
+		slog.Error("ecg-download: materialize failed for zip", "ecg_id", id, "file", ecg.FilePath, "error", matErr)
+		return c.JSON(http.StatusBadGateway, mw.APIError("STORAGE_UNAVAILABLE", "ECG storage is unreachable"))
+	}
+	defer cleanup()
+
 	// Load patient demographics once if any converted format is requested
 	// (nil is acceptable — conversion proceeds without enrichment, NFR-R2).
 	var patient *models.Patient
@@ -589,14 +620,14 @@ func handleZipDownload(
 				slog.Info("ecg-download: skipping original format in anonymised zip", "ecg_id", id)
 				continue
 			}
-			b, rerr := os.ReadFile(ecg.FilePath)
+			b, rerr := os.ReadFile(localPath)
 			if rerr != nil {
 				slog.Warn("ecg-download: zip read original failed", "ecg_id", id, "error", rerr)
 				continue
 			}
 			data, name = b, ecg.OriginalFilename
 		case "xmlfda", "dicom":
-			out, cerr := bridge.Convert(c.Request().Context(), ecg.FilePath, ecg.Vendor, f, patient, opts)
+			out, cerr := bridge.Convert(c.Request().Context(), localPath, ecg.Vendor, f, patient, opts)
 			if cerr != nil {
 				slog.Warn("ecg-download: zip convert failed", "ecg_id", id, "format", f, "error", cerr)
 				continue

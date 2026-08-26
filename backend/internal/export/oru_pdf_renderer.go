@@ -2,6 +2,7 @@ package export
 
 import (
 	"context"
+	"github.com/LIRYC-IHU/ecg-hub/internal/storage"
 
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 )
@@ -23,5 +24,10 @@ func NewORUPDFRenderer(conv Converter) *ORUPDFRenderer {
 // available its demographics are injected into the rendered report.
 func (r *ORUPDFRenderer) RenderPDF(ctx context.Context, ecg *models.ECG, patient *models.Patient) ([]byte, error) {
 	opts := ConvertOptions{InjectPatient: patient != nil}
-	return r.conv.Convert(ctx, ecg.FilePath, ecg.Vendor, "pdf", patient, opts)
+	localPath, cleanup, err := storage.Materialize(ctx, ecg.FilePath)
+	if err != nil {
+		return nil, err
+	}
+	defer cleanup()
+	return r.conv.Convert(ctx, localPath, ecg.Vendor, "pdf", patient, opts)
 }
