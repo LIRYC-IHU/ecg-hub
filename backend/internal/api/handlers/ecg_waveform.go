@@ -61,6 +61,7 @@ func ECGWaveformHandler(db *gorm.DB, volumePath string, bridge export.Converter)
 
 		// Everything below (hashing, reading, converting) works on a local path,
 		// so resolve the ref to one once and leave the rest of the handler alone.
+
 		filePath, cleanup, matErr := storage.Materialize(ctx, filePath)
 		if matErr != nil {
 			return c.JSON(http.StatusBadGateway, map[string]string{
