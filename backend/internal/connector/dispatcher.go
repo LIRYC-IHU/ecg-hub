@@ -3,6 +3,7 @@ package connector
 import (
 	"context"
 	"encoding/json"
+	"github.com/LIRYC-IHU/ecg-hub/internal/storage"
 	"log/slog"
 	"path/filepath"
 	"sync"
@@ -148,7 +149,15 @@ func (d *Dispatcher) forward(s ConnectorSettings, ecg *models.ECG, job *models.C
 	)
 
 	fwdStart := time.Now()
-	err := s.Connector.Forward(context.Background(), ecg, filePath)
+	// Connectors read the file themselves (a DICOM library, an HTTP multipart
+	// body), so what they need is a local path, not a ref. A materialisation
+	// failure IS a forwarding failure: it flows into the retry bookkeeping below
+	// rather than into a separate branch that nothing would ever exercise.
+	localPath, cleanup, err := storage.Materialize(context.Background(), filePath)
+	if err == nil {
+		err = s.Connector.Forward(context.Background(), ecg, localPath)
+		cleanup()
+	}
 	appmetrics.ConnectorRequestDuration.WithLabelValues(connName, "forward").Observe(time.Since(fwdStart).Seconds())
 
 	if err == nil {
