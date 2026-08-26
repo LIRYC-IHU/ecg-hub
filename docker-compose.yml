@@ -37,7 +37,18 @@ services:
   # DATABASE_URL above expects. It is NOT exposed to the network by Docker —
   # bind the host's firewall accordingly if the host has a public interface.
   db:
-    image: postgres:16-alpine
+    # From 18 on, the image stores the cluster in a major-version subdirectory
+    # (/var/lib/postgresql/18/docker), so the mount moves up one level to
+    # /var/lib/postgresql. That is what makes a later "pg_upgrade --link"
+    # possible without crossing a mount boundary.
+    #
+    # UPGRADING AN EXISTING INSTALL: do not point this at a volume that already
+    # holds a 16 cluster. 18 cannot open it, so it initialises an empty one —
+    # the stack comes up healthy and the application starts against a blank
+    # database while the old data sits untouched in the volume. Dump first,
+    # start 18 on a fresh volume, restore, and keep the old volume until the
+    # row counts check out: docs/POSTGRES_UPGRADE.md.
+    image: postgres:18.6-alpine
     network_mode: host
     restart: unless-stopped
     security_opt:
@@ -50,7 +61,7 @@ services:
       # DATABASE_URL if that port is already taken on the machine.
       PGPORT: ${DB_PORT:-5432}
     volumes:
-      - postgres-data:/var/lib/postgresql/data
+      - postgres-data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME:-ecghub}"]
       interval: 5s
