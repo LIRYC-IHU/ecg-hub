@@ -42,9 +42,19 @@ COPY --from=builder /bin/ecg-hub /app/ecg-hub
 COPY --from=builder /converters/* /usr/local/bin/
 
 # Pre-create the storage dirs owned by the app user so named volumes inherit
-# writable ownership on first creation. FTP/DICOM listen on non-privileged
-# ports (>1024), so no root capabilities are required at runtime.
+# writable ownership on first creation.
 RUN mkdir -p /data/ecg /data/ecg-quarantine && chown -R app:app /data /app
+
+# The default FTP/DICOM/ECTP ports are all > 1024, so nothing here is needed at
+# runtime. But some ECG devices (Nihon Kohden) can only send to FTP port 21,
+# and a non-root process cannot bind a privileged port unless the *binary*
+# carries the capability -- Docker's `cap_add` alone only widens the bounding
+# set, it grants a non-root process nothing. Stamping it here is inert under
+# the default `cap_drop: ALL`, which masks it away; it only takes effect when
+# docker-compose.yml opts in. See the port-21 block there.
+RUN apk add --no-cache libcap \
+  && setcap cap_net_bind_service=+ep /app/ecg-hub \
+  && apk del libcap
 
 ENV LOG_LEVEL debug
 

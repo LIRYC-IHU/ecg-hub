@@ -3,6 +3,7 @@ package ingestion
 import (
 	"bytes"
 	"log/slog"
+	"net"
 	"strings"
 	"testing"
 	"time"
@@ -179,5 +180,26 @@ func TestServer_Disabled_DoesNotStart(t *testing.T) {
 	}
 	if !strings.Contains(buf.String(), "server disabled") {
 		t.Errorf("expected 'server disabled' log line, got: %q", buf.String())
+	}
+}
+
+// A refused bind must surface from Start, not vanish into a goroutine: the UI
+// reads that error to decide whether the module is really running. Port 21
+// (permission denied for a non-root process) is the case this guards; an
+// already-taken port reproduces it without needing privileges.
+func TestServer_Start_BindFailure_ReturnsError(t *testing.T) {
+	ln, err := net.Listen("tcp", ":0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+
+	cfg := testConfig("u", "p", false)
+	cfg.Port = ln.Addr().(*net.TCPAddr).Port
+
+	s := New(cfg, NewIngestQueue(1))
+	t.Cleanup(s.Stop)
+	if err := s.Start(); err == nil {
+		t.Fatal("Start() on a taken port returned nil, want an error")
 	}
 }

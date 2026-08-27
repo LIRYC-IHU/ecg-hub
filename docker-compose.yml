@@ -84,9 +84,28 @@ services:
     # Hardening (NFR-S1): drop all Linux capabilities, forbid privilege escalation.
     cap_drop:
       - ALL
-    # The default FTP/DICOM/ECTP ports are all > 1024, so no capability is needed.
-    # ONLY if the device requires FTP on the privileged port 21: grant the bind
-    # capability and set the FTP port to 21 in Admin > Modules > FTP.
+    # ─── FTP ON THE PRIVILEGED PORT 21 ──────────────────────────────────────
+    # The default FTP/DICOM/ECTP ports are all > 1024, so the hardened defaults
+    # above are enough. Some ECG devices (Nihon Kohden) can only send to port
+    # 21, and the app runs as a non-root user, so binding it takes THREE
+    # changes together -- any one alone fails with "permission denied":
+    #
+    #   1. the image stamps cap_net_bind_service on the binary (already done in
+    #      backend/Dockerfile; `cap_add` alone only widens the bounding set and
+    #      grants a non-root process nothing),
+    #   2. uncomment the `cap_add` below so the capability is in the bounding
+    #      set at all,
+    #   3. comment out `no-new-privileges` above -- it blocks file capabilities
+    #      at execve, which is exactly how the binary would pick this one up.
+    #
+    # Then set the FTP port to 21 in Admin > Modules > FTP.
+    #
+    # Prefer NOT doing any of this: a host-side redirect keeps the container
+    # fully hardened and needs no rebuild --
+    #   iptables -t nat -A PREROUTING -p tcp --dport 21 -j REDIRECT --to-port 2121
+    # Only the control channel is redirected; the passive range is advertised
+    # directly, so FTPS is unaffected.
+    #
     # cap_add:
     #   - NET_BIND_SERVICE
     environment:
