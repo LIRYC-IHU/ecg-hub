@@ -27,6 +27,40 @@ import { useNotification } from "../../context/NotificationContext";
 import { useAuth } from "../../hooks/useAuth";
 import { errorMessage } from "../../lib/errors";
 
+// Ports published in docker-compose.yml. The container side of each mapping is
+// what the module binds, so these cannot be changed from the UI: a value that
+// drifts from the mapping listens where nothing is forwarded. Shown read-only.
+const FIXED_FTP_PORT = 2121;
+const FIXED_PASSIVE_RANGE = "30000-30010";
+const FIXED_DICOM_PORT = 4242;
+
+// A pinned port: displayed, never editable, and flagged when the stored value
+// no longer matches the mapping -- the one state the UI cannot fix by itself.
+function FixedPort({ label, value, expected }: { label: string; value: string | number; expected: string | number }) {
+  const { t } = useTranslation();
+  const mismatch = String(value) !== String(expected);
+  return (
+    <div>
+      <label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+        {label}
+      </label>
+      <input
+        type="text"
+        value={value}
+        readOnly
+        disabled
+        className="mt-1 w-full text-xs border border-border rounded-md px-2.5 py-1.5 bg-muted/40 text-muted-foreground cursor-not-allowed focus:outline-none"
+      />
+      <p className={`mt-1 text-[10px] ${mismatch ? "text-orange-600" : "text-muted-foreground"}`}>
+        {mismatch
+          ? t("modules.portMismatch", { expected })
+          : t("modules.portFixed")}
+      </p>
+    </div>
+  );
+}
+
+
 const MASKED_PASSWORD = "••••••";
 
 // ─── Password Input with toggle ─────────────────────────────────────────────
@@ -285,7 +319,7 @@ function FTPCard({ ftpStatus }: { ftpStatus: "running" | "stopped" | "error" | u
     onError: (err: unknown) => notify("error", errorMessage(err, t("modules.ftp.saveError"))),
   });
 
-  const inputClass =
+const inputClass =
     "w-full text-xs border border-border rounded-md px-2.5 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring/20";
 
   const isRunning = ftpStatus === "running";
@@ -314,42 +348,16 @@ function FTPCard({ ftpStatus }: { ftpStatus: "running" | "stopped" | "error" | u
         <>
           {/* Fields */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-5">
-            <div>
-              <label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                {t("modules.ftp.port")}
-              </label>
-              <input
-                type="number"
-                value={port}
-                min={1} max={65535}
-                onChange={(e) => setPort(Math.min(65535, Math.max(1, parseInt(e.target.value) || 2121)))}
-                className={`mt-1 ${inputClass}`}
-              />
-            </div>
-            <div>
-              <label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                {t("modules.ftp.passiveRange")}
-              </label>
-              <div className="flex items-center gap-2 mt-1">
-                <input
-                  type="number"
-                  value={passiveLow}
-                  min={1} max={65535}
-                  onChange={(e) => setPassiveLow(Math.min(65535, Math.max(1, parseInt(e.target.value) || 30000)))}
-                  className={inputClass}
-                  placeholder="30000"
-                />
-                <span className="text-muted-foreground text-sm shrink-0">–</span>
-                <input
-                  type="number"
-                  value={passiveHigh}
-                  min={1} max={65535}
-                  onChange={(e) => setPassiveHigh(Math.min(65535, Math.max(1, parseInt(e.target.value) || 30010)))}
-                  className={inputClass}
-                  placeholder="30010"
-                />
-              </div>
-            </div>
+            <FixedPort
+              label={t("modules.ftp.port")}
+              value={port}
+              expected={FIXED_FTP_PORT}
+            />
+            <FixedPort
+              label={t("modules.ftp.passiveRange")}
+              value={`${passiveLow}-${passiveHigh}`}
+              expected={FIXED_PASSIVE_RANGE}
+            />
             <div>
               <label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                 {t("modules.ftp.publicHost")}
@@ -536,18 +544,11 @@ function DICOMCard({ dicomStatus }: { dicomStatus: "running" | "stopped" | "erro
         <>
           {/* Fields */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-5">
-            <div>
-              <label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                {t("modules.dicom.port")}
-              </label>
-              <input
-                type="number"
-                value={port}
-                min={1} max={65535}
-                onChange={(e) => setPort(Math.min(65535, Math.max(1, parseInt(e.target.value) || 11112)))}
-                className={`mt-1 ${inputClass}`}
-              />
-            </div>
+            <FixedPort
+              label={t("modules.dicom.port")}
+              value={port}
+              expected={FIXED_DICOM_PORT}
+            />
             <div>
               <label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                 {t("modules.dicom.aeTitle")}

@@ -679,7 +679,9 @@
     "tls": {
       "unavailable": "No usable TLS certificate is mounted",
       "validUntil": "valid until {{date}}"
-    }
+    },
+    "portFixed": "Fixed by the deployment",
+    "portMismatch": "Does not match the published port {{expected}} — nothing is forwarded here"
   },
   "auth": {
     "login": "Login",

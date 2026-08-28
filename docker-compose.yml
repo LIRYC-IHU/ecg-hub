@@ -34,14 +34,14 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
+    # Fixed, and identical on both sides so the published port always matches
+    # what the module binds. Admin > Modules shows these read-only; changing a
+    # port means changing it here and redeploying.
     ports:
-      # Devices that cannot be told which port to use (Nihon Kohden) need FTP on
-      # 21. Docker publishes it as root, so the container keeps binding 2121 as a
-      # non-root user and needs no capability.
-      - "${FTP_PORT:-21}:2121"
-      - "${DICOM_PORT:-4242}:4242"
+      - "2121:2121" # FTP control
+      - "4242:4242" # DICOM C-STORE
       - "30003:30003" # ECTP (Nihon Kohden)
-      # FTP passive range, split around ECTP. Must match Admin > Modules > FTP.
+      # FTP passive range 30000-30010, published around ECTP's 30003.
       - "30000-30002:30000-30002"
       - "30004-30010:30004-30010"
       # Prometheus scrape, loopback only. Drop the 127.0.0.1 prefix to expose it.

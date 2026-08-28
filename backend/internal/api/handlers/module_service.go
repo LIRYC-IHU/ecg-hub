@@ -244,7 +244,9 @@ func (h *ModuleServiceHandler) GetDICOMConfig(_ context.Context, _ *apiv1.GetDIC
 		return nil, connect.NewError(connect.CodeInternal, errors.New("failed to read DICOM config"))
 	}
 	if record == nil {
-		return &apiv1.DICOMConfig{Port: 11112, AeTitle: "ECG-HUB", EchoEnabled: true, Enabled: false}, nil
+		// 4242 matches the port published in docker-compose.yml. The DICOM
+		// standard's 11112 would need the mapping changed to match.
+		return &apiv1.DICOMConfig{Port: 4242, AeTitle: "ECG-HUB", EchoEnabled: true, Enabled: false}, nil
 	}
 	decrypted, err := auth.DecryptString(record.ConfigEncrypted, h.EncKey)
 	if err != nil {

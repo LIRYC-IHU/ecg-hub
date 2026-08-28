@@ -680,7 +680,9 @@
     "tls": {
       "unavailable": "Aucun certificat TLS exploitable n'est monté",
       "validUntil": "valide jusqu'au {{date}}"
-    }
+    },
+    "portFixed": "Fixé par le déploiement",
+    "portMismatch": "Ne correspond pas au port publié {{expected}} — rien n'est redirigé ici"
   },
   "auth": {
     "login": "Connexion",
