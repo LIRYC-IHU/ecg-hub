@@ -81,8 +81,15 @@ func (s *Server) Start() error {
 	} else {
 		slog.Warn("ftp: tls disabled — non-production mode")
 	}
+	// Bind before backgrounding. ListenAndServe would do both inside the
+	// goroutine, so a refused bind -- port 21 without cap_net_bind_service,
+	// or a port already taken -- became a log line while Start returned nil
+	// and the UI reported the module Running with nothing listening.
+	if err := s.srv.Listen(); err != nil {
+		return fmt.Errorf("ftp: cannot listen on port %d: %w", s.cfg.Port, err)
+	}
 	go func() {
-		if err := s.srv.ListenAndServe(); err != nil {
+		if err := s.srv.Serve(); err != nil {
 			slog.Error("ftp: server stopped", "error", err)
 		}
 	}()
