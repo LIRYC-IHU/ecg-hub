@@ -45,16 +45,12 @@ COPY --from=builder /converters/* /usr/local/bin/
 # writable ownership on first creation.
 RUN mkdir -p /data/ecg /data/ecg-quarantine && chown -R app:app /data /app
 
-# The default FTP/DICOM/ECTP ports are all > 1024, so nothing here is needed at
-# runtime. But some ECG devices (Nihon Kohden) can only send to FTP port 21,
-# and a non-root process cannot bind a privileged port unless the *binary*
-# carries the capability -- Docker's `cap_add` alone only widens the bounding
-# set, it grants a non-root process nothing. Stamping it here is inert under
-# the default `cap_drop: ALL`, which masks it away; it only takes effect when
-# docker-compose.yml opts in. See the port-21 block there.
-RUN apk add --no-cache libcap \
-  && setcap cap_net_bind_service=+ep /app/ecg-hub \
-  && apk del libcap
+# No setcap here, deliberately. A binary carrying file capabilities cannot be
+# exec'd at all when the permitted set they ask for is unavailable -- which is
+# exactly what `cap_drop: ALL` and `no-new-privileges` produce -- and the
+# kernel reports it as "exec /app/ecg-hub: operation not permitted", not as a
+# bind error. Nothing needs it either: docker-compose publishes the device
+# ports, so dockerd does the privileged bind and the app binds >1024 inside.
 
 ENV LOG_LEVEL debug
 
