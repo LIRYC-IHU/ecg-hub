@@ -73,11 +73,15 @@ First release.
 
 ### Known limitations
 
-- **Patient IDs are not extracted from FDA aECG XML files.** The converter
-  reads `PatientID` under `subjectDemographicPerson`, while devices write the
-  identifier to `trialSubject/id/@extension` as the HL7 aECG schema specifies.
-  Affected files parse and land in the `unidentified` queue, where an operator
-  can assign them. The fix belongs to `ecg-bridge`.
+- **Third-party FDA aECG XML files are not auto-identified.** The `fda` module
+  reads the patient identifier from a `PatientID` element under
+  `subjectDemographicPerson`, which is not part of the HL7 aECG schema, instead
+  of `trialSubject/id/@extension` where the schema puts it. Files exported by
+  another system therefore land in the `unidentified` queue for an operator to
+  assign. This does not affect device ingestion: Nihon Kohden `.DAT` files go
+  through the `nihon-kohden` module, which reads the identifier correctly, and
+  the aECG XML this project generates carries it in both places. The fix
+  belongs to `ecg-bridge`.
 - ECG files are stored uncompressed. XML formats compress to roughly a quarter
   of their size, so filesystem- or storage-level compression is worth enabling
   where the deployment allows it.
