@@ -609,7 +609,9 @@
       "startOk": "FTP server started",
       "stopOk": "FTP server stopped",
       "saveOk": "FTP configuration saved",
-      "saveError": "Error saving FTP configuration"
+      "saveError": "Error saving FTP configuration",
+      "publicPort": "Public port (if translated)",
+      "publicPortHelp": "The port devices dial, when a router or NAT rule forwards it to the bound port. Leave empty when there is no translation — this field documents the deployment, it changes nothing on the server."
     },
     "dicom": {
       "title": "DICOM Server",
@@ -681,7 +683,8 @@
       "validUntil": "valid until {{date}}"
     },
     "portFixed": "Fixed by the deployment",
-    "portMismatch": "Does not match the published port {{expected}} — nothing is forwarded here"
+    "portMismatch": "Does not match the published port {{expected}} — nothing is forwarded here",
+    "portTranslated": "Devices dial {{publicPort}}, forwarded to {{boundPort}} by the deployment"
   },
   "auth": {
     "login": "Login",

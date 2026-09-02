@@ -510,8 +510,12 @@ type FTPConfig struct {
 	Username         string                 `protobuf:"bytes,5,opt,name=username,proto3" json:"username,omitempty"`
 	Password         string                 `protobuf:"bytes,6,opt,name=password,proto3" json:"password,omitempty"` // masked on read; masked/empty on write preserves the stored value
 	Enabled          bool                   `protobuf:"varint,7,opt,name=enabled,proto3" json:"enabled,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// Port the devices actually dial, when a NAT or a router rule translates it
+	// to `port` above. Documentation for whoever configures the devices: unlike
+	// public_host, nothing in the server reads it. 0 means no translation.
+	PublicPort    int32 `protobuf:"varint,8,opt,name=public_port,json=publicPort,proto3" json:"public_port,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *FTPConfig) Reset() {
@@ -591,6 +595,13 @@ func (x *FTPConfig) GetEnabled() bool {
 		return x.Enabled
 	}
 	return false
+}
+
+func (x *FTPConfig) GetPublicPort() int32 {
+	if x != nil {
+		return x.PublicPort
+	}
+	return 0
 }
 
 type GetFTPConfigRequest struct {
@@ -1943,7 +1954,7 @@ const file_v1_module_proto_rawDesc = "" +
 	"\x11StopModuleRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\"/\n" +
 	"\x15ModuleControlResponse\x12\x16\n" +
-	"\x06status\x18\x01 \x01(\tR\x06status\"\xd2\x01\n" +
+	"\x06status\x18\x01 \x01(\tR\x06status\"\xf3\x01\n" +
 	"\tFTPConfig\x12\x12\n" +
 	"\x04port\x18\x01 \x01(\x05R\x04port\x12,\n" +
 	"\x12passive_port_range\x18\x02 \x01(\tR\x10passivePortRange\x12\x1f\n" +
@@ -1952,7 +1963,9 @@ const file_v1_module_proto_rawDesc = "" +
 	"\x03tls\x18\x04 \x01(\bR\x03tls\x12\x1a\n" +
 	"\busername\x18\x05 \x01(\tR\busername\x12\x1a\n" +
 	"\bpassword\x18\x06 \x01(\tR\bpassword\x12\x18\n" +
-	"\aenabled\x18\a \x01(\bR\aenabled\"\x15\n" +
+	"\aenabled\x18\a \x01(\bR\aenabled\x12\x1f\n" +
+	"\vpublic_port\x18\b \x01(\x05R\n" +
+	"publicPort\"\x15\n" +
 	"\x13GetFTPConfigRequest\"F\n" +
 	"\x14SaveFTPConfigRequest\x12.\n" +
 	"\x06config\x18\x01 \x01(\v2\x16.grpc.api.v1.FTPConfigR\x06config\"\x8b\x01\n" +
