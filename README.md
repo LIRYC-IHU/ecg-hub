@@ -9,10 +9,12 @@
   <a href="#features">Features</a> ·
   <a href="#how-it-works">How it works</a> ·
   <a href="docs/deploy-prod.md">Deployment</a> ·
-  <a href="CONTRIBUTING.md">Contributing</a>
+  <a href="CONTRIBUTING.md">Contributing</a> ·
+  <a href="CHANGELOG.md">Changelog</a>
 </p>
 
 <p align="center">
+  <img src="https://img.shields.io/badge/release-v1.0.0-success" alt="v1.0.0">
   <img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="Apache 2.0">
   <img src="https://img.shields.io/badge/Go-1.26-00ADD8" alt="Go 1.26">
   <img src="https://img.shields.io/badge/React-19-61DAFB" alt="React 19">

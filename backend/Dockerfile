@@ -14,8 +14,9 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /bin/ecg-hub ./cmd/ecg
 
 # Conversion tools are pulled straight from the public ecg-bridge repo via
 # `go install` instead of being built from the local converter-fda tree.
-# Pin ECG_BRIDGE_VERSION to a tag for reproducible builds (defaults to latest).
-ARG ECG_BRIDGE_VERSION=latest
+# Pinned so a tagged release can be rebuilt byte-for-byte later. Bump this
+# deliberately; `latest` would make the image depend on when it was built.
+ARG ECG_BRIDGE_VERSION=v1.1.2
 ENV GOBIN=/converters
 RUN set -eux; \
   for tool in \
