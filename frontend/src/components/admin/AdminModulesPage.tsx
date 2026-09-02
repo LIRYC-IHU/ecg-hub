@@ -31,14 +31,21 @@ import { errorMessage } from "../../lib/errors";
 // what the module binds, so these cannot be changed from the UI: a value that
 // drifts from the mapping listens where nothing is forwarded. Shown read-only.
 const FIXED_FTP_PORT = 2121;
-const FIXED_PASSIVE_RANGE = "30000-30010";
+const FIXED_PASSIVE_RANGE = "30100-30199";
 const FIXED_DICOM_PORT = 4242;
 
 // A pinned port: displayed, never editable, and flagged when the stored value
 // no longer matches the mapping -- the one state the UI cannot fix by itself.
-function FixedPort({ label, value, expected }: { label: string; value: string | number; expected: string | number }) {
+function FixedPort({ label, value, expected, publicValue }: {
+  label: string;
+  value: string | number;
+  expected: string | number;
+  // What the devices actually dial, when a NAT translates the bound port.
+  publicValue?: number;
+}) {
   const { t } = useTranslation();
   const mismatch = String(value) !== String(expected);
+  const translated = !!publicValue && String(publicValue) !== String(value);
   return (
     <div>
       <label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -46,7 +53,7 @@ function FixedPort({ label, value, expected }: { label: string; value: string | 
       </label>
       <input
         type="text"
-        value={value}
+        value={translated ? `${publicValue} \u2192 ${value}` : value}
         readOnly
         disabled
         className="mt-1 w-full text-xs border border-border rounded-md px-2.5 py-1.5 bg-muted/40 text-muted-foreground cursor-not-allowed focus:outline-none"
@@ -54,7 +61,9 @@ function FixedPort({ label, value, expected }: { label: string; value: string | 
       <p className={`mt-1 text-[10px] ${mismatch ? "text-orange-600" : "text-muted-foreground"}`}>
         {mismatch
           ? t("modules.portMismatch", { expected })
-          : t("modules.portFixed")}
+          : translated
+            ? t("modules.portTranslated", { publicPort: publicValue, boundPort: value })
+            : t("modules.portFixed")}
       </p>
     </div>
   );
@@ -239,9 +248,10 @@ function FTPCard({ ftpStatus }: { ftpStatus: "running" | "stopped" | "error" | u
   const queryClient = useQueryClient();
 
   const [port, setPort] = useState(2121);
-  const [passiveLow, setPassiveLow] = useState(30000);
-  const [passiveHigh, setPassiveHigh] = useState(30010);
+  const [passiveLow, setPassiveLow] = useState(30100);
+  const [passiveHigh, setPassiveHigh] = useState(30199);
   const [publicHost, setPublicHost] = useState("");
+  const [publicPort, setPublicPort] = useState(0);
   const [tls, setTls] = useState(false);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState(MASKED_PASSWORD);
@@ -258,10 +268,11 @@ function FTPCard({ ftpStatus }: { ftpStatus: "running" | "stopped" | "error" | u
   useEffect(() => {
     if (!ftpConfig) return;
     setPort(ftpConfig.port);
-    const parts = (ftpConfig.passive_port_range || "30000-30010").split("-");
-    setPassiveLow(parseInt(parts[0]) || 30000);
-    setPassiveHigh(parseInt(parts[1]) || 30010);
+    const parts = (ftpConfig.passive_port_range || FIXED_PASSIVE_RANGE).split("-");
+    setPassiveLow(parseInt(parts[0]) || 30100);
+    setPassiveHigh(parseInt(parts[1]) || 30199);
     setPublicHost(ftpConfig.public_host);
+    setPublicPort(ftpConfig.public_port);
     setTls(ftpConfig.tls);
     setUsername(ftpConfig.username);
     setPassword(ftpConfig.password);
@@ -285,6 +296,7 @@ function FTPCard({ ftpStatus }: { ftpStatus: "running" | "stopped" | "error" | u
         port,
         passive_port_range: `${passiveLow}-${passiveHigh}`.trim(),
         public_host: publicHost.trim(),
+        public_port: publicPort,
         tls,
         username: username.trim(),
         password,
@@ -352,6 +364,7 @@ const inputClass =
               label={t("modules.ftp.port")}
               value={port}
               expected={FIXED_FTP_PORT}
+              publicValue={publicPort}
             />
             <FixedPort
               label={t("modules.ftp.passiveRange")}
@@ -369,6 +382,22 @@ const inputClass =
                 className={`mt-1 ${inputClass}`}
                 placeholder="192.0.2.10"
               />
+            </div>
+            <div>
+              <label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                {t("modules.ftp.publicPort")}
+              </label>
+              <input
+                type="number"
+                value={publicPort || ""}
+                min={0} max={65535}
+                onChange={(e) => setPublicPort(Math.min(65535, Math.max(0, parseInt(e.target.value) || 0)))}
+                className={`mt-1 ${inputClass}`}
+                placeholder={String(FIXED_FTP_PORT)}
+              />
+              <p className="mt-1 text-[10px] text-muted-foreground">
+                {t("modules.ftp.publicPortHelp")}
+              </p>
             </div>
             <div>
               <label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">

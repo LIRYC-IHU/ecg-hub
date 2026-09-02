@@ -132,7 +132,7 @@ func (h *ModuleServiceHandler) GetFTPConfig(_ context.Context, _ *apiv1.GetFTPCo
 	if record == nil {
 		return &apiv1.FTPConfig{
 			Port:             2121,
-			PassivePortRange: "30000-30010",
+			PassivePortRange: "30100-30199",
 			Password:         maskedSecret,
 			Enabled:          false,
 		}, nil
@@ -149,6 +149,7 @@ func (h *ModuleServiceHandler) GetFTPConfig(_ context.Context, _ *apiv1.GetFTPCo
 		Port:             int32(cfg.Port),
 		PassivePortRange: cfg.PassivePortRange,
 		PublicHost:       cfg.PublicHost,
+		PublicPort:       int32(cfg.PublicPort),
 		Tls:              cfg.TLS,
 		Username:         cfg.Username,
 		Password:         maskedSecret,
@@ -175,6 +176,11 @@ func (h *ModuleServiceHandler) SaveFTPConfig(_ context.Context, req *apiv1.SaveF
 			return nil, connect.NewError(connect.CodeInvalidArgument, err)
 		}
 	}
+	// 0 is the documented "no translation" value, so it is valid where the
+	// bound port is not.
+	if c.PublicPort < 0 || c.PublicPort > 65535 {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("public_port must be between 0 and 65535"))
+	}
 	if err := h.checkTLSAvailable(c.Tls); err != nil {
 		return nil, err
 	}
@@ -198,6 +204,7 @@ func (h *ModuleServiceHandler) SaveFTPConfig(_ context.Context, req *apiv1.SaveF
 		Port:             port,
 		PassivePortRange: passiveRange,
 		PublicHost:       publicHost,
+		PublicPort:       int(c.PublicPort),
 		TLS:              c.Tls,
 		Username:         username,
 		Password:         password,
@@ -221,7 +228,7 @@ func (h *ModuleServiceHandler) SaveFTPConfig(_ context.Context, req *apiv1.SaveF
 func validatePassivePortRange(r string) error {
 	parts := strings.SplitN(r, "-", 2)
 	if len(parts) != 2 {
-		return errors.New("passive_port_range must be in format \"low-high\" (e.g. \"30000-30010\")")
+		return errors.New("passive_port_range must be in format \"low-high\" (e.g. \"30100-30199\")")
 	}
 	var low, high int
 	if _, err := fmt.Sscan(parts[0], &low); err != nil || low < 1 || low > 65535 {

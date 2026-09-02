@@ -17,7 +17,7 @@ are free and open them in the firewall as needed:
 |------|---------|----------|
 | 80 / 443 | nginx (SPA + API + Swagger) | clients / clinicians |
 | 4444 | Go backend HTTP | loopback only (nginx proxies it) |
-| FTP control + passive `30000-30010` | FTP ingestion | ECG devices |
+| FTP control + passive `30100-30199` | FTP ingestion | ECG devices |
 | 4242 | DICOM SCP | ECG/PACS devices |
 | 30003 | ECTP (Nihon Kohden) | NK devices |
 | 9091 | Prometheus metrics | scraper only — keep off the public interface (`METRICS_ENABLED`, `METRICS_PORT`) |

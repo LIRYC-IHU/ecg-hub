@@ -610,7 +610,9 @@
       "startOk": "Serveur FTP démarré",
       "stopOk": "Serveur FTP arrêté",
       "saveOk": "Configuration FTP enregistrée",
-      "saveError": "Erreur lors de l'enregistrement de la configuration FTP"
+      "saveError": "Erreur lors de l'enregistrement de la configuration FTP",
+      "publicPort": "Port public (si traduit)",
+      "publicPortHelp": "Le port composé par les appareils, lorsqu'une règle de routeur ou de NAT le redirige vers le port écouté. Laisser vide s'il n'y a pas de traduction — ce champ documente le déploiement, il ne change rien sur le serveur."
     },
     "dicom": {
       "title": "Serveur DICOM",
@@ -682,7 +684,8 @@
       "validUntil": "valide jusqu'au {{date}}"
     },
     "portFixed": "Fixé par le déploiement",
-    "portMismatch": "Ne correspond pas au port publié {{expected}} — rien n'est redirigé ici"
+    "portMismatch": "Ne correspond pas au port publié {{expected}} — rien n'est redirigé ici",
+    "portTranslated": "Les appareils composent {{publicPort}}, redirigé vers {{boundPort}} par le déploiement"
   },
   "auth": {
     "login": "Connexion",

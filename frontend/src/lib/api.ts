@@ -1588,6 +1588,8 @@ export interface FTPModuleConfig {
   port: number;
   passive_port_range: string;
   public_host: string;
+  /** Port the devices dial when a NAT translates it; 0 = no translation. */
+  public_port: number;
   tls: boolean;
   username: string;
   password: string;
@@ -1625,6 +1627,7 @@ export async function fetchFTPConfig(): Promise<FTPModuleConfig> {
     port: c.port,
     passive_port_range: c.passivePortRange,
     public_host: c.publicHost,
+    public_port: c.publicPort,
     tls: c.tls,
     username: c.username,
     password: c.password,
@@ -1640,6 +1643,7 @@ export async function saveFTPConfig(
       port: config.port ?? 0,
       passivePortRange: config.passive_port_range ?? "",
       publicHost: config.public_host ?? "",
+      publicPort: config.public_port ?? 0,
       tls: config.tls ?? false,
       username: config.username ?? "",
       password: config.password ?? "",

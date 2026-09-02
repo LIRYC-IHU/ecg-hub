@@ -64,6 +64,10 @@ message FTPConfig {
   string username = 5;
   string password = 6; // masked on read; masked/empty on write preserves the stored value
   bool enabled = 7;
+  // Port the devices actually dial, when a NAT or a router rule translates it
+  // to `port` above. Documentation for whoever configures the devices: unlike
+  // public_host, nothing in the server reads it. 0 means no translation.
+  int32 public_port = 8;
 }
 
 message GetFTPConfigRequest {}
