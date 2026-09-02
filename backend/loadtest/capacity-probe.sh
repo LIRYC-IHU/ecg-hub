@@ -53,20 +53,27 @@ if [ -z "$snap" ]; then
 fi
 
 cpu0=$(printf '%s' "$snap" | value_of process_cpu_seconds_total)
-files0=$(printf '%s' "$snap" | value_of storage_files_total)
+# ingest_files_received_total, not storage_files_total: the gauge counts what
+# is on the local volume, which in s3 mode is the upload spool and drains back
+# to zero. The counter is monotonic and only advances on an accepted file.
+files0=$(printf '%s' "$snap" | value_of ingest_files_received_total)
+quar0=$(printf '%s' "$snap" | value_of ingest_quarantine_total)
 rss0=$(printf '%s' "$snap" | value_of process_resident_memory_bytes)
 cores=$(printf '%s' "$snap" | value_of go_sched_gomaxprocs_threads)
 
-if [ -z "$cpu0" ] || [ -z "$files0" ]; then
-  echo "ERROR: $METRICS answered, but without the metrics this needs." >&2
-  echo "       Wanted process_cpu_seconds_total and storage_files_total." >&2
+if [ -z "$cpu0" ]; then
+  echo "ERROR: $METRICS answered, but without process_cpu_seconds_total." >&2
   exit 1
 fi
+# Absent until the first file of its kind arrives -- a counter with labels has
+# no series until something increments it. Zero is the right starting value.
+files0=${files0:-0}
+quar0=${quar0:-0}
 
 echo "=== ECG Hub capacity probe ==="
 echo "Metrics:  $METRICS"
 echo "Load:     $LOAD_CMD"
-echo "Backend:  ${cores%.*} cores visible, $(( ${rss0%.*} / 1048576 )) MB RSS, ${files0%.*} files stored"
+echo "Backend:  ${cores%.*} cores visible, $(( ${rss0%.*} / 1048576 )) MB RSS, ${files0%.*} files ingested so far"
 echo ""
 
 # Sample RSS through the run: the value left after the queue drains is not the
@@ -89,25 +96,35 @@ kill $sampler 2>/dev/null; wait $sampler 2>/dev/null
 
 snap=$(scrape)
 cpu1=$(printf '%s' "$snap" | value_of process_cpu_seconds_total)
-files1=$(printf '%s' "$snap" | value_of storage_files_total)
+files1=$(printf '%s' "$snap" | value_of ingest_files_received_total)
+files1=${files1:-0}
+quar1=$(printf '%s' "$snap" | value_of ingest_quarantine_total)
+quar1=${quar1:-0}
 
-python3 - "$cpu0" "$cpu1" "$files0" "$files1" "$rss0" "$((t1-t0))" "$SAMPLE_FILE" <<'PY'
+python3 - "$cpu0" "$cpu1" "$files0" "$files1" "$rss0" "$((t1-t0))" "$SAMPLE_FILE" "$quar0" "$quar1" <<'PY'
 import sys
 cpu0, cpu1, f0, f1, rss0, window = (float(x) for x in sys.argv[1:7])
 samples = [float(l) for l in open(sys.argv[7]) if l.strip()]
+quarantined = float(sys.argv[9]) - float(sys.argv[8])
 cpu, ecgs = cpu1 - cpu0, f1 - f0
 peak = max(samples) if samples else rss0
 
 print("=== Results ===")
 print(f"Window:          {window:.0f}s")
-print(f"Files stored:    +{ecgs:.0f}")
+print(f"Files ingested:  +{ecgs:.0f}")
+if quarantined:
+    print(f"Quarantined:     +{quarantined:.0f}  <- parsed but rejected, still cost CPU")
 print(f"CPU consumed:    {cpu:.2f} core-seconds")
 print(f"Peak RSS:        {peak/1048576:.0f} MB (idle {rss0/1048576:.0f} MB)")
 
 if ecgs < 1:
-    print("\nNothing was stored, so there is nothing to extrapolate from.")
-    print("Files already ingested are rejected on their content hash -- a second")
-    print("run over the same directory measures deduplication, not ingestion.")
+    print("\nNothing was ingested, so there is nothing to extrapolate from.")
+    if quarantined:
+        print(f"{quarantined:.0f} file(s) went to quarantine instead: they parsed, but the")
+        print("module found no patient ID. Check Admin > Quarantine for the reason.")
+    else:
+        print("Files already ingested are rejected on their content hash -- a second")
+        print("run over the same directory measures deduplication, not ingestion.")
     sys.exit(1)
 
 per = cpu / ecgs
