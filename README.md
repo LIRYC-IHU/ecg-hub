@@ -162,7 +162,9 @@ bound on the host, TLS/Traefik notes) and **`docs/backup.md`** — PostgreSQL
 and the ECG volumes must be backed up _together_ (`docker-compose.backup.yml`,
 `scripts/restore.sh`).
 
-Default ports: API `4444` · FTP `2121` (+ passive `30100-30199`) · HL7 `2575`
+Default ports: API `4444` · FTP `2121` in the container, published on the
+host as `21` (`FTP_PORT`) for devices that cannot be told which port to
+use · passive `30100-30199` · HL7 `2575`
 · DICOM `4242` · metrics `9091`.
 
 ### Observability (optional overlay)
