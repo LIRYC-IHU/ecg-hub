@@ -1,25 +1,90 @@
-# ECG Hub
+<h1 align="center">ECG Hub</h1>
 
-**Vendor-neutral ECG ingestion and management hub for hospitals.**
+<p align="center">
+  <b>Vendor-neutral ECG ingestion and management for hospitals.</b>
+</p>
+
+<p align="center">
+  <a href="#getting-started">Getting started</a> ·
+  <a href="#features">Features</a> ·
+  <a href="#how-it-works">How it works</a> ·
+  <a href="docs/deploy-prod.md">Deployment</a> ·
+  <a href="CONTRIBUTING.md">Contributing</a>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/license-Apache--2.0-blue" alt="Apache 2.0">
+  <img src="https://img.shields.io/badge/Go-1.26-00ADD8" alt="Go 1.26">
+  <img src="https://img.shields.io/badge/React-19-61DAFB" alt="React 19">
+  <img src="https://img.shields.io/badge/PostgreSQL-18-336791" alt="PostgreSQL 18">
+</p>
+
+<p align="center">
+  <img src="assets/screenshot.png" alt="ECG Hub — patient list and waveform viewer" width="100%">
+</p>
+
+## Introduction
 
 ECG Hub sits between bedside ECG devices (Philips, GE, Nihon Kohden, DICOM
-modalities…) and the hospital IT system. Devices push their recordings to the
-hub over the protocols they already speak (FTP, DICOM C-STORE, ECTP); the hub
-parses every vendor format into a common model, enriches it with patient
-identity from the HIS via HL7, stores the original files safely, and gives
-clinicians a modern web UI to browse, view and export ECGs — while optionally
-forwarding a copy to an external PACS.
+modalities…) and the hospital IT system. Devices push their recordings over the
+protocols they already speak — FTP, DICOM C-STORE, ECTP — and the hub parses
+every vendor format into a common model, enriches it with patient identity from
+the HIS over HL7, keeps the original files intact, and gives clinicians a web UI
+to browse, view and export ECGs. A copy can be forwarded to an external PACS.
 
-> ⚠️ **Non-diagnostic use.** ECG Hub is a data-management and visualisation
-> tool. It is not a medical device and must not be used as the basis for
-> diagnosis.
+> **Non-diagnostic use.** ECG Hub is a data-management and visualisation tool.
+> It is not a medical device and must not be used as the basis for diagnosis.
 
----
+## Features
 
-## Contributing & security
+**Ingestion** — a built-in FTP/FTPS server, a DICOM C-STORE SCP and an ECTP
+listener receive files with no agent on the device. A router matches each file
+to a vendor module that validates and parses it; modules start and stop from the
+admin UI without restarting the server.
 
-Bug reports and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
-Found a vulnerability? Do not open an issue: follow [SECURITY.md](SECURITY.md).
+**Vendor formats** — Philips, GE MUSE, Nihon Kohden, Mindray and DICOM waveform,
+converted to a common model and exportable as PDF, HL7 aECG XML, DICOM or the
+native format.
+
+**Patient identity** — ECGs arriving without a usable patient ID enter an
+`unidentified` workflow: an operator assigns them to a patient, guarded by name,
+date-of-birth and ID cross-checks, and the file is re-ingested. An HL7 scheduler
+queries the HIS to enrich pending ECGs, with retries and an exhausted state.
+
+**Storage** — originals land on a dedicated volume with metadata in PostgreSQL,
+and unparseable files go to a separate quarantine for review. S3-compatible
+object storage is optional: the volume then acts as an upload spool, so a bucket
+outage delays uploads instead of refusing ingestion.
+
+**Distribution** — proxy connectors forward a copy of each ECG to external
+systems (PACS over DICOM C-STORE, ECTP/FTP endpoints) with retries; webhooks
+notify third parties after identification; batch export produces ZIPs.
+
+**Waveform viewer** — a WebGL 12-lead viewer with the usual calibration,
+gain and sweep-speed controls, driven from the decoded samples.
+
+**Security** — local, OIDC and LDAP authentication, role-based permissions, API
+keys and a full audit trail. Provider and module credentials are stored
+AES-256-GCM-encrypted. FTPS and DICOM TLS use certificates mounted from the
+host, so renewal stays with whoever already does it.
+
+**Observability** — around 40 Prometheus metrics covering ingestion, modules,
+HL7, DICOM, connectors, storage, export and HTTP, with a Grafana dashboard
+provisioned from this repository.
+
+## Getting started
+
+```bash
+make init          # creates .env and config.yaml from the examples
+# edit .env: DATABASE_URL, JWT_SECRET, AUTH_ENCRYPTION_KEY, APP_ENV=development
+make dev           # bridge stack: backend (air hot-reload) + frontend (vite) + nginx
+```
+
+Open the app, go to **`/setup`** to create the local admin account, then
+configure modules, HL7 and authentication from the admin pages.
+
+For production, read [`docs/deploy-prod.md`](docs/deploy-prod.md) first, then
+[Setup](#setup) below for prerequisites, ports and backups.
 
 ## How it works
 
@@ -92,10 +157,10 @@ backend/            Go backend (Echo + GORM + PostgreSQL)
   cmd/ecg-hub/      entrypoint
   internal/         api, auth, ingestion, module, hl7, dicom, connector,
                     export, storage, metrics, webhook, events, …
+  v1/               protobuf contracts (Connect RPC), generated into internal/api
 frontend/           React 19 + TypeScript + Vite + Tailwind 4 + TanStack Query
   src/components/   patient, ecg, admin, uploads, layout, ui
   src/ecg-viewer/   WebGL waveform viewer
-  v1/               protobuf contracts (Connect RPC), generated into internal/api
 nginx/              nginx.conf (prod, upstream backend:4444) and nginx.dev.conf
 docs/               deploy-prod.md, backup.md, epics/, grafana/
 scripts/            backup tooling
@@ -144,17 +209,6 @@ Three layers, by design:
 - Go ≥ 1.26 and Node ≥ 20 only for local (non-Docker) development
 - PostgreSQL 18. The production stack bundles it as the `db` service; point
   `DATABASE_URL` at an existing instance instead and comment that service out
-
-### Quick start (dev)
-
-```bash
-make init          # creates .env and config.yaml from the examples
-# edit .env: DATABASE_URL, JWT_SECRET, AUTH_ENCRYPTION_KEY, APP_ENV=development
-make dev           # bridge stack: backend (air hot-reload) + frontend (vite) + nginx
-```
-
-Open the app, go to **`/setup`** to create the local admin account, then
-configure modules/HL7/auth from the admin pages.
 
 ### Production
 
@@ -224,6 +278,11 @@ controlled by the `metrics:` section of `config.yaml`.
 - Roadmap and design history live in `docs/epics/` (connector pack, metrics,
   DICOM proxy, UX redesign, HL7 hardening, auth refactor, gRPC modules,
   input-validation & security hardening, …).
+
+## Contributing & security
+
+Bug reports and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
+Found a vulnerability? Do not open an issue: follow [SECURITY.md](SECURITY.md).
 
 ## Funding
 
