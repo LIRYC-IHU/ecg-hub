@@ -75,10 +75,14 @@ provisioned from this repository.
 ## Getting started
 
 ```bash
-make init          # creates .env and config.yaml from the examples
+cp .env.example .env
+cp config.example.yaml config.yaml
 # edit .env: DATABASE_URL, JWT_SECRET, AUTH_ENCRYPTION_KEY, APP_ENV=development
-make dev           # bridge stack: backend (air hot-reload) + frontend (vite) + nginx
+
+docker compose -f docker-compose.dev.yml up --build
 ```
+
+That brings up the backend with hot reload, the frontend on vite and nginx.
 
 Open the app, go to **`/setup`** to create the local admin account, then
 configure modules, HL7 and authentication from the admin pages.
@@ -213,7 +217,7 @@ Three layers, by design:
 ### Production
 
 ```bash
-make docker        # docker compose up -d
+docker compose up -d --build
 ```
 
 Containers share a bridge network and publish the device ports. Two
@@ -237,44 +241,12 @@ host as `21` (`FTP_PORT`) for devices that cannot be told which port to
 use · passive `30100-30199` · HL7 `2575`
 · DICOM `4242` · metrics `9091`.
 
-### Observability (optional overlay)
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.metrics.yml up -d
-```
-
-Adds Prometheus (`:9090`), Grafana (`:3000`, admin/admin, dashboard
-auto-provisioned from `docs/grafana/`), cAdvisor and node-exporter. All four
-bind `127.0.0.1` only — cAdvisor and node-exporter expose the whole host with
-no authentication — so reach them over an SSH tunnel:
-
-```bash
-ssh -L 3000:localhost:3000 -L 9090:localhost:9090 <host>
-```
-
-`METRICS_ENABLED=true` is required on the backend, or `:9091` serves nothing.
-
-To size a deployment, `backend/loadtest/capacity-probe.sh` reports the CPU cost
-of a single ECG — the number that extrapolates to a daily volume. It reads
-`/metrics` directly and needs none of the overlay above:
-
-```bash
-METRICS=http://<host>:9091/metrics ./loadtest/capacity-probe.sh \
-  'JOBS=8 ./loadtest/ftp-stress.sh /path/to/ecgs 2121 <host>'
-```
-
-The metrics port publishes storage volumes, queue depths and module health with
-no authentication. Keep it on the loopback or the management network; reaching
-it from a workstation is an SSH tunnel, not a published port. The
-backend exposes ~40 application metrics (ingestion, modules, HL7, DICOM,
-connectors, storage, export, HTTP/DB) on the dedicated metrics port —
-controlled by the `metrics:` section of `config.yaml`.
-
 ## Development notes
 
-- `make` builds backend + frontend locally; `make swagger` regenerates the
-  OpenAPI docs; `make clean` / `make fclean` / `make re` do what they say.
+- Local builds without Docker: `cd backend && go build ./cmd/ecg-hub` and
+  `cd frontend && yarn build`.
 - Backend tests: `cd backend && go test ./...`
+- Protobuf contracts live in `backend/v1/`; regenerate with `cd backend && buf generate`.
 - Roadmap and design history live in `docs/epics/` (connector pack, metrics,
   DICOM proxy, UX redesign, HL7 hardening, auth refactor, gRPC modules,
   input-validation & security hardening, …).

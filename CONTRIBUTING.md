@@ -14,7 +14,8 @@ honest about what was not tested.
 ## Getting a stack running
 
 ```bash
-make init                                     # .env and config.yaml from the examples
+cp .env.example .env
+cp config.example.yaml config.yaml
 docker compose -f docker-compose.dev.yml up -d # Postgres is expected on the host
 ```
 
