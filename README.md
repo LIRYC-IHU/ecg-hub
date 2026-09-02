@@ -182,9 +182,18 @@ ssh -L 3000:localhost:3000 -L 9090:localhost:9090 <host>
 
 `METRICS_ENABLED=true` is required on the backend, or `:9091` serves nothing.
 
-To size a deployment, `backend/loadtest/capacity-probe.sh` brackets a load run
-with two Prometheus reads and reports the CPU cost of a single ECG, which is
-the number that extrapolates to a daily volume. The
+To size a deployment, `backend/loadtest/capacity-probe.sh` reports the CPU cost
+of a single ECG — the number that extrapolates to a daily volume. It reads
+`/metrics` directly and needs none of the overlay above:
+
+```bash
+METRICS=http://<host>:9091/metrics ./loadtest/capacity-probe.sh \
+  'JOBS=8 ./loadtest/ftp-stress.sh /path/to/ecgs 2121 <host>'
+```
+
+The metrics port publishes storage volumes, queue depths and module health with
+no authentication. Keep it on the loopback or the management network; reaching
+it from a workstation is an SSH tunnel, not a published port. The
 backend exposes ~40 application metrics (ingestion, modules, HL7, DICOM,
 connectors, storage, export, HTTP/DB) on the dedicated metrics port —
 controlled by the `metrics:` section of `config.yaml`.
