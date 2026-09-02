@@ -196,6 +196,42 @@ function ageFromDOB(dob: string | null): number | null {
 
 // ─── Full-page patient grid (no patient selected) ───────────────────────────
 
+// Rendered by both the grid and the master-detail left column. It lived inline
+// in the grid only, so selecting a patient dropped the pager and left no way
+// back to page 2 without deselecting first.
+function PaginationFooter({ page, totalPages, onPage }: {
+  page: number;
+  totalPages: number;
+  onPage: React.Dispatch<React.SetStateAction<number>>;
+}) {
+  if (totalPages <= 1) return null;
+  const btn =
+    "inline-flex items-center justify-center w-7 h-7 rounded border border-border text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors";
+  return (
+    <div className="shrink-0 border-t border-border px-4 py-2 flex items-center justify-between">
+      <span className="text-xs text-muted-foreground">
+        Page {page} / {totalPages}
+      </span>
+      <div className="flex items-center gap-1">
+        <button
+          onClick={() => onPage((p) => Math.max(1, p - 1))}
+          disabled={page <= 1}
+          className={btn}
+        >
+          <ChevronLeft className="w-3.5 h-3.5" />
+        </button>
+        <button
+          onClick={() => onPage((p) => Math.min(totalPages, p + 1))}
+          disabled={page >= totalPages}
+          className={btn}
+        >
+          <ChevronRight className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function PatientGrid({
   patients,
   pinned,
@@ -763,6 +799,10 @@ function PatientDetail({
         duration: 0.4,
         ease: "",
         stagger: 0.08,
+        // Without this the tween's transform stays on the element, and a
+        // transform creates a stacking context: the stats band, a later
+        // sibling, then paints over the tag dropdown whatever its z-index.
+        clearProps: "transform",
       });
       gsap.from(".ecg-row", {
         y: 12,
@@ -1130,6 +1170,7 @@ function BulkECGFooter({
   canDelete,
   canSendResult,
   onClear,
+  insetLeft,
 }: {
   count: number;
   ecgIds: Set<number>;
@@ -1137,6 +1178,10 @@ function BulkECGFooter({
   canDelete: boolean;
   canSendResult: boolean;
   onClear: () => void;
+  // Master-detail keeps a 20rem patient column on the left. The bar acts on
+  // ECGs only, so it starts where they do rather than covering the list and
+  // the pager underneath it.
+  insetLeft?: boolean;
 }) {
   const { t } = useTranslation();
   const { notify, notifyProgress } = useNotification();
@@ -1146,7 +1191,7 @@ function BulkECGFooter({
   const [exportOpen, setExportOpen] = useState(false);
 
   return (
-    <div className="absolute bottom-0 left-0 right-0 z-20 border-t border-border bg-card/95 backdrop-blur-sm px-6 py-3 flex items-center justify-between">
+    <div className={`absolute bottom-0 ${insetLeft ? "left-80" : "left-0"} right-0 z-20 border-t border-border bg-card/95 backdrop-blur-sm px-6 py-3 flex items-center justify-between`}>
       <div className="flex items-center gap-2 text-sm text-foreground">
         <span className="font-medium">
           {count} ECG{count > 1 ? "s" : ""} {t("common.selected", { count })}
@@ -1823,29 +1868,7 @@ export function PatientMasterDetailPage({
         </div>
 
         {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="shrink-0 border-t border-border px-4 py-2 flex items-center justify-between">
-            <span className="text-xs text-muted-foreground">
-              Page {page} / {totalPages}
-            </span>
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page <= 1}
-                className="inline-flex items-center justify-center w-7 h-7 rounded border border-border text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-              >
-                <ChevronLeft className="w-3.5 h-3.5" />
-              </button>
-              <button
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page >= totalPages}
-                className="inline-flex items-center justify-center w-7 h-7 rounded border border-border text-muted-foreground hover:text-foreground hover:bg-muted disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-              >
-                <ChevronRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-        )}
+        <PaginationFooter page={page} totalPages={totalPages} onPage={setPage} />
 
         {/* Bulk ECG footer (shared) */}
         {selectedECGs.size > 0 && (
@@ -1927,6 +1950,8 @@ export function PatientMasterDetailPage({
             </>
           )}
         </div>
+
+        <PaginationFooter page={page} totalPages={totalPages} onPage={setPage} />
       </div>
 
       {/* ── Right panel: detail ── */}
@@ -1955,6 +1980,7 @@ export function PatientMasterDetailPage({
           canDelete={canDelete}
           canSendResult={canSendResult}
           onClear={handleClearAllECGs}
+          insetLeft
         />
       )}
     </div>
