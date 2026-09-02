@@ -170,7 +170,6 @@ docs/               deploy-prod.md, backup.md, epics/, grafana/
 scripts/            backup tooling
 docker-compose.yml         production stack
 docker-compose.dev.yml     dev stack (hot reload)
-docker-compose.metrics.yml observability overlay
 ```
 
 ## Configuration

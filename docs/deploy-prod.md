@@ -71,25 +71,18 @@ docker compose -f docker-compose.yml up -d --build
 docker compose -f docker-compose.yml logs -f backend
 ```
 
-Add metrics and/or scheduled backups by stacking the overlays:
-
-```sh
-docker compose -f docker-compose.yml -f docker-compose.metrics.yml \
-  -f docker-compose.backup.yml --profile backup up -d --build
-```
 
 ## FTP on the privileged port 21
 
-The backend drops all Linux capabilities (`cap_drop: ALL`). Default FTP/DICOM/ECTP
-ports are > 1024, so nothing extra is needed. **If a device requires FTP on port
-21**, in `docker-compose.yml` uncomment on the `backend` service:
+Already handled: the compose file publishes `${FTP_PORT:-21}:2121`, so dockerd
+performs the privileged bind as root while the backend keeps binding 2121 as a
+non-root user. `cap_drop: ALL` and `no-new-privileges` stay in force, and the
+FTP port in Admin → Modules → FTP stays **2121** — that is the container side
+of the mapping, which is what the module binds.
 
-```yaml
-    cap_add:
-      - NET_BIND_SERVICE
-```
-
-and set the FTP port to `21` in Admin → Modules → FTP.
+Do not add `cap_add: NET_BIND_SERVICE` or stamp the binary with `setcap`: a
+capability the bounding set cannot grant makes `execve` itself fail, and the
+container crash-loops with `exec /app/ecg-hub: operation not permitted`.
 
 ## After first start
 
