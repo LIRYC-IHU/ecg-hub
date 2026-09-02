@@ -25,7 +25,7 @@ Found a vulnerability? Do not open an issue: follow [SECURITY.md](SECURITY.md).
 
 ```
  ECG devices                        ECG Hub                             Hospital IT
-┌────────────┐   FTP :2121   ┌───────────────────────────────────┐
+┌────────────┐    FTP :21    ┌───────────────────────────────────┐
 │ Philips    │──────────────▶│ Ingestion pipeline                │  HL7 QRY/ADT :2575
 │ GE MUSE    │  DICOM :4242  │  • vendor module parses the file  │◀───────────────────▶ HIS / CommServer
 │ Nihon K.   │──────────────▶│  • metadata → PostgreSQL          │
@@ -46,7 +46,11 @@ Found a vulnerability? Do not open an issue: follow [SECURITY.md](SECURITY.md).
    metadata in PostgreSQL. Files that cannot be parsed go to a separate
    **quarantine** volume for manual review. A janitor watches a soft size cap
    (`storage.max_size`) and _never_ deletes clinical files unless rotation is
-   explicitly enabled.
+   explicitly enabled. With `STORAGE_BACKEND=s3` the volume becomes a spool
+   instead: every file is written locally first and uploaded from there, so a
+   bucket outage delays uploads rather than refusing ingestion, and the volume
+   must be sized for the longest outage worth riding out. Reads work across
+   both layouts with no migration — the stored path is the indirection.
 3. **Patient identity** — ECGs arriving without a usable patient ID enter the
    **unidentified** workflow: an operator assigns them to a patient (guarded
    by name + DOB + ID cross-checks) and the file is re-ingested. An HL7
@@ -89,13 +93,15 @@ backend/            Go backend (Echo + GORM + PostgreSQL)
   internal/         api, auth, ingestion, module, hl7, dicom, connector,
                     export, storage, metrics, webhook, events, …
 frontend/           React 19 + TypeScript + Vite + Tailwind 4 + TanStack Query
-  src/pages/        Login / Setup
   src/components/   patient, ecg, admin, uploads, layout, ui
   src/ecg-viewer/   WebGL waveform viewer
-modules/            remote gRPC vendor modules (EPIC-010, WIP)
-proto/              gRPC contracts for remote modules
+  v1/               protobuf contracts (Connect RPC), generated into internal/api
+nginx/              nginx.conf (prod, upstream backend:4444) and nginx.dev.conf
 docs/               deploy-prod.md, backup.md, epics/, grafana/
-scripts/            backup / restore tooling
+scripts/            backup tooling
+docker-compose.yml         production stack
+docker-compose.dev.yml     dev stack (hot reload)
+docker-compose.metrics.yml observability overlay
 ```
 
 ## Configuration
@@ -136,8 +142,8 @@ Three layers, by design:
 
 - Docker + Docker Compose (prod & dev stacks)
 - Go ≥ 1.26 and Node ≥ 20 only for local (non-Docker) development
-- A reachable PostgreSQL (the compose stacks expect an external DB —
-  see `DATABASE_URL`; helper scripts in `backend/createDATABAE.sh`)
+- PostgreSQL 18. The production stack bundles it as the `db` service; point
+  `DATABASE_URL` at an existing instance instead and comment that service out
 
 ### Quick start (dev)
 
@@ -153,14 +159,24 @@ configure modules/HL7/auth from the admin pages.
 ### Production
 
 ```bash
-make docker        # docker compose up -d — host networking (Linux only)
+make docker        # docker compose up -d
 ```
 
-Host networking is deliberate: FTP passive mode and real client IPs work
-without NAT juggling. Read **`docs/deploy-prod.md`** before deploying (ports
-bound on the host, TLS/Traefik notes) and **`docs/backup.md`** — PostgreSQL
-and the ECG volumes must be backed up _together_ (`docker-compose.backup.yml`,
-`scripts/restore.sh`).
+Containers share a bridge network and publish the device ports. Two
+consequences worth knowing before deploying: the published ports are fixed in
+`docker-compose.yml`, so a port changed in Admin > Modules must be changed on
+the container side of the mapping too; and the backend sees the Docker gateway
+rather than the real client IP, which also means `ufw` does not filter the
+published ports — Docker's DNAT bypasses the INPUT chain, so filtering belongs
+in `DOCKER-USER`.
+
+FTP passive mode needs **Public host** set in Admin > Modules > FTP: from
+inside a bridge network the server would otherwise advertise its `172.x`
+address in PASV and every client would reset the connection.
+
+Read **`docs/deploy-prod.md`** before deploying and **`docs/backup.md`** —
+PostgreSQL and the ECG volumes must be backed up _together_
+(`scripts/backup.sh`).
 
 Default ports: API `4444` · FTP `2121` in the container, published on the
 host as `21` (`FTP_PORT`) for devices that cannot be told which port to
@@ -208,3 +224,14 @@ controlled by the `metrics:` section of `config.yaml`.
 - Roadmap and design history live in `docs/epics/` (connector pack, metrics,
   DICOM proxy, UX redesign, HL7 hardening, auth refactor, gRPC modules,
   input-validation & security hardening, …).
+
+## Funding
+
+<p align="center">
+  <img src="assets/France_2030_2022_03_logotype_rouge_bleu.jpg" alt="France 2030" height="100" style="margin: 0 20px;">
+  <img src="assets/france-relance-europe.png" alt="France Relance - Europe" height="100" style="margin: 0 20px;">
+</p>
+
+This project has been funded by the French government as part of the France 2030
+initiative and by the European Union - Next Generation EU as part of the France
+Relance plan - Agence Nationale de la Recherche (ANR) — ANR-10-IAHU-04
