@@ -34,11 +34,15 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
-    # Fixed, and identical on both sides so the published port always matches
-    # what the module binds. Admin > Modules shows these read-only; changing a
-    # port means changing it here and redeploying.
+    # The container side is what the module binds and is fixed; Admin > Modules
+    # shows it read-only. Only the host side of the FTP mapping is a knob, for
+    # devices that cannot be told which port to use (Nihon Kohden dial 21).
+    # dockerd runs as root and does that privileged bind itself, so the app
+    # keeps binding 2121 unprivileged -- no capability, no host redirect. Set
+    # the same value as "Public port" in Admin > Modules > FTP so the page
+    # shows devices the port they should target.
     ports:
-      - "2121:2121" # FTP control
+      - "${FTP_PORT:-21}:2121" # FTP control
       - "4242:4242" # DICOM C-STORE
       - "30003:30003" # ECTP (Nihon Kohden)
       # FTP passive range. One port is held per in-flight data connection, so
