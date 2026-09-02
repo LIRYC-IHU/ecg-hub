@@ -27,21 +27,27 @@ import { useNotification } from "../../context/NotificationContext";
 import { useAuth } from "../../hooks/useAuth";
 import { errorMessage } from "../../lib/errors";
 
-// Ports published in docker-compose.yml. The container side of each mapping is
-// what the module binds, so these cannot be changed from the UI: a value that
-// drifts from the mapping listens where nothing is forwarded. Shown read-only.
+// Ports published in docker-compose.yml. The module has to bind what the
+// mapping forwards, so these are the values that agree with a stock deploy --
+// shown as the expected value, not enforced. A deployment that publishes
+// something else is legitimate, and locking the field would leave no way to
+// follow it from the UI.
 const FIXED_FTP_PORT = 2121;
 const FIXED_PASSIVE_RANGE = "30100-30199";
 const FIXED_DICOM_PORT = 4242;
 
-// A pinned port: displayed, never editable, and flagged when the stored value
-// no longer matches the mapping -- the one state the UI cannot fix by itself.
-function FixedPort({ label, value, expected, publicValue }: {
+// A port that has to agree with the published mapping: editable, with the
+// disagreement called out. The warning is the point -- a value that drifts
+// from the mapping binds where nothing is forwarded, and the module still
+// reports Running. Locking the field instead would leave no way to repair
+// exactly the state the warning reports.
+function PortField({ label, value, expected, publicValue, children }: {
   label: string;
   value: string | number;
   expected: string | number;
   // What the devices actually dial, when a NAT translates the bound port.
   publicValue?: number;
+  children: React.ReactNode;
 }) {
   const { t } = useTranslation();
   const mismatch = String(value) !== String(expected);
@@ -51,24 +57,17 @@ function FixedPort({ label, value, expected, publicValue }: {
       <label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
         {label}
       </label>
-      <input
-        type="text"
-        value={translated ? `${publicValue} \u2192 ${value}` : value}
-        readOnly
-        disabled
-        className="mt-1 w-full text-xs border border-border rounded-md px-2.5 py-1.5 bg-muted/40 text-muted-foreground cursor-not-allowed focus:outline-none"
-      />
+      {children}
       <p className={`mt-1 text-[10px] ${mismatch ? "text-orange-600" : "text-muted-foreground"}`}>
         {mismatch
           ? t("modules.portMismatch", { expected })
           : translated
             ? t("modules.portTranslated", { publicPort: publicValue, boundPort: value })
-            : t("modules.portFixed")}
+            : t("modules.portExpected", { expected })}
       </p>
     </div>
   );
 }
-
 
 const MASKED_PASSWORD = "••••••";
 
@@ -360,17 +359,45 @@ const inputClass =
         <>
           {/* Fields */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-5">
-            <FixedPort
+            <PortField
               label={t("modules.ftp.port")}
               value={port}
               expected={FIXED_FTP_PORT}
               publicValue={publicPort}
-            />
-            <FixedPort
+            >
+              <input
+                type="number"
+                value={port}
+                min={1} max={65535}
+                onChange={(e) => setPort(Math.min(65535, Math.max(1, parseInt(e.target.value) || FIXED_FTP_PORT)))}
+                className={`mt-1 ${inputClass}`}
+              />
+            </PortField>
+            <PortField
               label={t("modules.ftp.passiveRange")}
               value={`${passiveLow}-${passiveHigh}`}
               expected={FIXED_PASSIVE_RANGE}
-            />
+            >
+              <div className="flex items-center gap-2 mt-1">
+                <input
+                  type="number"
+                  value={passiveLow}
+                  min={1} max={65535}
+                  onChange={(e) => setPassiveLow(Math.min(65535, Math.max(1, parseInt(e.target.value) || 30100)))}
+                  className={inputClass}
+                  placeholder="30100"
+                />
+                <span className="text-muted-foreground text-sm shrink-0">–</span>
+                <input
+                  type="number"
+                  value={passiveHigh}
+                  min={1} max={65535}
+                  onChange={(e) => setPassiveHigh(Math.min(65535, Math.max(1, parseInt(e.target.value) || 30199)))}
+                  className={inputClass}
+                  placeholder="30199"
+                />
+              </div>
+            </PortField>
             <div>
               <label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                 {t("modules.ftp.publicHost")}
@@ -573,11 +600,19 @@ function DICOMCard({ dicomStatus }: { dicomStatus: "running" | "stopped" | "erro
         <>
           {/* Fields */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-5">
-            <FixedPort
+            <PortField
               label={t("modules.dicom.port")}
               value={port}
               expected={FIXED_DICOM_PORT}
-            />
+            >
+              <input
+                type="number"
+                value={port}
+                min={1} max={65535}
+                onChange={(e) => setPort(Math.min(65535, Math.max(1, parseInt(e.target.value) || FIXED_DICOM_PORT)))}
+                className={`mt-1 ${inputClass}`}
+              />
+            </PortField>
             <div>
               <label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                 {t("modules.dicom.aeTitle")}

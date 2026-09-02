@@ -683,9 +683,9 @@
       "unavailable": "Aucun certificat TLS exploitable n'est monté",
       "validUntil": "valide jusqu'au {{date}}"
     },
-    "portFixed": "Fixé par le déploiement",
     "portMismatch": "Ne correspond pas au port publié {{expected}} — rien n'est redirigé ici",
-    "portTranslated": "Les appareils composent {{publicPort}}, redirigé vers {{boundPort}} par le déploiement"
+    "portTranslated": "Les appareils composent {{publicPort}}, redirigé vers {{boundPort}} par le déploiement",
+    "portExpected": "Doit correspondre au port publié {{expected}}"
   },
   "auth": {
     "login": "Connexion",
