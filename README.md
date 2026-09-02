@@ -179,6 +179,7 @@ Three layers, by design:
    refuses to start with weak/placeholder secrets unless
    `APP_ENV=development`.
 2. **`config.yaml` — infrastructure only.** Copy from `config.example.yaml`.
+
    ```yaml
    server: { tls: false } # TLS here only for bare-metal; behind nginx keep false
    database: { max_open_conns: 10, max_idle_conns: 5 }
@@ -198,6 +199,7 @@ Three layers, by design:
    `METRICS_ENABLED`, `METRICS_PORT` and `WEBHOOKS_RETENTION_DAYS` — a container
    can move the scrape endpoint or change delivery retention without templating
    a mounted file.
+
 3. **Database (via the admin UI)** — everything else: auth providers, modules,
    FTP/DICOM/HL7, connectors, webhooks. Hot-reloaded, no restart needed.
 
@@ -236,48 +238,6 @@ Default ports: API `4444` · FTP `2121` in the container, published on the
 host as `21` (`FTP_PORT`) for devices that cannot be told which port to
 use · passive `30100-30199` · HL7 `2575`
 · DICOM `4242` · metrics `9091`.
-
-### Observability (optional overlay)
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.metrics.yml up -d
-```
-
-Adds Prometheus (`:9090`), Grafana (`:3000`, admin/admin, dashboard
-auto-provisioned from `docs/grafana/`), cAdvisor and node-exporter. All four
-bind `127.0.0.1` only — cAdvisor and node-exporter expose the whole host with
-no authentication — so reach them over an SSH tunnel:
-
-```bash
-ssh -L 3000:localhost:3000 -L 9090:localhost:9090 <host>
-```
-
-`METRICS_ENABLED=true` is required on the backend, or `:9091` serves nothing.
-
-To size a deployment, `backend/loadtest/capacity-probe.sh` reports the CPU cost
-of a single ECG — the number that extrapolates to a daily volume. It reads
-`/metrics` directly and needs none of the overlay above:
-
-```bash
-METRICS=http://<host>:9091/metrics ./loadtest/capacity-probe.sh \
-  'JOBS=8 ./loadtest/ftp-stress.sh /path/to/ecgs 2121 <host>'
-```
-
-The metrics port publishes storage volumes, queue depths and module health with
-no authentication. Keep it on the loopback or the management network; reaching
-it from a workstation is an SSH tunnel, not a published port. The
-backend exposes ~40 application metrics (ingestion, modules, HL7, DICOM,
-connectors, storage, export, HTTP/DB) on the dedicated metrics port —
-controlled by the `metrics:` section of `config.yaml`.
-
-## Development notes
-
-- `make` builds backend + frontend locally; `make swagger` regenerates the
-  OpenAPI docs; `make clean` / `make fclean` / `make re` do what they say.
-- Backend tests: `cd backend && go test ./...`
-- Roadmap and design history live in `docs/epics/` (connector pack, metrics,
-  DICOM proxy, UX redesign, HL7 hardening, auth refactor, gRPC modules,
-  input-validation & security hardening, …).
 
 ## Contributing & security
 
