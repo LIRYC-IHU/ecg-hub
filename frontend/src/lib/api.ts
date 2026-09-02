@@ -836,6 +836,14 @@ export async function markEcgViewed(ecgId: string): Promise<void> {
   await ecgClient.markViewed({ id: ecgId });
 }
 
+// markPatientEcgsViewed clears the patient's whole unviewed badge in one call.
+// Returns how many were actually stamped, so a caller can skip refetching when
+// there was nothing to mark.
+export async function markPatientEcgsViewed(patientId: string): Promise<number> {
+  const res = await patientClient.markECGsViewed({ patientId });
+  return res.marked;
+}
+
 
 export async function fetchECGMeta(ecgId: number): Promise<ECGMetaResponse> {
   // gRPC: ECGService.GetMetadata. values arrive as a JSON object string.

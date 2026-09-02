@@ -103,7 +103,11 @@
     "hl7RetryQueued": "ECG #{{id}} — retry HL7 planifié",
     "hl7RetryError": "ECG #{{id}} — échec du retry HL7",
     "deletedNamed": "ECG supprimé — {{filename}}",
-    "deleteErrorNamed": "Erreur lors de la suppression — {{filename}}"
+    "deleteErrorNamed": "Erreur lors de la suppression — {{filename}}",
+    "markViewedBulk": "Marquer comme vus",
+    "markViewedBulkOk": "{{count}} ECG marqué comme vu",
+    "markViewedBulkOk_other": "{{count}} ECG marqués comme vus",
+    "markViewedBulkError": "Impossible de marquer la sélection comme vue"
   },
   "export": {
     "selected": "{{count}} ECG sélectionné",

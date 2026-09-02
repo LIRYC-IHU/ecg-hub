@@ -32,6 +32,7 @@ import {
   createExportJob,
   deleteECG,
   markEcgViewed,
+  markPatientEcgsViewed,
   fetchPins,
   pinPatient,
   unpinPatient,
@@ -1198,6 +1199,29 @@ function BulkECGFooter({
             />
           </>
         )}
+        <button
+          disabled={busy}
+          onClick={async () => {
+            setBusy(true);
+            try {
+              // One call per ECG: the batch endpoint is per-patient, and this
+              // bar can hold a hand-picked selection across several of them.
+              await Promise.all([...ecgIds].map((id) => markEcgViewed(String(id))));
+              void queryClient.invalidateQueries({ queryKey: ["patients"] });
+              void queryClient.invalidateQueries({ queryKey: ["ecgs"] });
+              notify("success", t("ecg.markViewedBulkOk", { count }));
+              onClear();
+            } catch {
+              notify("error", t("ecg.markViewedBulkError"));
+            } finally {
+              setBusy(false);
+            }
+          }}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-muted-foreground border border-border hover:text-foreground hover:bg-muted transition-colors disabled:opacity-50"
+        >
+          <Eye className="w-3.5 h-3.5" />
+          {t("ecg.markViewedBulk")}
+        </button>
         {canSendResult && (
           <button
             disabled={busy}
@@ -1466,11 +1490,24 @@ export function PatientMasterDetailPage({
     [queryClient],
   );
 
+  const markPatientViewed = async (patient: Patient) => {
+    if ((patient.unviewed_count ?? 0) === 0) return;
+    try {
+      await markPatientEcgsViewed(String(patient.id));
+      void queryClient.invalidateQueries({ queryKey: ["patients"] });
+      void queryClient.invalidateQueries({ queryKey: ["ecgs", patient.id] });
+    } catch {
+      // Losing the badge is not worth interrupting the operator over; the next
+      // page load recomputes it from viewed_at anyway.
+    }
+  };
+
   const handleSelectPatient = async (patient: Patient) => {
     if (selectedPatient?.id === patient.id) {
       setSelectedPatient(null);
     } else {
       setSelectedPatient(patient);
+      void markPatientViewed(patient);
       if (checkedPatients.has(patient.id)) {
         try {
           const res = await fetch(
