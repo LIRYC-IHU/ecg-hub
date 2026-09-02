@@ -103,7 +103,11 @@
     "hl7RetryQueued": "ECG #{{id}} — HL7 retry queued",
     "hl7RetryError": "ECG #{{id}} — HL7 retry failed",
     "deletedNamed": "ECG deleted — {{filename}}",
-    "deleteErrorNamed": "Could not delete — {{filename}}"
+    "deleteErrorNamed": "Could not delete — {{filename}}",
+    "markViewedBulk": "Mark as seen",
+    "markViewedBulkOk": "{{count}} ECG marked as seen",
+    "markViewedBulkOk_other": "{{count}} ECGs marked as seen",
+    "markViewedBulkError": "Could not mark the selection as seen"
   },
   "export": {
     "selected": "{{count}} ECG selected",
