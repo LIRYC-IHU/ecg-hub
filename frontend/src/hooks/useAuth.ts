@@ -21,14 +21,23 @@ export function useAuth() {
       })
   }, [])
 
-  // The mount check above is a snapshot. A token that expires while the page
+  // The mount check above is a snapshot: a token that expires while the page
   // stays open leaves it stale, so drop to the login screen as soon as the
-  // server rejects a call — see SESSION_EXPIRED_EVENT.
+  // server rejects a call (SESSION_EXPIRED_EVENT).
+  //
+  // Only listen while a session is actually established. That does two things:
+  // a failed sign-in — unauthenticated too — cannot be reported as an expiry on
+  // the login screen, and the listener unsubscribes the moment the status
+  // changes, so the handler runs exactly once.
+  //
+  // Running it more than once loops: clearing the cache makes every mounted
+  // query refetch, the authenticated ones answer 401, that fires this event
+  // again, and the app parks on its loading screen because the setup-status
+  // query is in flight on every pass.
   useEffect(() => {
+    if (status !== 'authenticated') return
     const onExpired = () => {
-      // Only from an established session. A failed sign-in is unauthenticated
-      // too, and must not be reported as an expiry on the login screen itself.
-      setStatus((prev) => (prev === 'authenticated' ? 'unauthenticated' : prev))
+      setStatus('unauthenticated')
       setUser(null)
       // Cached patient data outlives the component tree. Clearing it stops the
       // next sign-in — possibly a different clinician on a shared workstation —
@@ -37,7 +46,7 @@ export function useAuth() {
     }
     window.addEventListener(SESSION_EXPIRED_EVENT, onExpired)
     return () => window.removeEventListener(SESSION_EXPIRED_EVENT, onExpired)
-  }, [queryClient])
+  }, [status, queryClient])
 
   const hasPermission = useCallback((permission: string): boolean => {
     return user?.permissions?.includes(permission) ?? false
