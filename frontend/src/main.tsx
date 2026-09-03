@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
+import { Code, ConnectError } from '@connectrpc/connect'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import './lib/i18n' // initialise react-i18next before first render
 import './index.css'
@@ -13,13 +14,16 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       retry: (failureCount, error) => {
-        // Don't retry on auth failures — redirect to login instead.
-        if (error && typeof error === 'object' && 'code' in error) {
-          const code = (error as { code?: string }).code
-          if (code === 'TOKEN_REFRESH_REQUIRED' || code === 'UNAUTHENTICATED') {
-            window.location.href = '/login'
-            return false
-          }
+        // Never retry an auth failure: the session is gone, and two more calls
+        // will not bring it back. Dropping to the login screen is handled by the
+        // transport interceptor, which sees every RPC rather than only the ones
+        // React Query happens to own.
+        //
+        // This compared error.code to the string 'UNAUTHENTICATED'. ConnectError
+        // carries a numeric code (Code.Unauthenticated === 16), so the branch
+        // never matched and the redirect it guarded never ran.
+        if (error instanceof ConnectError && error.code === Code.Unauthenticated) {
+          return false
         }
         return failureCount < 2
       },

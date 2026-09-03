@@ -1,3 +1,4 @@
+import { Code, ConnectError, type Interceptor } from "@connectrpc/connect";
 import { createClient } from "@connectrpc/connect";
 import { createConnectTransport } from "@connectrpc/connect-web";
 
@@ -22,6 +23,32 @@ import { WebhookService } from "../gen/v1/webhook_pb";
 
 const BASE_URL = (import.meta.env as Record<string, string>).VITE_API_URL ?? "";
 
+/**
+ * Fired when the server rejects a call as unauthenticated, i.e. the session
+ * expired while the page was open.
+ *
+ * Without this the app never learned: useAuth checks once on mount, so a token
+ * that expired afterwards left the UI in its authenticated state. Every request
+ * failed, panels sat empty or stale, and the user could still walk through a
+ * patient list showing data they were no longer authorised to see -- until they
+ * happened to reload.
+ *
+ * A window event rather than a direct import: this module is plain TypeScript
+ * with no React in scope, and every client already shares this transport.
+ */
+export const SESSION_EXPIRED_EVENT = "ecghub:session-expired";
+
+const sessionExpiryInterceptor: Interceptor = (next) => async (req) => {
+  try {
+    return await next(req);
+  } catch (err) {
+    if (err instanceof ConnectError && err.code === Code.Unauthenticated) {
+      window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
+    }
+    throw err;
+  }
+};
+
 // Connect transport for the gRPC/Connect API. baseUrl "/api" routes through
 // nginx `location /api/` to the backend, which strips the /api prefix before
 // the connect-go handler. Same-origin in dev, so the JWT cookie is sent
@@ -29,6 +56,7 @@ const BASE_URL = (import.meta.env as Record<string, string>).VITE_API_URL ?? "";
 export const connectTransport = createConnectTransport({
   baseUrl: `${BASE_URL}/api`,
   fetch: (input, init) => fetch(input, { ...init, credentials: "include" }),
+  interceptors: [sessionExpiryInterceptor],
 });
 
 // Typed clients — one per service as the API migrates to gRPC.
