@@ -258,7 +258,7 @@ rows pointing at files that were never saved.
 
 Default ports: API `4444` · FTP `2121` in the container, published on the
 host as `21` (`FTP_PORT`) for devices that cannot be told which port to
-use · passive `30100-30199` · HL7 `2575`
+use · passive `30000-30100` · HL7 `2575`
 · DICOM `4242` · metrics `9091`.
 
 ## Contributing & security
