@@ -91,7 +91,7 @@ For production, read [`docs/deploy-prod.md`](docs/deploy-prod.md) first, then
 ## How it works
 
 <p align="center">
-  <img src="assets/pipeline.png" alt="Pipeline ecg-hub" height="264" style="margin: 0 20px;">
+  <img src="assets/pipeline.png" alt="Pipeline ecg-hub" height="512" style="margin: 0 20px;">
 </p>
 
 1. **Ingestion** — built-in FTP server, DICOM C-STORE SCP and ECTP listener
