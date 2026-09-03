@@ -51,8 +51,9 @@ rule in front. The FTP port is the exception — see below.
 3. **PostgreSQL 18.** `docker-compose.yml` ships a `db` service. Comment it out —
    along with the backend's `depends_on` and the `postgres-data` volume — when
    the site provides its own instance, and point `DATABASE_URL` at it. Either
-   way, set up backups — `scripts/backup.sh` dumps the database and the ECG
-   volumes, which have to be captured together to be restorable.
+   way, backups are the database maintainers' responsibility. Whatever they run
+   has to capture the database and the ECG volumes at the same point: metadata
+   without its files restores to rows pointing at nothing.
 
    Upgrading an existing install: 18 cannot open a 16 cluster and initialises an
    empty one instead, so the stack comes up healthy against a blank database
@@ -126,8 +127,7 @@ client IP, so FTP logs and anything keyed on client IP reflect that.
 - Open `https://<host>/` → complete the initial admin setup at `/setup`.
 - Configure modules (FTP/DICOM), connectors, HL7 and auth (OIDC/LDAP) from the
   admin UI. Everything operational lives in the database, not in `config.yaml`.
-- Verify a test ingestion end-to-end, and that an audit entry and a backup are
-  produced.
+- Verify a test ingestion end-to-end and that an audit entry is written.
 
 ## Notes
 
