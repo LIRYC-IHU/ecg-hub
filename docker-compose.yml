@@ -6,7 +6,8 @@ services:
   db:
     image: postgres:18.6-alpine
     restart: unless-stopped
-    networks: [ecg-hub]
+    networks: 
+      - ecg-hub
     security_opt:
       - no-new-privileges:true
     environment:
@@ -26,7 +27,8 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     restart: unless-stopped
-    networks: [ecg-hub]
+    networks: 
+      - ecg-hub
     depends_on:
       db:
         condition: service_healthy
@@ -43,14 +45,14 @@ services:
     # shows devices the port they should target.
     ports:
       - "${FTP_PORT:-21}:2121" # FTP control
-      - "4242:4242" # DICOM C-STORE
+      - "${DICOM_PORT:-4242}:4242" # DICOM C-STORE
       - "30003:30003" # ECTP (Nihon Kohden)
       # FTP passive range. One port is held per in-flight data connection, so
       # the range width IS the concurrent-transfer ceiling: measured against
-      # the old 30000-30010, uploads began timing out at 10 in parallel, which
+      # the old 30000-30100, uploads began timing out at 100 in parallel, which
       # is exactly the ten usable ports that range had left once ECTP took
       # 30003. Moved clear of ECTP and widened to 100.
-      - "30100-30199:30100-30199"
+      - "30000-30100:30000-30100"
       # Prometheus scrape, loopback only. Drop the 127.0.0.1 prefix to expose it.
       - "127.0.0.1:${METRICS_PORT:-9091}:9091"
     environment:
@@ -102,7 +104,8 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     restart: unless-stopped
-    networks: [ecg-hub]
+    networks: 
+      - ecg-hub
     depends_on:
       - backend
     ports:
