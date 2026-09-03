@@ -1,0 +1,19 @@
+# Development image — Vite dev server with HMR. Unlike Dockerfile (prod), which
+# builds the SPA and serves it from nginx, this keeps node around: compose bind
+# mounts ./frontend over /app so edits reload in the browser.
+FROM node:20-alpine
+
+WORKDIR /app
+
+RUN corepack enable && corepack prepare yarn@1.22.22 --activate
+
+# Installed into the image's /app/node_modules, which compose then shadows with
+# an anonymous volume so the host tree (and its host-built binaries) stays out.
+COPY package.json yarn.lock ./
+RUN yarn --frozen-lockfile
+
+EXPOSE 5173
+
+# --host binds 0.0.0.0: without it Vite listens on loopback only and nginx
+# cannot reach it from its own container.
+CMD ["yarn", "dev", "--host", "0.0.0.0", "--port", "5173"]
