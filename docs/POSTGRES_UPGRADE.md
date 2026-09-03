@@ -115,11 +115,8 @@ be entered again.
 
 ## Avoiding this
 
-Enable the backup profile. It runs `pg_dump` on a schedule into `./backups`:
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.backup.yml --profile backup up -d
-```
-
-Keep its image tag in step with the server: `pg_dump` refuses to talk to a
-newer major version.
+Scheduled dumps are the database maintainers' responsibility — this project
+ships no backup tooling. Two constraints to hand them: `pg_dump` refuses to
+talk to a newer major version, so its client has to keep step with the server;
+and the dump has to be taken at the same point as the ECG volumes, since
+metadata without its files restores to rows pointing at nothing.

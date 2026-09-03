@@ -86,23 +86,13 @@ Open the app, go to **`/setup`** to create the local admin account, then
 configure modules, HL7 and authentication from the admin pages.
 
 For production, read [`docs/deploy-prod.md`](docs/deploy-prod.md) first, then
-[Setup](#setup) below for prerequisites, ports and backups.
+[Setup](#setup) below for prerequisites and ports.
 
 ## How it works
 
-```
- ECG devices                        ECG Hub                             Hospital IT
-┌────────────┐    FTP :21    ┌───────────────────────────────────┐
-│ Philips    │──────────────▶│ Ingestion pipeline                │  HL7 QRY/ADT :2575
-│ GE MUSE    │  DICOM :4242  │  • vendor module parses the file  │◀───────────────────▶ HIS / CommServer
-│ Nihon K.   │──────────────▶│  • metadata → PostgreSQL          │
-│ DICOM      │   ECTP        │  • original file → volume         │  Webhooks (HTTP POST)
-└────────────┘──────────────▶│  • no patient ID? → unidentified  │───────────────────▶ external systems
-                             │  • unparseable?   → quarantine    │
-                             │                                   │  Proxy connectors
-                             │ Web UI + REST API (:4444)         │───────────────────▶ PACS (DICOM C-STORE,
-                             └───────────────────────────────────┘                      ECTP/FTP forward)
-```
+<p align="center">
+  <img src="assets/pipeline.png" alt="Pipeline ecg-hub" height="264" style="margin: 0 20px;">
+</p>
 
 1. **Ingestion** — built-in FTP server, DICOM C-STORE SCP and ECTP listener
    receive files. A router matches each file to a **vendor module** (Philips,
@@ -164,8 +154,7 @@ frontend/           React 19 + TypeScript + Vite + Tailwind 4 + TanStack Query
   src/components/   patient, ecg, admin, uploads, layout, ui
   src/ecg-viewer/   WebGL waveform viewer
 nginx/              nginx.conf (prod, upstream backend:4444) and nginx.dev.conf
-docs/               deploy-prod.md, backup.md, epics/, grafana/
-scripts/            backup tooling
+docs/               deploy-prod.md, POSTGRES_UPGRADE.md, TLS_CERTS.md, epics/, grafana/
 docker-compose.yml         production stack
 docker-compose.dev.yml     dev stack (hot reload)
 docker-compose.metrics.yml observability overlay
@@ -183,17 +172,22 @@ Three layers, by design:
 2. **`config.yaml` — infrastructure only.** Copy from `config.example.yaml`.
 
    ```yaml
-   server: { tls: false } # TLS here only for bare-metal; behind nginx keep false
-   database: { max_open_conns: 10, max_idle_conns: 5 }
+   server:
+     tls: false # TLS here only for bare-metal; behind nginx keep false
+   database:
+     max_open_conns: 10
+     max_idle_conns: 5
    storage:
-     {
-       volume_path: /data/ecg,
-       quarantine_path: /data/ecg-quarantine,
-       max_size: 50Gi,
-       allow_rotation: false,
-     }
-   export: { workers: 2, tmp_ttl: 2h }
-   metrics: { enabled: true, port: 9091 } # dedicated Prometheus scrape port
+     volume_path: /data/ecg
+     quarantine_path: /data/ecg-quarantine
+     max_size: 50Gi
+     allow_rotation: false
+   export:
+     workers: 2
+     tmp_ttl: 2h
+   metrics:
+     enabled: true
+     port: 9091 # dedicated Prometheus scrape port
    ```
 
    The listen port is fixed at 4444 (Dockerfile, nginx and compose all assume
@@ -232,9 +226,10 @@ FTP passive mode needs **Public host** set in Admin > Modules > FTP: from
 inside a bridge network the server would otherwise advertise its `172.x`
 address in PASV and every client would reset the connection.
 
-Read **`docs/deploy-prod.md`** before deploying and **`docs/backup.md`** —
-PostgreSQL and the ECG volumes must be backed up _together_
-(`scripts/backup.sh`).
+Read **[`docs/deploy-prod.md`](docs/deploy-prod.md)** before deploying. Backups
+are the database maintainers' responsibility; whatever they run has to capture
+PostgreSQL and the ECG volumes at the same point, or the metadata restores to
+rows pointing at files that were never saved.
 
 Default ports: API `4444` · FTP `2121` in the container, published on the
 host as `21` (`FTP_PORT`) for devices that cannot be told which port to
