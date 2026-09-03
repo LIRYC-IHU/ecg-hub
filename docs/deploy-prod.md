@@ -106,7 +106,10 @@ client can route, and every transfer would reset right after `227`.
 
 The passive range width is the concurrent-transfer ceiling — one port is held
 per in-flight data connection. Measured on the previous 11-port range, uploads
-began timing out at 10 in parallel. The published 30100-30199 gives 100.
+began timing out at 10 in parallel. The published 30000-30100 gives 101.
+
+The range spans ECTP's 30003 without harm: ftpserverlib retries the next port
+when a bind fails, so a data connection that draws it moves on.
 
 Forward the same range on the router, and keep it clear of 30003 (ECTP).
 

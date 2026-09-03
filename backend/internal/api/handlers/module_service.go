@@ -132,7 +132,7 @@ func (h *ModuleServiceHandler) GetFTPConfig(_ context.Context, _ *apiv1.GetFTPCo
 	if record == nil {
 		return &apiv1.FTPConfig{
 			Port:             2121,
-			PassivePortRange: "30100-30199",
+			PassivePortRange: "30000-30100",
 			Password:         maskedSecret,
 			Enabled:          false,
 		}, nil
@@ -228,7 +228,7 @@ func (h *ModuleServiceHandler) SaveFTPConfig(_ context.Context, req *apiv1.SaveF
 func validatePassivePortRange(r string) error {
 	parts := strings.SplitN(r, "-", 2)
 	if len(parts) != 2 {
-		return errors.New("passive_port_range must be in format \"low-high\" (e.g. \"30100-30199\")")
+		return errors.New("passive_port_range must be in format \"low-high\" (e.g. \"30000-30100\")")
 	}
 	var low, high int
 	if _, err := fmt.Sscan(parts[0], &low); err != nil || low < 1 || low > 65535 {

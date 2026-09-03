@@ -33,7 +33,7 @@ import { errorMessage } from "../../lib/errors";
 // something else is legitimate, and locking the field would leave no way to
 // follow it from the UI.
 const FIXED_FTP_PORT = 2121;
-const FIXED_PASSIVE_RANGE = "30100-30199";
+const FIXED_PASSIVE_RANGE = "30000-30100";
 const FIXED_DICOM_PORT = 4242;
 
 // A port that has to agree with the published mapping: editable, with the
@@ -247,8 +247,8 @@ function FTPCard({ ftpStatus }: { ftpStatus: "running" | "stopped" | "error" | u
   const queryClient = useQueryClient();
 
   const [port, setPort] = useState(2121);
-  const [passiveLow, setPassiveLow] = useState(30100);
-  const [passiveHigh, setPassiveHigh] = useState(30199);
+  const [passiveLow, setPassiveLow] = useState(30000);
+  const [passiveHigh, setPassiveHigh] = useState(30100);
   const [publicHost, setPublicHost] = useState("");
   const [publicPort, setPublicPort] = useState(0);
   const [tls, setTls] = useState(false);
@@ -268,8 +268,8 @@ function FTPCard({ ftpStatus }: { ftpStatus: "running" | "stopped" | "error" | u
     if (!ftpConfig) return;
     setPort(ftpConfig.port);
     const parts = (ftpConfig.passive_port_range || FIXED_PASSIVE_RANGE).split("-");
-    setPassiveLow(parseInt(parts[0]) || 30100);
-    setPassiveHigh(parseInt(parts[1]) || 30199);
+    setPassiveLow(parseInt(parts[0]) || 30000);
+    setPassiveHigh(parseInt(parts[1]) || 30100);
     setPublicHost(ftpConfig.public_host);
     setPublicPort(ftpConfig.public_port);
     setTls(ftpConfig.tls);
@@ -383,18 +383,18 @@ const inputClass =
                   type="number"
                   value={passiveLow}
                   min={1} max={65535}
-                  onChange={(e) => setPassiveLow(Math.min(65535, Math.max(1, parseInt(e.target.value) || 30100)))}
+                  onChange={(e) => setPassiveLow(Math.min(65535, Math.max(1, parseInt(e.target.value) || 30000)))}
                   className={inputClass}
-                  placeholder="30100"
+                  placeholder="30000"
                 />
                 <span className="text-muted-foreground text-sm shrink-0">–</span>
                 <input
                   type="number"
                   value={passiveHigh}
                   min={1} max={65535}
-                  onChange={(e) => setPassiveHigh(Math.min(65535, Math.max(1, parseInt(e.target.value) || 30199)))}
+                  onChange={(e) => setPassiveHigh(Math.min(65535, Math.max(1, parseInt(e.target.value) || 30100)))}
                   className={inputClass}
-                  placeholder="30199"
+                  placeholder="30100"
                 />
               </div>
             </PortField>
