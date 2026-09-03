@@ -3,7 +3,7 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org/).
 
-## [1.0.0] — 2026-09-02
+## [1.0.0] — 2026-09-04
 
 First release.
 
@@ -66,10 +66,31 @@ First release.
 
 - Bridge networking with published device ports; FTP published on the host as
   `${FTP_PORT:-21}` while the container binds 2121 unprivileged.
-- Passive port range of 100 ports, sized so concurrency is not the ceiling.
+- Passive port range 30000-30100, sized so concurrency is not the ceiling: the
+  previous eleven-port range began refusing transfers at ten in parallel.
 - Around 40 Prometheus metrics and a Grafana dashboard.
 - `loadtest/capacity-probe.sh` reports the CPU cost of a single ECG, measured
   at ~27 ms on a 2-core deployment.
+
+### Fixed before release
+
+- Selecting a patient cleared the unviewed badge in the UI but marked nothing:
+  `ecgs.patient_id` holds the device string while the UI sends the UUID, so the
+  update matched no rows. Both identifier forms now resolve.
+- The FTP passive range disagreed between the compose file, the module defaults
+  and the deployment guide. The module bound ports Docker did not publish, and
+  passive transfers were refused right after the `227` reply.
+- The ECG viewer zoomed on a trackpad pinch but not on a mouse wheel: the wheel
+  handler required ctrl/cmd, which only a pinch sets, so a wheel fell through to
+  a pan branch that does nothing until the view is already zoomed.
+- An expired session left the UI in its authenticated state until a manual
+  reload, since authentication was checked once on mount. The app now returns to
+  the login screen when the server rejects a call, and clears the query cache
+  with it.
+- The pagination footer disappeared when a patient was selected, and the bulk
+  action bar covered it.
+- The tag dropdown rendered behind the statistics cards: a leftover GSAP
+  transform created a stacking context the dropdown could not escape.
 
 ### Known limitations
 
