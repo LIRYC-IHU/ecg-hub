@@ -10,7 +10,7 @@ name (`db`, `backend`), so nothing depends on the host's network layout.
 |-----------|---------|----------|
 | 80 | nginx (SPA + API) | clients / clinicians |
 | `${FTP_PORT:-21}` → 2121 | FTP control | ECG devices |
-| 30100-30199 | FTP passive range | ECG devices |
+| 30000-30100 | FTP passive range | ECG devices |
 | 4242 | DICOM C-STORE SCP | ECG / PACS devices |
 | 30003 | ECTP (Nihon Kohden) | NK devices |
 | 127.0.0.1:9091 | Prometheus metrics | scraper only |
