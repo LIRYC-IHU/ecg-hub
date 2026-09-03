@@ -173,21 +173,46 @@ Three layers, by design:
 
    ```yaml
    server:
-     tls: false # TLS here only for bare-metal; behind nginx keep false
+     tls: false
+
    database:
      max_open_conns: 10
      max_idle_conns: 5
+
    storage:
+     backend: local / s3
      volume_path: /data/ecg
      quarantine_path: /data/ecg-quarantine
-     max_size: 50Gi
-     allow_rotation: false
+     max_size: "50Gi"
+     s3:
+       endpoint: ""
+       bucket: ecg-hub
+       region: ""
+       prefix: ""
+       use_ssl: true
+       path_style: true
+       upload_interval_seconds: 10
+
+   # TLS certificate presented by the device-facing servers (FTPS, DICOM TLS).
+   #
+   # One pair for the installation, read from a mounted directory — there is no
+   # certificate field in the admin UI on purpose. Whoever already manages
+   # certificates (certbot, an internal PKI, a CHU wildcard) keeps managing them:
+   # the files are rewritten in place and the module is restarted, and nothing in
+   # the database ever holds a path.
+   #
+   # The defaults are certbot's filenames, so mounting
+   # /etc/letsencrypt/live/<host> at /certs needs no configuration at all.
+   # Overridable with TLS_CERT_FILE / TLS_KEY_FILE.
+   certs:
+     cert_file: /certs/fullchain.pem
+     key_file: /certs/privkey.pem
+
    export:
+     # Number of background export workers (PDF / FDA aECG / DICOM generation).
      workers: 2
+     # How long generated export files are kept in the temp area before cleanup.
      tmp_ttl: 2h
-   metrics:
-     enabled: true
-     port: 9091 # dedicated Prometheus scrape port
    ```
 
    The listen port is fixed at 4444 (Dockerfile, nginx and compose all assume
