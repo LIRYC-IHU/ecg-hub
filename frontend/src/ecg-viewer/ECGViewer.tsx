@@ -70,9 +70,42 @@ function cycle<T>(arr: readonly T[], current: T): T {
   return arr[(i + 1) % arr.length];
 }
 
-/** Only zoom on ctrl/cmd (matches macOS trackpad pinch + standard convention). */
+/**
+ * A wheel event that means "zoom" rather than "scroll".
+ *
+ * ctrl/cmd covers the trackpad pinch, which the browser reports as a wheel
+ * event with ctrlKey set. That alone left a plain mouse wheel doing nothing at
+ * all: it fell through to the pan branch, which is a no-op until the view is
+ * already zoomed in.
+ *
+ * Telling a wheel notch from two-finger scrolling has no API, so this reads the
+ * shape of the event. A notch reports whole lines or pages (deltaMode != PIXEL,
+ * which is what Firefox and Windows do), or one large whole-pixel jump —
+ * Chrome reports 100 or 120 per notch. Trackpads report small or fractional
+ * pixel deltas and usually some horizontal component, so they keep panning.
+ */
 function shouldZoom(e: WheelEvent): boolean {
-  return e.ctrlKey || e.metaKey;
+  if (e.ctrlKey || e.metaKey) return true;
+  if (e.deltaMode !== 0) return true; // DOM_DELTA_LINE / DOM_DELTA_PAGE
+  return e.deltaX === 0 && Number.isInteger(e.deltaY) && Math.abs(e.deltaY) >= 50;
+}
+
+/**
+ * deltaY in pixels, whatever unit the browser chose to report.
+ *
+ * Firefox reports a wheel notch as 3 lines rather than ~100 pixels, so using
+ * deltaY raw would zoom by a fraction of a percent there while Chrome moves
+ * 14% for the same physical notch.
+ */
+function wheelDeltaPx(e: WheelEvent): number {
+  const px =
+    e.deltaMode === 1 ? e.deltaY * 16 // lines -> px, one line ~= 16px
+    : e.deltaMode === 2 ? e.deltaY * 400 // pages -> px, roughly a screenful
+    : e.deltaY;
+  // Cap the step at one Windows notch. Page-mode wheels and trackpad momentum
+  // can report far more than that in a single event, and an uncapped step
+  // jumps the zoom instead of moving it.
+  return Math.max(-120, Math.min(120, px));
 }
 
 function clampPan(
@@ -294,7 +327,7 @@ export const ECGViewer = forwardRef<ECGViewerHandle, ECGViewerProps>(function EC
     }
   }, []);
 
-  // ---------- Wheel: zoom (ctrl/cmd) or pan ----------
+  // ---------- Wheel: zoom (pinch or mouse notch) or pan ----------
   useEffect(() => {
     const el = stageRef.current;
     if (!el) return;
@@ -304,7 +337,7 @@ export const ECGViewer = forwardRef<ECGViewerHandle, ECGViewerProps>(function EC
       const mx = e.clientX - rect.left;
       const my = e.clientY - rect.top;
       if (shouldZoom(e)) {
-        const factor = Math.exp(-e.deltaY * 0.0015);
+        const factor = Math.exp(-wheelDeltaPx(e) * 0.0015);
         const oldZoom = zoomRef.current;
         const newZoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, oldZoom * factor));
         if (newZoom === oldZoom) return;
