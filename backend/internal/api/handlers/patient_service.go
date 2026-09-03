@@ -25,8 +25,16 @@ type PatientServiceHandler struct {
 // POST /api/v1/patients/:id/ecgs/view). The empty-id case is already rejected by
 // protovalidate before this runs.
 func (h *PatientServiceHandler) MarkECGsViewed(_ context.Context, req *apiv1.MarkECGsViewedRequest) (*apiv1.MarkECGsViewedResponse, error) {
+	// ecgs.patient_id holds the device string, not the UUID. Callers send
+	// whichever id they have, so resolve before querying -- passing a UUID
+	// straight through matches no rows and reports zero marked.
+	patientID, err := h.resolvePatientID(req.PatientId)
+	if err != nil {
+		return &apiv1.MarkECGsViewedResponse{PatientId: req.PatientId, Marked: 0}, nil
+	}
+
 	repo := repository.NewECGRepository(h.DB)
-	n, err := repo.MarkViewedByPatient(req.PatientId)
+	n, err := repo.MarkViewedByPatient(patientID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -34,6 +42,20 @@ func (h *PatientServiceHandler) MarkECGsViewed(_ context.Context, req *apiv1.Mar
 		PatientId: req.PatientId,
 		Marked:    int32(n),
 	}, nil
+}
+
+// resolvePatientID turns either form of patient identifier -- the UUID
+// (patients.id) or the device string (patients.patient_id) -- into the device
+// string, which is what ecgs.patient_id stores.
+func (h *PatientServiceHandler) resolvePatientID(id string) (string, error) {
+	var patient models.Patient
+	if err := h.DB.First(&patient, "patient_id = ?", id).Error; err == nil {
+		return patient.PatientID, nil
+	}
+	if err := h.DB.First(&patient, "id = ?", id).Error; err != nil {
+		return "", err
+	}
+	return patient.PatientID, nil
 }
 
 // ListECGs returns one patient's ECGs, paginated + filtered (the former REST
@@ -49,15 +71,8 @@ func (h *PatientServiceHandler) ListECGs(ctx context.Context, req *apiv1.ListECG
 		perPage = 20
 	}
 
-	// Resolve patient_id: the request field can be either the UUID (patients.id)
-	// or the device string (patients.patient_id, e.g. "BS1339").
-	var patient models.Patient
-	var patientID string
-	if err := h.DB.First(&patient, "patient_id = ?", req.PatientId).Error; err == nil {
-		patientID = patient.PatientID
-	} else if err := h.DB.First(&patient, "id = ?", req.PatientId).Error; err == nil {
-		patientID = patient.PatientID
-	} else {
+	patientID, err := h.resolvePatientID(req.PatientId)
+	if err != nil {
 		return &apiv1.ListECGsResponse{Data: []*apiv1.Ecg{}, Total: 0, Page: page, PerPage: perPage}, nil
 	}
 
