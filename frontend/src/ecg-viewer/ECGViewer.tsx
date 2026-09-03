@@ -661,6 +661,14 @@ export const ECGViewer = forwardRef<ECGViewerHandle, ECGViewerProps>(function EC
           </div>
         </div>
       </div>
+      {/* Regulatory notice. Inside the viewer root on purpose: that root is the
+          element requestFullscreen is called on, so anywhere else the notice
+          would vanish exactly when the trace is being read most closely. No
+          dismiss control either -- it has to hold for every reading, not until
+          someone closes it once. */}
+      <p className="ecg-disclaimer">
+        <strong>{t('viewer.disclaimerTitle')}</strong> {t('viewer.disclaimer')}
+      </p>
     </div>
   );
 });

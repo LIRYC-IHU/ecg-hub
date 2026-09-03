@@ -813,7 +813,9 @@
     "clearCalipers": "clear",
     "noRecord": "No ECG loaded.",
     "nameInFile": "in file: {{name}}",
-    "nameInFileHint": "Name embedded in the source file — the ECG is filed under the patient shown before it."
+    "nameInFileHint": "Name embedded in the source file — the ECG is filed under the patient shown before it.",
+    "disclaimerTitle": "Non-diagnostic use.",
+    "disclaimer": "ECG Hub is a data-management and visualisation tool. It is not a medical device and must not be used as the basis for diagnosis."
   },
   "empty": {
     "patients": "No patient found",
