@@ -277,7 +277,7 @@ var queueFullTimeout = 30 * time.Second
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
-// parsePortRange parses "30100-30199" into an ftpserver.PortRange.
+// parsePortRange parses "30000-30100" into an ftpserver.PortRange.
 func parsePortRange(s string) (*ftpserver.PortRange, error) {
 	parts := strings.SplitN(s, "-", 2)
 	if len(parts) != 2 {

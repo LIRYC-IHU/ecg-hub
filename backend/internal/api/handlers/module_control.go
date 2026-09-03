@@ -94,7 +94,7 @@ func StartFTPFromDB(
 	settings := ingestion.FTPSettings{
 		Enabled:                  false,
 		Port:                     2121,
-		PassiveTransferPortRange: "30100-30199",
+		PassiveTransferPortRange: "30000-30100",
 	}
 
 	record, err := repo.Get(ftpModuleType)

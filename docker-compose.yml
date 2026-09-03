@@ -48,10 +48,12 @@ services:
       - "${DICOM_PORT:-4242}:4242" # DICOM C-STORE
       - "30003:30003" # ECTP (Nihon Kohden)
       # FTP passive range. One port is held per in-flight data connection, so
-      # the range width IS the concurrent-transfer ceiling: measured against
-      # the old 30000-30100, uploads began timing out at 100 in parallel, which
-      # is exactly the ten usable ports that range had left once ECTP took
-      # 30003. Moved clear of ECTP and widened to 100.
+      # the range width IS the concurrent-transfer ceiling: on the original
+      # eleven-port range, uploads started timing out at ten in parallel.
+      #
+      # The range spans ECTP's 30003 harmlessly: ftpserverlib retries the next
+      # port when a bind fails (findListenerWithinPortRange, up to 1000
+      # attempts), so a data connection that draws it simply moves on.
       - "30000-30100:30000-30100"
       # Prometheus scrape, loopback only. Drop the 127.0.0.1 prefix to expose it.
       - "127.0.0.1:${METRICS_PORT:-9091}:9091"
