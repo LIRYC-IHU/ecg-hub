@@ -814,7 +814,9 @@
     "clearCalipers": "effacer",
     "noRecord": "Aucun ECG chargé.",
     "nameInFile": "dans le fichier : {{name}}",
-    "nameInFileHint": "Nom inscrit dans le fichier source — l'ECG est rattaché au patient affiché avant."
+    "nameInFileHint": "Nom inscrit dans le fichier source — l'ECG est rattaché au patient affiché avant.",
+    "disclaimerTitle": "Usage non diagnostique.",
+    "disclaimer": "ECG Hub est un outil de gestion et de visualisation de données. Il ne constitue pas un dispositif médical et ne doit pas servir de base à un diagnostic."
   },
   "empty": {
     "patients": "Aucun patient trouvé",
