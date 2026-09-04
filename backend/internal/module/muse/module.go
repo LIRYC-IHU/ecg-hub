@@ -60,15 +60,14 @@ func (m *Module) SupportedFormats() []module.ExportFormat {
 	}
 }
 
-// museProbe is a minimal view used by Validate to confirm the file is a MUSE
-// RestingECG document with a patient ID — without invoking the converter.
+// museProbe is a minimal view used by Validate to establish format identity —
+// the root element only, without invoking the converter.
 // xml.Unmarshal errors when the root element is not <RestingECG>, which cleanly
-// rejects Philips (and any non-MUSE) XML during routing.
+// rejects Philips (and any non-MUSE) XML during routing. The tag carries no
+// namespace, so Go matches <RestingECG> in any namespace; Validate rejects the
+// namespaced ones itself, since MUSE documents have an unqualified root.
 type museProbe struct {
 	XMLName xml.Name `xml:"RestingECG"`
-	Patient struct {
-		PatientID string `xml:"PatientID"`
-	} `xml:"PatientDemographics"`
 }
 
 // Validate confirms the file is a MUSE RestingECG document — format identity only.
@@ -86,6 +85,9 @@ func (m *Module) Validate(data []byte) error {
 	var p museProbe
 	if err := xmlutil.Unmarshal(data, &p); err != nil {
 		return fmt.Errorf("muse: validate: not a valid MUSE RestingECG XML: %w", err)
+	}
+	if p.XMLName.Space != "" {
+		return fmt.Errorf("muse: validate: <RestingECG> root in foreign namespace %q", p.XMLName.Space)
 	}
 	return nil
 }

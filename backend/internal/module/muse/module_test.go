@@ -51,6 +51,18 @@ func TestValidate(t *testing.T) {
 	if err := m.Validate([]byte(noID)); err != nil {
 		t.Errorf("Validate(muse without patientID) = %v, want nil (handled as unidentified downstream)", err)
 	}
+	// Format identity is the root element alone: a bare <RestingECG/> is accepted
+	// here and fails later in the converter, which reports why. Validate is only
+	// the router's vendor discriminator, not a schema check.
+	if err := m.Validate([]byte(`<RestingECG/>`)); err != nil {
+		t.Errorf("Validate(empty RestingECG) = %v, want nil (router discriminator only)", err)
+	}
+	// MUSE roots are unqualified. A <RestingECG> in someone else's namespace is
+	// another vendor's document and must not route here.
+	foreign := `<RestingECG xmlns="http://example.com/not-muse"><PatientDemographics/></RestingECG>`
+	if err := m.Validate([]byte(foreign)); err == nil {
+		t.Error("Validate(foreign-namespace RestingECG) = nil, want rejection")
+	}
 }
 
 func TestSplitName(t *testing.T) {
