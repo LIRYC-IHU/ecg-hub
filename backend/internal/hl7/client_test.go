@@ -214,9 +214,9 @@ func TestReadMLLP_ExceedsMaxSize_ReturnsError(t *testing.T) {
 		buf := make([]byte, 1024)
 		conn.Read(buf) //nolint:errcheck
 		// Send VT + (maxMLLPResponseSize + 1 bytes of data) + FS
-		conn.Write([]byte{mllpStart})                           //nolint:errcheck
-		conn.Write(make([]byte, maxMLLPResponseSize+1))         //nolint:errcheck
-		conn.Write([]byte{mllpEnd, mllpCR})                    //nolint:errcheck
+		conn.Write([]byte{mllpStart})                   //nolint:errcheck
+		conn.Write(make([]byte, maxMLLPResponseSize+1)) //nolint:errcheck
+		conn.Write([]byte{mllpEnd, mllpCR})             //nolint:errcheck
 	}()
 
 	port := ln.Addr().(*net.TCPAddr).Port
@@ -227,5 +227,44 @@ func TestReadMLLP_ExceedsMaxSize_ReturnsError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "max size") {
 		t.Errorf("error should mention max size, got: %v", err)
+	}
+}
+
+// QueryPatient rejects "|", CR and LF outright (above). The other HL7
+// delimiters are not rejected, and before this they were not escaped either: a
+// "^" in the identifier splits QRD-8 into components, so the HIS reads a
+// different query than the one intended. esc() now covers them, matching
+// builder_oru.go.
+func TestBuildQRYMessage_EscapesRemainingDelimiters(t *testing.T) {
+	c := NewClient("127.0.0.1", 19999, time.Second, MSHConfig{
+		SendingApplication: "ECG^HUB",
+		SendingFacility:    "SITE&A",
+		ProcessingID:       "P",
+		Version:            "2.5",
+	})
+
+	msg := c.buildQRYMessage(`P001^inject~more&deep\end`)
+
+	// Note: a raw-substring check cannot be used for the backslash. esc turns
+	// `\end` into `\E\end`, which still contains `\end` -- the escape is
+	// verified by the `\E\` assertion below instead.
+	for _, raw := range []string{"P001^inject", "~more", "&deep"} {
+		if strings.Contains(msg, raw) {
+			t.Errorf("unescaped %q survived into the message:\n%s", raw, msg)
+		}
+	}
+	// The escaped forms HL7 defines for those delimiters.
+	for _, want := range []string{`\S\`, `\R\`, `\T\`, `\E\`} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("expected escape %q in the message:\n%s", want, msg)
+		}
+	}
+	// MSH fields go through the same treatment as the ORU builder.
+	if strings.Contains(msg, "ECG^HUB") || strings.Contains(msg, "SITE&A") {
+		t.Errorf("MSH fields left unescaped:\n%s", msg)
+	}
+	// The segment structure must survive: two segments, CR-separated.
+	if got := strings.Count(msg, "\r"); got != 2 {
+		t.Errorf("segment count changed: %d CRs, want 2\n%s", got, msg)
 	}
 }

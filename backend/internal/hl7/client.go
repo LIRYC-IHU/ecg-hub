@@ -191,14 +191,22 @@ func (c *Client) QueryPatientFull(_ context.Context, patientID string) (*QueryRe
 }
 
 // buildQRYMessage constructs a QRY^A19 HL7 message using the client's MSH config.
+//
+// Every interpolated value goes through esc, matching builder_oru.go. HL7 v2 is
+// delimiter-framed: an unescaped "|" or "^" shifts every field after it, and a
+// carriage return starts a new segment, so the message the HIS parses stops
+// being the message this code meant to send. patientID is the one that matters
+// -- it comes from parsed ECG metadata, i.e. from the device or the uploaded
+// file -- and this query runs unattended on a schedule, so a malformed one is
+// re-sent by the retry job rather than failing once.
 func (c *Client) buildQRYMessage(patientID string) string {
 	ts := time.Now().UTC().Format("20060102150405")
 	return strings.Join([]string{
 		fmt.Sprintf("MSH|^~\\&|%s|%s|%s|%s|%s||QRY^A19|%s|%s|%s",
-			c.msh.SendingApplication, c.msh.SendingFacility,
-			c.msh.ReceivingApplication, c.msh.ReceivingFacility,
-			ts, ts, c.msh.ProcessingID, c.msh.Version),
-		fmt.Sprintf("QRD|%s|R|I|Q001|||1^RD|%s|DEM|||", ts, patientID),
+			esc(c.msh.SendingApplication), esc(c.msh.SendingFacility),
+			esc(c.msh.ReceivingApplication), esc(c.msh.ReceivingFacility),
+			ts, ts, esc(c.msh.ProcessingID), esc(c.msh.Version)),
+		fmt.Sprintf("QRD|%s|R|I|Q001|||1^RD|%s|DEM|||", ts, esc(patientID)),
 	}, "\r") + "\r"
 }
 
