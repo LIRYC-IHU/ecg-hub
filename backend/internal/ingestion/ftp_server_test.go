@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	ftpserver "github.com/fclairamb/ftpserverlib"
 	"github.com/spf13/afero"
 )
 
@@ -56,6 +57,122 @@ func TestServer_AuthUser_EmptyCredentials(t *testing.T) {
 	}
 	if drv != nil {
 		t.Error("AuthUser should return nil driver when credentials are unconfigured")
+	}
+}
+
+// ---- auth throttle ----------------------------------------------------------
+
+// fakeClientContext carries a remote address so the throttle can key on it.
+// Only RemoteAddr is used by AuthUser; the rest of ftpserver.ClientContext is
+// never called, so an embedded nil interface is enough.
+type fakeClientContext struct {
+	ftpserver.ClientContext
+	addr net.Addr
+}
+
+func (c fakeClientContext) RemoteAddr() net.Addr { return c.addr }
+
+func clientFrom(t *testing.T, addr string) ftpserver.ClientContext {
+	t.Helper()
+	a, err := net.ResolveTCPAddr("tcp", addr)
+	if err != nil {
+		t.Fatalf("ResolveTCPAddr(%q): %v", addr, err)
+	}
+	return fakeClientContext{addr: a}
+}
+
+// noSleep makes the throttle's delays observable without waiting for them.
+func noSleep(s *Server) *[]time.Duration {
+	var slept []time.Duration
+	s.auth.sleep = func(d time.Duration) { slept = append(slept, d) }
+	return &slept
+}
+
+func TestServer_AuthUser_FailuresGrowTheDelay(t *testing.T) {
+	s := New(testConfig("testuser", "testpass", false), NewIngestQueue(10))
+	slept := noSleep(s)
+	cc := clientFrom(t, "192.0.2.10:5000")
+
+	const attempts = ftpAuthFreeAttempts + 40 // enough to reach the cap
+	for i := 1; i <= attempts; i++ {
+		if _, err := s.AuthUser(cc, "testuser", "wrongpass"); err == nil {
+			t.Fatalf("attempt %d: AuthUser = nil, want rejection", i)
+		}
+	}
+	// The first ftpAuthFreeAttempts answer immediately, the rest grow to the cap.
+	for i, d := range *slept {
+		want := time.Duration(i+1-ftpAuthFreeAttempts) * time.Second
+		if want < 0 {
+			want = 0
+		}
+		if want > ftpAuthMaxDelay {
+			want = ftpAuthMaxDelay
+		}
+		if d != want {
+			t.Errorf("delay after failure %d = %v, want %v", i+1, d, want)
+		}
+	}
+	// Throttling never locks anyone out: the right password still gets in, from
+	// the offending address and from any other.
+	if _, err := s.AuthUser(cc, "testuser", "testpass"); err != nil {
+		t.Errorf("AuthUser with valid credentials after failures = %v, want nil", err)
+	}
+	if _, err := s.AuthUser(clientFrom(t, "192.0.2.11:5000"), "testuser", "testpass"); err != nil {
+		t.Errorf("AuthUser from a different address = %v, want nil", err)
+	}
+}
+
+func TestServer_AuthUser_FailuresAreCountedPerAddress(t *testing.T) {
+	s := New(testConfig("testuser", "testpass", false), NewIngestQueue(10))
+	slept := noSleep(s)
+
+	for i := 0; i < ftpAuthFreeAttempts+2; i++ {
+		if _, err := s.AuthUser(clientFrom(t, "192.0.2.20:5000"), "testuser", "wrongpass"); err == nil {
+			t.Fatal("AuthUser = nil, want rejection")
+		}
+	}
+	// A first failure from another address is still delay-free.
+	if _, err := s.AuthUser(clientFrom(t, "192.0.2.21:5000"), "testuser", "wrongpass"); err == nil {
+		t.Fatal("AuthUser = nil, want rejection")
+	}
+	if last := (*slept)[len(*slept)-1]; last != 0 {
+		t.Errorf("delay for a fresh address = %v, want 0", last)
+	}
+}
+
+func TestServer_AuthUser_SuccessClearsFailures(t *testing.T) {
+	s := New(testConfig("testuser", "testpass", false), NewIngestQueue(10))
+	noSleep(s)
+	cc := clientFrom(t, "192.0.2.12:5000")
+
+	for i := 0; i < ftpAuthFreeAttempts+3; i++ {
+		if _, err := s.AuthUser(cc, "testuser", "wrongpass"); err == nil {
+			t.Fatal("AuthUser = nil, want rejection")
+		}
+	}
+	if _, err := s.AuthUser(cc, "testuser", "testpass"); err != nil {
+		t.Fatalf("AuthUser valid = %v, want nil", err)
+	}
+	// The record is gone: the next failure starts the count over, delay-free.
+	if count, delay := s.auth.fail(remoteHost(cc)); count != 1 || delay != 0 {
+		t.Errorf("first failure after a success = (%d, %v), want (1, 0)", count, delay)
+	}
+}
+
+func TestAuthThrottle_StaleRecordsArePruned(t *testing.T) {
+	tr := newAuthThrottle()
+	now := time.Now()
+	tr.now = func() time.Time { return now }
+
+	for i := 0; i < ftpAuthFreeAttempts+5; i++ {
+		tr.fail("192.0.2.13")
+	}
+	now = now.Add(ftpAuthWindow + time.Second)
+	if count, delay := tr.fail("192.0.2.14"); count != 1 || delay != 0 {
+		t.Errorf("fresh address = (%d, %v), want (1, 0)", count, delay)
+	}
+	if _, ok := tr.seen["192.0.2.13"]; ok {
+		t.Error("stale record was not pruned")
 	}
 }
 
