@@ -29,6 +29,11 @@ var (
 		Help: "Total files sent to quarantine, by reason category.",
 	}, []string{"reason"})
 
+	FTPAuthFailures = prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "ftp_auth_failures_total",
+		Help: "Failed FTP authentication attempts. A sustained rate means the port is being swept — alert on it.",
+	})
+
 	IngestQueueFull = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "ingest_queue_full_total",
 		Help: "Times a push found an ingestion queue full (FTP upload rejected or pipeline backpressure engaged). Alert on it — it means the pipeline cannot keep up.",
@@ -43,5 +48,6 @@ func init() {
 		IngestWorkersBusy,
 		IngestQuarantine,
 		IngestQueueFull,
+		FTPAuthFailures,
 	)
 }

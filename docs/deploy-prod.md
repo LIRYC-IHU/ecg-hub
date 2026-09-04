@@ -125,6 +125,14 @@ iptables -I DOCKER-USER -i eth0 ! -s 10.0.0.0/8 -p tcp --dport 21 -j DROP
 Note also that the backend sees the Docker gateway address rather than the real
 client IP, so FTP logs and anything keyed on client IP reflect that.
 
+The FTP module throttles failed logins — a delay that grows with the count, per
+source address, exported as `ftp_auth_failures_total`. It does not lock an
+address out, precisely because of the shared gateway address above: every device
+would sit in one bucket and a scanner could take ingestion offline. The throttle
+makes a password sweep pointless; it does not make a publicly reachable FTP port
+a good idea. Keep the port on the clinical network or behind the `DOCKER-USER`
+rule above.
+
 ## After first start
 
 - Open `https://<host>/` → complete the initial admin setup at `/setup`.

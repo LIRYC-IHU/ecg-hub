@@ -6,10 +6,12 @@ import (
 	"crypto/tls"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	ftpserver "github.com/fclairamb/ftpserverlib"
@@ -45,6 +47,7 @@ type Server struct {
 	queue          IngestQueue
 	srv            *ftpserver.FtpServer
 	onFileReceived func(filename string) // optional hook, called after each successful upload
+	auth           *authThrottle
 }
 
 // SetFileReceivedHook registers a callback invoked after each successful FTP upload.
@@ -55,7 +58,7 @@ func (s *Server) SetFileReceivedHook(fn func(filename string)) {
 
 // New creates a Server. Call Start() to begin accepting connections.
 func New(cfg FTPSettings, queue IngestQueue) *Server {
-	s := &Server{cfg: cfg, queue: queue}
+	s := &Server{cfg: cfg, queue: queue, auth: newAuthThrottle()}
 	s.srv = ftpserver.NewFtpServer(s)
 	return s
 }
@@ -148,18 +151,132 @@ func (s *Server) ClientDisconnected(cc ftpserver.ClientContext) {
 
 // AuthUser validates FTP credentials against the injected config secrets.
 // Returns a per-session clientDriver on success; error + nil on failure.
-func (s *Server) AuthUser(_ ftpserver.ClientContext, user, pass string) (ftpserver.ClientDriver, error) {
+//
+// There is a single shared credential pair and the port is reachable by every
+// device on the network, so failures are throttled per remote address with a
+// delay that grows with the count. See authThrottle for why it delays rather
+// than locks out.
+func (s *Server) AuthUser(cc ftpserver.ClientContext, user, pass string) (ftpserver.ClientDriver, error) {
 	if s.cfg.Username == "" || s.cfg.Password == "" {
 		return nil, fmt.Errorf("ftp: server credentials not configured (set FTP_USERNAME and FTP_PASSWORD)")
 	}
 	userOK := subtle.ConstantTimeCompare([]byte(user), []byte(s.cfg.Username)) == 1
 	passOK := subtle.ConstantTimeCompare([]byte(pass), []byte(s.cfg.Password)) == 1
 	if !(userOK && passOK) {
-		slog.Warn("ftp: authentication failed", "user", user)
+		addr := remoteHost(cc)
+		count, delay := s.auth.fail(addr)
+		appmetrics.FTPAuthFailures.Inc()
+		slog.Warn("ftp: authentication failed", "user", user, "remote_host", addr, "failures", count, "delay", delay)
+		s.auth.sleep(delay)
 		return nil, fmt.Errorf("ftp: invalid credentials")
 	}
+	s.auth.succeed(remoteHost(cc))
 	slog.Info("ftp: authenticated", "user", user)
 	return &clientDriver{MemMapFs: &afero.MemMapFs{}, queue: s.queue, onFileReceived: s.onFileReceived}, nil
+}
+
+// ─── authentication throttle ─────────────────────────────────────────────────
+
+const (
+	// Failures answered at full speed — a device with a stale password retries a
+	// few times before anyone notices, and should not be punished for it.
+	ftpAuthFreeAttempts = 3
+	// Cap on the per-failure delay. At 30s a password sweep manages two guesses a
+	// minute per connection, which is not a sweep any more.
+	ftpAuthMaxDelay = 30 * time.Second
+	// How long a record survives without a new failure.
+	ftpAuthWindow = 15 * time.Minute
+)
+
+// authThrottle counts authentication failures per remote address in memory and
+// turns them into a delay before the failure is answered. One process owns the
+// FTP port, so there is nothing to share: a map behind a mutex is the whole
+// mechanism, and records are forgotten after ftpAuthWindow of silence.
+//
+// It deliberately stops at delaying and does not lock an address out. Behind
+// Docker's port mapping the server sees the gateway address, not the device's
+// (see docs/deploy-prod.md) — every device would share one bucket, and a lockout
+// would let a scanner take clinical ingestion offline. A delay costs the sweep
+// everything and costs a real device nothing, since each connection waits in its
+// own goroutine.
+type authThrottle struct {
+	mu    sync.Mutex
+	seen  map[string]*authFailures
+	sleep func(time.Duration) // swapped out in tests
+	now   func() time.Time
+}
+
+type authFailures struct {
+	count int
+	last  time.Time
+}
+
+func newAuthThrottle() *authThrottle {
+	return &authThrottle{
+		seen:  make(map[string]*authFailures),
+		sleep: func(d time.Duration) { time.Sleep(d) },
+		now:   time.Now,
+	}
+}
+
+// fail records a failure for addr and returns the running count and the delay to
+// apply before answering the client.
+func (t *authThrottle) fail(addr string) (int, time.Duration) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	now := t.now()
+	t.pruneLocked(now)
+
+	f := t.seen[addr]
+	if f == nil {
+		f = &authFailures{}
+		t.seen[addr] = f
+	}
+	f.count++
+	f.last = now
+
+	over := f.count - ftpAuthFreeAttempts
+	if over <= 0 {
+		return f.count, 0
+	}
+	delay := time.Duration(over) * time.Second
+	if delay > ftpAuthMaxDelay {
+		delay = ftpAuthMaxDelay
+	}
+	return f.count, delay
+}
+
+// succeed clears the failure record for addr.
+func (t *authThrottle) succeed(addr string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	delete(t.seen, addr)
+}
+
+// pruneLocked drops records untouched for ftpAuthWindow.
+// ponytail: linear scan on every failure — the map holds one entry per address
+// that failed in the last 15 minutes, so it stays small; revisit only if that
+// stops being true.
+func (t *authThrottle) pruneLocked(now time.Time) {
+	for addr, f := range t.seen {
+		if now.Sub(f.last) > ftpAuthWindow {
+			delete(t.seen, addr)
+		}
+	}
+}
+
+// remoteHost is the throttle key: the client IP without its ephemeral port.
+// Returns "unknown" when the context carries no address, which keys every such
+// caller together rather than letting them bypass the throttle.
+func remoteHost(cc ftpserver.ClientContext) string {
+	if cc == nil || cc.RemoteAddr() == nil {
+		return "unknown"
+	}
+	addr := cc.RemoteAddr().String()
+	if host, _, err := net.SplitHostPort(addr); err == nil {
+		return host
+	}
+	return addr
 }
 
 // GetTLSConfig loads the TLS certificate when ftp.tls is enabled.
