@@ -46,24 +46,36 @@ func (v *Volume) GetPath(filename string) string {
 // Returns the path relative to basePath (e.g. "P001/ecg_2026-01-01.xml") stored in DB.
 func (v *Volume) WriteForPatient(patientID, filename string, data []byte) (string, error) {
 	start := time.Now()
-	// Sanitise patientID so it is safe as a directory name.
-	dir := filepath.Join(v.basePath, sanitisePath(patientID))
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	// Both components are attacker-reachable: patientID comes from parsed file
+	// metadata, and filename is built from that same identifier by the ingestion
+	// naming code -- so sanitising only the directory left the identifier free to
+	// climb out through the name joined to it.
+	safeDir, safeName := SafeName(patientID), SafeName(filename)
+
+	fullPath, err := EnsureWithin(v.basePath, safeDir, safeName)
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
 		return "", fmt.Errorf("storage: create patient dir: %w", err)
 	}
-	fullPath := filepath.Join(dir, filename)
 	if err := os.WriteFile(fullPath, data, 0644); err != nil {
 		return "", fmt.Errorf("storage: write %s: %w", fullPath, err)
 	}
 	appmetrics.StorageOpDuration.WithLabelValues("write").Observe(time.Since(start).Seconds())
 	// Return path relative to volume root so it is portable (volume mount can change).
-	rel := filepath.Join(sanitisePath(patientID), filename)
-	return rel, nil
+	return filepath.Join(safeDir, safeName), nil
 }
 
 // ExistsForPatient reports whether basePath/<patientID>/filename exists.
 func (v *Volume) ExistsForPatient(patientID, filename string) bool {
-	_, err := os.Stat(filepath.Join(v.basePath, sanitisePath(patientID), filename))
+	// Must mirror WriteForPatient exactly: this decides whether a name is free,
+	// and a mismatch would silently overwrite an existing ECG.
+	path, err := EnsureWithin(v.basePath, SafeName(patientID), SafeName(filename))
+	if err != nil {
+		return false
+	}
+	_, err = os.Stat(path)
 	return err == nil
 }
 
@@ -71,24 +83,4 @@ func (v *Volume) ExistsForPatient(patientID, filename string) bool {
 func (v *Volume) Exists(filename string) bool {
 	_, err := os.Stat(filepath.Join(v.basePath, filename))
 	return err == nil
-}
-
-// sanitisePath replaces characters unsafe for directory names.
-func sanitisePath(s string) string {
-	var out []byte
-	for i := 0; i < len(s); i++ {
-		c := s[i]
-		if c == '/' || c == '\\' || c == ':' || c == '*' || c == '?' || c == '"' || c == '<' || c == '>' || c == '|' {
-			out = append(out, '_')
-		} else {
-			out = append(out, c)
-		}
-	}
-	result := string(out)
-	// A value of exactly "." or ".." is a path-traversal component once joined
-	// (filepath.Join treats it specially); prefix it so it stays a literal name.
-	if result == "." || result == ".." {
-		return "_" + result
-	}
-	return result
 }

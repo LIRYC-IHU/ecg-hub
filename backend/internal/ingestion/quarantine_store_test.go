@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -103,5 +104,41 @@ func TestQuarantineStore_RecordUnidentified_PersistsMetadata(t *testing.T) {
 	}
 	if got.Extra["last_name"] != "Doe" {
 		t.Errorf("decoded Extra[last_name] = %v, want Doe", got.Extra["last_name"])
+	}
+}
+
+// This path handles files that already failed validation, so the name is
+// attacker-supplied by definition. The timestamp prefix does not contain it:
+// filepath.Join normalises the result, so separators inside the name would
+// still climb out of the quarantine directory.
+func TestQuarantineStore_WriteFileStaysInDirectory(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "quarantine")
+	s := NewQuarantineStore(dir, nil)
+
+	// The timestamp prefix absorbs one level: "<stamp>_.." is a literal
+	// component, so the first ".." only cancels it. Escaping takes one more
+	// than the obvious guess, which is exactly why this needs a test.
+	for _, name := range []string{
+		"../../../escaped.xml",
+		"../../../../escaped.xml",
+		"../../escaped.xml",
+		"a/b/escaped.xml",
+		"..",
+	} {
+		dst := s.writeFile(name, []byte("x"))
+		if dst == "" {
+			continue // refusing outright is an acceptable outcome
+		}
+		if !strings.HasPrefix(filepath.Clean(dst), filepath.Clean(dir)+string(filepath.Separator)) {
+			t.Errorf("writeFile(%q) wrote outside quarantine: %q", name, dst)
+		}
+	}
+
+	if entries, err := os.ReadDir(filepath.Dir(dir)); err == nil {
+		for _, e := range entries {
+			if strings.Contains(e.Name(), "escaped") {
+				t.Errorf("file escaped the quarantine directory: %s", e.Name())
+			}
+		}
 	}
 }

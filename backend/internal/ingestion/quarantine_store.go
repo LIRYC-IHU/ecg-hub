@@ -8,8 +8,6 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
-	"path/filepath"
-	"strings"
 	"time"
 
 	"gorm.io/datatypes"
@@ -17,6 +15,7 @@ import (
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 	"github.com/LIRYC-IHU/ecg-hub/internal/events"
 	"github.com/LIRYC-IHU/ecg-hub/internal/module"
+	"github.com/LIRYC-IHU/ecg-hub/internal/storage"
 )
 
 // QuarantineRecorder records a file that was not ingested to persistent storage (disk + DB).
@@ -183,8 +182,16 @@ func (s *QuarantineStore) writeFile(filename string, data []byte) string {
 		slog.Warn("quarantine: cannot create directory", "dir", s.dir, "error", err)
 		return ""
 	}
+	// The name comes from the upload, and this path handles files that already
+	// failed validation -- the least trustworthy input the system takes. The
+	// timestamp prefix does not contain it: filepath.Join normalises the result,
+	// so separators inside the name would still climb out of s.dir.
 	stamp := time.Now().UTC().Format("20060102_150405.000")
-	dst := filepath.Join(s.dir, fmt.Sprintf("%s_%s", stamp, strings.TrimSpace(filename)))
+	dst, err := storage.EnsureWithin(s.dir, storage.SafeName(fmt.Sprintf("%s_%s", stamp, filename)))
+	if err != nil {
+		slog.Warn("quarantine: refusing unsafe destination", "filename", filename, "error", err)
+		return ""
+	}
 	if err := os.WriteFile(dst, data, 0o644); err != nil {
 		slog.Warn("quarantine: file write failed", "path", dst, "error", err)
 		return ""
