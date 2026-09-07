@@ -193,7 +193,7 @@ export const API_SECTIONS: ApiSection[] = [
         path: "/api/v1/uploads",
         summary: "Upload ECG files",
         description:
-          "Feeds the same ingestion pipeline as FTP and DICOM: valid files are stored, files without a patient identifier go to the review queue, unparsable files are rejected. Multipart, field name files, repeatable, 50 MiB per file.",
+          "Feeds the same ingestion pipeline as FTP and DICOM: valid files are stored, files without a patient identifier go to the review queue, unparsable files are rejected. Multipart, field name files, repeatable. Each file must stay under the server's ingestion size ceiling (ingest.max_file_bytes, 1 MiB by default) — the same limit the FTP and DICOM ports apply.",
         permission: "ecg.upload",
         params: [{ name: "files", in: "form", type: "file[]", required: true, description: "One or more ECG files." }],
         response: `{

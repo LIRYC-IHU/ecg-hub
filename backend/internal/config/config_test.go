@@ -21,3 +21,31 @@ func TestPublicOrigin(t *testing.T) {
 		}
 	}
 }
+
+func TestIngestConfig_SetMaxFileBytes(t *testing.T) {
+	cases := []struct {
+		in      string
+		want    int64
+		wantErr bool
+	}{
+		{"", DefaultMaxFileBytes, false},
+		{"   ", DefaultMaxFileBytes, false},
+		{"1Mi", 1 << 20, false},
+		{"10Mi", 10 << 20, false},
+		{"512Ki", 512 << 10, false},
+		{"0", 0, false}, // explicit opt-out
+		{"-1", 0, true},
+		{"banana", 0, true},
+	}
+	for _, c := range cases {
+		var cfg IngestConfig
+		err := cfg.SetMaxFileBytes(c.in)
+		if (err != nil) != c.wantErr {
+			t.Errorf("SetMaxFileBytes(%q) error = %v, wantErr %v", c.in, err, c.wantErr)
+			continue
+		}
+		if err == nil && cfg.MaxBytes() != c.want {
+			t.Errorf("SetMaxFileBytes(%q) → MaxBytes() = %d, want %d", c.in, cfg.MaxBytes(), c.want)
+		}
+	}
+}

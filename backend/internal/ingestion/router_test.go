@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 	"github.com/LIRYC-IHU/ecg-hub/internal/module"
 )
 
@@ -21,7 +23,7 @@ type stubModule struct {
 	parseErr   error
 }
 
-func (s *stubModule) Name() string                { return s.name }
+func (s *stubModule) Name() string                 { return s.name }
 func (s *stubModule) AcceptedExtensions() []string { return s.extensions }
 func (s *stubModule) Health() error                { return nil }
 func (s *stubModule) SupportedFormats() []module.ExportFormat {
@@ -52,7 +54,7 @@ func (n *notifyModule) Parse(ctx context.Context, data []byte) (*module.ECGMetad
 // panicModule triggers a panic in Parse to exercise SafeParse recovery.
 type panicModule struct{ name string }
 
-func (p *panicModule) Name() string                { return p.name }
+func (p *panicModule) Name() string                 { return p.name }
 func (p *panicModule) AcceptedExtensions() []string { return []string{".panic"} }
 func (p *panicModule) Health() error                { return nil }
 func (p *panicModule) SupportedFormats() []module.ExportFormat {
@@ -281,5 +283,74 @@ func TestDispatcher_Stop_ExitsCleanly(t *testing.T) {
 	case <-d.Done():
 	case <-time.After(100 * time.Millisecond):
 		t.Error("dispatcher goroutine did not exit within 100ms after Stop()")
+	}
+}
+
+// recordingQuarantine is a QuarantineRecorder that keeps what it was handed.
+type recordingQuarantine struct {
+	mu      sync.Mutex
+	entries []struct{ filename, reason string }
+}
+
+func (q *recordingQuarantine) Record(_ context.Context, filename string, _ []byte, reason string) (*models.QuarantineEntry, error) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.entries = append(q.entries, struct{ filename, reason string }{filename, reason})
+	return &models.QuarantineEntry{Filename: filename}, nil
+}
+
+func (q *recordingQuarantine) RecordUnidentified(_ context.Context, item IngestItem, _ *module.ECGMetadata, reason string) (*models.QuarantineEntry, error) {
+	return q.Record(context.Background(), item.Filename, item.Data, reason)
+}
+
+func (q *recordingQuarantine) recorded() []struct{ filename, reason string } {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return append([]struct{ filename, reason string }(nil), q.entries...)
+}
+
+func TestDispatcher_RejectedItem_QuarantinedWithoutRouting(t *testing.T) {
+	meta := &module.ECGMetadata{PatientID: "P001", VendorName: "xml-vendor"}
+	m := &stubModule{name: "xml-vendor", extensions: []string{".xml"}, meta: meta}
+	router := NewRouter([]module.Module{m})
+
+	q := &recordingQuarantine{}
+	ingest := NewIngestQueue(1)
+	routed := NewRoutedQueue(1)
+	d := NewDispatcher(ingest, routed, router).WithQuarantineRecorder(q)
+	d.Start()
+	defer d.Stop()
+
+	// The file would route fine — the source's rejection must win anyway.
+	ingest <- IngestItem{
+		Filename:     "huge.xml",
+		Data:         []byte("head"),
+		Source:       "ftp",
+		RejectReason: "file_too_large: over the 1048576-byte ingestion limit",
+	}
+
+	deadline := time.After(time.Second)
+	for {
+		if got := q.recorded(); len(got) == 1 {
+			if got[0].filename != "huge.xml" {
+				t.Errorf("quarantined filename = %q, want %q", got[0].filename, "huge.xml")
+			}
+			if !strings.HasPrefix(got[0].reason, "file_too_large") {
+				t.Errorf("quarantined reason = %q, want the source's reject reason", got[0].reason)
+			}
+			break
+		}
+		select {
+		case <-deadline:
+			t.Fatal("timeout: rejected item was never quarantined")
+		default:
+			runtime.Gosched()
+		}
+	}
+
+	select {
+	case ri := <-routed:
+		t.Errorf("rejected item must not be routed, got %q", ri.IngestItem.Filename)
+	default:
 	}
 }

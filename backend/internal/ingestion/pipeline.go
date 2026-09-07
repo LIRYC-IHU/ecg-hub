@@ -24,6 +24,11 @@ type IngestItem struct {
 	Data []byte
 	// Source identifies the ingestion channel (e.g. "ftp", "dicom"). Used for metrics.
 	Source string
+	// RejectReason, when non-empty, marks a file the source refused at its own
+	// boundary — over the size cap, today. The dispatcher quarantines it
+	// instead of routing, and Data then holds only the head of the file that
+	// was read before the refusal, kept as evidence of what the device sent.
+	RejectReason string
 }
 
 // IngestQueue carries IngestItems from the FTP receiver to the ingestion pipeline.
@@ -140,6 +145,10 @@ func (d *Dispatcher) run() {
 			return
 		case item := <-d.ingest:
 			appmetrics.IngestQueueDepth.Set(float64(len(d.ingest)))
+			if item.RejectReason != "" {
+				d.recordRejected(item)
+				continue
+			}
 			ri, reason, ok := d.router.Route(d.ctx, item)
 			if !ok {
 				// Extract a bounded reason category for the label (no filename, no cardinality explosion).
@@ -204,6 +213,26 @@ func (d *Dispatcher) run() {
 				}
 			}
 		}
+	}
+}
+
+// recordRejected quarantines a file the ingestion source refused at its own
+// boundary, so an operator sees a device that started sending oversized files
+// rather than having it disappear into a log line.
+//
+// It deliberately does not proxy the file onward to the PACS connectors the way
+// a routing failure does: the bytes are a truncated head, and forwarding half a
+// study is worse than forwarding none of it.
+func (d *Dispatcher) recordRejected(item IngestItem) {
+	appmetrics.IngestQuarantine.WithLabelValues("rejected").Inc()
+	slog.Warn("ingestion: file rejected at the source boundary",
+		"filename", item.Filename, "source", item.Source, "reason", item.RejectReason)
+	if d.quarantine == nil {
+		return
+	}
+	if _, err := d.quarantine.Record(d.ctx, item.Filename, item.Data, item.RejectReason); err != nil {
+		slog.Error("ingestion: quarantine record failed",
+			"filename", item.Filename, "error", err)
 	}
 }
 

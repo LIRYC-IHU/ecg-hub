@@ -38,6 +38,8 @@ type Settings struct {
 	TLS         bool
 	CertFile    string
 	KeyFile     string
+	// MaxFileBytes caps a single received object. 0 disables the check.
+	MaxFileBytes int64
 }
 
 // Server wraps a DICOM C-STORE SCP and pushes received files onto an IngestQueue.
@@ -158,6 +160,10 @@ func (s *Server) onCStore(
 	sopInstanceUID string,
 	data []byte,
 ) dimse.Status {
+	if s.cfg.MaxFileBytes > 0 && int64(len(data)) > s.cfg.MaxFileBytes {
+		return s.rejectOversize(data, sopInstanceUID)
+	}
+
 	raw, err := reconstructDICOM(transferSyntaxUID, sopClassUID, sopInstanceUID, data)
 	if err != nil {
 		appmetrics.DICOMSCPErrors.WithLabelValues("reconstruct").Inc()
@@ -197,6 +203,51 @@ func (s *Server) onCStore(
 			ErrorComment: "ingestion queue full — retry later",
 		}
 	}
+}
+
+// rejectOversize refuses an object past the ingestion size cap.
+//
+// It rejects rather than prevents: go-netdicom reassembles the whole object
+// before calling the C-STORE callback, so by the time we are here the bytes are
+// already allocated. The library advertises a PDU size, not an object ceiling,
+// so nothing short of patching it would stop the allocation — but refusing here
+// still keeps the file out of the queue, the modules and the storage volume,
+// and lets it go instead of being held for the length of the pipeline.
+//
+// The head of the object is pushed as a rejected item so the rejection lands in
+// quarantine with its reason, the same as the FTP path.
+func (s *Server) rejectOversize(data []byte, sopInstanceUID string) dimse.Status {
+	filename := buildDICOMFilename(data, sopInstanceUID)
+	reason := fmt.Sprintf("file_too_large: over the %d-byte ingestion limit", s.cfg.MaxFileBytes)
+
+	appmetrics.DICOMSCPErrors.WithLabelValues("too_large").Inc()
+	slog.Error("dicom: object exceeds the ingestion size limit — C-STORE rejected",
+		"filename", filename,
+		"size_bytes", len(data),
+		"limit_bytes", s.cfg.MaxFileBytes,
+	)
+
+	// Copy rather than reslice: a slice of data would pin the whole oversized
+	// buffer for as long as the queued item lives, which is the allocation we
+	// are refusing in the first place.
+	n := int64(len(data))
+	if n > s.cfg.MaxFileBytes {
+		n = s.cfg.MaxFileBytes
+	}
+	head := append([]byte(nil), data[:n]...)
+	select {
+	case s.queue <- ingestion.IngestItem{
+		Filename:     filename,
+		Data:         head,
+		Source:       "dicom",
+		RejectReason: reason,
+	}:
+	default:
+		slog.Error("dicom: ingest queue full — oversized object rejection not recorded",
+			"filename", filename)
+	}
+
+	return dimse.Status{Status: dimse.CStoreOutOfResources, ErrorComment: reason}
 }
 
 // reconstructDICOM builds a valid DICOM file (128-byte preamble + "DICM" magic +

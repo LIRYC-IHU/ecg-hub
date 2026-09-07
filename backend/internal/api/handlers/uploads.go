@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"path/filepath"
@@ -11,10 +12,6 @@ import (
 	mw "github.com/LIRYC-IHU/ecg-hub/internal/api/middleware"
 	"github.com/LIRYC-IHU/ecg-hub/internal/ingestion"
 )
-
-// maxUploadFileBytes caps a single uploaded ECG file (50 MiB). Vendor ECG files
-// are well under this; the limit guards against accidental huge uploads.
-const maxUploadFileBytes = 50 << 20
 
 // uploadFileResult describes the outcome of queueing one uploaded file.
 type uploadFileResult struct {
@@ -48,7 +45,10 @@ type uploadFileResult struct {
 // @Security BearerAuth
 // @Security ApiKeyAuth
 // @Router /api/v1/uploads [post]
-func UploadECGsHandler(queue ingestion.IngestQueue, db *gorm.DB) echo.HandlerFunc {
+// maxBytes is the ingestion size ceiling (config.Ingest.MaxBytes); 0 disables
+// the check. It is the same limit the FTP and DICOM boundaries enforce — this
+// route is one more way into the same pipeline, so it must not be looser.
+func UploadECGsHandler(queue ingestion.IngestQueue, db *gorm.DB, maxBytes int64) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		form, err := c.MultipartForm()
 		if err != nil {
@@ -72,8 +72,8 @@ func UploadECGsHandler(queue ingestion.IngestQueue, db *gorm.DB) echo.HandlerFun
 				results = append(results, res)
 				continue
 			}
-			if fh.Size > maxUploadFileBytes {
-				res.Status, res.Error = "rejected", "file exceeds 50 MiB limit"
+			if maxBytes > 0 && fh.Size > maxBytes {
+				res.Status, res.Error = "rejected", fmt.Sprintf("file exceeds the %d-byte ingestion limit", maxBytes)
 				results = append(results, res)
 				continue
 			}
@@ -84,7 +84,12 @@ func UploadECGsHandler(queue ingestion.IngestQueue, db *gorm.DB) echo.HandlerFun
 				results = append(results, res)
 				continue
 			}
-			data, err := io.ReadAll(io.LimitReader(f, maxUploadFileBytes))
+			// LimitReader as well as the Size check: a multipart part can under-report.
+			reader := io.Reader(f)
+			if maxBytes > 0 {
+				reader = io.LimitReader(f, maxBytes)
+			}
+			data, err := io.ReadAll(reader)
 			f.Close()
 			if err != nil || len(data) == 0 {
 				res.Status, res.Error = "rejected", "cannot read file"

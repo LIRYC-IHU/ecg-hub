@@ -156,10 +156,12 @@ func main() {
 		ReferrerPolicy:     "strict-origin-when-cross-origin",
 	}))
 
-	// Bound request body size to prevent memory-exhaustion DoS. Sized above the
-	// manual ECG upload cap (maxUploadFileBytes = 50 MiB) plus multipart overhead:
-	// this global limit runs before per-route middleware, so a smaller value would
-	// reject legitimate 10–50 MiB ECG uploads. JSON and logo endpoints stay far under it.
+	// Bound request body size to prevent memory-exhaustion DoS. This is the whole
+	// request, not one file: /uploads takes a repeatable multipart field, so the
+	// body holds several ECGs plus multipart overhead while each individual file
+	// is capped separately by ingest.max_file_bytes (1 MiB by default). The limit
+	// runs before per-route middleware, so it has to leave room for a legitimate
+	// batch. JSON and logo endpoints stay far under it.
 	e.Use(middleware.BodyLimit("64M"))
 
 	// Global per-IP rate limiting is intentionally NOT applied here: it capped
