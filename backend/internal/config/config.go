@@ -16,6 +16,7 @@ type Config struct {
 	Server   ServerConfig   `mapstructure:"server"`
 	Database DatabaseConfig `mapstructure:"database"`
 	Storage  StorageConfig  `mapstructure:"storage"`
+	Ingest   IngestConfig   `mapstructure:"ingest"`
 	Certs    CertsConfig    `mapstructure:"certs"`
 	Export   ExportConfig   `mapstructure:"export"`
 	Metrics  MetricsConfig  `mapstructure:"metrics"`
@@ -197,6 +198,54 @@ func (s *StorageConfig) SetMaxSize(raw string) error {
 		return fmt.Errorf("max_size must be non-negative, got %q", raw)
 	}
 	s.bytesSize = q.Value()
+	return nil
+}
+
+// DefaultMaxFileBytes is the ingestion size ceiling applied when config.yaml
+// says nothing. Real ECGs measured on this project's own samples run 16 KB to
+// 250 KB, so 1 MiB is roughly four times the largest file seen.
+const DefaultMaxFileBytes = 1 << 20
+
+// IngestConfig bounds what a single incoming file may cost the server.
+//
+// Every ingestion stage holds the file in memory as a []byte — the FTP driver
+// buffers the upload, the queue item carries it, the module parses it, the
+// persister writes it. Without a ceiling, one upload on a device-facing port
+// sizes the server's working set, and the measured baseline leaves little
+// headroom.
+type IngestConfig struct {
+	// MaxFileBytes caps one incoming ECG, expressed as a Kubernetes resource
+	// quantity ("1Mi", "10Mi"), like storage.max_size. Empty means the
+	// DefaultMaxFileBytes default; an explicit "0" removes the limit — a
+	// deliberate opt-out, not something to reach for.
+	//
+	// Set it with INGEST_MAX_FILE_BYTES to avoid templating the mounted file.
+	MaxFileBytes string `mapstructure:"max_file_bytes"`
+	maxBytes     int64  // parsed from MaxFileBytes
+}
+
+// MaxBytes returns the parsed ceiling in bytes. 0 means no limit.
+func (i IngestConfig) MaxBytes() int64 { return i.maxBytes }
+
+// SetMaxFileBytes assigns MaxFileBytes and parses it into the internal byte
+// count. Empty (or whitespace-only) input falls back to DefaultMaxFileBytes;
+// an explicit "0" disables the check.
+func (i *IngestConfig) SetMaxFileBytes(raw string) error {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		i.MaxFileBytes = ""
+		i.maxBytes = DefaultMaxFileBytes
+		return nil
+	}
+	q, err := resource.ParseQuantity(raw)
+	if err != nil {
+		return fmt.Errorf("parse max_file_bytes %q: %w", raw, err)
+	}
+	if q.Sign() < 0 {
+		return fmt.Errorf("max_file_bytes must be non-negative, got %q", raw)
+	}
+	i.MaxFileBytes = raw
+	i.maxBytes = q.Value()
 	return nil
 }
 

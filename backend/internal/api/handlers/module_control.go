@@ -138,6 +138,9 @@ func StartFTPFromDB(
 		settings.PublicHost = os.Getenv("FTP_PUBLIC_HOST")
 	}
 
+	// One ceiling for every way in: the same limit the upload route applies.
+	settings.MaxFileBytes = cfg.Ingest.MaxBytes()
+
 	// Force enabled, like the DICOM path does: pressing Start IS the intent, and
 	// the stored flag is boot-time policy, not a veto on a manual start. Without
 	// this, a Start right after a Stop read back the enabled=false that Stop had
@@ -258,6 +261,8 @@ func StartDICOMFromDB(
 			}
 		}
 	}
+
+	settings.MaxFileBytes = cfg.Ingest.MaxBytes()
 
 	// Force enabled so the server actually starts.
 	settings.Enabled = true

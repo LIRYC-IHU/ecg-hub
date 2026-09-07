@@ -680,7 +680,7 @@ func (r *RouterConfig) RegisterRoutes() {
 
 	// Manual ECG upload (offline/isolated devices) — feeds the shared ingestion
 	// pipeline; live per-file status streams over /events/ws. Requires ecg.upload.
-	apiV1.POST("/uploads", handlers.UploadECGsHandler(r.ftpQueue, r.gormDB), mw.RequirePermission(r.checker, auth.PermECGUpload))
+	apiV1.POST("/uploads", handlers.UploadECGsHandler(r.ftpQueue, r.gormDB, r.cfg.Ingest.MaxBytes()), mw.RequirePermission(r.checker, auth.PermECGUpload))
 
 	// Audit log, system stats, storage metrics, recent errors, role CRUD,
 	// app-users, quarantine and global user-defaults are now served over gRPC by

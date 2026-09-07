@@ -320,3 +320,66 @@ func TestServer_Start_BindFailure_ReturnsError(t *testing.T) {
 		t.Fatal("Start() on a taken port returned nil, want an error")
 	}
 }
+
+// ---- size ceiling -----------------------------------------------------------
+
+func TestClientDriver_OversizeUpload_FailsTransferAndQuarantines(t *testing.T) {
+	queue := NewIngestQueue(1)
+	drv := &clientDriver{MemMapFs: &afero.MemMapFs{}, queue: queue, maxFileBytes: 8}
+
+	f, err := drv.Create("/huge.xml")
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if _, err := f.Write([]byte("12345")); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	// This chunk crosses the cap: the write must fail so ftpserverlib aborts
+	// the transfer rather than buffering the rest.
+	n, err := f.Write([]byte("6789abcdef"))
+	if err == nil {
+		t.Fatal("Write past the cap should return an error")
+	}
+	if n != 0 {
+		t.Errorf("Write past the cap wrote %d bytes, want 0", n)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	select {
+	case item := <-queue:
+		if item.RejectReason == "" {
+			t.Error("oversized upload should be queued with a RejectReason")
+		}
+		if len(item.Data) != 5 {
+			t.Errorf("Data = %d bytes, want only the 5 accepted before the cap", len(item.Data))
+		}
+	default:
+		t.Error("expected the rejection to be queued for quarantine, got nothing")
+	}
+}
+
+func TestClientDriver_NoLimit_AcceptsAnySize(t *testing.T) {
+	queue := NewIngestQueue(1)
+	drv := &clientDriver{MemMapFs: &afero.MemMapFs{}, queue: queue, maxFileBytes: 0}
+
+	f, err := drv.Create("/big.xml")
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if _, err := f.Write(bytes.Repeat([]byte("x"), 1<<20)); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	item := <-queue
+	if item.RejectReason != "" {
+		t.Errorf("RejectReason = %q, want empty when the cap is disabled", item.RejectReason)
+	}
+	if len(item.Data) != 1<<20 {
+		t.Errorf("Data = %d bytes, want %d", len(item.Data), 1<<20)
+	}
+}

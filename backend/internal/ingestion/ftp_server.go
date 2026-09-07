@@ -35,6 +35,9 @@ type FTPSettings struct {
 	PublicHost               string
 	Username                 string
 	Password                 string
+	// MaxFileBytes caps a single upload. Past it the transfer is failed back to
+	// the client instead of being buffered to completion. 0 disables the check.
+	MaxFileBytes int64
 }
 
 // tlsRequirementExplicit aliases ftpserver.MandatoryEncryption for use in package-internal tests.
@@ -172,7 +175,12 @@ func (s *Server) AuthUser(cc ftpserver.ClientContext, user, pass string) (ftpser
 	}
 	s.auth.succeed(remoteHost(cc))
 	slog.Info("ftp: authenticated", "user", user)
-	return &clientDriver{MemMapFs: &afero.MemMapFs{}, queue: s.queue, onFileReceived: s.onFileReceived}, nil
+	return &clientDriver{
+		MemMapFs:       &afero.MemMapFs{},
+		queue:          s.queue,
+		onFileReceived: s.onFileReceived,
+		maxFileBytes:   s.cfg.MaxFileBytes,
+	}, nil
 }
 
 // ─── authentication throttle ─────────────────────────────────────────────────
@@ -305,6 +313,7 @@ type clientDriver struct {
 	*afero.MemMapFs
 	queue          IngestQueue
 	onFileReceived func(filename string)
+	maxFileBytes   int64
 }
 
 // Create intercepts file creation (write path for FTP STOR command).
@@ -313,7 +322,7 @@ func (d *clientDriver) Create(name string) (afero.File, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &ingestFile{File: f, name: name, queue: d.queue, onFileReceived: d.onFileReceived}, nil
+	return d.wrap(f, name), nil
 }
 
 // OpenFile intercepts write-mode opens.
@@ -324,9 +333,20 @@ func (d *clientDriver) OpenFile(name string, flag int, perm os.FileMode) (afero.
 	}
 	const writeModes = os.O_WRONLY | os.O_RDWR | os.O_APPEND | os.O_CREATE | os.O_TRUNC
 	if flag&writeModes != 0 {
-		return &ingestFile{File: f, name: name, queue: d.queue, onFileReceived: d.onFileReceived}, nil
+		return d.wrap(f, name), nil
 	}
 	return f, nil
+}
+
+// wrap builds the ingestFile that intercepts an upload for this session.
+func (d *clientDriver) wrap(f afero.File, name string) afero.File {
+	return &ingestFile{
+		File:           f,
+		name:           name,
+		queue:          d.queue,
+		onFileReceived: d.onFileReceived,
+		maxBytes:       d.maxFileBytes,
+	}
 }
 
 // ─── ingestFile ──────────────────────────────────────────────────────────────
@@ -334,18 +354,36 @@ func (d *clientDriver) OpenFile(name string, flag int, perm os.FileMode) (afero.
 // ingestFile wraps afero.File and buffers written bytes.
 // On Close, if any bytes were written, an IngestItem is pushed to the queue.
 // If Close is called with zero bytes buffered (dropped connection), nothing is pushed.
+// When maxBytes is exceeded the file is not ingested: the write fails so
+// ftpserverlib aborts the transfer, and Close pushes what was read so far as a
+// rejected item for quarantine.
 type ingestFile struct {
 	afero.File
 	name           string
 	queue          IngestQueue
 	onFileReceived func(filename string)
 	buf            bytes.Buffer
+	maxBytes       int64 // 0 disables the check
+	written        int64
+	oversize       bool
 }
 
-// Write mirrors bytes to both the underlying file and the internal buffer.
+// Write mirrors bytes to both the underlying file and the internal buffer,
+// refusing anything past maxBytes.
+//
+// The check comes before the write to the underlying MemMapFs, not after: both
+// it and the buffer hold the upload in memory, so accepting the chunk first
+// would allocate exactly the bytes the cap exists to refuse. Returning an error
+// makes ftpserverlib's io.Copy stop reading the data connection and report the
+// failure to the client, so the device knows the file was not taken.
 func (f *ingestFile) Write(p []byte) (n int, err error) {
+	if f.maxBytes > 0 && f.written+int64(len(p)) > f.maxBytes {
+		f.oversize = true
+		return 0, fmt.Errorf("ftp: %s exceeds the %d-byte ingestion limit", filepath.Base(f.name), f.maxBytes)
+	}
 	n, err = f.File.Write(p)
 	if n > 0 {
+		f.written += int64(n)
 		f.buf.Write(p[:n])
 	}
 	return
@@ -356,7 +394,7 @@ func (f *ingestFile) Close() error {
 	if err := f.File.Close(); err != nil {
 		return err
 	}
-	if f.buf.Len() == 0 {
+	if f.buf.Len() == 0 && !f.oversize {
 		// Incomplete or empty transfer — do not ingest.
 		return nil
 	}
@@ -367,6 +405,24 @@ func (f *ingestFile) Close() error {
 		Filename: filepath.Base(f.name),
 		Data:     data,
 		Source:   "ftp",
+	}
+	if f.oversize {
+		// The transfer already failed back to the client. Hand the head of the
+		// file to the dispatcher so the rejection is visible in quarantine
+		// rather than only in the logs, and never call the file-received hook:
+		// nothing was received.
+		item.RejectReason = fmt.Sprintf("file_too_large: over the %d-byte ingestion limit", f.maxBytes)
+		select {
+		case f.queue <- item:
+		default:
+			// Not IngestQueueFull: that counter means "the pipeline cannot keep
+			// up" and is alerted on as such. Nothing was ingested here — the
+			// only loss is the quarantine record of a file already refused.
+			appmetrics.IngestQuarantine.WithLabelValues("rejected_dropped").Inc()
+			slog.Error("ftp: oversized upload rejected but the ingest queue is full — rejection not recorded",
+				"filename", item.Filename)
+		}
+		return nil
 	}
 	select {
 	case f.queue <- item:

@@ -35,6 +35,9 @@ func Load(cfgPath string) (*Config, error) {
 	// Webhook delivery history is pruned after 30 days unless config.yaml says
 	// otherwise. An explicit 0 keeps every delivery.
 	v.SetDefault("webhooks.delivery_retention_days", 30)
+	// The ingestion size ceiling. Spelled as a quantity so it reads the same way
+	// as storage.max_size; see IngestConfig for why it defaults to 1Mi.
+	v.SetDefault("ingest.max_file_bytes", "1Mi")
 	// Certbot's filenames, so mounting /etc/letsencrypt/live/<host> at /certs
 	// works with no configuration at all.
 	v.SetDefault("certs.cert_file", "/certs/fullchain.pem")
@@ -69,6 +72,13 @@ func Load(cfgPath string) (*Config, error) {
 		return nil, fmt.Errorf("config: storage.%w", err)
 	}
 
+	// Same quantity syntax for the ingestion ceiling. Unlike the metrics knobs
+	// this one is fatal on a bad value: silently falling back to the default
+	// would leave an operator who meant to raise the cap still rejecting files.
+	if err := cfg.Ingest.SetMaxFileBytes(cfg.Ingest.MaxFileBytes); err != nil {
+		return nil, fmt.Errorf("config: ingest.%w", err)
+	}
+
 	if err := validate(&cfg); err != nil {
 		return nil, err
 	}
@@ -77,7 +87,7 @@ func Load(cfgPath string) (*Config, error) {
 }
 
 // applyEnvOverrides applies the environment variables that override config.yaml:
-// METRICS_ENABLED, METRICS_PORT and WEBHOOKS_RETENTION_DAYS.
+// METRICS_ENABLED, METRICS_PORT, INGEST_MAX_FILE_BYTES and WEBHOOKS_RETENTION_DAYS.
 //
 // An unparsable value is ignored with a warning rather than fatal: none of these
 // is worth refusing to boot an ECG pipeline over — a monitoring gap or a default
@@ -129,6 +139,9 @@ func applyEnvOverrides(cfg *Config) {
 	// Credentials are environment-only: see S3Config.
 	cfg.Storage.S3.AccessKey = strings.TrimSpace(os.Getenv("S3_ACCESS_KEY"))
 	cfg.Storage.S3.SecretKey = strings.TrimSpace(os.Getenv("S3_SECRET_KEY"))
+	if raw, ok := os.LookupEnv("INGEST_MAX_FILE_BYTES"); ok {
+		cfg.Ingest.MaxFileBytes = strings.TrimSpace(raw)
+	}
 	if raw, ok := os.LookupEnv("WEBHOOKS_RETENTION_DAYS"); ok {
 		if days, err := strconv.Atoi(strings.TrimSpace(raw)); err == nil {
 			cfg.Webhooks.DeliveryRetentionDays = days
