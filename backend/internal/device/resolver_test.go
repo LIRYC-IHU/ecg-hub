@@ -2,6 +2,8 @@ package device
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -119,5 +121,40 @@ func TestResolverCachesTheTable(t *testing.T) {
 	}
 	if reads != 2 {
 		t.Errorf("read the ARP table %d times across the TTL, want 2", reads)
+	}
+}
+
+// A container on a bridge network reads its own ARP table, which holds its
+// bridge peers and never the devices on the site network. Pointing the resolver
+// at the host's files is what makes the whitelist work there, so the choice of
+// directory has to be honoured — and has to fall back rather than fail when the
+// files are not mounted.
+func TestProcNetDir(t *testing.T) {
+	t.Setenv(HostProcNetEnv, "")
+	if got := procNetDir(); got != "/proc/net" {
+		t.Errorf("procNetDir with no override = %q, want /proc/net", got)
+	}
+
+	t.Setenv(HostProcNetEnv, filepath.Join(t.TempDir(), "absent"))
+	if got := procNetDir(); got != "/proc/net" {
+		t.Errorf("procNetDir pointing at nothing = %q, want the fallback", got)
+	}
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "arp"), []byte(procARPSample), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(HostProcNetEnv, dir)
+	if got := procNetDir(); got != dir {
+		t.Errorf("procNetDir = %q, want the mounted host directory %q", got, dir)
+	}
+
+	// And the tables are actually read from there.
+	table, err := readARPTable(dir)
+	if err != nil {
+		t.Fatalf("readARPTable: %v", err)
+	}
+	if table["10.27.26.40"] != "00:0e:10:19:44:8a" {
+		t.Errorf("table = %v, want the host's entries", table)
 	}
 }

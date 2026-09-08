@@ -7,9 +7,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -47,11 +49,52 @@ type Resolver struct {
 
 // NewResolver builds a Resolver reading the running kernel's tables.
 func NewResolver() *Resolver {
+	dir := procNetDir()
 	return &Resolver{
 		now:     time.Now,
-		readARP: readARPTable,
-		readGWs: readDefaultGateways,
+		readARP: func() (map[string]string, error) { return readARPTable(dir) },
+		readGWs: func() ([]string, error) { return readDefaultGateways(dir) },
 	}
+}
+
+// HostProcNetEnv names the directory holding the host's /proc/net files.
+const HostProcNetEnv = "HOST_PROC_NET"
+
+// procNetDir chooses which /proc/net to read.
+//
+// A container on a bridge network has its own network namespace, so
+// /proc/net/arp lists its bridge peers — the other containers — and never the
+// devices on the site network, whose addresses are in the host's table. The
+// server then cannot identify any device, which is a real deployment and not a
+// misconfiguration: it is what docker-compose.yml describes.
+//
+// Bind-mounting the host's files read-only fixes it without host networking and
+// without a capability:
+//
+//	volumes:
+//	  - /proc/net/arp:/host/proc/net/arp:ro
+//	  - /proc/net/route:/host/proc/net/route:ro
+//	environment:
+//	  HOST_PROC_NET: /host/proc/net
+//
+// It hands the container a list of the host's layer-2 neighbours. That is worth
+// stating, and it is a small thing next to what the container already does:
+// terminate the device protocols themselves.
+//
+// Unset, or pointing at files that are not there, falls back to the container's
+// own /proc/net — the previous behaviour.
+func procNetDir() string {
+	dir := strings.TrimSpace(os.Getenv(HostProcNetEnv))
+	if dir == "" {
+		return "/proc/net"
+	}
+	if _, err := os.Stat(filepath.Join(dir, "arp")); err != nil {
+		slog.Warn("device: ignoring "+HostProcNetEnv+" — no arp file there, falling back to this container's own table",
+			"dir", dir, "error", err)
+		return "/proc/net"
+	}
+	slog.Info("device: reading the host's neighbour tables", "dir", dir)
+	return dir
 }
 
 // Lookup returns the normalised MAC behind ip.
@@ -131,8 +174,8 @@ func canonicalIP(s string) string {
 // container image is not guaranteed to carry net-tools, and a file read costs
 // nothing per connection. macOS has no procfs, so development on a Mac falls
 // back to the command.
-func readARPTable() (map[string]string, error) {
-	f, err := os.Open("/proc/net/arp")
+func readARPTable(dir string) (map[string]string, error) {
+	f, err := os.Open(filepath.Join(dir, "arp"))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return readARPTableCommand()
@@ -206,8 +249,8 @@ func readARPTableCommand() (map[string]string, error) {
 // 172.17.0.1 — the shape of a Docker bridge gateway, which is precisely the
 // address this exists to recognise. Returns nothing on a host without procfs;
 // the caller treats that as "no gateway known".
-func readDefaultGateways() ([]string, error) {
-	f, err := os.Open("/proc/net/route")
+func readDefaultGateways(dir string) ([]string, error) {
+	f, err := os.Open(filepath.Join(dir, "route"))
 	if err != nil {
 		return nil, err
 	}
