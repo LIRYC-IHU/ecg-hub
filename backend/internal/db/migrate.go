@@ -43,6 +43,7 @@ func RunMigrations(db *gorm.DB) error {
 		&appmodels.HL7ORUAttempt{},
 		&appmodels.LocalUser{},
 		&appmodels.AuthProviderConfig{},
+		&appmodels.Device{},
 		&appmodels.ModuleConfig{},
 		&appmodels.ModuleSettings{},
 		&appmodels.UserWebhook{},
