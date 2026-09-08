@@ -516,8 +516,8 @@ func main() {
 	//
 	// The resolver reads the MAC behind each connection from the ARP cache,
 	// which only works while the device shares a broadcast domain with the
-	// server. Say so once, at startup, rather than leaving an administrator to
-	// wonder why every device shows up unidentified.
+	// server. Whether it does is answered by the connections that actually
+	// arrive (Gate.Health), not by inspecting the table at startup.
 	deviceRepo := repository.NewDeviceRepository(gormDB)
 	deviceResolver := device.NewResolver()
 	devicePairing := device.NewPairing(deviceRepo).WithPublisher(eventHub)
@@ -526,15 +526,12 @@ func main() {
 			appmetrics.DeviceGate.WithLabelValues(id.Source, d.String()).Inc()
 		})
 	module.SetDeviceGate(deviceGate)
-	if deviceResolver.Degraded() {
-		slog.Warn("device: no device is reachable at layer 2 from here — the whitelist cannot identify hardware on this deployment, every device would be allowed through unidentified")
-	}
 
 	// Outbound HL7 ORU: expose the manual send-result route (guarded by ecg.send_result).
 	router.WithORUService(hl7ORUService)
 
 	// Device whitelist routes (device.read / device.manage).
-	router.WithDeviceWhitelist(deviceRepo, devicePairing, deviceResolver)
+	router.WithDeviceWhitelist(deviceRepo, devicePairing, deviceGate)
 
 	router.RegisterRoutes()
 

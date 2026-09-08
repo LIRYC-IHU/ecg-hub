@@ -151,7 +151,9 @@ export function AdminDevicesPage() {
         <div className="flex gap-2 items-start rounded-lg border border-warning/40 bg-warning/10 p-3">
           <AlertTriangle className="w-4 h-4 text-warning shrink-0 mt-0.5" />
           <p className="text-xs text-warning">
-            {t("admin.devices.degraded")}
+            {t("admin.devices.degraded", {
+              count: Number(settings.unidentifiedConnections),
+            })}
           </p>
         </div>
       )}

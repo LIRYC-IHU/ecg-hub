@@ -412,13 +412,21 @@ func (*GetDeviceSettingsRequest) Descriptor() ([]byte, []int) {
 type GetDeviceSettingsResponse struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
 	Settings *DeviceSettings        `protobuf:"bytes,1,opt,name=settings,proto3" json:"settings,omitempty"`
-	// degraded is true when no device is reachable at layer 2 from the server —
-	// a routed network, or a container behind a NAT. The whitelist then cannot
-	// identify hardware and lets every device through unidentified, so the UI
+	// degraded is true once ingestion connections have arrived and none of them
+	// could be identified — a routed network, or a NAT the server cannot see
+	// past. The whitelist then lets every device through unidentified, so the UI
 	// must say so rather than let an administrator believe they are protected.
-	Degraded      bool `protobuf:"varint,2,opt,name=degraded,proto3" json:"degraded,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	//
+	// Counted from real connections, not guessed from the ARP table: a container
+	// on a Docker network has its sibling containers in that table, which reads
+	// as "devices are visible" while no actual device ever is.
+	Degraded bool `protobuf:"varint,2,opt,name=degraded,proto3" json:"degraded,omitempty"`
+	// Connections seen since startup, with and without a hardware identity. The
+	// banner quotes them so an administrator can see what it is based on.
+	IdentifiedConnections   int64 `protobuf:"varint,3,opt,name=identified_connections,json=identifiedConnections,proto3" json:"identified_connections,omitempty"`
+	UnidentifiedConnections int64 `protobuf:"varint,4,opt,name=unidentified_connections,json=unidentifiedConnections,proto3" json:"unidentified_connections,omitempty"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *GetDeviceSettingsResponse) Reset() {
@@ -463,6 +471,20 @@ func (x *GetDeviceSettingsResponse) GetDegraded() bool {
 		return x.Degraded
 	}
 	return false
+}
+
+func (x *GetDeviceSettingsResponse) GetIdentifiedConnections() int64 {
+	if x != nil {
+		return x.IdentifiedConnections
+	}
+	return 0
+}
+
+func (x *GetDeviceSettingsResponse) GetUnidentifiedConnections() int64 {
+	if x != nil {
+		return x.UnidentifiedConnections
+	}
+	return 0
 }
 
 type UpdateDeviceSettingsRequest struct {
@@ -983,10 +1005,12 @@ const file_v1_device_proto_rawDesc = "" +
 	"\aenabled\x18\x01 \x01(\bR\aenabled\x12!\n" +
 	"\fpairing_open\x18\x02 \x01(\bR\vpairingOpen\x12#\n" +
 	"\rpairing_until\x18\x03 \x01(\tR\fpairingUntil\"\x1a\n" +
-	"\x18GetDeviceSettingsRequest\"p\n" +
+	"\x18GetDeviceSettingsRequest\"\xe2\x01\n" +
 	"\x19GetDeviceSettingsResponse\x127\n" +
 	"\bsettings\x18\x01 \x01(\v2\x1b.grpc.api.v1.DeviceSettingsR\bsettings\x12\x1a\n" +
-	"\bdegraded\x18\x02 \x01(\bR\bdegraded\"V\n" +
+	"\bdegraded\x18\x02 \x01(\bR\bdegraded\x125\n" +
+	"\x16identified_connections\x18\x03 \x01(\x03R\x15identifiedConnections\x129\n" +
+	"\x18unidentified_connections\x18\x04 \x01(\x03R\x17unidentifiedConnections\"V\n" +
 	"\x1bUpdateDeviceSettingsRequest\x127\n" +
 	"\bsettings\x18\x01 \x01(\v2\x1b.grpc.api.v1.DeviceSettingsR\bsettings\"W\n" +
 	"\x1cUpdateDeviceSettingsResponse\x127\n" +

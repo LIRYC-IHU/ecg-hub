@@ -83,25 +83,6 @@ func (r *Resolver) Lookup(ip string) (string, error) {
 	return mac, nil
 }
 
-// Degraded reports whether this deployment can identify devices at all: it is
-// true when the ARP table is readable but holds nothing except gateway
-// addresses, which is what a container on a bridge network sees. The admin UI
-// shows it so an operator is told the whitelist cannot work here, instead of
-// enabling it and believing they are protected.
-func (r *Resolver) Degraded() bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if err := r.refreshLocked(); err != nil {
-		return true
-	}
-	for _, mac := range r.table {
-		if mac != "" && !r.gwMACs[mac] {
-			return false
-		}
-	}
-	return true
-}
-
 // refreshLocked reloads both tables when the cached copy has aged out.
 func (r *Resolver) refreshLocked() error {
 	if r.table != nil && r.now().Sub(r.loadedAt) < tableTTL {

@@ -134,3 +134,55 @@ func TestGateDecisionHookFires(t *testing.T) {
 		t.Errorf("hook saw %v, want one Allow", seen)
 	}
 }
+
+// Health is counted from the connections that actually arrive, not guessed
+// from the ARP table — a container on a Docker network has its sibling
+// containers in that table, which reads as "devices are visible" while no
+// actual device ever is. That reading is the one that tells an administrator
+// they are protected when they are not.
+func TestGateHealthIsCountedFromConnections(t *testing.T) {
+	arp := map[string]string{
+		"172.21.0.1": "d2:fc:bf:1f:eb:3a", // the bridge gateway
+		"172.21.0.6": "52:bf:57:0f:20:d1", // a sibling container, not a device
+	}
+	r := testResolver(arp, []string{"172.21.0.1"})
+	g := NewGate(r, &fakeStore{status: map[string]string{}}, fakeSettings{set: Settings{Enabled: true}})
+
+	if h := g.Health(); h.Degraded {
+		t.Error("Degraded before any connection: nothing is known yet")
+	}
+
+	// A device arriving from beyond the gateway has no ARP entry of its own.
+	g.Identify("172.217.22.91:50577", "ftp")
+	h := g.Health()
+	if !h.Degraded {
+		t.Error("Degraded = false after an unidentifiable connection, want true")
+	}
+	if h.Unresolved != 1 || h.Resolved != 0 {
+		t.Errorf("counts = %d resolved / %d unresolved, want 0/1", h.Resolved, h.Unresolved)
+	}
+
+	// One device that does resolve is enough: identification works here.
+	g.Identify("172.21.0.6:40000", "ftp")
+	h = g.Health()
+	if h.Degraded {
+		t.Error("Degraded = true after a connection that resolved, want false")
+	}
+	if h.Resolved != 1 || h.Unresolved != 1 {
+		t.Errorf("counts = %d resolved / %d unresolved, want 1/1", h.Resolved, h.Unresolved)
+	}
+}
+
+// The gateway's own MAC is never an identity, so a connection that resolves to
+// it counts as unidentified rather than as a device.
+func TestGateHealthCountsTheGatewayAsUnidentified(t *testing.T) {
+	r := testResolver(map[string]string{"172.21.0.1": "d2:fc:bf:1f:eb:3a"}, []string{"172.21.0.1"})
+	g := NewGate(r, &fakeStore{status: map[string]string{}}, fakeSettings{set: Settings{Enabled: true}})
+
+	if id := g.Identify("172.21.0.1:50577", "dicom"); id.Resolved() {
+		t.Errorf("identity = %+v, want no MAC for the gateway", id)
+	}
+	if h := g.Health(); !h.Degraded || h.Unresolved != 1 {
+		t.Errorf("health = %+v, want degraded with one unidentified connection", h)
+	}
+}

@@ -510,7 +510,7 @@
     "devices": {
       "title": "Appareils",
       "subtitle": "Quel matériel peut déposer des ECG sur les ports FTP, DICOM et ECTP. Les appareils sont identifiés par adresse MAC, lue dans le cache ARP à l'arrivée de la connexion.",
-      "degraded": "Aucun appareil n'est joignable au niveau 2 depuis ce serveur — réseau routé, ou conteneur derrière un NAT. La liste blanche ne peut pas identifier le matériel ici : même activée, tous les appareils passent, non identifiés.",
+      "degraded": "Les {{count}} dernières connexions d'appareils n'ont pas pu être identifiées — le matériel n'est pas sur le segment réseau de ce serveur, ou un NAT s'intercale. Toutes ont été laissées passer non identifiées : la liste blanche n'applique rien ici.",
       "tab": {
         "pairing": "Appairage",
         "devices": "Appareils"

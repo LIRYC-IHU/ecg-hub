@@ -93,26 +93,6 @@ func TestResolverLookup(t *testing.T) {
 	}
 }
 
-// A container on a Docker bridge sees every connection arrive from the gateway,
-// so its ARP table holds nothing but the gateway. Enabling the whitelist there
-// would approve the whole network through one device — the resolver must say so.
-func TestResolverDegradedBehindABridge(t *testing.T) {
-	bridge := testResolver(map[string]string{
-		"172.17.0.1": "02:42:aa:bb:cc:dd",
-	}, []string{"172.17.0.1"})
-	if !bridge.Degraded() {
-		t.Error("a table holding only the gateway must report Degraded")
-	}
-
-	hostMode := testResolver(map[string]string{
-		"172.17.0.1":  "02:42:aa:bb:cc:dd",
-		"10.27.26.40": "00:0e:10:19:44:8a",
-	}, []string{"172.17.0.1"})
-	if hostMode.Degraded() {
-		t.Error("a table holding a real device must not report Degraded")
-	}
-}
-
 func TestResolverCachesTheTable(t *testing.T) {
 	reads := 0
 	now := time.Now()

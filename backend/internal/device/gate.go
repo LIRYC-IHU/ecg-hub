@@ -3,6 +3,7 @@ package device
 import (
 	"context"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
@@ -79,6 +80,42 @@ type Gate struct {
 	settings SettingsSource
 	// onDecision is an optional hook for metrics and the pairing feed.
 	onDecision func(Identity, Decision)
+
+	// Evidence for Health: how many incoming connections carried a hardware
+	// identity and how many did not.
+	mu         sync.Mutex
+	resolved   int64
+	unresolved int64
+}
+
+// Health describes whether this deployment can identify devices at all.
+//
+// It is counted from real ingestion connections rather than guessed from the
+// shape of the ARP table. The table is not the evidence: a container on a
+// Docker network has its sibling containers in it, which looks like devices
+// being visible while no actual device ever is — the reading that would tell an
+// administrator they are protected when they are not.
+type Health struct {
+	// Resolved and Unresolved count connections since startup.
+	Resolved, Unresolved int64
+	// Degraded is true once connections have arrived and none of them could be
+	// identified: a routed network, or a NAT the server cannot see past. With
+	// the whitelist enabled, every one of those devices was let through.
+	//
+	// False before the first connection, because nothing is known yet — the
+	// banner appears as soon as there is evidence for it, and no earlier.
+	Degraded bool
+}
+
+// Health returns what the gate has observed. Read by the admin API.
+func (g *Gate) Health() Health {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return Health{
+		Resolved:   g.resolved,
+		Unresolved: g.unresolved,
+		Degraded:   g.unresolved > 0 && g.resolved == 0,
+	}
 }
 
 // NewGate wires a Gate. resolver may be nil in tests that supply identities
@@ -106,10 +143,22 @@ func (g *Gate) Identify(remoteAddr, source string) Identity {
 	if err != nil {
 		slog.Debug("device: no hardware identity for connection",
 			"ip", id.IP, "source", source, "error", err)
+		g.count(false)
 		return id
 	}
 	id.MAC = mac
+	g.count(true)
 	return id
+}
+
+func (g *Gate) count(resolved bool) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if resolved {
+		g.resolved++
+		return
+	}
+	g.unresolved++
 }
 
 // Decide answers whether the connection behind id may ingest.

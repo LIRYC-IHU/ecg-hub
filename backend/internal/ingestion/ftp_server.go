@@ -202,7 +202,7 @@ func (s *Server) AuthUser(cc ftpserver.ClientContext, user, pass string) (ftpser
 		return nil, fmt.Errorf("ftp: device not approved")
 	}
 
-	slog.Info("ftp: authenticated", "user", user, "mac", id.MAC, "device_decision", decision)
+	slog.Info("ftp: authenticated", "user", user, "mac", id.MAC, "device_decision", decision.String())
 	return &clientDriver{
 		MemMapFs:       &afero.MemMapFs{},
 		queue:          s.queue,

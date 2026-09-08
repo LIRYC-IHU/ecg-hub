@@ -34,10 +34,10 @@ type DevicePairingStore interface {
 	Drop(mac string)
 }
 
-// DeviceIdentityHealth reports whether hardware can be identified at all on
-// this deployment. Implemented by device.Resolver.
+// DeviceIdentityHealth reports what the gate has observed about whether
+// hardware can be identified on this deployment. Implemented by device.Gate.
 type DeviceIdentityHealth interface {
-	Degraded() bool
+	Health() device.Health
 }
 
 // DeviceServiceHandler implements apiv1connect.DeviceServiceHandler. Reads
@@ -126,7 +126,10 @@ func (h *DeviceServiceHandler) GetSettings(ctx context.Context, _ *apiv1.GetDevi
 		},
 	}
 	if h.Resolver != nil {
-		resp.Degraded = h.Resolver.Degraded()
+		health := h.Resolver.Health()
+		resp.Degraded = health.Degraded
+		resp.IdentifiedConnections = health.Resolved
+		resp.UnidentifiedConnections = health.Unresolved
 	}
 	return resp, nil
 }

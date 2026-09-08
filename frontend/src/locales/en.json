@@ -510,7 +510,7 @@
     "devices": {
       "title": "Devices",
       "subtitle": "Which hardware may push ECGs into the FTP, DICOM and ECTP ports. Devices are identified by MAC address, read from the ARP cache when the connection arrives.",
-      "degraded": "No device is reachable at layer 2 from this server — a routed network, or a container behind a NAT. The whitelist cannot identify hardware here: with it enabled, every device is still allowed through, unidentified.",
+      "degraded": "The last {{count}} device connections could not be identified — the hardware is not on this server's own network segment, or a NAT sits in between. Every one of them was allowed through unidentified: the whitelist cannot enforce anything here.",
       "tab": {
         "pairing": "Pairing",
         "devices": "Devices"
