@@ -3,7 +3,7 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org/).
 
-## [1.0.0] — 2026-09-04
+## [1.0.0] — 2026-09-08
 
 First release.
 
@@ -61,6 +61,26 @@ First release.
   with whoever already does it. Enabling TLS without a usable certificate is
   refused at start-up with a stated reason, rather than accepted and then
   failing every client.
+- `ingest.max_file_bytes` (default 1Mi) caps an incoming file at every
+  boundary. Every stage of the pipeline holds the file in memory, and the FTP
+  and DICOM ports are published to devices, so an unbounded upload was enough
+  to push the backend into the OOM killer.
+- FTP authentication failures are counted per source address: the first three
+  are answered at full speed, then a second of delay per extra failure, capped
+  at 30s and forgotten after 15 minutes of silence or a successful login.
+  `ftp_auth_failures_total` exports the count. No lockout on purpose — behind
+  Docker's port mapping every device shares the gateway address, and a lockout
+  would let a scanner take clinical ingestion offline.
+- File names built out of sender-controlled input — DICOM `PatientID`,
+  `StudyDate`/`StudyTime`, the SOP Instance UID, and the patient identifier
+  parsed out of a vendor file on the FTP side — are reduced to a single safe
+  path component before they reach the pipeline. The storage and quarantine
+  writers additionally resolve the join and refuse a result that leaves its
+  base directory.
+- HL7 `QRY^A19` fields are escaped, as the ORU builder already did. Segment
+  injection was already refused before dialling, but `^`, `~`, `&` and `\`
+  passed through, so an identifier carrying `^` split QRD-8 into components and
+  the HIS read a different query than the one intended.
 
 ### Operations
 
@@ -91,6 +111,15 @@ First release.
   action bar covered it.
 - The tag dropdown rendered behind the statistics cards: a leftover GSAP
   transform created a stacking context the dropdown could not escape.
+- The session-expiry handler parked the app on its loading screen instead of
+  the login form: clearing the query cache on every event made the mounted
+  queries refetch, the authenticated ones answered 401, and the interceptor
+  fired the event again. The listener is now registered only while the session
+  is authenticated, so it runs exactly once.
+- The GE MUSE probe matched `<RestingECG>` in any namespace, since its
+  `XMLName` tag carried none. MUSE roots are unqualified, so a namespaced root
+  is now rejected explicitly rather than letting the root name alone
+  discriminate between vendors.
 
 ### Known limitations
 
