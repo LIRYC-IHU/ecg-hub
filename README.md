@@ -34,6 +34,14 @@ every vendor format into a common model, enriches it with patient identity from
 the HIS over HL7, keeps the original files intact, and gives clinicians a web UI
 to browse, view and export ECGs. A copy can be forwarded to an external PACS.
 
+ECG Hub is built on [**ecg-bridge**](https://github.com/LIRYC-IHU/ecg-bridge),
+our ECG format-conversion toolkit and the foundation this project grew out of.
+Every conversion the hub performs — a Philips XML to HL7 aECG, a Nihon Kohden
+`.DAT` to DICOM, any waveform to PDF — is done by an ecg-bridge binary the
+backend invokes. The vendor modules here parse metadata and delegate the format
+work, so a new vendor is taught to ecg-bridge first. It is vendored under
+`backend/converter-fda/`.
+
 > **Non-diagnostic use.** ECG Hub is a data-management and visualisation tool.
 > It is not a medical device and must not be used as the basis for diagnosis.
 
@@ -46,7 +54,7 @@ admin UI without restarting the server.
 
 **Vendor formats** — Philips, GE MUSE, Nihon Kohden, Mindray and DICOM waveform,
 converted to a common model and exportable as PDF, HL7 aECG XML, DICOM or the
-native format.
+native format, through [ecg-bridge](https://github.com/LIRYC-IHU/ecg-bridge).
 
 **Patient identity** — ECGs arriving without a usable patient ID enter an
 `unidentified` workflow: an operator assigns them to a patient, guarded by name,
@@ -150,6 +158,8 @@ backend/            Go backend (Echo + GORM + PostgreSQL)
   internal/         api, auth, ingestion, module, hl7, dicom, connector,
                     export, storage, metrics, webhook, events, …
   v1/               protobuf contracts (Connect RPC), generated into internal/api
+  converter-fda/    ecg-bridge, the conversion toolkit the backend shells out to
+                    (github.com/LIRYC-IHU/ecg-bridge)
 frontend/           React 19 + TypeScript + Vite + Tailwind 4 + TanStack Query
   src/components/   patient, ecg, admin, uploads, layout, ui
   src/ecg-viewer/   WebGL waveform viewer
