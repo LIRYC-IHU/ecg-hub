@@ -1,0 +1,122 @@
+syntax = "proto3";
+package grpc.api.v1;
+
+// Device whitelist. Which pieces of hardware may push ECGs into the ingestion
+// ports (FTP, DICOM C-STORE, ECTP). Reads require device.read, every mutation
+// requires device.manage.
+//
+// Devices are keyed on the MAC address read from the ARP cache at connection
+// time, never on the IP: hospital networks hand addresses out by DHCP. That
+// only works while the device shares a broadcast domain with the server, which
+// is what `degraded` in GetSettingsResponse reports.
+
+// Device is one piece of hardware, enrolled or awaiting a decision.
+message Device {
+  string id = 1;
+  string mac = 2;
+  string oui = 3;             // manufacturer prefix, e.g. "00:0E:10"
+  string status = 4;          // "pending" | "approved" | "revoked"
+  string label = 5;
+  string description = 6;
+
+  // What a vendor module read out of the file the device sent while pairing.
+  // Empty when the device was only ever seen at connection level.
+  string vendor = 7;
+  string device_model = 8;
+  string serial_number = 9;
+
+  string first_source = 10;   // "ftp" | "dicom" | "ectp"
+  string last_ip = 11;        // display only; DHCP moves it
+  string first_seen_at = 12;  // RFC3339 UTC
+  string last_seen_at = 13;
+  int64 seen_count = 14;
+
+  string approved_by = 15;
+  string approved_at = 16;
+  string revoked_by = 17;
+  string revoked_at = 18;
+  string revoked_reason = 19;
+
+  // has_held_file is true when the device sent a file during the pairing
+  // window that is still held: approving it re-ingests that file, so the ward
+  // does not have to acquire a second ECG.
+  bool has_held_file = 20;
+}
+
+message ListDevicesRequest {
+  string status = 1;  // empty = every status
+}
+message ListDevicesResponse {
+  repeated Device devices = 1;
+}
+
+// Settings is the whitelist configuration. Stored in the module-settings
+// singleton, edited from the admin UI.
+message DeviceSettings {
+  bool enabled = 1;
+  bool pairing_open = 2;
+  string pairing_until = 3;  // RFC3339 UTC; empty = open until closed
+}
+
+message GetDeviceSettingsRequest {}
+message GetDeviceSettingsResponse {
+  DeviceSettings settings = 1;
+  // degraded is true when no device is reachable at layer 2 from the server —
+  // a routed network, or a container behind a NAT. The whitelist then cannot
+  // identify hardware and lets every device through unidentified, so the UI
+  // must say so rather than let an administrator believe they are protected.
+  bool degraded = 2;
+}
+
+message UpdateDeviceSettingsRequest {
+  DeviceSettings settings = 1;
+}
+message UpdateDeviceSettingsResponse {
+  DeviceSettings settings = 1;
+}
+
+message ApproveDeviceRequest {
+  string mac = 1;
+  string label = 2;
+  string description = 3;
+}
+message ApproveDeviceResponse {
+  Device device = 1;
+  // reingested is true when a file held from the pairing window was pushed
+  // back into the ingestion pipeline on approval.
+  bool reingested = 2;
+}
+
+message RevokeDeviceRequest {
+  string mac = 1;
+  string reason = 2;
+}
+message RevokeDeviceResponse {
+  Device device = 1;
+}
+
+message DeleteDeviceRequest {
+  string mac = 1;
+}
+message DeleteDeviceResponse {}
+
+// DeviceEvent is pushed as devices appear and change. The pairing screen is
+// live: a device is enrolled by plugging it in and sending one ECG, so an
+// operator watches the list rather than reloading it.
+message DeviceEvent {
+  string type = 1;  // "device.pending" | "device.approved" | "device.revoked"
+  Device device = 2;
+  string at = 3;    // RFC3339 UTC
+}
+
+message SubscribeDevicesRequest {}
+
+service DeviceService {
+  rpc ListDevices(ListDevicesRequest) returns (ListDevicesResponse) {}
+  rpc GetSettings(GetDeviceSettingsRequest) returns (GetDeviceSettingsResponse) {}
+  rpc UpdateSettings(UpdateDeviceSettingsRequest) returns (UpdateDeviceSettingsResponse) {}
+  rpc ApproveDevice(ApproveDeviceRequest) returns (ApproveDeviceResponse) {}
+  rpc RevokeDevice(RevokeDeviceRequest) returns (RevokeDeviceResponse) {}
+  rpc DeleteDevice(DeleteDeviceRequest) returns (DeleteDeviceResponse) {}
+  rpc SubscribeDevices(SubscribeDevicesRequest) returns (stream DeviceEvent) {}
+}

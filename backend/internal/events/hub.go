@@ -24,7 +24,29 @@ const (
 	// with the same content hash already exists. Without this event a re-sent
 	// file would disappear silently — the UI shows a notification instead.
 	TypeECGDuplicate = "ecg.duplicate"
+
+	// Device events. The pairing screen is live — a device is enrolled by
+	// plugging it in and sending one ECG — so these carry only the MAC and the
+	// device stream loads the row. They are filtered out of the ingestion
+	// stream, which is open to anyone with patient.read.
+	//
+	// TypeDevicePending is emitted when a device asks to be enrolled.
+	TypeDevicePending = "device.pending"
+	// TypeDeviceApproved is emitted when an operator enrols a device.
+	TypeDeviceApproved = "device.approved"
+	// TypeDeviceRevoked is emitted when an operator withdraws one.
+	TypeDeviceRevoked = "device.revoked"
 )
+
+// IsDevice reports whether an event belongs to the device whitelist rather than
+// to ingestion. The two streams carry different permissions.
+func IsDevice(eventType string) bool {
+	switch eventType {
+	case TypeDevicePending, TypeDeviceApproved, TypeDeviceRevoked:
+		return true
+	}
+	return false
+}
 
 // Event is a single notification broadcast to all subscribers and serialized to
 // the WebSocket clients as JSON.
@@ -36,7 +58,9 @@ type Event struct {
 	Vendor       string `json:"vendor,omitempty"`
 	Filename     string `json:"filename,omitempty"`
 	Reason       string `json:"reason,omitempty"`
-	At           string `json:"at"` // RFC3339 timestamp
+	// DeviceMAC is set on device.* events: the hardware the event is about.
+	DeviceMAC string `json:"device_mac,omitempty"`
+	At        string `json:"at"` // RFC3339 timestamp
 }
 
 // Publisher is the narrow interface consumed by the ingestion components so they

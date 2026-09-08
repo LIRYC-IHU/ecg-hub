@@ -76,6 +76,12 @@ func (h *EventServiceHandler) Subscribe(ctx context.Context, _ *apiv1.SubscribeR
 			if !ok {
 				return nil
 			}
+			// Device events travel on the same hub but are not for this
+			// audience: this stream is open to anyone with patient.read, and
+			// the device list is device.read. DeviceService carries them.
+			if events.IsDevice(ev.Type) {
+				continue
+			}
 			if err := stream.Send(eventToProto(ev)); err != nil {
 				return nil // client disconnected
 			}

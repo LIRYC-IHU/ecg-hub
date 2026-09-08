@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"sync"
 	"time"
+
+	"github.com/LIRYC-IHU/ecg-hub/internal/events"
 )
 
 // Describer records what a vendor module read out of a file. Implemented by
@@ -46,7 +48,13 @@ type Pairing struct {
 	maxDevices int
 	ttl        time.Duration
 	describer  Describer
+	publisher  publisher // nil when realtime events are disabled
 	now        func() time.Time
+}
+
+// publisher is the narrow events.Hub interface the pairing store needs.
+type publisher interface {
+	Publish(e events.Event)
 }
 
 // DefaultPairingHold is how long a held file survives without an approval. Long
@@ -69,6 +77,14 @@ func NewPairing(describer Describer) *Pairing {
 		describer:  describer,
 		now:        time.Now,
 	}
+}
+
+// WithPublisher attaches the realtime event hub so a device asking to be
+// enrolled appears on the pairing screen without a reload. Returns p for
+// chaining.
+func (p *Pairing) WithPublisher(pub publisher) *Pairing {
+	p.publisher = pub
+	return p
 }
 
 // Hold stores the file a pending device sent and records what the vendor module
@@ -105,6 +121,14 @@ func (p *Pairing) Hold(ctx context.Context, id Identity, filename string, data [
 		Serial:   serial,
 		At:       p.now(),
 	}
+	if p.publisher != nil {
+		p.publisher.Publish(events.Event{
+			Type:      events.TypeDevicePending,
+			DeviceMAC: id.MAC,
+			Vendor:    vendor,
+			Filename:  filename,
+		})
+	}
 	return nil
 }
 
@@ -117,6 +141,15 @@ func (p *Pairing) Take(mac string) (Held, bool) {
 	h, ok := p.held[mac]
 	delete(p.held, mac)
 	return h, ok
+}
+
+// Has reports whether a file is still held for mac, without consuming it.
+func (p *Pairing) Has(mac string) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.expireLocked()
+	_, ok := p.held[mac]
+	return ok
 }
 
 // Drop discards the file held for mac, for a device that is refused rather than

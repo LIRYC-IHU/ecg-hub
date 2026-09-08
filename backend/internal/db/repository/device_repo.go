@@ -37,6 +37,15 @@ func (r *DeviceRepository) Status(ctx context.Context, mac string) (string, erro
 	return d.Status, nil
 }
 
+// Get returns one device by MAC.
+func (r *DeviceRepository) Get(ctx context.Context, mac string) (*models.Device, error) {
+	var d models.Device
+	if err := r.db.WithContext(ctx).First(&d, "mac = ?", mac).Error; err != nil {
+		return nil, err
+	}
+	return &d, nil
+}
+
 // Seen records a contact. On first sight the row is created with
 // initialStatus; afterwards only the volatile columns are refreshed, so an
 // operator's approval or revocation is never overwritten by a later

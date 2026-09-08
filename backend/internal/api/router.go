@@ -75,9 +75,12 @@ type RouterConfig struct {
 	moduleConfigRepo    *repository.ModuleConfigRepository
 	moduleSettingsRepo  *repository.ModuleSettingsRepository
 	ftpQueue            ingestion.IngestQueue
-	ingestRouter        *ingestion.Router                     // for hot module reload
-	persister           *ingestion.Persister                  // for re-ingesting assigned unidentified ECGs; nil disables the assign route
-	eventHub            *events.Hub                           // realtime ingestion event hub; nil disables the events WS route
+	ingestRouter        *ingestion.Router    // for hot module reload
+	persister           *ingestion.Persister // for re-ingesting assigned unidentified ECGs; nil disables the assign route
+	eventHub            *events.Hub          // realtime ingestion event hub; nil disables the events WS route
+	deviceRepo          *repository.DeviceRepository
+	devicePairing       handlers.DevicePairingStore
+	deviceResolver      handlers.DeviceIdentityHealth
 	userWebhookRepo     *repository.UserWebhookRepository     // per-user webhooks; nil disables the /webhooks routes
 	webhookDeliveryRepo *repository.WebhookDeliveryRepository // delivery history; nil disables the /deliveries routes
 	webhookDispatcher   *webhook.Dispatcher                   // delivers user webhooks; required by the test/resend routes
@@ -101,6 +104,16 @@ func (r *RouterConfig) WithUserWebhooks(repo *repository.UserWebhookRepository, 
 	r.userWebhookRepo = repo
 	r.webhookDeliveryRepo = deliveryRepo
 	r.webhookDispatcher = d
+	return r
+}
+
+// WithDeviceWhitelist attaches the device repository, the pairing store and the
+// identity resolver so the DeviceService routes can be registered. Must be
+// called before RegisterRoutes. Returns r for chaining.
+func (r *RouterConfig) WithDeviceWhitelist(repo *repository.DeviceRepository, pairing handlers.DevicePairingStore, resolver handlers.DeviceIdentityHealth) *RouterConfig {
+	r.deviceRepo = repo
+	r.devicePairing = pairing
+	r.deviceResolver = resolver
 	return r
 }
 
@@ -609,6 +622,41 @@ func (r *RouterConfig) RegisterRoutes() {
 			),
 		)
 		mountConnect(r.e, webhookPath, webhookHandler)
+	}
+
+	// Device whitelist — device.read to look, device.manage to change anything.
+	// SubscribeDevices is a server-stream, so it goes through the streaming
+	// interceptor like EventService; the unary interceptors do not cover it.
+	if r.deviceRepo != nil {
+		deviceHandler := &handlers.DeviceServiceHandler{
+			Repo:     r.deviceRepo,
+			Settings: r.moduleSettingsRepo,
+			Pairing:  r.devicePairing,
+			Resolver: r.deviceResolver,
+			Queue:    r.ftpQueue,
+			Hub:      r.eventHub,
+			Pub:      r.eventHub,
+			DB:       r.gormDB,
+		}
+		devicePath, deviceConnect := apiv1connect.NewDeviceServiceHandler(
+			deviceHandler,
+			connect.WithInterceptors(metricsInterceptor,
+				validateInterceptor,
+				mw.ConnectRequireAuth(r.authProvider, r.userRepo, apiKeyRepo),
+				mw.ConnectRequirePermission(r.checker, map[string]string{
+					apiv1connect.DeviceServiceListDevicesProcedure:    auth.PermDeviceRead,
+					apiv1connect.DeviceServiceGetSettingsProcedure:    auth.PermDeviceRead,
+					apiv1connect.DeviceServiceUpdateSettingsProcedure: auth.PermDeviceManage,
+					apiv1connect.DeviceServiceApproveDeviceProcedure:  auth.PermDeviceManage,
+					apiv1connect.DeviceServiceRevokeDeviceProcedure:   auth.PermDeviceManage,
+					apiv1connect.DeviceServiceDeleteDeviceProcedure:   auth.PermDeviceManage,
+				}),
+				mw.ConnectStreamAuth(r.authProvider, r.userRepo, apiKeyRepo, r.checker, map[string]string{
+					apiv1connect.DeviceServiceSubscribeDevicesProcedure: auth.PermDeviceRead,
+				}),
+			),
+		)
+		mountConnect(r.e, devicePath, deviceConnect)
 	}
 
 	// API reference: served by the SPA at /api-docs, from the endpoint catalogue

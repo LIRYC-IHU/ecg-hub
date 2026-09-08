@@ -426,7 +426,8 @@
         "quarantine": "Quarantaine",
         "admin": "Administration",
         "webhook": "Webhooks",
-        "api": "API"
+        "api": "API",
+        "device": "Appareils"
       },
       "perm": {
         "patient_read": "Consulter les patients",
@@ -452,7 +453,9 @@
         "admin_system": "État système & contrôle des modules",
         "admin_auth_config": "Configurer les fournisseurs d'auth",
         "webhook_manage": "Configurer ses webhooks",
-        "apikey_manage": "Créer et gérer ses clés API"
+        "apikey_manage": "Créer et gérer ses clés API",
+        "device_read": "Voir les appareils et la file d'appairage",
+        "device_manage": "Approuver, révoquer et supprimer des appareils"
       }
     },
     "authProviders": {

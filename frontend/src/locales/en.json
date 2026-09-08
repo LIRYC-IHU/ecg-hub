@@ -426,7 +426,8 @@
         "quarantine": "Quarantine",
         "admin": "Administration",
         "webhook": "Webhooks",
-        "api": "API"
+        "api": "API",
+        "device": "Devices"
       },
       "perm": {
         "patient_read": "View patients",
@@ -452,7 +453,9 @@
         "admin_system": "System status & module control",
         "admin_auth_config": "Configure auth providers",
         "webhook_manage": "Configure personal webhooks",
-        "apikey_manage": "Create and manage API keys"
+        "apikey_manage": "Create and manage API keys",
+        "device_read": "View devices and the pairing queue",
+        "device_manage": "Approve, revoke and delete devices"
       }
     },
     "authProviders": {

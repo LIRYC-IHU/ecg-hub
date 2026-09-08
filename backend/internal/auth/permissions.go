@@ -35,6 +35,8 @@ const (
 	PermAdminAuthConfig  = "admin.auth_config"
 	PermWebhookManage    = "webhook.manage" // configure personal outbound webhooks
 	PermAPIKeyManage     = "apikey.manage"  // create and manage personal API keys
+	PermDeviceRead       = "device.read"    // see the enrolled devices and the pairing queue
+	PermDeviceManage     = "device.manage"  // approve, revoke and delete devices; open the pairing window
 )
 
 // AllPermissions is the ordered list of every permission string in the application.
@@ -63,6 +65,8 @@ var AllPermissions = []string{
 	PermAdminAuthConfig,
 	PermWebhookManage,
 	PermAPIKeyManage,
+	PermDeviceRead,
+	PermDeviceManage,
 }
 
 // PermissionChecker resolves a role name → set of permissions from the database.

@@ -510,11 +510,6 @@ func main() {
 		WithEventPublisher(eventHub)
 	router.WithPersister(persister)
 
-	// Outbound HL7 ORU: expose the manual send-result route (guarded by ecg.send_result).
-	router.WithORUService(hl7ORUService)
-
-	router.RegisterRoutes()
-
 	// Device whitelist. Registered before any ingestion server starts, so the
 	// FTP/DICOM auto-start below and every later UI-triggered restart pick it
 	// up (module.ActiveDeviceGate).
@@ -525,7 +520,7 @@ func main() {
 	// wonder why every device shows up unidentified.
 	deviceRepo := repository.NewDeviceRepository(gormDB)
 	deviceResolver := device.NewResolver()
-	devicePairing := device.NewPairing(deviceRepo)
+	devicePairing := device.NewPairing(deviceRepo).WithPublisher(eventHub)
 	deviceGate := device.NewGate(deviceResolver, deviceRepo, moduleSettingsRepo).
 		WithDecisionHook(func(id device.Identity, d device.Decision) {
 			appmetrics.DeviceGate.WithLabelValues(id.Source, d.String()).Inc()
@@ -534,6 +529,14 @@ func main() {
 	if deviceResolver.Degraded() {
 		slog.Warn("device: no device is reachable at layer 2 from here — the whitelist cannot identify hardware on this deployment, every device would be allowed through unidentified")
 	}
+
+	// Outbound HL7 ORU: expose the manual send-result route (guarded by ecg.send_result).
+	router.WithORUService(hl7ORUService)
+
+	// Device whitelist routes (device.read / device.manage).
+	router.WithDeviceWhitelist(deviceRepo, devicePairing, deviceResolver)
+
+	router.RegisterRoutes()
 
 	// Auto-start FTP from DB configuration if enabled (survives container restart).
 	// FTP is configured exclusively from the admin UI (Modules > FTP).
