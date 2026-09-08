@@ -177,11 +177,9 @@ last_session_claude
 # regenerated on demand, megabytes of cache.
 graphify-out/
 
-# Local deployment configuration. The root config.yaml is a developer's own
-# copy and carries site addresses; the one the application reads is committed
-# at backend/config.yaml.
-/config.yaml
-
 # Compiled Go binaries left by `go build` in the package directory.
 /backend/main
 /backend/ecg-hub
+
+# Local dev compose override (host-specific volume/paths).
+docker-compose.dev.override.yml
