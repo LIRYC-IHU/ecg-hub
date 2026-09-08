@@ -2,6 +2,7 @@ package ingestion
 
 import (
 	"bytes"
+	"context"
 	"log/slog"
 	"net"
 	"strings"
@@ -9,6 +10,8 @@ import (
 	"time"
 
 	ftpserver "github.com/fclairamb/ftpserverlib"
+
+	"github.com/LIRYC-IHU/ecg-hub/internal/device"
 	"github.com/spf13/afero"
 )
 
@@ -381,5 +384,120 @@ func TestClientDriver_NoLimit_AcceptsAnySize(t *testing.T) {
 	}
 	if len(item.Data) != 1<<20 {
 		t.Errorf("Data = %d bytes, want %d", len(item.Data), 1<<20)
+	}
+}
+
+// ---- device whitelist -------------------------------------------------------
+
+// stubGate answers with a fixed decision, so the FTP wiring can be tested
+// without an ARP table.
+type stubGate struct {
+	decision device.Decision
+	mac      string
+	seen     []string // remote addresses it was asked about
+}
+
+func (g *stubGate) Identify(remoteAddr, source string) device.Identity {
+	g.seen = append(g.seen, remoteAddr)
+	return device.Identity{MAC: g.mac, IP: remoteAddr, Source: source}
+}
+
+func (g *stubGate) Decide(context.Context, device.Identity) device.Decision { return g.decision }
+
+func authWithGate(t *testing.T, g *stubGate) (ftpserver.ClientDriver, error) {
+	t.Helper()
+	s := New(testConfig("user", "pass", false), NewIngestQueue(1))
+	s.WithDeviceGate(g)
+	return s.AuthUser(clientFrom(t, "10.27.26.40:51234"), "user", "pass")
+}
+
+func TestServer_AuthUser_DeniedDeviceGetsNoSession(t *testing.T) {
+	g := &stubGate{decision: device.Deny, mac: "00:0e:10:19:44:8a"}
+	drv, err := authWithGate(t, g)
+	if err == nil {
+		t.Fatal("a device the whitelist refuses must not get a session, even with valid credentials")
+	}
+	if drv != nil {
+		t.Error("no client driver may be handed back for a refused device")
+	}
+	if len(g.seen) != 1 || g.seen[0] != "10.27.26.40:51234" {
+		t.Errorf("gate was asked about %v, want the client's remote address", g.seen)
+	}
+}
+
+func TestServer_AuthUser_ApprovedDeviceCarriesItsMAC(t *testing.T) {
+	drv, err := authWithGate(t, &stubGate{decision: device.Allow, mac: "00:0e:10:19:44:8a"})
+	if err != nil {
+		t.Fatalf("AuthUser: %v", err)
+	}
+	cd, ok := drv.(*clientDriver)
+	if !ok {
+		t.Fatalf("driver is %T, want *clientDriver", drv)
+	}
+	if cd.deviceMAC != "00:0e:10:19:44:8a" {
+		t.Errorf("deviceMAC = %q, want the resolved address", cd.deviceMAC)
+	}
+	if cd.pairing {
+		t.Error("an approved device must not be marked as pairing")
+	}
+}
+
+// A device being paired uploads normally; the file is marked so the dispatcher
+// identifies and holds it rather than storing it.
+func TestClientDriver_PairingUploadIsMarked(t *testing.T) {
+	queue := NewIngestQueue(1)
+	drv := &clientDriver{
+		MemMapFs:  &afero.MemMapFs{},
+		queue:     queue,
+		deviceMAC: "00:0e:10:19:44:8a",
+		pairing:   true,
+	}
+
+	f, err := drv.Create("/ecg.xml")
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if _, err := f.Write([]byte("ecg content")); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	item := <-queue
+	if !item.Pairing {
+		t.Error("an upload from a device being paired must be marked Pairing")
+	}
+	if item.DeviceMAC != "00:0e:10:19:44:8a" {
+		t.Errorf("DeviceMAC = %q, want the session's device", item.DeviceMAC)
+	}
+}
+
+// The hook answers the device's ECTP FILE|ENDS check. A pairing upload is never
+// stored, so telling the device it arrived would be a lie.
+func TestClientDriver_PairingUploadDoesNotFireTheReceivedHook(t *testing.T) {
+	fired := 0
+	drv := &clientDriver{
+		MemMapFs:       &afero.MemMapFs{},
+		queue:          NewIngestQueue(1),
+		onFileReceived: func(string) { fired++ },
+		pairing:        true,
+		deviceMAC:      "00:0e:10:19:44:8a",
+	}
+	f, _ := drv.Create("/ecg.xml")
+	_, _ = f.Write([]byte("x"))
+	_ = f.Close()
+
+	if fired != 0 {
+		t.Errorf("file-received hook fired %d times for a pairing upload, want 0", fired)
+	}
+}
+
+// No gate wired is the behaviour from before the whitelist existed.
+func TestServer_AuthUser_NoGateAllowsEveryDevice(t *testing.T) {
+	s := New(testConfig("user", "pass", false), NewIngestQueue(1))
+	drv, err := s.AuthUser(clientFrom(t, "10.27.26.40:51234"), "user", "pass")
+	if err != nil || drv == nil {
+		t.Fatalf("AuthUser with no gate = (%v, %v), want a session", drv, err)
 	}
 }

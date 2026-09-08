@@ -40,6 +40,7 @@ import (
 	"github.com/LIRYC-IHU/ecg-hub/internal/connector/polaris"
 	dbpkg "github.com/LIRYC-IHU/ecg-hub/internal/db"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
+	"github.com/LIRYC-IHU/ecg-hub/internal/device"
 	dicomsrv "github.com/LIRYC-IHU/ecg-hub/internal/dicom"
 	"github.com/LIRYC-IHU/ecg-hub/internal/events"
 	"github.com/LIRYC-IHU/ecg-hub/internal/export"
@@ -514,6 +515,26 @@ func main() {
 
 	router.RegisterRoutes()
 
+	// Device whitelist. Registered before any ingestion server starts, so the
+	// FTP/DICOM auto-start below and every later UI-triggered restart pick it
+	// up (module.ActiveDeviceGate).
+	//
+	// The resolver reads the MAC behind each connection from the ARP cache,
+	// which only works while the device shares a broadcast domain with the
+	// server. Say so once, at startup, rather than leaving an administrator to
+	// wonder why every device shows up unidentified.
+	deviceRepo := repository.NewDeviceRepository(gormDB)
+	deviceResolver := device.NewResolver()
+	devicePairing := device.NewPairing(deviceRepo)
+	deviceGate := device.NewGate(deviceResolver, deviceRepo, moduleSettingsRepo).
+		WithDecisionHook(func(id device.Identity, d device.Decision) {
+			appmetrics.DeviceGate.WithLabelValues(id.Source, d.String()).Inc()
+		})
+	module.SetDeviceGate(deviceGate)
+	if deviceResolver.Degraded() {
+		slog.Warn("device: no device is reachable at layer 2 from here — the whitelist cannot identify hardware on this deployment, every device would be allowed through unidentified")
+	}
+
 	// Auto-start FTP from DB configuration if enabled (survives container restart).
 	// FTP is configured exclusively from the admin UI (Modules > FTP).
 	ftpEnabledFromDB := false
@@ -573,6 +594,9 @@ func main() {
 	quarantineStore := ingestion.NewQuarantineStore(cfg.Storage.QuarantinePath, quarantineRepo).
 		WithPublisher(eventHub)
 	dispatcher.WithQuarantineRecorder(quarantineStore)
+	// Files from devices awaiting approval: identified, held in memory for the
+	// operator, never written anywhere.
+	dispatcher.WithPairing(devicePairing)
 	// Proxy role: files that fail ingestion are still forwarded to the
 	// configured PACS connectors from the quarantine volume.
 	dispatcher.WithConnectorForwarder(connDispatcher)

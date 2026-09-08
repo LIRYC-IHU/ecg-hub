@@ -1,6 +1,7 @@
 package nihonkohden
 
 import (
+	"context"
 	"io"
 	"log/slog"
 	"net"
@@ -8,12 +9,27 @@ import (
 
 	"github.com/LIRYC-IHU/ecg-hub/internal/config"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
+	"github.com/LIRYC-IHU/ecg-hub/internal/device"
 )
+
+// deviceGate decides whether the hardware behind a connection may ingest.
+// Implemented by device.Gate; nil disables the whitelist entirely.
+type deviceGate interface {
+	Identify(remoteAddr, source string) device.Identity
+	Decide(ctx context.Context, id device.Identity) device.Decision
+}
 
 type ECTPServer struct {
 	addr         string
 	cfg          *config.Config
 	transferRepo *repository.NihonKohdenRepository // nil when DB not configured
+	gate         deviceGate                        // optional; nil disables the device whitelist
+}
+
+// WithDeviceGate attaches the device whitelist. Returns s for chaining.
+func (s *ECTPServer) WithDeviceGate(g deviceGate) *ECTPServer {
+	s.gate = g
+	return s
 }
 
 func NewECTPServer(addr string, cfg *config.Config, repo *repository.NihonKohdenRepository) *ECTPServer {
@@ -45,8 +61,36 @@ func (s *ECTPServer) serve(ln net.Listener) {
 			slog.Error("[ECTP] accept failed — server stopped", "error", err)
 			return
 		}
+		if !s.allowed(conn) {
+			_ = conn.Close()
+			continue
+		}
 		go s.handle(conn)
 	}
+}
+
+// allowed asks the device whitelist about the connection.
+//
+// ECTP carries no ECG — it is the control channel a Nihon Kohden device uses to
+// announce and verify a transfer that travelled over FTP. So there is no
+// pairing here: a device that is not approved is simply not answered, and it is
+// the FTP side that identifies it. Refusing quietly is deliberate; the protocol
+// has no way to say "you are not enrolled" that a device would act on.
+func (s *ECTPServer) allowed(conn net.Conn) bool {
+	if s.gate == nil {
+		return true
+	}
+	addr := ""
+	if conn.RemoteAddr() != nil {
+		addr = conn.RemoteAddr().String()
+	}
+	id := s.gate.Identify(addr, "ectp")
+	if s.gate.Decide(context.Background(), id) == device.Deny {
+		slog.Warn("[ECTP] device not approved — connection refused",
+			"mac", id.MAC, "remote", id.IP)
+		return false
+	}
+	return true
 }
 
 func (s *ECTPServer) handle(conn net.Conn) {
