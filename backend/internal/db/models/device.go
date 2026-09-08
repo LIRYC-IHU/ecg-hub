@@ -37,7 +37,7 @@ type Device struct {
 	MAC string `gorm:"type:text;not null;uniqueIndex" json:"mac"`
 	// OUI is the first three bytes, upper-case, kept alongside so the UI can
 	// show a manufacturer prefix without re-deriving it.
-	OUI string `gorm:"type:text;not null;default:''" json:"oui"`
+	OUI string `gorm:"column:oui;type:text;not null;default:''" json:"oui"`
 
 	// Status is one of the DeviceStatus* constants.
 	Status string `gorm:"type:text;not null;default:'pending';index" json:"status"`
