@@ -1,0 +1,43 @@
+# Development image — hot reload via air. Unlike Dockerfile (multi-stage, static
+# binary), this one keeps the Go toolchain in the runtime layer: compose bind
+# mounts ./backend over /app, so the source is rebuilt inside the container on
+# every save.
+FROM golang:1.26.2-alpine
+
+RUN apk add --no-cache git ca-certificates
+
+ENV GOBIN=/usr/local/bin
+
+# Reloader. Pinned so a rebuild does not silently pick up a new major.
+RUN go install github.com/air-verse/air@v1.63.0
+
+# Conversion tools, same source and pin as the production image.
+ARG ECG_BRIDGE_VERSION=v1.1.2
+RUN set -eux; \
+  for tool in \
+  fda-to-dicom fda-to-pdf \
+  dicom-to-fda \
+  mindray-to-dicom mindray-to-fda mindray-to-pdf \
+  muse-to-dicom muse-to-fda muse-to-pdf \
+  nk-to-dicom nk-to-fda nk-to-pdf \
+  philips-to-dicom philips-to-fda philips-to-pdf; do \
+  go install -ldflags="-s -w" "github.com/LIRYC-IHU/ecg-bridge/cmd/${tool}@${ECG_BRIDGE_VERSION}"; \
+  done
+
+WORKDIR /app
+
+# Warm the module cache in /go/pkg/mod, which the bind mount does not hide.
+COPY go.mod go.sum ./
+RUN go mod download
+
+# Runs as root, deliberately: the bind-mounted source and ./data belong to the
+# host user, and a fixed in-image UID would not match it. The hardening lives in
+# Dockerfile (prod), not here.
+RUN mkdir -p /data/ecg /data/ecg-quarantine
+
+ENV CGO_ENABLED=0
+ENV LOG_LEVEL=debug
+
+EXPOSE 4444 9091
+
+ENTRYPOINT ["air", "-c", ".air.toml"]
