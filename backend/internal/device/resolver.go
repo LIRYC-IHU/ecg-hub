@@ -88,9 +88,20 @@ func procNetDir() string {
 	if dir == "" {
 		return "/proc/net"
 	}
-	if _, err := os.Stat(filepath.Join(dir, "arp")); err != nil {
+	// A regular file, not merely something at that path. Docker creates an
+	// empty directory when a bind mount's source does not exist on the host —
+	// which is what happens on Docker Desktop, where the machine has no
+	// /proc/net at all — and a directory would otherwise pass this check and
+	// fail later on every read.
+	fi, err := os.Stat(filepath.Join(dir, "arp"))
+	switch {
+	case err != nil:
 		slog.Warn("device: ignoring "+HostProcNetEnv+" — no arp file there, falling back to this container's own table",
 			"dir", dir, "error", err)
+		return "/proc/net"
+	case !fi.Mode().IsRegular():
+		slog.Warn("device: ignoring "+HostProcNetEnv+" — arp is not a file, so the bind mount did not resolve on the host",
+			"dir", dir, "mode", fi.Mode().String())
 		return "/proc/net"
 	}
 	slog.Info("device: reading the host's neighbour tables", "dir", dir)

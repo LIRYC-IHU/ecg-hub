@@ -140,6 +140,18 @@ func TestProcNetDir(t *testing.T) {
 		t.Errorf("procNetDir pointing at nothing = %q, want the fallback", got)
 	}
 
+	// Docker creates an empty directory when a bind mount source is missing on
+	// the host — the failure the production notes already record for the
+	// certificate mounts. A directory must not pass for the table.
+	asDir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(asDir, "arp"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(HostProcNetEnv, asDir)
+	if got := procNetDir(); got != "/proc/net" {
+		t.Errorf("procNetDir with arp as a directory = %q, want the fallback", got)
+	}
+
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "arp"), []byte(procARPSample), 0o644); err != nil {
 		t.Fatal(err)
