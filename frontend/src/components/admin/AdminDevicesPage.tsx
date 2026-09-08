@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useId, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import {
@@ -68,6 +68,15 @@ export function AdminDevicesPage() {
 
   const devices = list?.devices ?? [];
   const pending = devices.filter((d) => d.status === "pending");
+
+  // Labels already in use, offered as suggestions when naming a device. Taken
+  // from the list the page has already fetched — a separate endpoint for it
+  // would ask the server for what is sitting in this component. A datalist
+  // rather than a select: the first device of a site has nothing to pick from,
+  // and a new ward is a new label, so the field has to stay free text.
+  const knownLabels = [
+    ...new Set(devices.map((d) => d.label).filter(Boolean)),
+  ].sort((a, b) => a.localeCompare(b));
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["devices"] });
   const failed = () => notify("error", t("common.error"));
@@ -161,7 +170,7 @@ export function AdminDevicesPage() {
       <div className="flex items-center gap-1 border-b border-border pb-2">
         <button
           onClick={() => setTab("pairing")}
-          className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+          className={`cursor-pointer px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
             tab === "pairing"
               ? "bg-primary/10 text-primary"
               : "text-muted-foreground hover:text-foreground"
@@ -176,7 +185,7 @@ export function AdminDevicesPage() {
         </button>
         <button
           onClick={() => setTab("devices")}
-          className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+          className={`cursor-pointer px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
             tab === "devices"
               ? "bg-primary/10 text-primary"
               : "text-muted-foreground hover:text-foreground"
@@ -265,14 +274,14 @@ export function AdminDevicesPage() {
                             setLabel(d.label);
                             setDescription(d.description);
                           }}
-                          className="inline-flex items-center gap-1 rounded-md bg-success/10 text-success px-2.5 py-1.5 text-xs font-medium hover:bg-success/20"
+                          className="cursor-pointer inline-flex items-center gap-1 rounded-md bg-success/10 text-success px-2.5 py-1.5 text-xs font-medium hover:bg-success/20"
                         >
                           <Check className="w-3.5 h-3.5" />
                           {t("admin.devices.approve")}
                         </button>
                         <button
                           onClick={() => setDeleting(d)}
-                          className="inline-flex items-center gap-1 rounded-md text-muted-foreground px-2.5 py-1.5 text-xs font-medium hover:text-destructive"
+                          className="cursor-pointer inline-flex items-center gap-1 rounded-md text-muted-foreground px-2.5 py-1.5 text-xs font-medium hover:text-destructive"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                           {t("admin.devices.dismiss")}
@@ -345,7 +354,7 @@ export function AdminDevicesPage() {
                           {d.status === "approved" && (
                             <button
                               onClick={() => setRevoking(d)}
-                              className="inline-flex items-center gap-1 text-muted-foreground hover:text-destructive"
+                              className="cursor-pointer inline-flex items-center gap-1 text-muted-foreground hover:text-destructive"
                             >
                               <ShieldOff className="w-3.5 h-3.5" />
                               {t("admin.devices.revoke")}
@@ -353,7 +362,7 @@ export function AdminDevicesPage() {
                           )}
                           <button
                             onClick={() => setDeleting(d)}
-                            className="inline-flex items-center gap-1 text-muted-foreground hover:text-destructive"
+                            className="cursor-pointer inline-flex items-center gap-1 text-muted-foreground hover:text-destructive"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                             {t("common.delete")}
@@ -382,6 +391,7 @@ export function AdminDevicesPage() {
             onChange={setLabel}
             placeholder={t("admin.devices.labelPlaceholder")}
             maxLength={255}
+            options={knownLabels}
           />
           <Field
             label={t("admin.devices.description")}
@@ -397,14 +407,14 @@ export function AdminDevicesPage() {
           <div className="flex justify-end gap-2 pt-2">
             <button
               onClick={() => setApproving(null)}
-              className="px-3 py-1.5 text-xs rounded-md text-muted-foreground hover:text-foreground"
+              className="cursor-pointer px-3 py-1.5 text-xs rounded-md text-muted-foreground hover:text-foreground"
             >
               {t("common.cancel")}
             </button>
             <button
               onClick={() => approve.mutate(approving.mac)}
               disabled={approve.isPending}
-              className="px-3 py-1.5 text-xs rounded-md bg-primary text-primary-foreground disabled:opacity-50"
+              className="cursor-pointer px-3 py-1.5 text-xs rounded-md bg-primary text-primary-foreground disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {t("admin.devices.approve")}
             </button>
@@ -426,14 +436,14 @@ export function AdminDevicesPage() {
           <div className="flex justify-end gap-2 pt-2">
             <button
               onClick={() => setRevoking(null)}
-              className="px-3 py-1.5 text-xs rounded-md text-muted-foreground hover:text-foreground"
+              className="cursor-pointer px-3 py-1.5 text-xs rounded-md text-muted-foreground hover:text-foreground"
             >
               {t("common.cancel")}
             </button>
             <button
               onClick={() => revoke.mutate(revoking.mac)}
               disabled={revoke.isPending}
-              className="px-3 py-1.5 text-xs rounded-md bg-destructive text-destructive-foreground disabled:opacity-50"
+              className="cursor-pointer px-3 py-1.5 text-xs rounded-md bg-destructive text-destructive-foreground disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {t("admin.devices.revoke")}
             </button>
@@ -485,7 +495,9 @@ function Toggle({
   hint: string;
 }) {
   return (
-    <label className="flex items-start gap-3 cursor-pointer">
+    <label
+      className={`flex items-start gap-3 ${disabled ? "cursor-not-allowed" : "cursor-pointer"}`}
+    >
       <input
         type="checkbox"
         checked={checked}
@@ -501,19 +513,24 @@ function Toggle({
   );
 }
 
+// options, when given, are offered as suggestions through a native datalist:
+// the field keeps accepting anything typed, which a select would not.
 function Field({
   label,
   value,
   onChange,
   placeholder,
   maxLength,
+  options,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
   maxLength?: number;
+  options?: string[];
 }) {
+  const listId = useId();
   return (
     <label className="block">
       <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
@@ -524,8 +541,16 @@ function Field({
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         maxLength={maxLength}
+        list={options && options.length > 0 ? listId : undefined}
         className="mt-1 w-full text-xs border border-border rounded-md px-2 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring/20"
       />
+      {options && options.length > 0 && (
+        <datalist id={listId}>
+          {options.map((o) => (
+            <option key={o} value={o} />
+          ))}
+        </datalist>
+      )}
     </label>
   );
 }
