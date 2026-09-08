@@ -280,10 +280,17 @@ func reconstructDICOM(
 // DICOM data elements to produce a human-readable filename like
 // "BS1174_20260430T092816_dicom.dcm". Falls back to sopInstanceUID.dcm on
 // parse errors or missing tags.
+//
+// Every part of this comes out of the C-STORE payload — PatientID (0010,0020),
+// StudyDate/StudyTime and the SOP Instance UID are whatever the sending
+// modality wrote. Each goes through ingestion.SafeComponent, so a separator, a
+// control character or an unbounded string produces an awkward name rather than
+// a name that means something to the filesystem. The fallback is normalised
+// too: it is the same untrusted payload, one tag over.
 func buildDICOMFilename(data []byte, sopInstanceUID string) string {
-	fallback := sopInstanceUID + ".dcm"
-	if sopInstanceUID == "" {
-		fallback = "unknown.dcm"
+	fallback := "unknown.dcm"
+	if uid := ingestion.SafeComponent(sopInstanceUID); uid != "" {
+		fallback = uid + ".dcm"
 	}
 
 	ds, err := legacydicom.ReadDataSetInBytes(data, legacydicom.ReadOptions{})
@@ -291,25 +298,25 @@ func buildDICOMFilename(data []byte, sopInstanceUID string) string {
 		return fallback
 	}
 
-	patientID := extractTagString(ds, legacytag.PatientID)
+	patientID := ingestion.SafeComponent(extractTagString(ds, legacytag.PatientID))
 	if patientID == "" {
 		return fallback
 	}
 
-	studyDate := extractTagString(ds, legacytag.StudyDate)
-	studyTime := extractTagString(ds, legacytag.StudyTime)
+	studyDate := ingestion.SafeComponent(extractTagString(ds, legacytag.StudyDate))
+	studyTime := ingestion.SafeComponent(extractTagString(ds, legacytag.StudyTime))
 
 	var ts string
 	if studyDate != "" {
-		ts = strings.TrimSpace(studyDate)
+		ts = studyDate
 		if len(studyTime) >= 6 {
-			ts += "T" + strings.TrimSpace(studyTime[:6])
+			ts += "T" + studyTime[:6]
 		}
 	} else {
 		ts = time.Now().Format("20060102T150405")
 	}
 
-	return fmt.Sprintf("%s_%s_dicom.dcm", strings.TrimSpace(patientID), ts)
+	return fmt.Sprintf("%s_%s_dicom.dcm", patientID, ts)
 }
 
 func extractTagString(ds *legacydicom.DataSet, t legacytag.Tag) string {
