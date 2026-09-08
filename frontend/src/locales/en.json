@@ -506,6 +506,57 @@
       "active": "Active",
       "inactive": "Inactive",
       "restartNotice": "Restart the server to apply authentication changes."
+    },
+    "devices": {
+      "title": "Devices",
+      "subtitle": "Which hardware may push ECGs into the FTP, DICOM and ECTP ports. Devices are identified by MAC address, read from the ARP cache when the connection arrives.",
+      "degraded": "No device is reachable at layer 2 from this server — a routed network, or a container behind a NAT. The whitelist cannot identify hardware here: with it enabled, every device is still allowed through, unidentified.",
+      "tab": {
+        "pairing": "Pairing",
+        "devices": "Devices"
+      },
+      "enable": "Enable the device whitelist",
+      "enableHint": "Only approved devices may send. A device is spoofable by its MAC, so this is an enrolment control, not authentication.",
+      "pairing": "Open the pairing window",
+      "pairingHint": "An unknown device may send one ECG so it can be identified. The file is kept in memory, never stored, and only appears here — approval stays manual.",
+      "waiting": "Waiting for approval",
+      "noPending": "No device is waiting. With the pairing window open, send one ECG from the device to make it appear here.",
+      "none": "No device has contacted the ingestion ports yet.",
+      "seen": "Seen {{count}}× · last {{at}}",
+      "fileHeld": "an ECG is held, approving re-ingests it",
+      "willReingest": "The ECG this device sent will be ingested on approval.",
+      "approve": "Approve",
+      "approveTitle": "Approve {{mac}}",
+      "approved": "Device approved.",
+      "approvedAndIngested": "Device approved — the ECG it sent has been ingested.",
+      "dismiss": "Dismiss",
+      "revoke": "Revoke",
+      "revokeTitle": "Revoke {{mac}}",
+      "revoked": "Device revoked.",
+      "reason": "Reason",
+      "label": "Label",
+      "labelPlaceholder": "Cardio B, room 214",
+      "description": "Description",
+      "deleteTitle": "Delete this device?",
+      "deleteMessage": "{{mac}} is removed from the list. It reappears as pending on its next connection — to keep it out, revoke it instead.",
+      "deleted": "Device deleted.",
+      "settingsSaved": "Settings saved.",
+      "status": {
+        "pending": "Pending",
+        "approved": "Approved",
+        "revoked": "Revoked"
+      },
+      "col": {
+        "device": "Device",
+        "mac": "MAC",
+        "status": "Status",
+        "source": "Source",
+        "lastSeen": "Last seen",
+        "approvedBy": "Approved by"
+      },
+      "event": {
+        "pending": "{{label}} is asking to be enrolled ({{mac}})"
+      }
     }
   },
   "quarantine": {
@@ -576,7 +627,8 @@
     "authConfig": "Auth",
     "quarantine": "Quarantine",
     "apiKeys": "API Keys",
-    "webhooks": "Webhooks"
+    "webhooks": "Webhooks",
+    "devices": "Devices"
   },
   "apiKeys": {
     "title": "API Keys",

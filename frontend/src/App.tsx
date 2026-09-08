@@ -14,6 +14,7 @@ import {
   Activity,
   Palette,
   UploadCloud,
+  HardDrive,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Spinner } from "./components/ui/Spinner";
@@ -32,6 +33,7 @@ import { AdminRolesPage } from "./components/admin/AdminRolesPage";
 import { AdminAppUsersPage } from "./components/admin/AdminAppUsersPage";
 import { AdminQuarantinePage } from "./components/admin/AdminQuarantinePage";
 import { AdminAuthPage } from "./components/admin/AdminAuthPage";
+import { AdminDevicesPage } from "./components/admin/AdminDevicesPage";
 import { AdminModulesPage } from "./components/admin/AdminModulesPage";
 import { AdminHL7Page } from "./components/admin/AdminHL7Page";
 import { AdminBrandingPage } from "./components/admin/AdminBrandingPage";
@@ -110,6 +112,8 @@ function App() {
     status === "authenticated" && hasPermission("quarantine.assign");
   const canViewAuthConfig =
     status === "authenticated" && hasPermission("admin.auth_config");
+  const canViewDevices =
+    status === "authenticated" && hasPermission("device.read");
   const canManageWebhooks =
     status === "authenticated" && hasPermission("webhook.manage");
   const canManageApiKeys =
@@ -183,6 +187,11 @@ function App() {
       labelKey: "nav.modulesConfig",
     },
     canViewHL7 && { to: "/hl7", icon: Activity, labelKey: "nav.hl7" },
+    canViewDevices && {
+      to: "/devices",
+      icon: HardDrive,
+      labelKey: "nav.devices",
+    },
     canViewAuthConfig && {
       to: "/auth-config",
       icon: KeyRound,
@@ -445,6 +454,16 @@ function App() {
                 element={
                   <div className="overflow-auto">
                     <AdminModulesPage />
+                  </div>
+                }
+              />
+            )}
+            {canViewDevices && (
+              <Route
+                path="/devices"
+                element={
+                  <div className="overflow-auto">
+                    <AdminDevicesPage />
                   </div>
                 }
               />

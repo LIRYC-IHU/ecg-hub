@@ -506,6 +506,57 @@
       "active": "Actif",
       "inactive": "Inactif",
       "restartNotice": "Redémarrez le serveur pour appliquer les modifications d'authentification."
+    },
+    "devices": {
+      "title": "Appareils",
+      "subtitle": "Quel matériel peut déposer des ECG sur les ports FTP, DICOM et ECTP. Les appareils sont identifiés par adresse MAC, lue dans le cache ARP à l'arrivée de la connexion.",
+      "degraded": "Aucun appareil n'est joignable au niveau 2 depuis ce serveur — réseau routé, ou conteneur derrière un NAT. La liste blanche ne peut pas identifier le matériel ici : même activée, tous les appareils passent, non identifiés.",
+      "tab": {
+        "pairing": "Appairage",
+        "devices": "Appareils"
+      },
+      "enable": "Activer la liste blanche",
+      "enableHint": "Seuls les appareils approuvés peuvent émettre. Une MAC s'usurpe : c'est un contrôle d'enrôlement, pas une authentification.",
+      "pairing": "Ouvrir la fenêtre d'appairage",
+      "pairingHint": "Un appareil inconnu peut envoyer un ECG pour être identifié. Le fichier reste en mémoire, n'est jamais stocké et n'apparaît qu'ici — l'approbation reste manuelle.",
+      "waiting": "En attente d'approbation",
+      "noPending": "Aucun appareil en attente. Fenêtre d'appairage ouverte, envoyez un ECG depuis l'appareil pour le faire apparaître ici.",
+      "none": "Aucun appareil n'a encore contacté les ports d'ingestion.",
+      "seen": "Vu {{count}}× · dernière fois {{at}}",
+      "fileHeld": "un ECG est conservé, l'approbation le réingère",
+      "willReingest": "L'ECG envoyé par cet appareil sera ingéré à l'approbation.",
+      "approve": "Approuver",
+      "approveTitle": "Approuver {{mac}}",
+      "approved": "Appareil approuvé.",
+      "approvedAndIngested": "Appareil approuvé — l'ECG qu'il a envoyé a été ingéré.",
+      "dismiss": "Écarter",
+      "revoke": "Révoquer",
+      "revokeTitle": "Révoquer {{mac}}",
+      "revoked": "Appareil révoqué.",
+      "reason": "Motif",
+      "label": "Libellé",
+      "labelPlaceholder": "Cardio B, chambre 214",
+      "description": "Description",
+      "deleteTitle": "Supprimer cet appareil ?",
+      "deleteMessage": "{{mac}} est retiré de la liste. Il réapparaîtra en attente à sa prochaine connexion — pour le tenir à l'écart, révoquez-le plutôt.",
+      "deleted": "Appareil supprimé.",
+      "settingsSaved": "Réglages enregistrés.",
+      "status": {
+        "pending": "En attente",
+        "approved": "Approuvé",
+        "revoked": "Révoqué"
+      },
+      "col": {
+        "device": "Appareil",
+        "mac": "MAC",
+        "status": "Statut",
+        "source": "Source",
+        "lastSeen": "Vu le",
+        "approvedBy": "Approuvé par"
+      },
+      "event": {
+        "pending": "{{label}} demande à être enrôlé ({{mac}})"
+      }
     }
   },
   "quarantine": {
@@ -577,7 +628,8 @@
     "authConfig": "Authentification",
     "quarantine": "Quarantaine",
     "apiKeys": "Clés API",
-    "webhooks": "Webhooks"
+    "webhooks": "Webhooks",
+    "devices": "Appareils"
   },
   "apiKeys": {
     "title": "Clés API",
