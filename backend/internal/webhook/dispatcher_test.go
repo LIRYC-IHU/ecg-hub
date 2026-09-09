@@ -214,3 +214,41 @@ func TestValidateWebhookURL(t *testing.T) {
 		}
 	}
 }
+
+// A receiver routing by ward wants the operator's name for the machine, not an
+// address — and the address travels with it, so a rule keyed on the MAC keeps
+// matching when somebody renames the device.
+func TestPayloadDataCarriesTheDevice(t *testing.T) {
+	raw, err := json.Marshal(PayloadData{
+		ECGID:       "e1",
+		DeviceMAC:   "00:0e:10:19:44:8a",
+		DeviceLabel: "Cardio B, room 214",
+	})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got["device_mac"] != "00:0e:10:19:44:8a" || got["device_label"] != "Cardio B, room 214" {
+		t.Errorf("payload = %v, want both device fields", got)
+	}
+}
+
+// An ECG nobody could identify must not put empty keys in every payload.
+func TestPayloadDataOmitsAnUnknownDevice(t *testing.T) {
+	raw, err := json.Marshal(PayloadData{ECGID: "e1", Vendor: "philips"})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	for _, k := range []string{"device_mac", "device_label"} {
+		if _, present := got[k]; present {
+			t.Errorf("payload carries an empty %q", k)
+		}
+	}
+}

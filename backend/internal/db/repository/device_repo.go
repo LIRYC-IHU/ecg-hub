@@ -46,6 +46,32 @@ func (r *DeviceRepository) Get(ctx context.Context, mac string) (*models.Device,
 	return &d, nil
 }
 
+// LabelsFor resolves MAC -> label for the addresses given, skipping the ones
+// with no name yet. One query per page of ECGs rather than a join rewritten
+// into every list: the lists load the ECG model itself, and turning them into
+// scans of a custom row would take the JSONB metadata with it.
+//
+// Unknown addresses are simply absent from the map — an ECG keeps the device it
+// arrived from even after the device is deleted from the inventory, and the
+// caller falls back to showing the address.
+func (r *DeviceRepository) LabelsFor(ctx context.Context, macs []string) (map[string]string, error) {
+	out := map[string]string{}
+	if len(macs) == 0 {
+		return out, nil
+	}
+	var rows []struct{ MAC, Label string }
+	if err := r.db.WithContext(ctx).Model(&models.Device{}).
+		Select("mac", "label").
+		Where("mac IN ? AND label != ''", macs).
+		Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		out[row.MAC] = row.Label
+	}
+	return out, nil
+}
+
 // Seen records a contact. On first sight the row is created with
 // initialStatus; afterwards only the volatile columns are refreshed, so an
 // operator's approval or revocation is never overwritten by a later

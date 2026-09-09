@@ -22,7 +22,6 @@ type EcgWithPatientRow struct {
 // EcgWithPatientDTO extends EcgDTO with patient demographics for the timeline view.
 type EcgWithPatientDTO struct {
 	EcgDTO
-	DeviceLabel      string  `json:"device_label"`
 	PatientFirstName string  `json:"patient_first_name"`
 	PatientLastName  string  `json:"patient_last_name"`
 	PatientGender    string  `json:"patient_gender"`
@@ -53,7 +52,8 @@ type EcgDTO struct {
 	ID               string         `json:"id"`
 	PatientID        string         `json:"patient_id"`
 	Vendor           string         `json:"vendor"`
-	DeviceMAC        string         `json:"device_mac"` // hardware that sent it; empty when unidentified
+	DeviceMAC        string         `json:"device_mac"`   // hardware that sent it; empty when unidentified
+	DeviceLabel      string         `json:"device_label"` // operator's name for that hardware; empty when it has none
 	OriginalFilename string         `json:"original_filename"`
 	RecordedAt       *string        `json:"recorded_at"` // ISO 8601 UTC; nil for legacy records without acquisition timestamp
 	IngestedAt       string         `json:"ingested_at"` // ISO 8601 UTC

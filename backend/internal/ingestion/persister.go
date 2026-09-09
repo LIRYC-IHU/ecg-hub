@@ -278,6 +278,7 @@ func (p *Persister) persist(ri RoutedItem) error {
 				Type:      events.TypeECGDuplicate,
 				PatientID: ri.Meta.PatientID,
 				Vendor:    ri.Meta.VendorName,
+				DeviceMAC: ri.IngestItem.DeviceMAC,
 				Filename:  ri.IngestItem.Filename,
 			})
 		}
@@ -366,6 +367,7 @@ func (p *Persister) persist(ri RoutedItem) error {
 			ECGID:     ecg.ID,
 			PatientID: ecg.PatientID,
 			Vendor:    ecg.Vendor,
+			DeviceMAC: ecg.DeviceMAC,
 			Filename:  ri.IngestItem.Filename,
 			At:        recordedAt,
 		})

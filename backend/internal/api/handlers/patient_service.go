@@ -121,6 +121,7 @@ func (h *PatientServiceHandler) ListECGs(ctx context.Context, req *apiv1.ListECG
 	for i := range ecgs {
 		data[i] = ecgToProto(&ecgs[i])
 	}
+	fillProtoDeviceLabels(ctx, h.DB, data)
 
 	// Audit log — non-blocking (NFR-R2). userID comes from the auth interceptor.
 	_ = mw.WriteAuditLog(ctx, h.DB, mw.UserIDFromContext(ctx), "patient_ecg_list",

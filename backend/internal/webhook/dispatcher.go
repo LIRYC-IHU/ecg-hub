@@ -160,17 +160,17 @@ func (d *Dispatcher) Run(hub *events.Hub) {
 			if !ok {
 				return
 			}
-			d.dispatch(Payload{
-				Event: e.Type,
-				Data: PayloadData{
-					ECGID:        e.ECGID,
-					PatientID:    e.PatientID,
-					QuarantineID: e.QuarantineID,
-					Vendor:       e.Vendor,
-					Filename:     e.Filename,
-					Reason:       e.Reason,
-				},
-			})
+			data := PayloadData{
+				ECGID:        e.ECGID,
+				PatientID:    e.PatientID,
+				QuarantineID: e.QuarantineID,
+				Vendor:       e.Vendor,
+				DeviceMAC:    e.DeviceMAC,
+				Filename:     e.Filename,
+				Reason:       e.Reason,
+			}
+			data.DeviceLabel = d.deviceLabel(data.DeviceMAC)
+			d.dispatch(Payload{Event: e.Type, Data: data})
 		case <-d.stop:
 			return
 		}
@@ -223,11 +223,14 @@ func (d *Dispatcher) Notify(event string, ecgID string) error {
 	}
 
 	data := PayloadData{ECGID: ecgID}
-	// Enrich with patient/vendor so the receiver can filter without a callback.
+	// Enrich with patient/vendor/device so the receiver can filter without a
+	// callback.
 	var ecg models.ECG
-	if err := d.db.Select("patient_id", "vendor").Where("id = ?", ecgID).First(&ecg).Error; err == nil {
+	if err := d.db.Select("patient_id", "vendor", "device_mac").Where("id = ?", ecgID).First(&ecg).Error; err == nil {
 		data.PatientID = ecg.PatientID
 		data.Vendor = ecg.Vendor
+		data.DeviceMAC = ecg.DeviceMAC
+		data.DeviceLabel = d.deviceLabel(ecg.DeviceMAC)
 	}
 	d.dispatch(Payload{Event: mapped, Data: data})
 	return nil
@@ -250,8 +253,32 @@ type PayloadData struct {
 	PatientID    string `json:"patient_id,omitempty"`
 	QuarantineID string `json:"quarantine_id,omitempty"`
 	Vendor       string `json:"vendor,omitempty"`
-	Filename     string `json:"filename,omitempty"`
-	Reason       string `json:"reason,omitempty"`
+	// The machine the ECG came off. device_label is the operator's name for it
+	// and the useful half — a receiver routing by ward wants "Cardio B, room
+	// 214", not an address — but the MAC travels too, because a label can be
+	// renamed and a rule keyed on it would silently stop matching.
+	DeviceMAC   string `json:"device_mac,omitempty"`
+	DeviceLabel string `json:"device_label,omitempty"`
+	Filename    string `json:"filename,omitempty"`
+	Reason      string `json:"reason,omitempty"`
+}
+
+// deviceLabel resolves the operator's name for a MAC. Empty when the device is
+// unnamed, unknown, or was never identified — the payload then carries the
+// address alone, which is still more than nothing.
+func (d *Dispatcher) deviceLabel(mac string) string {
+	if mac == "" {
+		return ""
+	}
+	var label string
+	if err := d.db.Model(&models.Device{}).
+		Where("mac = ?", mac).
+		Limit(1).
+		Pluck("label", &label).Error; err != nil {
+		slog.Warn("webhook: cannot resolve the device label", "mac", mac, "error", err)
+		return ""
+	}
+	return label
 }
 
 // buildLinks returns the callback API endpoints relevant to the event.

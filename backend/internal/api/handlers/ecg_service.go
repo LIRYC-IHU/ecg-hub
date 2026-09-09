@@ -96,6 +96,33 @@ func (h *ECGServiceHandler) GetFilters(_ context.Context, _ *apiv1.GetFiltersReq
 	}, nil
 }
 
+// fillProtoDeviceLabels resolves the operator's name for the hardware behind a
+// page of ECGs, in one query. The timeline joins the label per row because it
+// already joins devices to filter on them; this is for the lists that load the
+// ECG model itself, where turning the scan into a custom row would take the
+// JSONB metadata with it.
+func fillProtoDeviceLabels(ctx context.Context, db *gorm.DB, ecgs []*apiv1.Ecg) {
+	macs := make([]string, 0, len(ecgs))
+	seen := map[string]bool{}
+	for _, e := range ecgs {
+		if e.DeviceMac != "" && !seen[e.DeviceMac] {
+			seen[e.DeviceMac] = true
+			macs = append(macs, e.DeviceMac)
+		}
+	}
+	if len(macs) == 0 {
+		return
+	}
+	labels, err := repository.NewDeviceRepository(db).LabelsFor(ctx, macs)
+	if err != nil {
+		slog.Warn("ecg: cannot resolve device labels", "error", err)
+		return
+	}
+	for _, e := range ecgs {
+		e.DeviceLabel = labels[e.DeviceMac]
+	}
+}
+
 // ecgWithPatientToProto maps a joined ECG+patient scan row to the wire message
 // (mirrors dto.EcgWithPatientToDTO), reusing ecgToProto for the ECG portion.
 func ecgWithPatientToProto(r *dto.EcgWithPatientRow) *apiv1.EcgWithPatient {
