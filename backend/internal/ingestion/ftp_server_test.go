@@ -393,6 +393,7 @@ func TestClientDriver_NoLimit_AcceptsAnySize(t *testing.T) {
 // without an ARP table.
 type stubGate struct {
 	decision device.Decision
+	recheck  *device.Decision
 	mac      string
 	seen     []string // remote addresses it was asked about
 }
@@ -403,6 +404,15 @@ func (g *stubGate) Identify(remoteAddr, source string) device.Identity {
 }
 
 func (g *stubGate) Decide(context.Context, device.Identity) device.Decision { return g.decision }
+
+// recheck, when set, is what a mid-session re-evaluation answers; otherwise the
+// re-check agrees with the decision that opened the session.
+func (g *stubGate) Recheck(_ context.Context, _ device.Identity) device.Decision {
+	if g.recheck != nil {
+		return *g.recheck
+	}
+	return g.decision
+}
 
 func authWithGate(t *testing.T, g *stubGate) (ftpserver.ClientDriver, error) {
 	t.Helper()
@@ -434,8 +444,8 @@ func TestServer_AuthUser_ApprovedDeviceCarriesItsMAC(t *testing.T) {
 	if !ok {
 		t.Fatalf("driver is %T, want *clientDriver", drv)
 	}
-	if cd.deviceMAC != "00:0e:10:19:44:8a" {
-		t.Errorf("deviceMAC = %q, want the resolved address", cd.deviceMAC)
+	if cd.identity.MAC != "00:0e:10:19:44:8a" {
+		t.Errorf("identity.MAC = %q, want the resolved address", cd.identity.MAC)
 	}
 	if cd.pairing {
 		t.Error("an approved device must not be marked as pairing")
@@ -447,10 +457,10 @@ func TestServer_AuthUser_ApprovedDeviceCarriesItsMAC(t *testing.T) {
 func TestClientDriver_PairingUploadIsMarked(t *testing.T) {
 	queue := NewIngestQueue(1)
 	drv := &clientDriver{
-		MemMapFs:  &afero.MemMapFs{},
-		queue:     queue,
-		deviceMAC: "00:0e:10:19:44:8a",
-		pairing:   true,
+		MemMapFs: &afero.MemMapFs{},
+		queue:    queue,
+		identity: device.Identity{MAC: "00:0e:10:19:44:8a", Source: "ftp"},
+		pairing:  true,
 	}
 
 	f, err := drv.Create("/ecg.xml")
@@ -482,7 +492,7 @@ func TestClientDriver_PairingUploadDoesNotFireTheReceivedHook(t *testing.T) {
 		queue:          NewIngestQueue(1),
 		onFileReceived: func(string) { fired++ },
 		pairing:        true,
-		deviceMAC:      "00:0e:10:19:44:8a",
+		identity:       device.Identity{MAC: "00:0e:10:19:44:8a", Source: "ftp"},
 	}
 	f, _ := drv.Create("/ecg.xml")
 	_, _ = f.Write([]byte("x"))
@@ -499,5 +509,67 @@ func TestServer_AuthUser_NoGateAllowsEveryDevice(t *testing.T) {
 	drv, err := s.AuthUser(clientFrom(t, "10.27.26.40:51234"), "user", "pass")
 	if err != nil || drv == nil {
 		t.Fatalf("AuthUser with no gate = (%v, %v), want a session", drv, err)
+	}
+}
+
+// Revoking a device must stop it now, not once it happens to reconnect. These
+// devices hold an FTP control connection for a minute at a time and run several
+// in parallel, so a session-scoped check let a revoked device keep uploading.
+func TestClientDriver_RevokedMidSession_RefusesTheUpload(t *testing.T) {
+	denied := device.Deny
+	gate := &stubGate{decision: device.Allow, recheck: &denied, mac: "00:0e:10:19:44:8a"}
+
+	queue := NewIngestQueue(1)
+	drv := &clientDriver{
+		MemMapFs: &afero.MemMapFs{},
+		queue:    queue,
+		gate:     gate,
+		identity: device.Identity{MAC: gate.mac, Source: "ftp"},
+	}
+
+	f, err := drv.Create("/ecg.xml")
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if _, err := f.Write([]byte("ecg content")); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	if err := f.Close(); err == nil {
+		t.Fatal("Close must fail the transfer for a device revoked during the session")
+	}
+
+	select {
+	case item := <-queue:
+		t.Errorf("queued %q — a revoked device's file must not reach the pipeline", item.Filename)
+	default:
+	}
+}
+
+// The re-check runs in both directions: a device approved while its pairing
+// session was open ingests normally instead of going back to the pairing queue.
+func TestClientDriver_ApprovedMidSession_IngestsNormally(t *testing.T) {
+	allowed := device.Allow
+	gate := &stubGate{decision: device.Pair, recheck: &allowed, mac: "00:0e:10:19:44:8a"}
+
+	queue := NewIngestQueue(1)
+	drv := &clientDriver{
+		MemMapFs: &afero.MemMapFs{},
+		queue:    queue,
+		gate:     gate,
+		identity: device.Identity{MAC: gate.mac, Source: "ftp"},
+		pairing:  true,
+	}
+
+	f, _ := drv.Create("/ecg.xml")
+	if _, err := f.Write([]byte("ecg content")); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	item := <-queue
+	if item.Pairing {
+		t.Error("the file must be ingested, not held for pairing, once the device is approved")
 	}
 }

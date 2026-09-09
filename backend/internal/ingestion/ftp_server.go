@@ -47,6 +47,7 @@ type FTPSettings struct {
 type deviceGate interface {
 	Identify(remoteAddr, source string) device.Identity
 	Decide(ctx context.Context, id device.Identity) device.Decision
+	Recheck(ctx context.Context, id device.Identity) device.Decision
 }
 
 // tlsRequirementExplicit aliases ftpserver.MandatoryEncryption for use in package-internal tests.
@@ -208,7 +209,8 @@ func (s *Server) AuthUser(cc ftpserver.ClientContext, user, pass string) (ftpser
 		queue:          s.queue,
 		onFileReceived: s.onFileReceived,
 		maxFileBytes:   s.cfg.MaxFileBytes,
-		deviceMAC:      id.MAC,
+		identity:       id,
+		gate:           s.gate,
 		pairing:        decision == device.Pair,
 	}, nil
 }
@@ -359,7 +361,8 @@ type clientDriver struct {
 	queue          IngestQueue
 	onFileReceived func(filename string)
 	maxFileBytes   int64
-	deviceMAC      string
+	identity       device.Identity
+	gate           deviceGate
 	pairing        bool
 }
 
@@ -393,7 +396,8 @@ func (d *clientDriver) wrap(f afero.File, name string) afero.File {
 		queue:          d.queue,
 		onFileReceived: d.onFileReceived,
 		maxBytes:       d.maxFileBytes,
-		deviceMAC:      d.deviceMAC,
+		identity:       d.identity,
+		gate:           d.gate,
 		pairing:        d.pairing,
 	}
 }
@@ -415,7 +419,8 @@ type ingestFile struct {
 	maxBytes       int64 // 0 disables the check
 	written        int64
 	oversize       bool
-	deviceMAC      string
+	identity       device.Identity
+	gate           deviceGate
 	pairing        bool
 }
 
@@ -456,7 +461,7 @@ func (f *ingestFile) Close() error {
 		Filename:  filepath.Base(f.name),
 		Data:      data,
 		Source:    "ftp",
-		DeviceMAC: f.deviceMAC,
+		DeviceMAC: f.identity.MAC,
 		Pairing:   f.pairing,
 	}
 	if f.oversize {
@@ -477,10 +482,27 @@ func (f *ingestFile) Close() error {
 		}
 		return nil
 	}
+	// The session was authorised when it opened, and it outlives that decision:
+	// these devices hold a control connection for a minute at a time and run
+	// several in parallel, so a device revoked mid-session would go on
+	// ingesting until it happened to reconnect. Ask again for this file.
+	if f.gate != nil {
+		switch f.gate.Recheck(context.Background(), f.identity) {
+		case device.Deny:
+			slog.Warn("ftp: device no longer approved — upload refused mid-session",
+				"filename", item.Filename, "mac", f.identity.MAC)
+			return fmt.Errorf("ftp: device not approved: %s", item.Filename)
+		case device.Pair:
+			item.Pairing = true
+		case device.Allow:
+			item.Pairing = false
+		}
+	}
+
 	select {
 	case f.queue <- item:
 		slog.Info("ftp: file queued for ingestion",
-			"filename", item.Filename, "bytes", len(item.Data), "pairing", f.pairing)
+			"filename", item.Filename, "bytes", len(item.Data), "pairing", item.Pairing)
 		// The hook answers the device's ECTP FILE|ENDS check. A pairing upload
 		// is never stored, so telling the device it arrived would be a lie.
 		if f.onFileReceived != nil && !f.pairing {

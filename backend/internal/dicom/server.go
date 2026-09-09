@@ -49,6 +49,7 @@ type Settings struct {
 type deviceGate interface {
 	Identify(remoteAddr, source string) device.Identity
 	Decide(ctx context.Context, id device.Identity) device.Decision
+	Recheck(ctx context.Context, id device.Identity) device.Decision
 }
 
 // Server wraps a DICOM C-STORE SCP and pushes received files onto an IngestQueue.
@@ -222,6 +223,23 @@ func (s *Server) onCStore(
 	id device.Identity,
 	decision device.Decision,
 ) dimse.Status {
+	// An association is authorised once and then carries object after object,
+	// so a device revoked mid-association would keep storing until it
+	// disconnected. Ask again for this object.
+	if s.gate != nil && id.Resolved() {
+		switch s.gate.Recheck(context.Background(), id) {
+		case device.Deny:
+			slog.Warn("dicom: device no longer approved — C-STORE refused mid-association",
+				"mac", id.MAC, "sop_instance_uid", sopInstanceUID)
+			appmetrics.DICOMSCPErrors.WithLabelValues("device_denied").Inc()
+			return dimse.Status{Status: dimse.StatusNotAuthorized, ErrorComment: "device not approved"}
+		case device.Pair:
+			decision = device.Pair
+		case device.Allow:
+			decision = device.Allow
+		}
+	}
+
 	if s.cfg.MaxFileBytes > 0 && int64(len(data)) > s.cfg.MaxFileBytes {
 		return s.rejectOversize(data, sopInstanceUID, id)
 	}

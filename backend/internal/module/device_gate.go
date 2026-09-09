@@ -12,6 +12,9 @@ import (
 type DeviceGate interface {
 	Identify(remoteAddr, source string) device.Identity
 	Decide(ctx context.Context, id device.Identity) device.Decision
+	// Recheck re-evaluates a device without recording another contact, for
+	// callers that hold a session open across several files.
+	Recheck(ctx context.Context, id device.Identity) device.Decision
 }
 
 // Modules that open their own listener — nihon-kohden's ECTP server — need the

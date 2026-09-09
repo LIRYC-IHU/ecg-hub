@@ -161,16 +161,35 @@ func (g *Gate) count(resolved bool) {
 	g.unresolved++
 }
 
-// Decide answers whether the connection behind id may ingest.
+// Decide answers whether the connection behind id may ingest, and records the
+// contact. Called once when a connection is accepted.
 func (g *Gate) Decide(ctx context.Context, id Identity) Decision {
-	d := g.decide(ctx, id)
+	d := g.decide(ctx, id, true)
 	if g.onDecision != nil {
 		g.onDecision(id, d)
 	}
 	return d
 }
 
-func (g *Gate) decide(ctx context.Context, id Identity) Decision {
+// Recheck answers the same question again, without recording a second contact
+// or firing the decision hook.
+//
+// It exists because a session outlives the decision that opened it. An FTP
+// client authenticates once and then sends files for as long as it keeps the
+// control connection — the devices here hold one for a minute at a time and run
+// several in parallel — so a device revoked mid-session would go on ingesting
+// until it happened to reconnect. An operator who has just revoked a device
+// means now, not eventually.
+//
+// The cost is one settings read and one indexed lookup per file, against a
+// pipeline that is about to write that file to disk.
+func (g *Gate) Recheck(ctx context.Context, id Identity) Decision {
+	return g.decide(ctx, id, false)
+}
+
+// decide is the shared body. record is false for a re-check, where counting the
+// contact again would turn seen_count from connections into files.
+func (g *Gate) decide(ctx context.Context, id Identity, record bool) Decision {
 	set, err := g.settings.DeviceSettings(ctx)
 	if err != nil {
 		slog.Error("device: cannot read whitelist settings — allowing the connection",
@@ -202,19 +221,25 @@ func (g *Gate) decide(ctx context.Context, id Identity) Decision {
 
 	switch status {
 	case models.DeviceStatusApproved:
-		g.record(ctx, id, "")
+		if record {
+			g.record(ctx, id, "")
+		}
 		return Allow
 	case models.DeviceStatusRevoked:
-		g.record(ctx, id, "")
+		if record {
+			g.record(ctx, id, "")
+		}
 		return Deny
 	}
 
 	// Unknown, or known and still pending.
-	initial := models.DeviceStatusPending
-	if status != "" {
-		initial = "" // row exists; Seen only refreshes it
+	if record {
+		initial := models.DeviceStatusPending
+		if status != "" {
+			initial = "" // row exists; Seen only refreshes it
+		}
+		g.record(ctx, id, initial)
 	}
-	g.record(ctx, id, initial)
 
 	if set.PairingOpen && (set.PairingUntil.IsZero() || time.Now().Before(set.PairingUntil)) {
 		return Pair

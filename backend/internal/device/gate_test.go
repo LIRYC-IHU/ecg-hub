@@ -186,3 +186,37 @@ func TestGateHealthCountsTheGatewayAsUnidentified(t *testing.T) {
 		t.Errorf("health = %+v, want degraded with one unidentified connection", h)
 	}
 }
+
+// A re-check must not count a second contact: seen_count is connections, and
+// counting per file would make it something else entirely.
+func TestGateRecheckDoesNotRecord(t *testing.T) {
+	store := &fakeStore{status: map[string]string{known.MAC: models.DeviceStatusApproved}}
+	g := gateWith(store, Settings{Enabled: true})
+	ctx := context.Background()
+
+	g.Decide(ctx, known)
+	for i := 0; i < 5; i++ {
+		if got := g.Recheck(ctx, known); got != Allow {
+			t.Fatalf("Recheck = %v, want Allow", got)
+		}
+	}
+	if len(store.seen) != 1 {
+		t.Errorf("recorded %d contacts, want 1 — only Decide counts", len(store.seen))
+	}
+}
+
+// The answer a re-check gives is the current one, which is the whole point:
+// revoking a device has to stop a session that is already open.
+func TestGateRecheckSeesARevocation(t *testing.T) {
+	store := &fakeStore{status: map[string]string{known.MAC: models.DeviceStatusApproved}}
+	g := gateWith(store, Settings{Enabled: true})
+	ctx := context.Background()
+
+	if got := g.Decide(ctx, known); got != Allow {
+		t.Fatalf("Decide = %v, want Allow", got)
+	}
+	store.status[known.MAC] = models.DeviceStatusRevoked
+	if got := g.Recheck(ctx, known); got != Deny {
+		t.Errorf("Recheck after revocation = %v, want Deny", got)
+	}
+}
