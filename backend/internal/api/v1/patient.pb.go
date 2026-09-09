@@ -154,8 +154,9 @@ type SearchRequest struct {
 	DeviceModel   string                 `protobuf:"bytes,8,opt,name=device_model,json=deviceModel,proto3" json:"device_model,omitempty"`
 	FileFormat    string                 `protobuf:"bytes,9,opt,name=file_format,json=fileFormat,proto3" json:"file_format,omitempty"`
 	Hl7Status     string                 `protobuf:"bytes,10,opt,name=hl7_status,json=hl7Status,proto3" json:"hl7_status,omitempty"`
-	From          string                 `protobuf:"bytes,11,opt,name=from,proto3" json:"from,omitempty"` // YYYY-MM-DD (inclusive)
-	To            string                 `protobuf:"bytes,12,opt,name=to,proto3" json:"to,omitempty"`     // YYYY-MM-DD (inclusive)
+	From          string                 `protobuf:"bytes,11,opt,name=from,proto3" json:"from,omitempty"`                            // YYYY-MM-DD (inclusive)
+	To            string                 `protobuf:"bytes,12,opt,name=to,proto3" json:"to,omitempty"`                                // YYYY-MM-DD (inclusive)
+	DeviceMac     string                 `protobuf:"bytes,13,opt,name=device_mac,json=deviceMac,proto3" json:"device_mac,omitempty"` // the hardware that sent the ECG, by address
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -270,6 +271,13 @@ func (x *SearchRequest) GetFrom() string {
 func (x *SearchRequest) GetTo() string {
 	if x != nil {
 		return x.To
+	}
+	return ""
+}
+
+func (x *SearchRequest) GetDeviceMac() string {
+	if x != nil {
+		return x.DeviceMac
 	}
 	return ""
 }
@@ -451,6 +459,7 @@ type ListECGsRequest struct {
 	DeviceModel   string                 `protobuf:"bytes,7,opt,name=device_model,json=deviceModel,proto3" json:"device_model,omitempty"`
 	FileFormat    string                 `protobuf:"bytes,8,opt,name=file_format,json=fileFormat,proto3" json:"file_format,omitempty"`
 	Hl7Status     string                 `protobuf:"bytes,9,opt,name=hl7_status,json=hl7Status,proto3" json:"hl7_status,omitempty"`
+	DeviceMac     string                 `protobuf:"bytes,10,opt,name=device_mac,json=deviceMac,proto3" json:"device_mac,omitempty"` // the hardware that sent it, by address
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -548,6 +557,13 @@ func (x *ListECGsRequest) GetHl7Status() string {
 	return ""
 }
 
+func (x *ListECGsRequest) GetDeviceMac() string {
+	if x != nil {
+		return x.DeviceMac
+	}
+	return ""
+}
+
 type ListECGsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Data          []*Ecg                 `protobuf:"bytes,1,rep,name=data,proto3" json:"data,omitempty"`
@@ -634,7 +650,7 @@ const file_v1_patient_proto_rawDesc = "" +
 	"\tecg_count\x18\b \x01(\x05R\becgCount\x12%\n" +
 	"\x0eunviewed_count\x18\t \x01(\x05R\runviewedCount\x12#\n" +
 	"\rlast_activity\x18\n" +
-	" \x01(\tR\flastActivity\"\xb7\x02\n" +
+	" \x01(\tR\flastActivity\"\xd6\x02\n" +
 	"\rSearchRequest\x12\f\n" +
 	"\x01q\x18\x01 \x01(\tR\x01q\x12\x12\n" +
 	"\x04tags\x18\x02 \x01(\tR\x04tags\x12\x17\n" +
@@ -651,7 +667,9 @@ const file_v1_patient_proto_rawDesc = "" +
 	"hl7_status\x18\n" +
 	" \x01(\tR\thl7Status\x12\x12\n" +
 	"\x04from\x18\v \x01(\tR\x04from\x12\x0e\n" +
-	"\x02to\x18\f \x01(\tR\x02to\"\x7f\n" +
+	"\x02to\x18\f \x01(\tR\x02to\x12\x1d\n" +
+	"\n" +
+	"device_mac\x18\r \x01(\tR\tdeviceMac\"\x7f\n" +
 	"\x0eSearchResponse\x12(\n" +
 	"\x04data\x18\x01 \x03(\v2\x14.grpc.api.v1.PatientR\x04data\x12\x14\n" +
 	"\x05total\x18\x02 \x01(\x03R\x05total\x12\x12\n" +
@@ -663,7 +681,7 @@ const file_v1_patient_proto_rawDesc = "" +
 	"\x16MarkECGsViewedResponse\x12\x1d\n" +
 	"\n" +
 	"patient_id\x18\x01 \x01(\tR\tpatientId\x12\x16\n" +
-	"\x06marked\x18\x02 \x01(\x05R\x06marked\"\xfe\x01\n" +
+	"\x06marked\x18\x02 \x01(\x05R\x06marked\"\x9d\x02\n" +
 	"\x0fListECGsRequest\x12\x1d\n" +
 	"\n" +
 	"patient_id\x18\x01 \x01(\tR\tpatientId\x12\x12\n" +
@@ -676,7 +694,10 @@ const file_v1_patient_proto_rawDesc = "" +
 	"\vfile_format\x18\b \x01(\tR\n" +
 	"fileFormat\x12\x1d\n" +
 	"\n" +
-	"hl7_status\x18\t \x01(\tR\thl7Status\"}\n" +
+	"hl7_status\x18\t \x01(\tR\thl7Status\x12\x1d\n" +
+	"\n" +
+	"device_mac\x18\n" +
+	" \x01(\tR\tdeviceMac\"}\n" +
 	"\x10ListECGsResponse\x12$\n" +
 	"\x04data\x18\x01 \x03(\v2\x10.grpc.api.v1.EcgR\x04data\x12\x14\n" +
 	"\x05total\x18\x02 \x01(\x03R\x05total\x12\x12\n" +

@@ -184,6 +184,7 @@ type AllECGsParams struct {
 	HL7Status   string `query:"hl7_status"`   // "pending"|"success"|"hl7_exhausted"
 	Vendor      string `query:"vendor"`       // exact vendor match
 	DeviceModel string `query:"device_model"` // exact device model match (from extra JSONB)
+	DeviceMAC   string `query:"device_mac"`   // one piece of hardware, by address
 	FileFormat  string `query:"file_format"`  // file extension filter (e.g. ".xml", ".dat", ".dcm")
 	From        string `query:"from"`         // YYYY-MM-DD, inclusive
 	To          string `query:"to"`           // YYYY-MM-DD, inclusive
@@ -203,6 +204,7 @@ type AllECGsParams struct {
 // @Param hl7_status query string false "HL7 status filter" Enums(pending, success, hl7_exhausted)
 // @Param vendor query string false "Vendor filter"
 // @Param device_model query string false "Device model filter"
+// @Param device_mac query string false "Sending device filter (MAC address)"
 // @Param file_format query string false "File extension filter (e.g. .xml, .dat, .dcm)"
 // @Param from query string false "Start date (YYYY-MM-DD)"
 // @Param to query string false "End date (YYYY-MM-DD)"
@@ -231,7 +233,10 @@ func ListAllECGsHandler(db *gorm.DB) echo.HandlerFunc {
 
 		buildQ := func() *gorm.DB {
 			q := db.Model(&models.ECG{}).
-				Joins("LEFT JOIN patients ON patients.patient_id = ecgs.patient_id")
+				Joins("LEFT JOIN patients ON patients.patient_id = ecgs.patient_id").
+				// LEFT: an ECG keeps its row when its device was deleted from
+				// the inventory, or when none was ever identified.
+				Joins("LEFT JOIN devices ON devices.mac = ecgs.device_mac")
 			if params.Q != "" {
 				like := "%" + params.Q + "%"
 				q = q.Where("(patients.last_name ILIKE ? OR patients.first_name ILIKE ? OR ecgs.patient_id ILIKE ? OR ecgs.original_filename ILIKE ?)", like, like, like, like)
@@ -244,6 +249,9 @@ func ListAllECGsHandler(db *gorm.DB) echo.HandlerFunc {
 			}
 			if params.DeviceModel != "" {
 				q = q.Where("ecgs.extra->>'device_model' = ?", params.DeviceModel)
+			}
+			if params.DeviceMAC != "" {
+				q = q.Where("ecgs.device_mac = ?", params.DeviceMAC)
 			}
 			if params.FileFormat != "" {
 				q = q.Where("LOWER(substring(ecgs.original_filename from '\\.([^.]+)$')) = LOWER(?)", strings.TrimPrefix(params.FileFormat, "."))
@@ -269,7 +277,7 @@ func ListAllECGsHandler(db *gorm.DB) echo.HandlerFunc {
 		var rows []dto.EcgWithPatientRow
 		offset := (params.Page - 1) * params.PerPage
 		if err := buildQ().
-			Select("ecgs.*, patients.first_name AS patient_first_name, patients.last_name AS patient_last_name, patients.gender AS patient_gender, patients.date_of_birth AS patient_dob").
+			Select("ecgs.*, patients.first_name AS patient_first_name, patients.last_name AS patient_last_name, patients.gender AS patient_gender, patients.date_of_birth AS patient_dob, devices.label AS device_label").
 			Order("COALESCE(ecgs.recorded_at, ecgs.ingested_at) DESC").
 			Offset(offset).Limit(params.PerPage).
 			Scan(&rows).Error; err != nil {
@@ -323,6 +331,21 @@ func ECGFiltersHandler(db *gorm.DB) echo.HandlerFunc {
 			Order("extra->>'device_model'").
 			Pluck("extra->>'device_model'", &deviceModels)
 
+		type deviceOption struct {
+			MAC   string `json:"mac"`
+			Label string `json:"label"`
+		}
+		// The devices that actually sent something, not the whole inventory: a
+		// filter offering a device with no ECGs behind it is a dead end.
+		var devices []deviceOption
+		db.Model(&models.ECG{}).
+			Joins("JOIN devices ON devices.mac = ecgs.device_mac").
+			Where("ecgs.device_mac != ''").
+			Distinct("devices.mac", "devices.label").
+			Order("devices.label, devices.mac").
+			Select("devices.mac AS mac, devices.label AS label").
+			Scan(&devices)
+
 		var fileFormats []string
 		db.Model(&models.ECG{}).
 			Where("original_filename LIKE '%.%'").
@@ -332,6 +355,7 @@ func ECGFiltersHandler(db *gorm.DB) echo.HandlerFunc {
 
 		return c.JSON(http.StatusOK, map[string]any{
 			"vendors":       vendors,
+			"devices":       devices,
 			"device_models": deviceModels,
 			"file_formats":  fileFormats,
 		})

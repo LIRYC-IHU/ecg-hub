@@ -57,7 +57,13 @@ function App() {
   const [filters, setFilters] = useState<
     Pick<
       AllECGFilters,
-      "vendor" | "device_model" | "file_format" | "hl7_status" | "from" | "to"
+      | "vendor"
+      | "device_model"
+      | "device_mac"
+      | "file_format"
+      | "hl7_status"
+      | "from"
+      | "to"
     >
   >({});
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -291,6 +297,28 @@ function App() {
                             </option>
                           ))}
                         </select>
+                        {/* One piece of hardware. Shows the operator's label,
+                            sends the MAC: renaming a device must not silently
+                            change what a saved filter matches. */}
+                        {facets?.devices.length ? (
+                          <select
+                            value={filters.device_mac ?? ""}
+                            onChange={(e) =>
+                              setFilters((f) => ({
+                                ...f,
+                                device_mac: e.target.value || undefined,
+                              }))
+                            }
+                            className="text-xs border border-border rounded-md px-2.5 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring/20"
+                          >
+                            <option value="">{t("filters.allDevices")}</option>
+                            {facets.devices.map((d) => (
+                              <option key={d.mac} value={d.mac}>
+                                {d.label || d.mac}
+                              </option>
+                            ))}
+                          </select>
+                        ) : null}
                         <select
                           value={filters.file_format ?? ""}
                           onChange={(e) =>

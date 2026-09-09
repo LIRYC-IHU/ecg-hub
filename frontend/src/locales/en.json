@@ -591,7 +591,8 @@
     "allFormats": "All formats",
     "allHL7": "All HL7 statuses",
     "from": "From",
-    "to": "to"
+    "to": "to",
+    "allDevices": "All devices"
   },
   "uploads": {
     "title": "Upload ECGs",

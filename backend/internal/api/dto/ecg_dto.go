@@ -13,11 +13,16 @@ type EcgWithPatientRow struct {
 	PatientLastName  string     `gorm:"column:patient_last_name"`
 	PatientGender    string     `gorm:"column:patient_gender"`
 	PatientDOB       *time.Time `gorm:"column:patient_dob"`
+	// DeviceLabel is joined from the device inventory rather than stored on the
+	// ECG, which records the address the file arrived from and nothing else —
+	// so renaming a device renames it on every ECG it ever sent.
+	DeviceLabel string `gorm:"column:device_label"`
 }
 
 // EcgWithPatientDTO extends EcgDTO with patient demographics for the timeline view.
 type EcgWithPatientDTO struct {
 	EcgDTO
+	DeviceLabel      string  `json:"device_label"`
 	PatientFirstName string  `json:"patient_first_name"`
 	PatientLastName  string  `json:"patient_last_name"`
 	PatientGender    string  `json:"patient_gender"`
@@ -33,6 +38,7 @@ func EcgWithPatientToDTO(r *EcgWithPatientRow) EcgWithPatientDTO {
 		PatientLastName:  r.PatientLastName,
 		PatientGender:    r.PatientGender,
 	}
+	dto.DeviceLabel = r.DeviceLabel
 	if r.PatientDOB != nil {
 		s := r.PatientDOB.UTC().Format(time.RFC3339)
 		dto.PatientDOB = &s
@@ -47,6 +53,7 @@ type EcgDTO struct {
 	ID               string         `json:"id"`
 	PatientID        string         `json:"patient_id"`
 	Vendor           string         `json:"vendor"`
+	DeviceMAC        string         `json:"device_mac"` // hardware that sent it; empty when unidentified
 	OriginalFilename string         `json:"original_filename"`
 	RecordedAt       *string        `json:"recorded_at"` // ISO 8601 UTC; nil for legacy records without acquisition timestamp
 	IngestedAt       string         `json:"ingested_at"` // ISO 8601 UTC
@@ -61,6 +68,7 @@ func EcgToDTO(e *models.ECG) EcgDTO {
 		ID:               e.ID,
 		PatientID:        e.PatientID,
 		Vendor:           e.Vendor,
+		DeviceMAC:        e.DeviceMAC,
 		OriginalFilename: e.OriginalFilename,
 		IngestedAt:       e.IngestedAt.UTC().Format(time.RFC3339),
 		HL7Status:        e.HL7Status,

@@ -37,8 +37,13 @@ type Ecg struct {
 	Hl7Status        string                 `protobuf:"bytes,7,opt,name=hl7_status,json=hl7Status,proto3" json:"hl7_status,omitempty"`    // "pending"|"success"|"hl7_exhausted"|"hl7_rejected"
 	Viewed           bool                   `protobuf:"varint,8,opt,name=viewed,proto3" json:"viewed,omitempty"`
 	ExtraJson        string                 `protobuf:"bytes,9,opt,name=extra_json,json=extraJson,proto3" json:"extra_json,omitempty"` // editable vendor metadata (JSON object)
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// The hardware that sent the file. device_mac is empty when the ingestion
+	// source could not identify it; device_label is the operator's name for it,
+	// resolved through the device inventory and empty when it has none.
+	DeviceMac     string `protobuf:"bytes,10,opt,name=device_mac,json=deviceMac,proto3" json:"device_mac,omitempty"`
+	DeviceLabel   string `protobuf:"bytes,11,opt,name=device_label,json=deviceLabel,proto3" json:"device_label,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Ecg) Reset() {
@@ -130,6 +135,20 @@ func (x *Ecg) GetViewed() bool {
 func (x *Ecg) GetExtraJson() string {
 	if x != nil {
 		return x.ExtraJson
+	}
+	return ""
+}
+
+func (x *Ecg) GetDeviceMac() string {
+	if x != nil {
+		return x.DeviceMac
+	}
+	return ""
+}
+
+func (x *Ecg) GetDeviceLabel() string {
+	if x != nil {
+		return x.DeviceLabel
 	}
 	return ""
 }
@@ -249,18 +268,74 @@ func (*GetFiltersRequest) Descriptor() ([]byte, []int) {
 	return file_v1_ecg_proto_rawDescGZIP(), []int{2}
 }
 
+// DeviceOption is one entry of the device filter. The label is what an operator
+// reads; the MAC is what the filter sends, because a label can be renamed and a
+// saved search should not stop matching when it is.
+type DeviceOption struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Mac           string                 `protobuf:"bytes,1,opt,name=mac,proto3" json:"mac,omitempty"`
+	Label         string                 `protobuf:"bytes,2,opt,name=label,proto3" json:"label,omitempty"` // empty when the device has no name yet
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeviceOption) Reset() {
+	*x = DeviceOption{}
+	mi := &file_v1_ecg_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeviceOption) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeviceOption) ProtoMessage() {}
+
+func (x *DeviceOption) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_ecg_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeviceOption.ProtoReflect.Descriptor instead.
+func (*DeviceOption) Descriptor() ([]byte, []int) {
+	return file_v1_ecg_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *DeviceOption) GetMac() string {
+	if x != nil {
+		return x.Mac
+	}
+	return ""
+}
+
+func (x *DeviceOption) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
 type GetFiltersResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Vendors       []string               `protobuf:"bytes,1,rep,name=vendors,proto3" json:"vendors,omitempty"`
 	DeviceModels  []string               `protobuf:"bytes,2,rep,name=device_models,json=deviceModels,proto3" json:"device_models,omitempty"`
 	FileFormats   []string               `protobuf:"bytes,3,rep,name=file_formats,json=fileFormats,proto3" json:"file_formats,omitempty"`
+	Devices       []*DeviceOption        `protobuf:"bytes,4,rep,name=devices,proto3" json:"devices,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetFiltersResponse) Reset() {
 	*x = GetFiltersResponse{}
-	mi := &file_v1_ecg_proto_msgTypes[3]
+	mi := &file_v1_ecg_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -272,7 +347,7 @@ func (x *GetFiltersResponse) String() string {
 func (*GetFiltersResponse) ProtoMessage() {}
 
 func (x *GetFiltersResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_ecg_proto_msgTypes[3]
+	mi := &file_v1_ecg_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -285,7 +360,7 @@ func (x *GetFiltersResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetFiltersResponse.ProtoReflect.Descriptor instead.
 func (*GetFiltersResponse) Descriptor() ([]byte, []int) {
-	return file_v1_ecg_proto_rawDescGZIP(), []int{3}
+	return file_v1_ecg_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *GetFiltersResponse) GetVendors() []string {
@@ -309,6 +384,13 @@ func (x *GetFiltersResponse) GetFileFormats() []string {
 	return nil
 }
 
+func (x *GetFiltersResponse) GetDevices() []*DeviceOption {
+	if x != nil {
+		return x.Devices
+	}
+	return nil
+}
+
 // ListAllRequest is the cross-patient ECG timeline filter set (GET /ecgs).
 type ListAllRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -317,8 +399,9 @@ type ListAllRequest struct {
 	Vendor        string                 `protobuf:"bytes,3,opt,name=vendor,proto3" json:"vendor,omitempty"`
 	DeviceModel   string                 `protobuf:"bytes,4,opt,name=device_model,json=deviceModel,proto3" json:"device_model,omitempty"`
 	FileFormat    string                 `protobuf:"bytes,5,opt,name=file_format,json=fileFormat,proto3" json:"file_format,omitempty"`
-	From          string                 `protobuf:"bytes,6,opt,name=from,proto3" json:"from,omitempty"` // YYYY-MM-DD (inclusive)
-	To            string                 `protobuf:"bytes,7,opt,name=to,proto3" json:"to,omitempty"`     // YYYY-MM-DD (inclusive)
+	DeviceMac     string                 `protobuf:"bytes,10,opt,name=device_mac,json=deviceMac,proto3" json:"device_mac,omitempty"` // one piece of hardware, by address
+	From          string                 `protobuf:"bytes,6,opt,name=from,proto3" json:"from,omitempty"`                             // YYYY-MM-DD (inclusive)
+	To            string                 `protobuf:"bytes,7,opt,name=to,proto3" json:"to,omitempty"`                                 // YYYY-MM-DD (inclusive)
 	Page          int32                  `protobuf:"varint,8,opt,name=page,proto3" json:"page,omitempty"`
 	PerPage       int32                  `protobuf:"varint,9,opt,name=per_page,json=perPage,proto3" json:"per_page,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -327,7 +410,7 @@ type ListAllRequest struct {
 
 func (x *ListAllRequest) Reset() {
 	*x = ListAllRequest{}
-	mi := &file_v1_ecg_proto_msgTypes[4]
+	mi := &file_v1_ecg_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -339,7 +422,7 @@ func (x *ListAllRequest) String() string {
 func (*ListAllRequest) ProtoMessage() {}
 
 func (x *ListAllRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_ecg_proto_msgTypes[4]
+	mi := &file_v1_ecg_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -352,7 +435,7 @@ func (x *ListAllRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAllRequest.ProtoReflect.Descriptor instead.
 func (*ListAllRequest) Descriptor() ([]byte, []int) {
-	return file_v1_ecg_proto_rawDescGZIP(), []int{4}
+	return file_v1_ecg_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *ListAllRequest) GetQ() string {
@@ -386,6 +469,13 @@ func (x *ListAllRequest) GetDeviceModel() string {
 func (x *ListAllRequest) GetFileFormat() string {
 	if x != nil {
 		return x.FileFormat
+	}
+	return ""
+}
+
+func (x *ListAllRequest) GetDeviceMac() string {
+	if x != nil {
+		return x.DeviceMac
 	}
 	return ""
 }
@@ -430,7 +520,7 @@ type ListAllResponse struct {
 
 func (x *ListAllResponse) Reset() {
 	*x = ListAllResponse{}
-	mi := &file_v1_ecg_proto_msgTypes[5]
+	mi := &file_v1_ecg_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -442,7 +532,7 @@ func (x *ListAllResponse) String() string {
 func (*ListAllResponse) ProtoMessage() {}
 
 func (x *ListAllResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_ecg_proto_msgTypes[5]
+	mi := &file_v1_ecg_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -455,7 +545,7 @@ func (x *ListAllResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListAllResponse.ProtoReflect.Descriptor instead.
 func (*ListAllResponse) Descriptor() ([]byte, []int) {
-	return file_v1_ecg_proto_rawDescGZIP(), []int{5}
+	return file_v1_ecg_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *ListAllResponse) GetData() []*EcgWithPatient {
@@ -500,7 +590,7 @@ type EcgField struct {
 
 func (x *EcgField) Reset() {
 	*x = EcgField{}
-	mi := &file_v1_ecg_proto_msgTypes[6]
+	mi := &file_v1_ecg_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -512,7 +602,7 @@ func (x *EcgField) String() string {
 func (*EcgField) ProtoMessage() {}
 
 func (x *EcgField) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_ecg_proto_msgTypes[6]
+	mi := &file_v1_ecg_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -525,7 +615,7 @@ func (x *EcgField) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EcgField.ProtoReflect.Descriptor instead.
 func (*EcgField) Descriptor() ([]byte, []int) {
-	return file_v1_ecg_proto_rawDescGZIP(), []int{6}
+	return file_v1_ecg_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *EcgField) GetKey() string {
@@ -565,7 +655,7 @@ type GetMetadataRequest struct {
 
 func (x *GetMetadataRequest) Reset() {
 	*x = GetMetadataRequest{}
-	mi := &file_v1_ecg_proto_msgTypes[7]
+	mi := &file_v1_ecg_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -577,7 +667,7 @@ func (x *GetMetadataRequest) String() string {
 func (*GetMetadataRequest) ProtoMessage() {}
 
 func (x *GetMetadataRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_ecg_proto_msgTypes[7]
+	mi := &file_v1_ecg_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -590,7 +680,7 @@ func (x *GetMetadataRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMetadataRequest.ProtoReflect.Descriptor instead.
 func (*GetMetadataRequest) Descriptor() ([]byte, []int) {
-	return file_v1_ecg_proto_rawDescGZIP(), []int{7}
+	return file_v1_ecg_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *GetMetadataRequest) GetId() string {
@@ -610,7 +700,7 @@ type GetMetadataResponse struct {
 
 func (x *GetMetadataResponse) Reset() {
 	*x = GetMetadataResponse{}
-	mi := &file_v1_ecg_proto_msgTypes[8]
+	mi := &file_v1_ecg_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -622,7 +712,7 @@ func (x *GetMetadataResponse) String() string {
 func (*GetMetadataResponse) ProtoMessage() {}
 
 func (x *GetMetadataResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_ecg_proto_msgTypes[8]
+	mi := &file_v1_ecg_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -635,7 +725,7 @@ func (x *GetMetadataResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetMetadataResponse.ProtoReflect.Descriptor instead.
 func (*GetMetadataResponse) Descriptor() ([]byte, []int) {
-	return file_v1_ecg_proto_rawDescGZIP(), []int{8}
+	return file_v1_ecg_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *GetMetadataResponse) GetFields() []*EcgField {
@@ -664,7 +754,7 @@ type UpdateMetadataRequest struct {
 
 func (x *UpdateMetadataRequest) Reset() {
 	*x = UpdateMetadataRequest{}
-	mi := &file_v1_ecg_proto_msgTypes[9]
+	mi := &file_v1_ecg_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -676,7 +766,7 @@ func (x *UpdateMetadataRequest) String() string {
 func (*UpdateMetadataRequest) ProtoMessage() {}
 
 func (x *UpdateMetadataRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_ecg_proto_msgTypes[9]
+	mi := &file_v1_ecg_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -689,7 +779,7 @@ func (x *UpdateMetadataRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateMetadataRequest.ProtoReflect.Descriptor instead.
 func (*UpdateMetadataRequest) Descriptor() ([]byte, []int) {
-	return file_v1_ecg_proto_rawDescGZIP(), []int{9}
+	return file_v1_ecg_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *UpdateMetadataRequest) GetId() string {
@@ -715,7 +805,7 @@ type UpdateMetadataResponse struct {
 
 func (x *UpdateMetadataResponse) Reset() {
 	*x = UpdateMetadataResponse{}
-	mi := &file_v1_ecg_proto_msgTypes[10]
+	mi := &file_v1_ecg_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -727,7 +817,7 @@ func (x *UpdateMetadataResponse) String() string {
 func (*UpdateMetadataResponse) ProtoMessage() {}
 
 func (x *UpdateMetadataResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_ecg_proto_msgTypes[10]
+	mi := &file_v1_ecg_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -740,7 +830,7 @@ func (x *UpdateMetadataResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateMetadataResponse.ProtoReflect.Descriptor instead.
 func (*UpdateMetadataResponse) Descriptor() ([]byte, []int) {
-	return file_v1_ecg_proto_rawDescGZIP(), []int{10}
+	return file_v1_ecg_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *UpdateMetadataResponse) GetValuesJson() string {
@@ -760,7 +850,7 @@ type MarkViewedRequest struct {
 
 func (x *MarkViewedRequest) Reset() {
 	*x = MarkViewedRequest{}
-	mi := &file_v1_ecg_proto_msgTypes[11]
+	mi := &file_v1_ecg_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -772,7 +862,7 @@ func (x *MarkViewedRequest) String() string {
 func (*MarkViewedRequest) ProtoMessage() {}
 
 func (x *MarkViewedRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_ecg_proto_msgTypes[11]
+	mi := &file_v1_ecg_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -785,7 +875,7 @@ func (x *MarkViewedRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MarkViewedRequest.ProtoReflect.Descriptor instead.
 func (*MarkViewedRequest) Descriptor() ([]byte, []int) {
-	return file_v1_ecg_proto_rawDescGZIP(), []int{11}
+	return file_v1_ecg_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *MarkViewedRequest) GetId() string {
@@ -805,7 +895,7 @@ type MarkViewedResponse struct {
 
 func (x *MarkViewedResponse) Reset() {
 	*x = MarkViewedResponse{}
-	mi := &file_v1_ecg_proto_msgTypes[12]
+	mi := &file_v1_ecg_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -817,7 +907,7 @@ func (x *MarkViewedResponse) String() string {
 func (*MarkViewedResponse) ProtoMessage() {}
 
 func (x *MarkViewedResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_ecg_proto_msgTypes[12]
+	mi := &file_v1_ecg_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -830,7 +920,7 @@ func (x *MarkViewedResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MarkViewedResponse.ProtoReflect.Descriptor instead.
 func (*MarkViewedResponse) Descriptor() ([]byte, []int) {
-	return file_v1_ecg_proto_rawDescGZIP(), []int{12}
+	return file_v1_ecg_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *MarkViewedResponse) GetId() string {
@@ -851,7 +941,7 @@ var File_v1_ecg_proto protoreflect.FileDescriptor
 
 const file_v1_ecg_proto_rawDesc = "" +
 	"\n" +
-	"\fv1/ecg.proto\x12\vgrpc.api.v1\"\x91\x02\n" +
+	"\fv1/ecg.proto\x12\vgrpc.api.v1\"\xd3\x02\n" +
 	"\x03Ecg\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
 	"\n" +
@@ -866,7 +956,11 @@ const file_v1_ecg_proto_rawDesc = "" +
 	"hl7_status\x18\a \x01(\tR\thl7Status\x12\x16\n" +
 	"\x06viewed\x18\b \x01(\bR\x06viewed\x12\x1d\n" +
 	"\n" +
-	"extra_json\x18\t \x01(\tR\textraJson\"\xd6\x01\n" +
+	"extra_json\x18\t \x01(\tR\textraJson\x12\x1d\n" +
+	"\n" +
+	"device_mac\x18\n" +
+	" \x01(\tR\tdeviceMac\x12!\n" +
+	"\fdevice_label\x18\v \x01(\tR\vdeviceLabel\"\xd6\x01\n" +
 	"\x0eEcgWithPatient\x12\"\n" +
 	"\x03ecg\x18\x01 \x01(\v2\x10.grpc.api.v1.EcgR\x03ecg\x12,\n" +
 	"\x12patient_first_name\x18\x02 \x01(\tR\x10patientFirstName\x12*\n" +
@@ -874,11 +968,15 @@ const file_v1_ecg_proto_rawDesc = "" +
 	"\x0epatient_gender\x18\x04 \x01(\tR\rpatientGender\x12\x1f\n" +
 	"\vpatient_dob\x18\x05 \x01(\tR\n" +
 	"patientDob\"\x13\n" +
-	"\x11GetFiltersRequest\"v\n" +
+	"\x11GetFiltersRequest\"6\n" +
+	"\fDeviceOption\x12\x10\n" +
+	"\x03mac\x18\x01 \x01(\tR\x03mac\x12\x14\n" +
+	"\x05label\x18\x02 \x01(\tR\x05label\"\xab\x01\n" +
 	"\x12GetFiltersResponse\x12\x18\n" +
 	"\avendors\x18\x01 \x03(\tR\avendors\x12#\n" +
 	"\rdevice_models\x18\x02 \x03(\tR\fdeviceModels\x12!\n" +
-	"\ffile_formats\x18\x03 \x03(\tR\vfileFormats\"\xec\x01\n" +
+	"\ffile_formats\x18\x03 \x03(\tR\vfileFormats\x123\n" +
+	"\adevices\x18\x04 \x03(\v2\x19.grpc.api.v1.DeviceOptionR\adevices\"\x8b\x02\n" +
 	"\x0eListAllRequest\x12\f\n" +
 	"\x01q\x18\x01 \x01(\tR\x01q\x12\x1d\n" +
 	"\n" +
@@ -886,7 +984,10 @@ const file_v1_ecg_proto_rawDesc = "" +
 	"\x06vendor\x18\x03 \x01(\tR\x06vendor\x12!\n" +
 	"\fdevice_model\x18\x04 \x01(\tR\vdeviceModel\x12\x1f\n" +
 	"\vfile_format\x18\x05 \x01(\tR\n" +
-	"fileFormat\x12\x12\n" +
+	"fileFormat\x12\x1d\n" +
+	"\n" +
+	"device_mac\x18\n" +
+	" \x01(\tR\tdeviceMac\x12\x12\n" +
 	"\x04from\x18\x06 \x01(\tR\x04from\x12\x0e\n" +
 	"\x02to\x18\a \x01(\tR\x02to\x12\x12\n" +
 	"\x04page\x18\b \x01(\x05R\x04page\x12\x19\n" +
@@ -942,41 +1043,43 @@ func file_v1_ecg_proto_rawDescGZIP() []byte {
 	return file_v1_ecg_proto_rawDescData
 }
 
-var file_v1_ecg_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
+var file_v1_ecg_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_v1_ecg_proto_goTypes = []any{
 	(*Ecg)(nil),                    // 0: grpc.api.v1.Ecg
 	(*EcgWithPatient)(nil),         // 1: grpc.api.v1.EcgWithPatient
 	(*GetFiltersRequest)(nil),      // 2: grpc.api.v1.GetFiltersRequest
-	(*GetFiltersResponse)(nil),     // 3: grpc.api.v1.GetFiltersResponse
-	(*ListAllRequest)(nil),         // 4: grpc.api.v1.ListAllRequest
-	(*ListAllResponse)(nil),        // 5: grpc.api.v1.ListAllResponse
-	(*EcgField)(nil),               // 6: grpc.api.v1.EcgField
-	(*GetMetadataRequest)(nil),     // 7: grpc.api.v1.GetMetadataRequest
-	(*GetMetadataResponse)(nil),    // 8: grpc.api.v1.GetMetadataResponse
-	(*UpdateMetadataRequest)(nil),  // 9: grpc.api.v1.UpdateMetadataRequest
-	(*UpdateMetadataResponse)(nil), // 10: grpc.api.v1.UpdateMetadataResponse
-	(*MarkViewedRequest)(nil),      // 11: grpc.api.v1.MarkViewedRequest
-	(*MarkViewedResponse)(nil),     // 12: grpc.api.v1.MarkViewedResponse
+	(*DeviceOption)(nil),           // 3: grpc.api.v1.DeviceOption
+	(*GetFiltersResponse)(nil),     // 4: grpc.api.v1.GetFiltersResponse
+	(*ListAllRequest)(nil),         // 5: grpc.api.v1.ListAllRequest
+	(*ListAllResponse)(nil),        // 6: grpc.api.v1.ListAllResponse
+	(*EcgField)(nil),               // 7: grpc.api.v1.EcgField
+	(*GetMetadataRequest)(nil),     // 8: grpc.api.v1.GetMetadataRequest
+	(*GetMetadataResponse)(nil),    // 9: grpc.api.v1.GetMetadataResponse
+	(*UpdateMetadataRequest)(nil),  // 10: grpc.api.v1.UpdateMetadataRequest
+	(*UpdateMetadataResponse)(nil), // 11: grpc.api.v1.UpdateMetadataResponse
+	(*MarkViewedRequest)(nil),      // 12: grpc.api.v1.MarkViewedRequest
+	(*MarkViewedResponse)(nil),     // 13: grpc.api.v1.MarkViewedResponse
 }
 var file_v1_ecg_proto_depIdxs = []int32{
 	0,  // 0: grpc.api.v1.EcgWithPatient.ecg:type_name -> grpc.api.v1.Ecg
-	1,  // 1: grpc.api.v1.ListAllResponse.data:type_name -> grpc.api.v1.EcgWithPatient
-	6,  // 2: grpc.api.v1.GetMetadataResponse.fields:type_name -> grpc.api.v1.EcgField
-	2,  // 3: grpc.api.v1.ECGService.GetFilters:input_type -> grpc.api.v1.GetFiltersRequest
-	4,  // 4: grpc.api.v1.ECGService.ListAll:input_type -> grpc.api.v1.ListAllRequest
-	7,  // 5: grpc.api.v1.ECGService.GetMetadata:input_type -> grpc.api.v1.GetMetadataRequest
-	9,  // 6: grpc.api.v1.ECGService.UpdateMetadata:input_type -> grpc.api.v1.UpdateMetadataRequest
-	11, // 7: grpc.api.v1.ECGService.MarkViewed:input_type -> grpc.api.v1.MarkViewedRequest
-	3,  // 8: grpc.api.v1.ECGService.GetFilters:output_type -> grpc.api.v1.GetFiltersResponse
-	5,  // 9: grpc.api.v1.ECGService.ListAll:output_type -> grpc.api.v1.ListAllResponse
-	8,  // 10: grpc.api.v1.ECGService.GetMetadata:output_type -> grpc.api.v1.GetMetadataResponse
-	10, // 11: grpc.api.v1.ECGService.UpdateMetadata:output_type -> grpc.api.v1.UpdateMetadataResponse
-	12, // 12: grpc.api.v1.ECGService.MarkViewed:output_type -> grpc.api.v1.MarkViewedResponse
-	8,  // [8:13] is the sub-list for method output_type
-	3,  // [3:8] is the sub-list for method input_type
-	3,  // [3:3] is the sub-list for extension type_name
-	3,  // [3:3] is the sub-list for extension extendee
-	0,  // [0:3] is the sub-list for field type_name
+	3,  // 1: grpc.api.v1.GetFiltersResponse.devices:type_name -> grpc.api.v1.DeviceOption
+	1,  // 2: grpc.api.v1.ListAllResponse.data:type_name -> grpc.api.v1.EcgWithPatient
+	7,  // 3: grpc.api.v1.GetMetadataResponse.fields:type_name -> grpc.api.v1.EcgField
+	2,  // 4: grpc.api.v1.ECGService.GetFilters:input_type -> grpc.api.v1.GetFiltersRequest
+	5,  // 5: grpc.api.v1.ECGService.ListAll:input_type -> grpc.api.v1.ListAllRequest
+	8,  // 6: grpc.api.v1.ECGService.GetMetadata:input_type -> grpc.api.v1.GetMetadataRequest
+	10, // 7: grpc.api.v1.ECGService.UpdateMetadata:input_type -> grpc.api.v1.UpdateMetadataRequest
+	12, // 8: grpc.api.v1.ECGService.MarkViewed:input_type -> grpc.api.v1.MarkViewedRequest
+	4,  // 9: grpc.api.v1.ECGService.GetFilters:output_type -> grpc.api.v1.GetFiltersResponse
+	6,  // 10: grpc.api.v1.ECGService.ListAll:output_type -> grpc.api.v1.ListAllResponse
+	9,  // 11: grpc.api.v1.ECGService.GetMetadata:output_type -> grpc.api.v1.GetMetadataResponse
+	11, // 12: grpc.api.v1.ECGService.UpdateMetadata:output_type -> grpc.api.v1.UpdateMetadataResponse
+	13, // 13: grpc.api.v1.ECGService.MarkViewed:output_type -> grpc.api.v1.MarkViewedResponse
+	9,  // [9:14] is the sub-list for method output_type
+	4,  // [4:9] is the sub-list for method input_type
+	4,  // [4:4] is the sub-list for extension type_name
+	4,  // [4:4] is the sub-list for extension extendee
+	0,  // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_v1_ecg_proto_init() }
@@ -990,7 +1093,7 @@ func file_v1_ecg_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_ecg_proto_rawDesc), len(file_v1_ecg_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   13,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

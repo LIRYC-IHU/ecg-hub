@@ -9,9 +9,16 @@ import "time"
 // metadata) and ViewedAt (read/seen state for the "new ECG" indicator).
 type ECG struct {
 	// No CreatedAt/UpdatedAt — ECGs use IngestedAt as their canonical timestamp.
-	ID               string         `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
-	PatientID        string         `gorm:"type:text;not null;index:idx_ecg_patient_date"`
-	Vendor           string         `gorm:"not null;index"`
+	ID        string `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
+	PatientID string `gorm:"type:text;not null;index:idx_ecg_patient_date"`
+	Vendor    string `gorm:"not null;index"`
+	// DeviceMAC is the hardware that sent this file, when the ingestion source
+	// could resolve one — empty on the manual upload route, and on deployments
+	// where devices are not on the server's own network segment. It is the raw
+	// address rather than a foreign key to devices: an ECG is an immutable
+	// record of what arrived, and deleting a device from the inventory must not
+	// take the ECGs it produced with it.
+	DeviceMAC        string         `gorm:"column:device_mac;type:text;not null;default:'';index"`
 	FilePath         string         `gorm:"not null"`
 	OriginalFilename string         `gorm:"not null"`
 	ContentHash      string         `gorm:"type:varchar(64);uniqueIndex"` // SHA-256 hex digest for deduplication

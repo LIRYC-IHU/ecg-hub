@@ -592,7 +592,8 @@
     "allFormats": "Tous les formats",
     "allHL7": "Tous les statuts HL7",
     "from": "Du",
-    "to": "au"
+    "to": "au",
+    "allDevices": "Tous les appareils"
   },
   "uploads": {
     "title": "Importer des ECG",

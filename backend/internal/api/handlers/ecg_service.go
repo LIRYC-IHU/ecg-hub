@@ -33,6 +33,7 @@ func ecgToProto(e *models.ECG) *apiv1.Ecg {
 		Id:               e.ID,
 		PatientId:        e.PatientID,
 		Vendor:           e.Vendor,
+		DeviceMac:        e.DeviceMAC,
 		OriginalFilename: e.OriginalFilename,
 		IngestedAt:       e.IngestedAt.UTC().Format(time.RFC3339),
 		Hl7Status:        e.HL7Status,
@@ -69,6 +70,17 @@ func (h *ECGServiceHandler) GetFilters(_ context.Context, _ *apiv1.GetFiltersReq
 		Order("extra->>'device_model'").
 		Pluck("extra->>'device_model'", &deviceModels)
 
+	// The devices that actually sent something, not the whole inventory: a
+	// filter offering a device with no ECGs behind it is a dead end.
+	var devices []*apiv1.DeviceOption
+	h.DB.Model(&models.ECG{}).
+		Joins("JOIN devices ON devices.mac = ecgs.device_mac").
+		Where("ecgs.device_mac != ''").
+		Distinct("devices.mac", "devices.label").
+		Order("devices.label, devices.mac").
+		Select("devices.mac AS mac, devices.label AS label").
+		Scan(&devices)
+
 	var fileFormats []string
 	h.DB.Model(&models.ECG{}).
 		Where("original_filename LIKE '%.%'").
@@ -80,6 +92,7 @@ func (h *ECGServiceHandler) GetFilters(_ context.Context, _ *apiv1.GetFiltersReq
 		Vendors:      vendors,
 		DeviceModels: deviceModels,
 		FileFormats:  fileFormats,
+		Devices:      devices,
 	}, nil
 }
 
@@ -95,6 +108,10 @@ func ecgWithPatientToProto(r *dto.EcgWithPatientRow) *apiv1.EcgWithPatient {
 	if r.PatientDOB != nil {
 		out.PatientDob = r.PatientDOB.UTC().Format(time.RFC3339)
 	}
+	// Joined per row rather than stored on the ECG, which records the address
+	// the file arrived from and nothing else — renaming a device renames it
+	// everywhere at once.
+	out.Ecg.DeviceLabel = r.DeviceLabel
 	return out
 }
 
@@ -116,7 +133,10 @@ func (h *ECGServiceHandler) ListAll(ctx context.Context, req *apiv1.ListAllReque
 
 	buildQ := func() *gorm.DB {
 		q := h.DB.Model(&models.ECG{}).
-			Joins("LEFT JOIN patients ON patients.patient_id = ecgs.patient_id")
+			Joins("LEFT JOIN patients ON patients.patient_id = ecgs.patient_id").
+			// LEFT: an ECG keeps its row when its device was deleted from the
+			// inventory, or when none was ever identified.
+			Joins("LEFT JOIN devices ON devices.mac = ecgs.device_mac")
 		if req.Q != "" {
 			like := "%" + req.Q + "%"
 			q = q.Where("(patients.last_name ILIKE ? OR patients.first_name ILIKE ? OR ecgs.patient_id ILIKE ? OR ecgs.original_filename ILIKE ?)", like, like, like, like)
@@ -129,6 +149,9 @@ func (h *ECGServiceHandler) ListAll(ctx context.Context, req *apiv1.ListAllReque
 		}
 		if req.DeviceModel != "" {
 			q = q.Where("ecgs.extra->>'device_model' = ?", req.DeviceModel)
+		}
+		if req.DeviceMac != "" {
+			q = q.Where("ecgs.device_mac = ?", req.DeviceMac)
 		}
 		if req.FileFormat != "" {
 			q = q.Where("LOWER(substring(ecgs.original_filename from '\\.([^.]+)$')) = LOWER(?)", strings.TrimPrefix(req.FileFormat, "."))
@@ -154,7 +177,7 @@ func (h *ECGServiceHandler) ListAll(ctx context.Context, req *apiv1.ListAllReque
 	var rows []dto.EcgWithPatientRow
 	offset := (page - 1) * perPage
 	if err := buildQ().
-		Select("ecgs.*, patients.first_name AS patient_first_name, patients.last_name AS patient_last_name, patients.gender AS patient_gender, patients.date_of_birth AS patient_dob").
+		Select("ecgs.*, patients.first_name AS patient_first_name, patients.last_name AS patient_last_name, patients.gender AS patient_gender, patients.date_of_birth AS patient_dob, devices.label AS device_label").
 		Order("COALESCE(ecgs.recorded_at, ecgs.ingested_at) DESC").
 		Offset(int(offset)).Limit(int(perPage)).
 		Scan(&rows).Error; err != nil {
@@ -171,6 +194,7 @@ func (h *ECGServiceHandler) ListAll(ctx context.Context, req *apiv1.ListAllReque
 		"q":          req.Q,
 		"hl7_status": req.Hl7Status,
 		"vendor":     req.Vendor,
+		"device_mac": req.DeviceMac,
 		"from":       req.From,
 		"to":         req.To,
 		"page":       page,

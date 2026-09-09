@@ -84,7 +84,7 @@ type Persister struct {
 	dispatcherMu sync.RWMutex           // guards concurrent read (persist) / write (WithConnectorDispatcher)
 	oruTrigger   ecgORUTrigger          // nil when outbound ORU is disabled; guarded by oruMu
 	oruMu        sync.RWMutex           // guards concurrent read (persist) / write (WithORUTrigger)
-	publisher    events.Publisher // nil when realtime events are disabled
+	publisher    events.Publisher       // nil when realtime events are disabled
 	// postSem bounds concurrent post-persist tasks (HL7 enrichment/ORU send and
 	// connector forwarding). Without it, a burst of ingests spawns one goroutine
 	// per ECG and hammers the HIS/PACS with unbounded parallel connections.
@@ -340,6 +340,7 @@ func (p *Persister) persist(ri RoutedItem) error {
 	ecg := &models.ECG{
 		PatientID:        ri.Meta.PatientID,
 		Vendor:           ri.Meta.VendorName,
+		DeviceMAC:        ri.IngestItem.DeviceMAC,
 		FilePath:         p.volume.GetPath(fullPath),
 		OriginalFilename: ri.IngestItem.Filename,
 		ContentHash:      contentHash,

@@ -96,6 +96,9 @@ func (h *PatientServiceHandler) ListECGs(ctx context.Context, req *apiv1.ListECG
 	if req.DeviceModel != "" {
 		q = q.Where("extra->>'device_model' = ?", req.DeviceModel)
 	}
+	if req.DeviceMac != "" {
+		q = q.Where("device_mac = ?", req.DeviceMac)
+	}
 	if req.FileFormat != "" {
 		q = q.Where("LOWER(substring(original_filename from '\\.([^.]+)$')) = LOWER(?)", strings.TrimPrefix(req.FileFormat, "."))
 	}
@@ -124,6 +127,7 @@ func (h *PatientServiceHandler) ListECGs(ctx context.Context, req *apiv1.ListECG
 		req.PatientId, map[string]any{
 			"vendor":       req.Vendor,
 			"device_model": req.DeviceModel,
+			"device_mac":   req.DeviceMac,
 			"file_format":  req.FileFormat,
 			"hl7_status":   req.Hl7Status,
 			"from":         req.From,
@@ -210,8 +214,8 @@ func (h *PatientServiceHandler) Search(_ context.Context, req *apiv1.SearchReque
 	}
 
 	// ECG-level filters: keep only patients with at least one matching ECG.
-	hasECGFilters := req.Vendor != "" || req.DeviceModel != "" || req.FileFormat != "" ||
-		req.Hl7Status != "" || req.From != "" || req.To != ""
+	hasECGFilters := req.Vendor != "" || req.DeviceModel != "" || req.DeviceMac != "" ||
+		req.FileFormat != "" || req.Hl7Status != "" || req.From != "" || req.To != ""
 	if hasECGFilters {
 		sub := h.DB.Table("ecgs").Select("1").
 			Where("ecgs.patient_id = patients.patient_id")
@@ -220,6 +224,9 @@ func (h *PatientServiceHandler) Search(_ context.Context, req *apiv1.SearchReque
 		}
 		if req.DeviceModel != "" {
 			sub = sub.Where("ecgs.extra->>'device_model' = ?", req.DeviceModel)
+		}
+		if req.DeviceMac != "" {
+			sub = sub.Where("ecgs.device_mac = ?", req.DeviceMac)
 		}
 		if req.FileFormat != "" {
 			sub = sub.Where("LOWER(substring(ecgs.original_filename from '\\.([^.]+)$')) = LOWER(?)", strings.TrimPrefix(req.FileFormat, "."))

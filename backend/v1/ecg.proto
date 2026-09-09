@@ -19,6 +19,11 @@ message Ecg {
   string hl7_status = 7;  // "pending"|"success"|"hl7_exhausted"|"hl7_rejected"
   bool viewed = 8;
   string extra_json = 9;  // editable vendor metadata (JSON object)
+  // The hardware that sent the file. device_mac is empty when the ingestion
+  // source could not identify it; device_label is the operator's name for it,
+  // resolved through the device inventory and empty when it has none.
+  string device_mac = 10;
+  string device_label = 11;
 }
 
 // EcgWithPatient is one row of the cross-patient timeline (GET /ecgs): an Ecg
@@ -34,10 +39,19 @@ message EcgWithPatient {
 
 message GetFiltersRequest {}
 
+// DeviceOption is one entry of the device filter. The label is what an operator
+// reads; the MAC is what the filter sends, because a label can be renamed and a
+// saved search should not stop matching when it is.
+message DeviceOption {
+  string mac = 1;
+  string label = 2;  // empty when the device has no name yet
+}
+
 message GetFiltersResponse {
   repeated string vendors = 1;
   repeated string device_models = 2;
   repeated string file_formats = 3;
+  repeated DeviceOption devices = 4;
 }
 
 // ListAllRequest is the cross-patient ECG timeline filter set (GET /ecgs).
@@ -47,6 +61,7 @@ message ListAllRequest {
   string vendor = 3;
   string device_model = 4;
   string file_format = 5;
+  string device_mac = 10;  // one piece of hardware, by address
   string from = 6;         // YYYY-MM-DD (inclusive)
   string to = 7;           // YYYY-MM-DD (inclusive)
   int32 page = 8;

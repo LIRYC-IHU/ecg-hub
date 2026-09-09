@@ -1051,6 +1051,15 @@ function PatientDetail({
                     title={ecg.original_filename}
                   >
                     {ecg.original_filename}
+                    {/* Which machine recorded it. Shown only when the device is
+                        known: on a deployment that cannot identify hardware,
+                        every row would otherwise carry the same empty slot. */}
+                    {ecg.device_mac && (
+                      <span title={ecg.device_mac}>
+                        {" · "}
+                        {ecg.device_label || ecg.device_mac}
+                      </span>
+                    )}
                   </div>
                   <ECGTagDots
                     ecgId={String(ecg.id)}
