@@ -1919,6 +1919,9 @@ export interface UserWebhook {
   insecure_skip_verify: boolean;
   events: string[];
   vendors: string[];
+  // MAC addresses. Empty = every device. The editor shows labels and stores
+  // addresses, so renaming a device does not silently stop deliveries.
+  devices: string[];
   has_secret: boolean;
   has_auth_header: boolean;
   last_status_code: number;
@@ -1939,6 +1942,7 @@ export interface WebhookInput {
   auth_header?: string;
   events: string[];
   vendors: string[];
+  devices: string[];
 }
 
 export interface WebhookVendorOption {
@@ -1949,6 +1953,7 @@ export interface WebhookVendorOption {
 export interface WebhookOptions {
   events: string[];
   vendors: WebhookVendorOption[];
+  devices: DeviceFacet[];
 }
 
 export interface WebhookTestResult {
@@ -1968,6 +1973,7 @@ function webhookFromProto(w: {
   insecureSkipVerify: boolean;
   events: string[];
   vendors: string[];
+  devices: string[];
   hasSecret: boolean;
   hasAuthHeader: boolean;
   lastStatusCode: number;
@@ -1984,6 +1990,7 @@ function webhookFromProto(w: {
     insecure_skip_verify: w.insecureSkipVerify,
     events: w.events,
     vendors: w.vendors,
+    devices: w.devices,
     has_secret: w.hasSecret,
     has_auth_header: w.hasAuthHeader,
     last_status_code: w.lastStatusCode,
@@ -2006,6 +2013,7 @@ function webhookInputToProto(input: WebhookInput) {
     authHeader: input.auth_header,
     events: input.events,
     vendors: input.vendors,
+    devices: input.devices,
   };
 }
 
@@ -2037,9 +2045,10 @@ export async function fetchWebhookOptions(): Promise<WebhookOptions> {
         name: v.name,
         extensions: v.extensions,
       })),
+      devices: res.devices.map((d) => ({ mac: d.mac, label: d.label })),
     };
   } catch {
-    return { events: [], vendors: [] };
+    return { events: [], vendors: [], devices: [] };
   }
 }
 

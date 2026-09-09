@@ -298,8 +298,8 @@ func (d *Dispatcher) buildLinks(data PayloadData) map[string]string {
 	return links
 }
 
-// dispatch fans the event out to every enabled webhook whose event and vendor
-// filters match. Each delivery runs in its own goroutine.
+// dispatch fans the event out to every enabled webhook whose event, vendor and
+// device filters match. Each delivery runs in its own goroutine.
 func (d *Dispatcher) dispatch(p Payload) {
 	hooks, err := d.repo.ListEnabled()
 	if err != nil {
@@ -316,6 +316,14 @@ func (d *Dispatcher) dispatch(p Payload) {
 		}
 		// Vendor filter only applies when the event carries a vendor.
 		if p.Data.Vendor != "" && !matches(jsonList(hook.Vendors), p.Data.Vendor) {
+			continue
+		}
+		// Device filter, same rule: it applies only when the event says which
+		// machine sent the ECG. An event without one — a manual upload, or a
+		// deployment that cannot identify hardware — is still delivered, for
+		// the same reason the vendor filter works that way: dropping events a
+		// filter cannot judge loses them silently.
+		if p.Data.DeviceMAC != "" && !matches(jsonList(hook.Devices), p.Data.DeviceMAC) {
 			continue
 		}
 		d.wg.Add(1)

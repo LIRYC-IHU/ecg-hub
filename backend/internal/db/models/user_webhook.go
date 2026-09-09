@@ -58,6 +58,10 @@ type UserWebhook struct {
 	// Vendors restricts delivery to ECGs from these modules (e.g. "mindray",
 	// "philips", "dicom"). Empty array = all vendors.
 	Vendors datatypes.JSON `gorm:"type:jsonb;not null;default:'[]'" json:"vendors" swaggertype:"array,string"`
+	// Devices restricts delivery to ECGs sent by these machines, by MAC
+	// address. Empty array = every device. Stored normalised (lower case, full
+	// bytes) so it compares against the address the payload carries.
+	Devices datatypes.JSON `gorm:"type:jsonb;not null;default:'[]'" json:"devices" swaggertype:"array,string"`
 
 	// Delivery feedback shown in the UI — updated best-effort by the dispatcher.
 	LastStatusCode  int        `gorm:"not null;default:0" json:"last_status_code"`

@@ -851,7 +851,8 @@
       "hl7.exhausted": "HL7 retries exhausted",
       "hl7.rejected": "HL7 rejected",
       "ecg.duplicate": "ECG duplicate (skipped)"
-    }
+    },
+    "devicesLabel": "Devices"
   },
   "viewer": {
     "theme": "Theme",

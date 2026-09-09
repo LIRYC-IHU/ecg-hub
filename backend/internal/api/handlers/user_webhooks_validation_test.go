@@ -50,3 +50,48 @@ func TestValidateWebhookRequest_EventsAndVendorsTogether(t *testing.T) {
 		t.Errorf("event validation lost: got %q", got)
 	}
 }
+
+// A filter that matches nothing stops every delivery without an error, a failed
+// delivery or a history entry — the silent failure the vendor allow-list exists
+// to prevent. For a MAC the way in is the casing: a person reads it off a label
+// in upper case, the payload carries it lower.
+func TestValidateWebhookRequest_NormalisesTheDeviceFilter(t *testing.T) {
+	req := &webhookRequest{
+		Name:    "Cardio B receiver",
+		URL:     "https://receiver.example.org/hook",
+		Devices: []string{"00:0E:10:19:44:8A", "0:e:10:19:44:8b"},
+	}
+	if msg := validateWebhookRequest(req, nil); msg != "" {
+		t.Fatalf("validate: %s", msg)
+	}
+	want := []string{"00:0e:10:19:44:8a", "00:0e:10:19:44:8b"}
+	for i, w := range want {
+		if req.Devices[i] != w {
+			t.Errorf("Devices[%d] = %q, want %q", i, req.Devices[i], w)
+		}
+	}
+}
+
+func TestValidateWebhookRequest_RejectsANonAddress(t *testing.T) {
+	req := &webhookRequest{
+		Name:    "Cardio B receiver",
+		URL:     "https://receiver.example.org/hook",
+		Devices: []string{"cardio-b"},
+	}
+	if msg := validateWebhookRequest(req, nil); msg == "" {
+		t.Error("a device filter that is not a MAC address must be rejected on write")
+	}
+}
+
+// A machine can be given a webhook before it is ever plugged in, so an address
+// absent from the inventory is not an error.
+func TestValidateWebhookRequest_AcceptsAnUnenrolledAddress(t *testing.T) {
+	req := &webhookRequest{
+		Name:    "Cardio B receiver",
+		URL:     "https://receiver.example.org/hook",
+		Devices: []string{"aa:bb:cc:dd:ee:ff"},
+	}
+	if msg := validateWebhookRequest(req, nil); msg != "" {
+		t.Errorf("validate = %q, want an unenrolled but well-formed address to pass", msg)
+	}
+}

@@ -29,8 +29,9 @@ type Webhook struct {
 	Url                string                 `protobuf:"bytes,3,opt,name=url,proto3" json:"url,omitempty"`
 	Enabled            bool                   `protobuf:"varint,4,opt,name=enabled,proto3" json:"enabled,omitempty"`
 	InsecureSkipVerify bool                   `protobuf:"varint,5,opt,name=insecure_skip_verify,json=insecureSkipVerify,proto3" json:"insecure_skip_verify,omitempty"`
-	Events             []string               `protobuf:"bytes,6,rep,name=events,proto3" json:"events,omitempty"`   // empty = all
-	Vendors            []string               `protobuf:"bytes,7,rep,name=vendors,proto3" json:"vendors,omitempty"` // empty = all
+	Events             []string               `protobuf:"bytes,6,rep,name=events,proto3" json:"events,omitempty"`    // empty = all
+	Vendors            []string               `protobuf:"bytes,7,rep,name=vendors,proto3" json:"vendors,omitempty"`  // empty = all
+	Devices            []string               `protobuf:"bytes,15,rep,name=devices,proto3" json:"devices,omitempty"` // MAC addresses; empty = every device
 	HasSecret          bool                   `protobuf:"varint,8,opt,name=has_secret,json=hasSecret,proto3" json:"has_secret,omitempty"`
 	HasAuthHeader      bool                   `protobuf:"varint,9,opt,name=has_auth_header,json=hasAuthHeader,proto3" json:"has_auth_header,omitempty"`
 	LastStatusCode     int32                  `protobuf:"varint,10,opt,name=last_status_code,json=lastStatusCode,proto3" json:"last_status_code,omitempty"`
@@ -121,6 +122,13 @@ func (x *Webhook) GetVendors() []string {
 	return nil
 }
 
+func (x *Webhook) GetDevices() []string {
+	if x != nil {
+		return x.Devices
+	}
+	return nil
+}
+
 func (x *Webhook) GetHasSecret() bool {
 	if x != nil {
 		return x.HasSecret
@@ -183,6 +191,7 @@ type WebhookInput struct {
 	AuthHeader         *string                `protobuf:"bytes,6,opt,name=auth_header,json=authHeader,proto3,oneof" json:"auth_header,omitempty"`
 	Events             []string               `protobuf:"bytes,7,rep,name=events,proto3" json:"events,omitempty"`
 	Vendors            []string               `protobuf:"bytes,8,rep,name=vendors,proto3" json:"vendors,omitempty"`
+	Devices            []string               `protobuf:"bytes,9,rep,name=devices,proto3" json:"devices,omitempty"` // MAC addresses; empty = every device
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
 }
@@ -269,6 +278,13 @@ func (x *WebhookInput) GetEvents() []string {
 func (x *WebhookInput) GetVendors() []string {
 	if x != nil {
 		return x.Vendors
+	}
+	return nil
+}
+
+func (x *WebhookInput) GetDevices() []string {
+	if x != nil {
+		return x.Devices
 	}
 	return nil
 }
@@ -812,9 +828,12 @@ func (*GetWebhookOptionsRequest) Descriptor() ([]byte, []int) {
 }
 
 type GetWebhookOptionsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Events        []string               `protobuf:"bytes,1,rep,name=events,proto3" json:"events,omitempty"`
-	Vendors       []*VendorOption        `protobuf:"bytes,2,rep,name=vendors,proto3" json:"vendors,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Events  []string               `protobuf:"bytes,1,rep,name=events,proto3" json:"events,omitempty"`
+	Vendors []*VendorOption        `protobuf:"bytes,2,rep,name=vendors,proto3" json:"vendors,omitempty"`
+	// Every enrolled device, not only the ones that have sent something: a
+	// webhook may be configured for a machine before it is first used.
+	Devices       []*DeviceOption `protobuf:"bytes,3,rep,name=devices,proto3" json:"devices,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -863,11 +882,18 @@ func (x *GetWebhookOptionsResponse) GetVendors() []*VendorOption {
 	return nil
 }
 
+func (x *GetWebhookOptionsResponse) GetDevices() []*DeviceOption {
+	if x != nil {
+		return x.Devices
+	}
+	return nil
+}
+
 var File_v1_webhook_proto protoreflect.FileDescriptor
 
 const file_v1_webhook_proto_rawDesc = "" +
 	"\n" +
-	"\x10v1/webhook.proto\x12\vgrpc.api.v1\"\xb7\x03\n" +
+	"\x10v1/webhook.proto\x12\vgrpc.api.v1\x1a\fv1/ecg.proto\"\xd1\x03\n" +
 	"\aWebhook\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x10\n" +
@@ -875,7 +901,8 @@ const file_v1_webhook_proto_rawDesc = "" +
 	"\aenabled\x18\x04 \x01(\bR\aenabled\x120\n" +
 	"\x14insecure_skip_verify\x18\x05 \x01(\bR\x12insecureSkipVerify\x12\x16\n" +
 	"\x06events\x18\x06 \x03(\tR\x06events\x12\x18\n" +
-	"\avendors\x18\a \x03(\tR\avendors\x12\x1d\n" +
+	"\avendors\x18\a \x03(\tR\avendors\x12\x18\n" +
+	"\adevices\x18\x0f \x03(\tR\adevices\x12\x1d\n" +
 	"\n" +
 	"has_secret\x18\b \x01(\bR\thasSecret\x12&\n" +
 	"\x0fhas_auth_header\x18\t \x01(\bR\rhasAuthHeader\x12(\n" +
@@ -887,7 +914,7 @@ const file_v1_webhook_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\r \x01(\tR\tcreatedAt\x12\x1d\n" +
 	"\n" +
-	"updated_at\x18\x0e \x01(\tR\tupdatedAt\"\xbf\x02\n" +
+	"updated_at\x18\x0e \x01(\tR\tupdatedAt\"\xd9\x02\n" +
 	"\fWebhookInput\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x10\n" +
 	"\x03url\x18\x02 \x01(\tR\x03url\x12\x1d\n" +
@@ -897,7 +924,8 @@ const file_v1_webhook_proto_rawDesc = "" +
 	"\vauth_header\x18\x06 \x01(\tH\x03R\n" +
 	"authHeader\x88\x01\x01\x12\x16\n" +
 	"\x06events\x18\a \x03(\tR\x06events\x12\x18\n" +
-	"\avendors\x18\b \x03(\tR\avendorsB\n" +
+	"\avendors\x18\b \x03(\tR\avendors\x12\x18\n" +
+	"\adevices\x18\t \x03(\tR\adevicesB\n" +
 	"\n" +
 	"\b_enabledB\x17\n" +
 	"\x15_insecure_skip_verifyB\t\n" +
@@ -930,10 +958,11 @@ const file_v1_webhook_proto_rawDesc = "" +
 	"\n" +
 	"extensions\x18\x02 \x03(\tR\n" +
 	"extensions\"\x1a\n" +
-	"\x18GetWebhookOptionsRequest\"h\n" +
+	"\x18GetWebhookOptionsRequest\"\x9d\x01\n" +
 	"\x19GetWebhookOptionsResponse\x12\x16\n" +
 	"\x06events\x18\x01 \x03(\tR\x06events\x123\n" +
-	"\avendors\x18\x02 \x03(\v2\x19.grpc.api.v1.VendorOptionR\avendors2\xa8\x04\n" +
+	"\avendors\x18\x02 \x03(\v2\x19.grpc.api.v1.VendorOptionR\avendors\x123\n" +
+	"\adevices\x18\x03 \x03(\v2\x19.grpc.api.v1.DeviceOptionR\adevices2\xa8\x04\n" +
 	"\x0eWebhookService\x12]\n" +
 	"\n" +
 	"GetOptions\x12%.grpc.api.v1.GetWebhookOptionsRequest\x1a&.grpc.api.v1.GetWebhookOptionsResponse\"\x00\x12U\n" +
@@ -973,6 +1002,7 @@ var file_v1_webhook_proto_goTypes = []any{
 	(*VendorOption)(nil),              // 12: grpc.api.v1.VendorOption
 	(*GetWebhookOptionsRequest)(nil),  // 13: grpc.api.v1.GetWebhookOptionsRequest
 	(*GetWebhookOptionsResponse)(nil), // 14: grpc.api.v1.GetWebhookOptionsResponse
+	(*DeviceOption)(nil),              // 15: grpc.api.v1.DeviceOption
 }
 var file_v1_webhook_proto_depIdxs = []int32{
 	0,  // 0: grpc.api.v1.ListWebhooksResponse.webhooks:type_name -> grpc.api.v1.Webhook
@@ -981,23 +1011,24 @@ var file_v1_webhook_proto_depIdxs = []int32{
 	1,  // 3: grpc.api.v1.UpdateWebhookRequest.input:type_name -> grpc.api.v1.WebhookInput
 	0,  // 4: grpc.api.v1.UpdateWebhookResponse.webhook:type_name -> grpc.api.v1.Webhook
 	12, // 5: grpc.api.v1.GetWebhookOptionsResponse.vendors:type_name -> grpc.api.v1.VendorOption
-	13, // 6: grpc.api.v1.WebhookService.GetOptions:input_type -> grpc.api.v1.GetWebhookOptionsRequest
-	2,  // 7: grpc.api.v1.WebhookService.ListWebhooks:input_type -> grpc.api.v1.ListWebhooksRequest
-	4,  // 8: grpc.api.v1.WebhookService.CreateWebhook:input_type -> grpc.api.v1.CreateWebhookRequest
-	6,  // 9: grpc.api.v1.WebhookService.UpdateWebhook:input_type -> grpc.api.v1.UpdateWebhookRequest
-	8,  // 10: grpc.api.v1.WebhookService.DeleteWebhook:input_type -> grpc.api.v1.DeleteWebhookRequest
-	10, // 11: grpc.api.v1.WebhookService.TestWebhook:input_type -> grpc.api.v1.TestWebhookRequest
-	14, // 12: grpc.api.v1.WebhookService.GetOptions:output_type -> grpc.api.v1.GetWebhookOptionsResponse
-	3,  // 13: grpc.api.v1.WebhookService.ListWebhooks:output_type -> grpc.api.v1.ListWebhooksResponse
-	5,  // 14: grpc.api.v1.WebhookService.CreateWebhook:output_type -> grpc.api.v1.CreateWebhookResponse
-	7,  // 15: grpc.api.v1.WebhookService.UpdateWebhook:output_type -> grpc.api.v1.UpdateWebhookResponse
-	9,  // 16: grpc.api.v1.WebhookService.DeleteWebhook:output_type -> grpc.api.v1.DeleteWebhookResponse
-	11, // 17: grpc.api.v1.WebhookService.TestWebhook:output_type -> grpc.api.v1.TestWebhookResponse
-	12, // [12:18] is the sub-list for method output_type
-	6,  // [6:12] is the sub-list for method input_type
-	6,  // [6:6] is the sub-list for extension type_name
-	6,  // [6:6] is the sub-list for extension extendee
-	0,  // [0:6] is the sub-list for field type_name
+	15, // 6: grpc.api.v1.GetWebhookOptionsResponse.devices:type_name -> grpc.api.v1.DeviceOption
+	13, // 7: grpc.api.v1.WebhookService.GetOptions:input_type -> grpc.api.v1.GetWebhookOptionsRequest
+	2,  // 8: grpc.api.v1.WebhookService.ListWebhooks:input_type -> grpc.api.v1.ListWebhooksRequest
+	4,  // 9: grpc.api.v1.WebhookService.CreateWebhook:input_type -> grpc.api.v1.CreateWebhookRequest
+	6,  // 10: grpc.api.v1.WebhookService.UpdateWebhook:input_type -> grpc.api.v1.UpdateWebhookRequest
+	8,  // 11: grpc.api.v1.WebhookService.DeleteWebhook:input_type -> grpc.api.v1.DeleteWebhookRequest
+	10, // 12: grpc.api.v1.WebhookService.TestWebhook:input_type -> grpc.api.v1.TestWebhookRequest
+	14, // 13: grpc.api.v1.WebhookService.GetOptions:output_type -> grpc.api.v1.GetWebhookOptionsResponse
+	3,  // 14: grpc.api.v1.WebhookService.ListWebhooks:output_type -> grpc.api.v1.ListWebhooksResponse
+	5,  // 15: grpc.api.v1.WebhookService.CreateWebhook:output_type -> grpc.api.v1.CreateWebhookResponse
+	7,  // 16: grpc.api.v1.WebhookService.UpdateWebhook:output_type -> grpc.api.v1.UpdateWebhookResponse
+	9,  // 17: grpc.api.v1.WebhookService.DeleteWebhook:output_type -> grpc.api.v1.DeleteWebhookResponse
+	11, // 18: grpc.api.v1.WebhookService.TestWebhook:output_type -> grpc.api.v1.TestWebhookResponse
+	13, // [13:19] is the sub-list for method output_type
+	7,  // [7:13] is the sub-list for method input_type
+	7,  // [7:7] is the sub-list for extension type_name
+	7,  // [7:7] is the sub-list for extension extendee
+	0,  // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_v1_webhook_proto_init() }
@@ -1005,6 +1036,7 @@ func file_v1_webhook_proto_init() {
 	if File_v1_webhook_proto != nil {
 		return
 	}
+	file_v1_ecg_proto_init()
 	file_v1_webhook_proto_msgTypes[1].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

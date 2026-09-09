@@ -1,6 +1,8 @@
 syntax = "proto3";
 package grpc.api.v1;
 
+import "v1/ecg.proto"; // DeviceOption, shared with the ECG search facets
+
 // Per-user outbound webhooks. Protected — requires webhook.manage. Secrets and
 // auth-header values are encrypted at rest and NEVER returned; has_secret /
 // has_auth_header tell the UI whether they are configured.
@@ -14,6 +16,7 @@ message Webhook {
   bool insecure_skip_verify = 5;
   repeated string events = 6;   // empty = all
   repeated string vendors = 7;  // empty = all
+  repeated string devices = 15; // MAC addresses; empty = every device
   bool has_secret = 8;
   bool has_auth_header = 9;
   int32 last_status_code = 10;
@@ -35,6 +38,7 @@ message WebhookInput {
   optional string auth_header = 6;
   repeated string events = 7;
   repeated string vendors = 8;
+  repeated string devices = 9;  // MAC addresses; empty = every device
 }
 
 message ListWebhooksRequest {}
@@ -81,6 +85,9 @@ message GetWebhookOptionsRequest {}
 message GetWebhookOptionsResponse {
   repeated string events = 1;
   repeated VendorOption vendors = 2;
+  // Every enrolled device, not only the ones that have sent something: a
+  // webhook may be configured for a machine before it is first used.
+  repeated DeviceOption devices = 3;
 }
 
 service WebhookService {

@@ -221,7 +221,8 @@ export const API_SECTIONS: ApiSection[] = [
         permission: "webhook.manage",
         response: `{
   "events": ["ecg.ingested","ecg.unidentified","ecg.quarantined","ecg.duplicate","hl7.exhausted","hl7.rejected"],
-  "vendors": [ { "name": "philips", "extensions": [".xml"] } ]
+  "vendors": [ { "name": "philips", "extensions": [".xml"] } ],
+  "devices": [ { "mac": "00:0e:10:19:44:8a", "label": "Cardio B, room 214" } ]
 }`,
       },
       {
@@ -239,6 +240,7 @@ export const API_SECTIONS: ApiSection[] = [
     "enabled": true,
     "events": ["ecg.ingested"],
     "vendors": ["philips"],
+    "devices": ["00:0e:10:19:44:8a"],
     "has_secret": true,
     "has_auth_header": false,
     "last_status_code": 200,
@@ -259,6 +261,7 @@ export const API_SECTIONS: ApiSection[] = [
           { name: "auth_header", in: "body", type: "string", description: "Sent as-is in the Authorization header, e.g. \"Bearer …\"." },
           { name: "events", in: "body", type: "string[]", description: "Empty = every event." },
           { name: "vendors", in: "body", type: "string[]", description: "Empty = every vendor. Unknown names are rejected." },
+          { name: "devices", in: "body", type: "string[]", description: "MAC addresses; empty = every device. Stored normalised, so the casing you send does not matter. Anything that is not an address is rejected — a filter matching nothing would stop deliveries with no error to show for it." },
           { name: "enabled", in: "body", type: "bool", description: "Defaults to true." },
           { name: "insecure_skip_verify", in: "body", type: "bool", description: "HTTPS receivers with a self-signed certificate only." },
         ],
