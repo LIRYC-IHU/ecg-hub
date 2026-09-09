@@ -156,6 +156,9 @@ func StartFTPFromDB(
 	if g := module.ActiveDeviceGate(); g != nil {
 		server.WithDeviceGate(g)
 	}
+	if a := module.ActiveAuditWriter(); a != nil {
+		server.WithAuditWriter(a)
+	}
 
 	// Re-wire the FTP file-received hook: a UI-triggered restart builds a fresh
 	// server instance that would otherwise lose the hook, silently breaking

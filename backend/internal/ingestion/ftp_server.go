@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net"
@@ -16,6 +17,9 @@ import (
 	"time"
 
 	ftpserver "github.com/fclairamb/ftpserverlib"
+	"gorm.io/datatypes"
+
+	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 
 	"github.com/LIRYC-IHU/ecg-hub/internal/certs"
 	"github.com/LIRYC-IHU/ecg-hub/internal/device"
@@ -61,7 +65,19 @@ type Server struct {
 	srv            *ftpserver.FtpServer
 	onFileReceived func(filename string) // optional hook, called after each successful upload
 	auth           *authThrottle
-	gate           deviceGate // optional; nil disables the device whitelist
+	gate           deviceGate  // optional; nil disables the device whitelist
+	audit          auditWriter // optional; nil disables the auth-failure trail
+}
+
+// ActionFTPAuthFailed is the audit action for a rejected FTP login.
+const ActionFTPAuthFailed = "ftp_auth_failed"
+
+// WithAuditWriter records refused FTP logins. The device whitelist keeps its
+// own trail for hardware it turns away; this one is for the credentials, which
+// the whitelist never sees. Returns s for chaining.
+func (s *Server) WithAuditWriter(a auditWriter) *Server {
+	s.audit = a
+	return s
 }
 
 // WithDeviceGate attaches the device whitelist. Returns s for chaining.
@@ -187,6 +203,7 @@ func (s *Server) AuthUser(cc ftpserver.ClientContext, user, pass string) (ftpser
 		count, delay := s.auth.fail(addr)
 		appmetrics.FTPAuthFailures.Inc()
 		slog.Warn("ftp: authentication failed", "user", user, "remote_host", addr, "failures", count, "delay", delay)
+		s.recordAuthFailure(user, addr, count)
 		s.auth.sleep(delay)
 		return nil, fmt.Errorf("ftp: invalid credentials")
 	}
@@ -196,6 +213,8 @@ func (s *Server) AuthUser(cc ftpserver.ClientContext, user, pass string) (ftpser
 	// is the last point before the session can transfer anything, and the
 	// decision it produces has to travel with the session anyway — a device
 	// being paired uploads normally and is sorted out downstream.
+	// The gate keeps its own audit trail for the hardware it refuses, so there
+	// is nothing to write here.
 	id, decision := s.gateDecision(cc)
 	if decision == device.Deny {
 		slog.Warn("ftp: device not approved — session refused",
@@ -228,6 +247,35 @@ func (s *Server) gateDecision(cc ftpserver.ClientContext) (device.Identity, devi
 	}
 	id := s.gate.Identify(addr, "ftp")
 	return id, s.gate.Decide(context.Background(), id)
+}
+
+// recordAuthFailure writes a rejected login to the audit log.
+//
+// The throttle above is what bounds the volume: failures past the free
+// attempts are answered more and more slowly, so a password sweep cannot turn
+// this into unbounded growth of an append-only table.
+func (s *Server) recordAuthFailure(user, addr string, count int) {
+	if s.audit == nil {
+		return
+	}
+	details, err := json.Marshal(map[string]any{
+		"user":        user,
+		"remote_host": addr,
+		"failures":    count,
+	})
+	if err != nil {
+		return
+	}
+	entry := &models.AuditLog{
+		UserID:     "system",
+		Action:     ActionFTPAuthFailed,
+		ResourceID: addr,
+		Details:    datatypes.JSON(details),
+	}
+	if err := s.audit.Insert(entry); err != nil {
+		slog.Warn("ftp: cannot record the failed login in the audit log",
+			"remote_host", addr, "error", err)
+	}
 }
 
 // ─── authentication throttle ─────────────────────────────────────────────────

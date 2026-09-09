@@ -523,10 +523,12 @@ func main() {
 	deviceResolver := device.NewResolver()
 	devicePairing := device.NewPairing(deviceRepo).WithPublisher(eventHub)
 	deviceGate := device.NewGate(deviceResolver, deviceRepo, moduleSettingsRepo).
+		WithAuditWriter(repository.NewAuditRepository(gormDB)).
 		WithDecisionHook(func(id device.Identity, d device.Decision) {
 			appmetrics.DeviceGate.WithLabelValues(id.Source, d.String()).Inc()
 		})
 	module.SetDeviceGate(deviceGate)
+	module.SetAuditWriter(repository.NewAuditRepository(gormDB))
 
 	// Outbound HL7 ORU: expose the manual send-result route (guarded by ecg.send_result).
 	router.WithORUService(hl7ORUService)

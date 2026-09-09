@@ -57,6 +57,12 @@ type ActionKey =
   | "webhook_deleted"
   | "auth_config_saved"
   | "auth_config_deleted"
+  | "device_approved"
+  | "device_revoked"
+  | "device_deleted"
+  | "device_whitelist_settings"
+  | "device_refused"
+  | "ftp_auth_failed"
   | "connector_config_saved"
   | "connector_config_deleted"
   | "module_started"
@@ -116,6 +122,14 @@ const actionConfig: Record<
   hl7_settings_saved: { icon: Settings, label: "hl7_settings_saved", cls: warning },
   hl7_bulk_retry: { icon: RefreshCw, label: "hl7_bulk_retry", cls: warning },
   system_initialized: { icon: Power, label: "system_initialized", cls: success },
+  // Ingestion devices. The refusals are the ones worth spotting in a list: a
+  // device nobody enrolled, or one that was revoked and keeps calling.
+  device_approved: { icon: Plug, label: "device_approved", cls: success },
+  device_revoked: { icon: Plug, label: "device_revoked", cls: destructive },
+  device_deleted: { icon: Trash2, label: "device_deleted", cls: destructive },
+  device_whitelist_settings: { icon: Settings, label: "device_whitelist_settings", cls: warning },
+  device_refused: { icon: Shield, label: "device_refused", cls: destructive },
+  ftp_auth_failed: { icon: LogIn, label: "ftp_auth_failed", cls: destructive },
 };
 
 // Export scope tiers — group actions by sensitivity for filtered JSON exports.
@@ -138,6 +152,13 @@ const SCOPE_ACTIONS: Record<Exclude<ExportScope, "all">, Set<string>> = {
     "api_key_deleted",
     "auth_config_saved",
     "auth_config_deleted",
+    // Who may put data into the pipeline, and who tried and could not.
+    "device_approved",
+    "device_revoked",
+    "device_deleted",
+    "device_whitelist_settings",
+    "device_refused",
+    "ftp_auth_failed",
     "delete",
     "system_initialized",
   ]),

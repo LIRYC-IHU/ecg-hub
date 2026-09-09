@@ -2,6 +2,7 @@ package device
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -240,5 +241,45 @@ func TestSettingsPairingActive(t *testing.T) {
 		if got := c.set.PairingActive(now); got != c.want {
 			t.Errorf("%s: PairingActive = %v, want %v", c.name, got, c.want)
 		}
+	}
+}
+
+// Every refusal reaches the audit trail, whichever port it arrived on and
+// whether it was the opening decision or a mid-session re-check.
+func TestGateAuditsRefusals(t *testing.T) {
+	w := &fakeAudit{}
+	store := &fakeStore{status: map[string]string{
+		known.MAC:           models.DeviceStatusRevoked,
+		"aa:bb:cc:dd:ee:ff": "", // never seen
+	}}
+	g := gateWith(store, Settings{Enabled: true}).WithAuditWriter(w)
+	ctx := context.Background()
+
+	g.Decide(ctx, known)
+	g.Recheck(ctx, Identity{MAC: "aa:bb:cc:dd:ee:ff", IP: "10.27.26.99", Source: "dicom"})
+
+	if w.count() != 2 {
+		t.Fatalf("wrote %d entries, want one per refusal", w.count())
+	}
+	reasons := map[string]bool{}
+	for _, e := range w.entries {
+		var d map[string]any
+		if err := json.Unmarshal(e.Details, &d); err != nil {
+			t.Fatal(err)
+		}
+		reasons[d["reason"].(string)] = true
+	}
+	if !reasons["revoked"] || !reasons["not_enrolled"] {
+		t.Errorf("reasons = %v, want both revoked and not_enrolled", reasons)
+	}
+}
+
+// An allowed device leaves no refusal behind.
+func TestGateDoesNotAuditAllowedDevices(t *testing.T) {
+	w := &fakeAudit{}
+	store := &fakeStore{status: map[string]string{known.MAC: models.DeviceStatusApproved}}
+	gateWith(store, Settings{Enabled: true}).WithAuditWriter(w).Decide(context.Background(), known)
+	if w.count() != 0 {
+		t.Errorf("wrote %d entries for an approved device, want 0", w.count())
 	}
 }

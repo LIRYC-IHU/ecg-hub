@@ -105,6 +105,8 @@ type Gate struct {
 	settings SettingsSource
 	// onDecision is an optional hook for metrics and the pairing feed.
 	onDecision func(Identity, Decision)
+	// audit records refused connections; nil disables the trail.
+	audit *refusalAudit
 
 	// Evidence for Health: how many incoming connections carried a hardware
 	// identity and how many did not.
@@ -147,6 +149,13 @@ func (g *Gate) Health() Health {
 // directly to Decide.
 func NewGate(resolver *Resolver, store Store, settings SettingsSource) *Gate {
 	return &Gate{resolver: resolver, store: store, settings: settings}
+}
+
+// WithAuditWriter records every refused connection in the audit log — a device
+// that was revoked, or one nobody has enrolled. Returns g for chaining.
+func (g *Gate) WithAuditWriter(w AuditWriter) *Gate {
+	g.audit = newRefusalAudit(w)
+	return g
 }
 
 // WithDecisionHook registers a callback fired after every decision. Returns g
@@ -254,6 +263,7 @@ func (g *Gate) decide(ctx context.Context, id Identity, record bool) Decision {
 		if record {
 			g.record(ctx, id, "")
 		}
+		g.audit.record(id, "revoked")
 		return Deny
 	}
 
@@ -269,6 +279,10 @@ func (g *Gate) decide(ctx context.Context, id Identity, record bool) Decision {
 	if set.PairingActive(time.Now()) {
 		return Pair
 	}
+	// Unknown hardware, and no window open to identify it through. Worth a
+	// trail: this is either a device somebody forgot to enrol, or one that has
+	// no business on the port.
+	g.audit.record(id, "not_enrolled")
 	return Deny
 }
 

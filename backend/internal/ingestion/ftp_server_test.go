@@ -3,14 +3,17 @@ package ingestion
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"log/slog"
 	"net"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	ftpserver "github.com/fclairamb/ftpserverlib"
 
+	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 	"github.com/LIRYC-IHU/ecg-hub/internal/device"
 	"github.com/spf13/afero"
 )
@@ -572,4 +575,67 @@ func TestClientDriver_ApprovedMidSession_IngestsNormally(t *testing.T) {
 	if item.Pairing {
 		t.Error("the file must be ingested, not held for pairing, once the device is approved")
 	}
+}
+
+// Rejected credentials belong in the trail too: the whitelist never sees them,
+// so without this a password sweep leaves nothing behind but a metric.
+func TestServer_AuthUser_FailedLoginIsAudited(t *testing.T) {
+	audit := &recordingAudit{}
+	s := New(testConfig("user", "pass", false), NewIngestQueue(1))
+	s.WithAuditWriter(audit)
+	noSleep(s)
+
+	if _, err := s.AuthUser(clientFrom(t, "10.27.26.90:51234"), "user", "wrong"); err == nil {
+		t.Fatal("AuthUser should reject the wrong password")
+	}
+
+	entries := audit.recorded()
+	if len(entries) != 1 {
+		t.Fatalf("wrote %d entries, want 1", len(entries))
+	}
+	e := entries[0]
+	if e.Action != ActionFTPAuthFailed || e.UserID != "system" {
+		t.Errorf("entry = %+v, want a system %s", e, ActionFTPAuthFailed)
+	}
+	if e.ResourceID != "10.27.26.90" {
+		t.Errorf("ResourceID = %q, want the remote host", e.ResourceID)
+	}
+	var details map[string]any
+	if err := json.Unmarshal(e.Details, &details); err != nil {
+		t.Fatal(err)
+	}
+	if details["user"] != "user" || details["failures"] != float64(1) {
+		t.Errorf("details = %v, want the attempted user and the running count", details)
+	}
+}
+
+func TestServer_AuthUser_SuccessIsNotAudited(t *testing.T) {
+	audit := &recordingAudit{}
+	s := New(testConfig("user", "pass", false), NewIngestQueue(1))
+	s.WithAuditWriter(audit)
+
+	if _, err := s.AuthUser(clientFrom(t, "10.27.26.90:51234"), "user", "pass"); err != nil {
+		t.Fatalf("AuthUser: %v", err)
+	}
+	if n := len(audit.recorded()); n != 0 {
+		t.Errorf("wrote %d entries for a successful login, want 0", n)
+	}
+}
+
+type recordingAudit struct {
+	mu      sync.Mutex
+	entries []models.AuditLog
+}
+
+func (a *recordingAudit) Insert(e *models.AuditLog) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.entries = append(a.entries, *e)
+	return nil
+}
+
+func (a *recordingAudit) recorded() []models.AuditLog {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return append([]models.AuditLog(nil), a.entries...)
 }

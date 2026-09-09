@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 	"github.com/LIRYC-IHU/ecg-hub/internal/device"
 )
 
@@ -26,6 +27,33 @@ var (
 	deviceGateMu sync.RWMutex
 	deviceGate   DeviceGate
 )
+
+// AuditWriter records audit entries. Implemented by repository.AuditRepository.
+type AuditWriter interface {
+	Insert(entry *models.AuditLog) error
+}
+
+var (
+	auditWriterMu sync.RWMutex
+	auditWriter   AuditWriter
+)
+
+// SetAuditWriter records the audit writer the ingestion servers should use.
+// Shared here for the same reason as the gate: the FTP server is rebuilt on
+// every UI-triggered restart, and its constructor takes settings, not
+// dependencies.
+func SetAuditWriter(a AuditWriter) {
+	auditWriterMu.Lock()
+	defer auditWriterMu.Unlock()
+	auditWriter = a
+}
+
+// ActiveAuditWriter returns the registered writer, or nil when none is wired.
+func ActiveAuditWriter() AuditWriter {
+	auditWriterMu.RLock()
+	defer auditWriterMu.RUnlock()
+	return auditWriter
+}
 
 // SetDeviceGate records the gate modules should consult. Safe for concurrent
 // use; called once from main before modules start.
