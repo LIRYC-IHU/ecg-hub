@@ -87,7 +87,8 @@ func Load(cfgPath string) (*Config, error) {
 }
 
 // applyEnvOverrides applies the environment variables that override config.yaml:
-// METRICS_ENABLED, METRICS_PORT, INGEST_MAX_FILE_BYTES and WEBHOOKS_RETENTION_DAYS.
+// SERVER_HOST, METRICS_ENABLED, METRICS_HOST, METRICS_PORT, INGEST_MAX_FILE_BYTES
+// and WEBHOOKS_RETENTION_DAYS.
 //
 // An unparsable value is ignored with a warning rather than fatal: none of these
 // is worth refusing to boot an ECG pipeline over — a monitoring gap or a default
@@ -100,6 +101,12 @@ func applyEnvOverrides(cfg *Config) {
 		} else {
 			slog.Warn("config: ignoring METRICS_ENABLED — not a boolean", "value", raw)
 		}
+	}
+	if raw, ok := os.LookupEnv("SERVER_HOST"); ok {
+		cfg.Server.Host = strings.TrimSpace(raw)
+	}
+	if raw, ok := os.LookupEnv("METRICS_HOST"); ok {
+		cfg.Metrics.Host = strings.TrimSpace(raw)
 	}
 	if raw, ok := os.LookupEnv("METRICS_PORT"); ok {
 		if port, err := strconv.Atoi(strings.TrimSpace(raw)); err == nil {

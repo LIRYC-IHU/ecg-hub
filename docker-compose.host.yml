@@ -1,0 +1,152 @@
+# ECG Hub — host networking.
+#
+# Use instead of docker-compose.yml when the MAC device whitelist has to work
+# (Admin > Devices). A container on a bridge network has its own network
+# namespace: its ARP table lists the other containers and never the hardware on
+# the site network, and every device arrives from the Docker gateway, so the
+# whitelist identifies nothing and — failing open — lets everything through.
+# Sharing the host namespace gives the backend the real client addresses and
+# the real neighbour table.
+#
+#   docker compose -f docker-compose.host.yml up -d
+#
+# What this costs, and there is no way around it: nothing publishes ports any
+# more, so nothing performs the privileged bind on 21. Add the redirect on the
+# host and persist it —
+#
+#   iptables -t nat -A PREROUTING -p tcp --dport 21 -j REDIRECT --to-port 2121
+#
+# and see docs/deploy-prod.md for why it must be DNAT and never socat, haproxy
+# or an nginx stream block.
+
+services:
+  # Bundled PostgreSQL. Comment out this service, the `depends_on` below and the
+  # `postgres-data` volume when the site provides its own database.
+  db:
+    image: postgres:18.6-alpine
+    restart: unless-stopped
+    # The database stays on its own bridge network and is published on loopback
+    # only: the backend now shares the host namespace, so it reaches Postgres at
+    # 127.0.0.1:5432 rather than by service name. Point DATABASE_URL there.
+    networks:
+      - ecg-hub
+    ports:
+      - "127.0.0.1:5432:5432"
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      POSTGRES_DB: ${DB_NAME:-ecghub}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME:-ecghub}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    network_mode: host
+    depends_on:
+      db:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    # No ports: block — network_mode: host publishes nothing and maps nothing.
+    # The module binds the site-facing ports itself (2121 FTP, 30000-30100
+    # passive, 4242 DICOM, 30003 ECTP), and Admin > Modules is where they are
+    # set. Port 21 needs the host redirect described at the top of this file.
+    #
+    # The two ports that must NOT be reachable from the site network are bound
+    # to loopback below, because the mappings that used to confine them are
+    # gone: 4444 (the API, which belongs behind nginx and its headers) and 9091
+    # (the metrics endpoint, unauthenticated).
+    environment:
+      # ─── Required ────────────────────────────────────────────────────────
+      # postgres://ecghub_user:...@127.0.0.1:5432/ecghub?sslmode=disable
+      # Loopback, not "db": there is no Docker DNS in the host namespace.
+      DATABASE_URL: ${DATABASE_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      AUTH_ENCRYPTION_KEY: ${AUTH_ENCRYPTION_KEY}
+      # Anything but development/dev/test/local means production, where the
+      # weak-secret checks are enforced. Leave unset in prod.
+      APP_ENV: ${APP_ENV}
+      # ─── Optional ────────────────────────────────────────────────────────
+      # Public origin (https://ecg.chu.example): CORS, and webhook callback links.
+      HOST_URL: ${HOST_URL}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      CONFIG_PATH: ${CONFIG_PATH:-/app/config.yaml}
+      # Keep both off the site network. nginx shares this namespace and reaches
+      # the API on loopback; Prometheus scrapes the metrics the same way.
+      SERVER_HOST: ${SERVER_HOST:-127.0.0.1}
+      METRICS_ENABLED: ${METRICS_ENABLED:-false}
+      METRICS_HOST: ${METRICS_HOST:-127.0.0.1}
+      METRICS_PORT: ${METRICS_PORT:-9091}
+      # FTPS and DICOM TLS. Defaults match certbot's filenames, so mounting
+      # /etc/letsencrypt/live/<host> at /certs needs nothing here.
+      TLS_CERT_FILE: ${TLS_CERT_FILE:-/certs/fullchain.pem}
+      TLS_KEY_FILE: ${TLS_KEY_FILE:-/certs/privkey.pem}
+      # ─── Object storage (optional) ───────────────────────────────────────
+      # STORAGE_BACKEND=s3 turns it on. Files are written to the local volume
+      # first and uploaded from there, so keep the volume sized for the longest
+      # bucket outage worth riding out. Unset (or "local") stores on disk only.
+      STORAGE_BACKEND: ${STORAGE_BACKEND:-local}
+      S3_ENDPOINT: ${S3_ENDPOINT:-}
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_REGION: ${S3_REGION:-}
+      S3_PREFIX: ${S3_PREFIX:-}
+      # MinIO/RustFS/Ceph need path-style addressing; AWS accepts either.
+      S3_PATH_STYLE: ${S3_PATH_STYLE:-true}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-}
+      # Delivery-history retention in days; 0 keeps every delivery forever. Each
+      # row holds the full payload, patient identifiers included.
+      WEBHOOKS_RETENTION_DAYS: ${WEBHOOKS_RETENTION_DAYS:-30}
+    volumes:
+      # Certificates managed outside the app. Point the left side at
+      # /etc/letsencrypt/live/<host> to use certbot directly.
+      - ./certs:/certs:ro
+      - ./config.yaml:/app/config.yaml:ro
+      - ecg-storage:/data/ecg
+      - ecg-quarantine:/data/ecg-quarantine
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    # Also in the host namespace, which is what lets it reach the backend on
+    # loopback. It binds :80 directly — hence NET_BIND_SERVICE below, which it
+    # already needed.
+    network_mode: host
+    depends_on:
+      - backend
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+      - CHOWN
+      - SETUID
+      - SETGID
+      - DAC_OVERRIDE
+    volumes:
+      - ./nginx/nginx.host.conf:/etc/nginx/conf.d/default.conf:ro
+
+networks:
+  ecg-hub:
+    driver: bridge
+
+volumes:
+  ecg-storage:
+  ecg-quarantine:
+  # Only needed with the bundled `db` service.
+  postgres-data:

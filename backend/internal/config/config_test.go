@@ -1,6 +1,10 @@
 package config
 
-import "testing"
+import (
+	"net"
+	"strconv"
+	"testing"
+)
 
 func TestPublicOrigin(t *testing.T) {
 	cases := []struct {
@@ -46,6 +50,26 @@ func TestIngestConfig_SetMaxFileBytes(t *testing.T) {
 		}
 		if err == nil && cfg.MaxBytes() != c.want {
 			t.Errorf("SetMaxFileBytes(%q) → MaxBytes() = %d, want %d", c.in, cfg.MaxBytes(), c.want)
+		}
+	}
+}
+
+// The bind address is what confines the API and the metrics endpoint under
+// network_mode: host, where the compose file's port mappings — the thing that
+// confined them on a bridge network — no longer exist.
+func TestBindAddresses(t *testing.T) {
+	cases := []struct {
+		host string
+		port int
+		want string
+	}{
+		{"", 4444, ":4444"},                   // every interface, the bridge default
+		{"127.0.0.1", 4444, "127.0.0.1:4444"}, // loopback, for host networking
+		{"::1", 9091, "[::1]:9091"},
+	}
+	for _, c := range cases {
+		if got := net.JoinHostPort(c.host, strconv.Itoa(c.port)); got != c.want {
+			t.Errorf("bind address for host %q port %d = %q, want %q", c.host, c.port, got, c.want)
 		}
 	}
 }

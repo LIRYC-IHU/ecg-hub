@@ -122,9 +122,27 @@ backend:
     HOST_PROC_NET: /host/proc/net
 ```
 
-or run the backend with `network_mode: host`, where it shares the host's
-namespace and sees both the real client addresses and the real ARP table with
-no extra mount. `HOST_PROC_NET` is then unnecessary.
+or run the whole stack with `network_mode: host`, where the backend shares the
+host's namespace and sees both the real client addresses and the real ARP table
+with no extra mount. `HOST_PROC_NET` is then unnecessary. `docker-compose.host.yml`
+is that variant:
+
+```sh
+docker compose -f docker-compose.host.yml up -d
+```
+
+It differs from the bridge file in four places, and each is forced:
+
+- `backend` and `frontend` take `network_mode: host`. nginx then reaches the
+  API on loopback, which is why it mounts `nginx/nginx.host.conf` instead —
+  the same file with `127.0.0.1:4444` as the upstream and no Docker resolver.
+- `db` stays on its own bridge network, published on `127.0.0.1:5432`. Point
+  `DATABASE_URL` there rather than at `db`: there is no Docker DNS in the host
+  namespace.
+- `SERVER_HOST` and `METRICS_HOST` are set to `127.0.0.1`. Without the port
+  mappings, an unset bind address puts the API on the site network past nginx,
+  and publishes the unauthenticated metrics endpoint with it.
+- Nothing publishes ports, so nothing binds 21 — see below.
 
 Host networking changes three things in this document:
 
@@ -134,6 +152,10 @@ Host networking changes three things in this document:
   address and advertises it correctly in PASV.
 - **`DOCKER-USER` no longer applies.** With no DNAT there is nothing to filter
   there; the rules belong in `INPUT`, where `ufw` works normally again.
+- **What used to confine a port is gone.** On the bridge network the compose
+  file publishes `127.0.0.1:9091` for metrics and does not publish 4444 at all;
+  in the host namespace both are as reachable as the process binds them. That
+  is what `SERVER_HOST` and `METRICS_HOST` are for.
 
 ### Port 21 without a port mapping
 

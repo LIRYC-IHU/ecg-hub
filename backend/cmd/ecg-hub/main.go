@@ -20,11 +20,12 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -682,7 +683,7 @@ func main() {
 		if port == 0 {
 			port = defaultMetricsPort
 		}
-		metricsAddr := fmt.Sprintf(":%d", port)
+		metricsAddr := net.JoinHostPort(cfg.Metrics.Host, strconv.Itoa(port))
 		mux := http.NewServeMux()
 		mux.Handle("/metrics", appmetrics.Handler())
 		srv := &http.Server{Addr: metricsAddr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
@@ -724,7 +725,7 @@ func main() {
 	if serverPort == 0 {
 		serverPort = 4444
 	}
-	addr := fmt.Sprintf(":%d", serverPort)
+	addr := net.JoinHostPort(cfg.Server.Host, strconv.Itoa(serverPort))
 
 	// TLS is enabled for bare-metal production deployments (no reverse proxy).
 	// Behind nginx, TLS terminates at the proxy and server.tls stays false.
