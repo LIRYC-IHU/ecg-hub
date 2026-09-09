@@ -56,6 +56,13 @@ admin UI without restarting the server.
 converted to a common model and exportable as PDF, HL7 aECG XML, DICOM or the
 native format, through [ecg-bridge](https://github.com/LIRYC-IHU/ecg-bridge).
 
+**Device whitelist** — only enrolled hardware may push ECGs into the FTP, DICOM
+and ECTP ports. A device is paired by sending one ECG over the protocol it
+already speaks: the file is read in memory to identify the machine, held for an
+operator to approve, and ingested once they do. Devices are keyed on their MAC
+address, which requires them to share a network segment with the server — the
+admin screen says so plainly when they do not.
+
 **Patient identity** — ECGs arriving without a usable patient ID enter an
 `unidentified` workflow: an operator assigns them to a patient, guarded by name,
 date-of-birth and ID cross-checks, and the file is re-ingested. An HL7 scheduler
