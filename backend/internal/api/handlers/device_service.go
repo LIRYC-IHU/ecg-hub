@@ -34,6 +34,13 @@ type DevicePairingStore interface {
 	Drop(mac string)
 }
 
+// DeviceSettingsStore reads and writes the whitelist configuration.
+// Implemented by the module-settings repository.
+type DeviceSettingsStore interface {
+	DeviceSettings(ctx context.Context) (device.Settings, error)
+	SetDeviceSettings(enabled, pairingOpen bool, pairingUntil time.Time) error
+}
+
 // DeviceIdentityHealth reports what the gate has observed about whether
 // hardware can be identified on this deployment. Implemented by device.Gate.
 type DeviceIdentityHealth interface {
@@ -45,7 +52,7 @@ type DeviceIdentityHealth interface {
 // in RegisterRoutes.
 type DeviceServiceHandler struct {
 	Repo     *repository.DeviceRepository
-	Settings *repository.ModuleSettingsRepository
+	Settings DeviceSettingsStore
 	Pairing  DevicePairingStore
 	Resolver DeviceIdentityHealth
 	// Queue re-ingests the file a device sent while pairing, once approved.
@@ -118,10 +125,12 @@ func (h *DeviceServiceHandler) GetSettings(ctx context.Context, _ *apiv1.GetDevi
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, errors.New("failed to read device settings"))
 	}
+	// The computed value, not the stored flag: an expired window is closed, and
+	// a screen still showing it open would be an indicator that lies.
 	resp := &apiv1.GetDeviceSettingsResponse{
 		Settings: &apiv1.DeviceSettings{
 			Enabled:      set.Enabled,
-			PairingOpen:  set.PairingOpen,
+			PairingOpen:  set.PairingActive(time.Now()),
 			PairingUntil: rfc3339(set.PairingUntil),
 		},
 	}
@@ -147,6 +156,13 @@ func (h *DeviceServiceHandler) UpdateSettings(ctx context.Context, req *apiv1.Up
 			return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("pairing_until must be an RFC3339 timestamp"))
 		}
 		until = t
+	}
+	// Opening the window without an expiry closes it in half an hour rather
+	// than never. The default belongs here and not in the browser: it is the
+	// only place every caller goes through, and "forever" should take saying
+	// so, not forgetting to.
+	if in.PairingOpen && until.IsZero() {
+		until = time.Now().Add(device.DefaultPairingWindow)
 	}
 	if err := h.Settings.SetDeviceSettings(in.Enabled, in.PairingOpen, until); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, errors.New("failed to store device settings"))

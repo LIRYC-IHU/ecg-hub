@@ -518,7 +518,7 @@
       "enable": "Activer la liste blanche",
       "enableHint": "Seuls les appareils approuvés peuvent émettre. Une MAC s'usurpe : c'est un contrôle d'enrôlement, pas une authentification.",
       "pairing": "Ouvrir la fenêtre d'appairage",
-      "pairingHint": "Un appareil inconnu peut envoyer un ECG pour être identifié. Le fichier reste en mémoire, n'est jamais stocké et n'apparaît qu'ici — l'approbation reste manuelle.",
+      "pairingHint": "Un appareil inconnu peut envoyer un ECG pour être identifié. Le fichier reste en mémoire, n'est jamais stocké et n'apparaît qu'ici — l'approbation reste manuelle. La fenêtre se ferme d'elle-même au bout de 30 minutes.",
       "waiting": "En attente d'approbation",
       "noPending": "Aucun appareil en attente. Fenêtre d'appairage ouverte, envoyez un ECG depuis l'appareil pour le faire apparaître ici.",
       "none": "Aucun appareil n'a encore contacté les ports d'ingestion.",
@@ -556,7 +556,9 @@
       },
       "event": {
         "pending": "{{label}} demande à être enrôlé ({{mac}})"
-      }
+      },
+      "pairingCloses": "Se ferme à {{at}}.",
+      "pairingExtend": "Prolonger 30 min"
     }
   },
   "quarantine": {

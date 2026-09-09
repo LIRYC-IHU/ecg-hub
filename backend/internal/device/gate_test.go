@@ -220,3 +220,25 @@ func TestGateRecheckSeesARevocation(t *testing.T) {
 		t.Errorf("Recheck after revocation = %v, want Deny", got)
 	}
 }
+
+func TestSettingsPairingActive(t *testing.T) {
+	now := time.Date(2026, 9, 9, 10, 0, 0, 0, time.UTC)
+	cases := []struct {
+		name string
+		set  Settings
+		want bool
+	}{
+		{"closed", Settings{Enabled: true}, false},
+		{"open with no expiry", Settings{Enabled: true, PairingOpen: true}, true},
+		{"open, expiry ahead", Settings{Enabled: true, PairingOpen: true, PairingUntil: now.Add(time.Minute)}, true},
+		{"open, expiry passed", Settings{Enabled: true, PairingOpen: true, PairingUntil: now.Add(-time.Minute)}, false},
+		// The expiry alone means nothing: an operator who closed the window has
+		// closed it, whatever the timestamp still says.
+		{"closed, expiry ahead", Settings{Enabled: true, PairingUntil: now.Add(time.Hour)}, false},
+	}
+	for _, c := range cases {
+		if got := c.set.PairingActive(now); got != c.want {
+			t.Errorf("%s: PairingActive = %v, want %v", c.name, got, c.want)
+		}
+	}
+}

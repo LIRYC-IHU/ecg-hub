@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import {
   AlertTriangle,
   Check,
+  Clock,
   HardDrive,
   Radio,
   ShieldOff,
@@ -20,11 +21,24 @@ import { ConfirmDialog } from "../ui/ConfirmDialog";
 
 type Tab = "pairing" | "devices";
 
+// How long the pairing window stays open when it is switched on here. Matches
+// device.DefaultPairingWindow, which is what the server applies to any caller
+// that opens the window without saying — this only makes the value visible
+// before the click rather than after it.
+const PAIRING_WINDOW_MS = 30 * 60 * 1000;
+
 const STATUS_STYLE: Record<string, string> = {
   pending: "bg-warning/10 text-warning",
   approved: "bg-success/10 text-success",
   revoked: "bg-destructive/10 text-destructive",
 };
+
+function formatTime(iso: string): string {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime())
+    ? "—"
+    : d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
 
 function formatDate(iso: string): string {
   if (!iso) return "—";
@@ -88,7 +102,12 @@ export function AdminDevicesPage() {
           $typeName: "grpc.api.v1.DeviceSettings",
           enabled: next.enabled,
           pairingOpen: next.pairingOpen,
-          pairingUntil: "",
+          // Opening the window always sets an expiry. Leaving one open is how
+          // the pending queue fills with noise, and noise is where a real
+          // device goes unnoticed.
+          pairingUntil: next.pairingOpen
+            ? new Date(Date.now() + PAIRING_WINDOW_MS).toISOString()
+            : "",
         },
       }),
     onSuccess: () => {
@@ -139,7 +158,10 @@ export function AdminDevicesPage() {
   });
 
   const enabled = settings?.settings?.enabled ?? false;
+  // The server reports the window as closed once its expiry has passed, so this
+  // never shows open when the gate would refuse.
   const pairingOpen = settings?.settings?.pairingOpen ?? false;
+  const pairingUntil = settings?.settings?.pairingUntil ?? "";
 
   return (
     <div className="p-6 space-y-4 max-w-6xl">
@@ -220,6 +242,25 @@ export function AdminDevicesPage() {
                   title={t("admin.devices.pairing")}
                   hint={t("admin.devices.pairingHint")}
                 />
+                {pairingOpen && pairingUntil && (
+                  <p className="flex items-center gap-2 pl-6 text-[11px] text-muted-foreground">
+                    <Clock className="h-3 w-3" />
+                    {t("admin.devices.pairingCloses", {
+                      at: formatTime(pairingUntil),
+                    })}
+                    {canManage && (
+                      <button
+                        onClick={() =>
+                          saveSettings.mutate({ enabled, pairingOpen: true })
+                        }
+                        disabled={saveSettings.isPending}
+                        className="cursor-pointer underline underline-offset-2 hover:text-foreground disabled:cursor-not-allowed"
+                      >
+                        {t("admin.devices.pairingExtend")}
+                      </button>
+                    )}
+                  </p>
+                )}
               </>
             )}
           </div>

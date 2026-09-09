@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 
@@ -10,6 +11,23 @@ import (
 	"github.com/LIRYC-IHU/ecg-hub/internal/device"
 	"github.com/LIRYC-IHU/ecg-hub/internal/ingestion"
 )
+
+// stubSettings stands in for the module-settings repository.
+type stubSettings struct {
+	set         device.Settings
+	enabled     bool
+	pairingOpen bool
+	until       time.Time
+}
+
+func (s *stubSettings) DeviceSettings(context.Context) (device.Settings, error) {
+	return s.set, nil
+}
+
+func (s *stubSettings) SetDeviceSettings(enabled, pairingOpen bool, pairingUntil time.Time) error {
+	s.enabled, s.pairingOpen, s.until = enabled, pairingOpen, pairingUntil
+	return nil
+}
 
 // stubPairing stands in for device.Pairing.
 type stubPairing struct {
@@ -137,5 +155,61 @@ func TestBoundedText(t *testing.T) {
 	}
 	if _, err := boundedText("abcdef", 3, "label"); codeOf(t, err) != connect.CodeInvalidArgument {
 		t.Errorf("code = %v, want InvalidArgument for an over-long value", codeOf(t, err))
+	}
+}
+
+// Opening the pairing window without an expiry must not open it forever: a
+// forgotten window fills the pending queue with noise, which is where a real
+// device goes unnoticed.
+func TestDeviceService_PairingWindowGetsADefaultExpiry(t *testing.T) {
+	repo := &stubSettings{}
+	h := &DeviceServiceHandler{Settings: repo}
+
+	before := time.Now()
+	_, err := h.UpdateSettings(context.Background(), &apiv1.UpdateDeviceSettingsRequest{
+		Settings: &apiv1.DeviceSettings{Enabled: true, PairingOpen: true},
+	})
+	if err != nil {
+		t.Fatalf("UpdateSettings: %v", err)
+	}
+	if repo.until.IsZero() {
+		t.Fatal("pairing was opened with no expiry at all")
+	}
+	want := before.Add(device.DefaultPairingWindow)
+	if repo.until.Before(want) || repo.until.After(want.Add(time.Minute)) {
+		t.Errorf("expiry = %v, want about %v", repo.until, want)
+	}
+}
+
+// An explicit expiry is the caller's, including one far enough out to mean
+// "leave it open" for someone who says so deliberately.
+func TestDeviceService_ExplicitPairingExpiryIsKept(t *testing.T) {
+	repo := &stubSettings{}
+	h := &DeviceServiceHandler{Settings: repo}
+	chosen := time.Now().Add(4 * time.Hour).UTC().Truncate(time.Second)
+
+	if _, err := h.UpdateSettings(context.Background(), &apiv1.UpdateDeviceSettingsRequest{
+		Settings: &apiv1.DeviceSettings{
+			Enabled: true, PairingOpen: true, PairingUntil: chosen.Format(time.RFC3339),
+		},
+	}); err != nil {
+		t.Fatalf("UpdateSettings: %v", err)
+	}
+	if !repo.until.Equal(chosen) {
+		t.Errorf("expiry = %v, want the one asked for %v", repo.until, chosen)
+	}
+}
+
+// Closing the window must not acquire an expiry it does not need.
+func TestDeviceService_ClosingPairingKeepsNoExpiry(t *testing.T) {
+	repo := &stubSettings{}
+	h := &DeviceServiceHandler{Settings: repo}
+	if _, err := h.UpdateSettings(context.Background(), &apiv1.UpdateDeviceSettingsRequest{
+		Settings: &apiv1.DeviceSettings{Enabled: true, PairingOpen: false},
+	}); err != nil {
+		t.Fatalf("UpdateSettings: %v", err)
+	}
+	if !repo.until.IsZero() {
+		t.Errorf("expiry = %v, want none when the window is closed", repo.until)
 	}
 }

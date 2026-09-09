@@ -518,7 +518,7 @@
       "enable": "Enable the device whitelist",
       "enableHint": "Only approved devices may send. A device is spoofable by its MAC, so this is an enrolment control, not authentication.",
       "pairing": "Open the pairing window",
-      "pairingHint": "An unknown device may send one ECG so it can be identified. The file is kept in memory, never stored, and only appears here — approval stays manual.",
+      "pairingHint": "An unknown device may send one ECG so it can be identified. The file is kept in memory, never stored, and only appears here — approval stays manual. The window closes on its own after 30 minutes.",
       "waiting": "Waiting for approval",
       "noPending": "No device is waiting. With the pairing window open, send one ECG from the device to make it appear here.",
       "none": "No device has contacted the ingestion ports yet.",
@@ -556,7 +556,9 @@
       },
       "event": {
         "pending": "{{label}} is asking to be enrolled ({{mac}})"
-      }
+      },
+      "pairingCloses": "Closes at {{at}}.",
+      "pairingExtend": "Extend 30 min"
     }
   },
   "quarantine": {

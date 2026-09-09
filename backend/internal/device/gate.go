@@ -46,8 +46,33 @@ type Settings struct {
 	// sees what hardware is asking to be enrolled. Approval is still manual.
 	PairingOpen bool
 	// PairingUntil closes the window on its own. Zero means it stays open until
-	// an operator closes it.
+	// an operator closes it — which is what nobody should be relying on, so
+	// the API fills it in when a caller opens the window without one.
 	PairingUntil time.Time
+}
+
+// DefaultPairingWindow is how long a pairing window stays open when the caller
+// does not say. It is an enrolment window — an operator opens it, walks to the
+// machine and sends one ECG — not a state a deployment sits in.
+//
+// A forgotten window is not an open door: an unknown device still gets no
+// further than one file, read in memory and dropped, and still cannot ingest
+// anything until a human approves it. What it costs is a pending queue full of
+// noise, which is where a real device goes unnoticed, and an "pairing open"
+// indicator nobody believes any more because it has been lit for three weeks.
+const DefaultPairingWindow = 30 * time.Minute
+
+// PairingActive reports whether the pairing window is open at now.
+//
+// The rule lives here rather than in the gate and again in the API, because two
+// copies of it drift: the gate would refuse a device while the screen still
+// showed the window open, which is worse than having no expiry at all — an
+// indicator that lies is not an indicator.
+func (s Settings) PairingActive(now time.Time) bool {
+	if !s.PairingOpen {
+		return false
+	}
+	return s.PairingUntil.IsZero() || now.Before(s.PairingUntil)
 }
 
 // Store is the persistence the gate needs. Implemented by the device
@@ -241,7 +266,7 @@ func (g *Gate) decide(ctx context.Context, id Identity, record bool) Decision {
 		g.record(ctx, id, initial)
 	}
 
-	if set.PairingOpen && (set.PairingUntil.IsZero() || time.Now().Before(set.PairingUntil)) {
+	if set.PairingActive(time.Now()) {
 		return Pair
 	}
 	return Deny
