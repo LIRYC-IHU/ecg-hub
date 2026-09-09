@@ -1,6 +1,6 @@
 {
   "search": {
-    "placeholder": "Rechercher un patient par nom ou identifiant…",
+    "placeholder": "Rechercher par patient, identifiant ou appareil…",
     "noResults": "Aucun patient trouvé",
     "loading": "Recherche en cours…"
   },

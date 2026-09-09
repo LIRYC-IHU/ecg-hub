@@ -139,7 +139,8 @@ func (h *ECGServiceHandler) ListAll(ctx context.Context, req *apiv1.ListAllReque
 			Joins("LEFT JOIN devices ON devices.mac = ecgs.device_mac")
 		if req.Q != "" {
 			like := "%" + req.Q + "%"
-			q = q.Where("(patients.last_name ILIKE ? OR patients.first_name ILIKE ? OR ecgs.patient_id ILIKE ? OR ecgs.original_filename ILIKE ?)", like, like, like, like)
+			q = q.Where("(patients.last_name ILIKE ? OR patients.first_name ILIKE ? OR ecgs.patient_id ILIKE ? OR ecgs.original_filename ILIKE ? OR devices.label ILIKE ? OR ecgs.device_mac ILIKE ?)",
+				like, like, like, like, like, like)
 		}
 		if req.Hl7Status != "" {
 			q = q.Where("ecgs.hl7_status = ?", req.Hl7Status)

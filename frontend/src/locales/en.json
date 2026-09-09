@@ -1,6 +1,6 @@
 {
   "search": {
-    "placeholder": "Search patient by name or identifier…",
+    "placeholder": "Search by patient, identifier or device…",
     "noResults": "No patients found",
     "loading": "Searching…"
   },

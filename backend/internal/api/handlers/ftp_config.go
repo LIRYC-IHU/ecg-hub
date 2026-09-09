@@ -13,8 +13,8 @@ type FTPStoredConfig struct {
 	PublicHost       string `json:"public_host"`
 	// Deployment documentation only -- the port devices dial when a NAT
 	// translates it. Nothing in the server reads it; see FTPConfig.public_port.
-	PublicPort       int    `json:"public_port"`
-	TLS              bool   `json:"tls"`
-	Username         string `json:"username"`
-	Password         string `json:"password"`
+	PublicPort int    `json:"public_port"`
+	TLS        bool   `json:"tls"`
+	Username   string `json:"username"`
+	Password   string `json:"password"`
 }

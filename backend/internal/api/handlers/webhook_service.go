@@ -74,8 +74,8 @@ func inputToRequest(in *apiv1.WebhookInput) *webhookRequest {
 		URL:                in.Url,
 		Enabled:            in.Enabled,            // *bool (proto optional)
 		InsecureSkipVerify: in.InsecureSkipVerify, // *bool (proto optional)
-		Secret:             in.Secret,     // *string
-		AuthHeader:         in.AuthHeader, // *string
+		Secret:             in.Secret,             // *string
+		AuthHeader:         in.AuthHeader,         // *string
 		Events:             in.Events,
 		Vendors:            in.Vendors,
 	}

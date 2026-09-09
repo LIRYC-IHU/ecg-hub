@@ -16,7 +16,7 @@ import (
 // PatientSearchParams holds query parameters for GET /api/v1/patients.
 type PatientSearchParams struct {
 	Q         string `query:"q"`
-	Tags      string `query:"tags"` // comma-separated tag IDs
+	Tags      string `query:"tags"`       // comma-separated tag IDs
 	SortBy    string `query:"sort_by"`    // "patient_id" | "last_name" | "created_at"
 	SortOrder string `query:"sort_order"` // "asc" | "desc"
 	Page      int    `query:"page"`

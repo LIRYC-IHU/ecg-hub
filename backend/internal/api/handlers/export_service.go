@@ -21,12 +21,12 @@ import (
 // the WatchProgress server-stream uses mw.ConnectStreamAuth. Both enforce
 // ecg.download; per-job ownership is checked in the handler.
 type ExportServiceHandler struct {
-	Repo      exportJobFinder      // Get + WatchProgress
-	Creator   exportJobCreator     // Create
-	ECGRepo   ecgByIDsFinder       // Create + Formats
-	Pool      exportJobEnqueuer    // Create
+	Repo      exportJobFinder       // Get + WatchProgress
+	Creator   exportJobCreator      // Create
+	ECGRepo   ecgByIDsFinder        // Create + Formats
+	Pool      exportJobEnqueuer     // Create
 	Bridge    vendorFormatSupporter // Formats
-	DB        *gorm.DB             // audit (best-effort)
+	DB        *gorm.DB              // audit (best-effort)
 	AdminRole string
 }
 

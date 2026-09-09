@@ -239,7 +239,8 @@ func ListAllECGsHandler(db *gorm.DB) echo.HandlerFunc {
 				Joins("LEFT JOIN devices ON devices.mac = ecgs.device_mac")
 			if params.Q != "" {
 				like := "%" + params.Q + "%"
-				q = q.Where("(patients.last_name ILIKE ? OR patients.first_name ILIKE ? OR ecgs.patient_id ILIKE ? OR ecgs.original_filename ILIKE ?)", like, like, like, like)
+				q = q.Where("(patients.last_name ILIKE ? OR patients.first_name ILIKE ? OR ecgs.patient_id ILIKE ? OR ecgs.original_filename ILIKE ? OR devices.label ILIKE ? OR ecgs.device_mac ILIKE ?)",
+					like, like, like, like, like, like)
 			}
 			if params.HL7Status != "" {
 				q = q.Where("ecgs.hl7_status = ?", params.HL7Status)

@@ -200,7 +200,17 @@ func (h *PatientServiceHandler) Search(_ context.Context, req *apiv1.SearchReque
 	query := h.DB.Model(&models.Patient{})
 	if req.Q != "" {
 		like := "%" + req.Q + "%"
-		query = query.Where("patients.last_name ILIKE ? OR patients.first_name ILIKE ? OR patients.patient_id ILIKE ? OR patients.nda ILIKE ?", like, like, like, like)
+		// The device is part of what people type here: "which patients came off
+		// the trolley in cardio B" is a question about hardware, and the search
+		// bar is what anyone reaches for first. Same subquery shape as the tag
+		// filter below — keep only patients owning a matching ECG.
+		query = query.Where(
+			"patients.last_name ILIKE ? OR patients.first_name ILIKE ? OR patients.patient_id ILIKE ? OR patients.nda ILIKE ? OR patients.patient_id IN (?)",
+			like, like, like, like,
+			h.DB.Table("ecgs").Select("DISTINCT ecgs.patient_id").
+				Joins("JOIN devices ON devices.mac = ecgs.device_mac").
+				Where("devices.label ILIKE ? OR ecgs.device_mac ILIKE ?", like, like),
+		)
 	}
 	if req.Tags != "" {
 		tagIDs := strings.Split(req.Tags, ",")
