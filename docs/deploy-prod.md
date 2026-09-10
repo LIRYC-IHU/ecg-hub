@@ -171,6 +171,12 @@ gone at the next reboot. `PREROUTING` covers traffic arriving on an interface
 but not the host talking to its own address — add the matching `OUTPUT` rule if
 you want `ftp localhost 21` to work for testing.
 
+`make ftp-ports` does this and persists it, and is safe to run twice — it
+collapses the rule to exactly one whatever it starts from. Applying it by hand
+and then again after a reboot is how a chain ends up with two copies, which
+nothing complains about and nobody sees. `make ftp-ports-check` reports without
+changing anything.
+
 The alternative is no NAT at all:
 
 ```sh
@@ -200,7 +206,21 @@ began timing out at 10 in parallel. The published 30000-30100 gives 101.
 The range spans ECTP's 30003 without harm: ftpserverlib retries the next port
 when a bind fails, so a data connection that draws it moves on.
 
-Forward the same range on the router, and keep it clear of 30003 (ECTP).
+Forward the same range on every router and firewall between the devices and
+this host, and keep it clear of 30003 (ECTP).
+
+**It will not open itself.** A NAT helper (`nf_conntrack_ftp`) normally reads
+the `227 Entering Passive Mode` reply on the control channel and opens the data
+port on demand — which is why plain FTP through a home router usually just
+works. Enable FTPS and that reply is encrypted: the helper sees nothing and
+opens nothing. The control port keeps working because it is forwarded
+explicitly, so the symptom is a session that logs in, answers `PWD` and `PASV`,
+and then hangs for twenty seconds on `MLSD` or the first transfer. Nothing in
+the server logs says why — from its side the connection simply never arrives.
+
+Measured on the pilot, 2026-09-10: with a listener up on 30099, port 21 from
+outside connected and 30099 timed out. Two of those tests are the whole
+diagnosis.
 
 ## Firewall
 
