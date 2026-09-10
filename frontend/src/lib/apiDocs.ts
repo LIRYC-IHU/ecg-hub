@@ -81,6 +81,8 @@ export const API_SECTIONS: ApiSection[] = [
       "id": "6b958f3e-359b-4ac1-987f-3c78d8e2814c",
       "patient_id": "BS1016",
       "vendor": "philips",
+      "device_mac": "00:0e:10:19:44:8a",
+      "device_label": "Cardio B, room 214",
       "recorded_at": "2025-10-08T14:26:00Z",
       "original_filename": "philips-BS1016.xml",
       "hl7_status": "success"
@@ -112,12 +114,13 @@ export const API_SECTIONS: ApiSection[] = [
         permission: "patient.read",
         params: [
           { name: "vendor", in: "query", type: "string", description: "Filter by ingestion module (philips, dicom, muse, …)." },
+          { name: "device_mac", in: "query", type: "string", description: "Filter by the machine that sent the ECG, by MAC address. /api/v1/ecgs/filters lists the devices that have sent something, with their labels." },
           { name: "from", in: "query", type: "date", description: "Recorded on or after (YYYY-MM-DD)." },
           { name: "to", in: "query", type: "date", description: "Recorded on or before (YYYY-MM-DD)." },
           { name: "limit", in: "query", type: "int", description: "Page size." },
           { name: "offset", in: "query", type: "int", description: "Pagination offset." },
         ],
-        response: `{ "data": [ { "id": "…", "patient_id": "BS1016", "vendor": "philips", "recorded_at": "2025-10-08T14:26:00Z" } ], "total": 1 }`,
+        response: `{ "data": [ { "id": "…", "patient_id": "BS1016", "vendor": "philips", "device_mac": "00:0e:10:19:44:8a", "device_label": "Cardio B, room 214", "recorded_at": "2025-10-08T14:26:00Z" } ], "total": 1 }`,
       },
       {
         id: "ecg-filters",
@@ -126,7 +129,7 @@ export const API_SECTIONS: ApiSection[] = [
         summary: "Available filter values",
         description: "The vendors and date bounds currently present in the database — useful to build a filter UI without guessing.",
         permission: "patient.read",
-        response: `{ "vendors": ["philips", "dicom"], "min_date": "2025-10-08", "max_date": "2026-08-24" }`,
+        response: `{ "vendors": ["philips", "dicom"], "devices": [ { "mac": "00:0e:10:19:44:8a", "label": "Cardio B, room 214" } ], "min_date": "2025-10-08", "max_date": "2026-08-24" }`,
       },
       {
         id: "ecg-metadata",
@@ -207,7 +210,8 @@ export const API_SECTIONS: ApiSection[] = [
     id: "webhooks",
     title: "Webhooks",
     blurb:
-      "Manage your own endpoints. Every route is scoped to the calling identity: an API key only ever sees the webhooks of the user who created it.",
+      "Manage your own endpoints. Every route is scoped to the calling identity: an API key only ever sees the webhooks of the user who created it. The delivered payload looks like this — device_label is the operator's name for the machine the ECG came off, and travels beside its MAC so a rule keyed on the address keeps matching when the label is changed:\n\n" +
+      `{\n  "event": "ecg.ingested",\n  "webhook_id": "2683ad89-…",\n  "timestamp": "2026-08-24T11:33:50Z",\n  "data": {\n    "ecg_id": "6b958f3e-…",\n    "patient_id": "BS1016",\n    "vendor": "philips",\n    "device_mac": "00:0e:10:19:44:8a",\n    "device_label": "Cardio B, room 214",\n    "filename": "philips-BS1016.xml"\n  },\n  "links": { "ecg_metadata": "…", "ecg_download": "…" }\n}`,
     endpoints: [
       {
         id: "webhook-options",
@@ -217,7 +221,8 @@ export const API_SECTIONS: ApiSection[] = [
         permission: "webhook.manage",
         response: `{
   "events": ["ecg.ingested","ecg.unidentified","ecg.quarantined","ecg.duplicate","hl7.exhausted","hl7.rejected"],
-  "vendors": [ { "name": "philips", "extensions": [".xml"] } ]
+  "vendors": [ { "name": "philips", "extensions": [".xml"] } ],
+  "devices": [ { "mac": "00:0e:10:19:44:8a", "label": "Cardio B, room 214" } ]
 }`,
       },
       {
@@ -235,6 +240,7 @@ export const API_SECTIONS: ApiSection[] = [
     "enabled": true,
     "events": ["ecg.ingested"],
     "vendors": ["philips"],
+    "devices": ["00:0e:10:19:44:8a"],
     "has_secret": true,
     "has_auth_header": false,
     "last_status_code": 200,
@@ -255,6 +261,7 @@ export const API_SECTIONS: ApiSection[] = [
           { name: "auth_header", in: "body", type: "string", description: "Sent as-is in the Authorization header, e.g. \"Bearer …\"." },
           { name: "events", in: "body", type: "string[]", description: "Empty = every event." },
           { name: "vendors", in: "body", type: "string[]", description: "Empty = every vendor. Unknown names are rejected." },
+          { name: "devices", in: "body", type: "string[]", description: "MAC addresses; empty = every device. Stored normalised, so the casing you send does not matter. Anything that is not an address is rejected — a filter matching nothing would stop deliveries with no error to show for it." },
           { name: "enabled", in: "body", type: "bool", description: "Defaults to true." },
           { name: "insecure_skip_verify", in: "body", type: "bool", description: "HTTPS receivers with a self-signed certificate only." },
         ],

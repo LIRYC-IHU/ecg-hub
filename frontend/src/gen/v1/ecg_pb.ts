@@ -10,7 +10,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file v1/ecg.proto.
  */
 export const file_v1_ecg: GenFile = /*@__PURE__*/
-  fileDesc("Cgx2MS9lY2cucHJvdG8SC2dycGMuYXBpLnYxIrIBCgNFY2cSCgoCaWQYASABKAkSEgoKcGF0aWVudF9pZBgCIAEoCRIOCgZ2ZW5kb3IYAyABKAkSGQoRb3JpZ2luYWxfZmlsZW5hbWUYBCABKAkSEwoLcmVjb3JkZWRfYXQYBSABKAkSEwoLaW5nZXN0ZWRfYXQYBiABKAkSEgoKaGw3X3N0YXR1cxgHIAEoCRIOCgZ2aWV3ZWQYCCABKAgSEgoKZXh0cmFfanNvbhgJIAEoCSKTAQoORWNnV2l0aFBhdGllbnQSHQoDZWNnGAEgASgLMhAuZ3JwYy5hcGkudjEuRWNnEhoKEnBhdGllbnRfZmlyc3RfbmFtZRgCIAEoCRIZChFwYXRpZW50X2xhc3RfbmFtZRgDIAEoCRIWCg5wYXRpZW50X2dlbmRlchgEIAEoCRITCgtwYXRpZW50X2RvYhgFIAEoCSITChFHZXRGaWx0ZXJzUmVxdWVzdCJSChJHZXRGaWx0ZXJzUmVzcG9uc2USDwoHdmVuZG9ycxgBIAMoCRIVCg1kZXZpY2VfbW9kZWxzGAIgAygJEhQKDGZpbGVfZm9ybWF0cxgDIAMoCSKkAQoOTGlzdEFsbFJlcXVlc3QSCQoBcRgBIAEoCRISCgpobDdfc3RhdHVzGAIgASgJEg4KBnZlbmRvchgDIAEoCRIUCgxkZXZpY2VfbW9kZWwYBCABKAkSEwoLZmlsZV9mb3JtYXQYBSABKAkSDAoEZnJvbRgGIAEoCRIKCgJ0bxgHIAEoCRIMCgRwYWdlGAggASgFEhAKCHBlcl9wYWdlGAkgASgFImsKD0xpc3RBbGxSZXNwb25zZRIpCgRkYXRhGAEgAygLMhsuZ3JwYy5hcGkudjEuRWNnV2l0aFBhdGllbnQSDQoFdG90YWwYAiABKAMSDAoEcGFnZRgDIAEoBRIQCghwZXJfcGFnZRgEIAEoBSJFCghFY2dGaWVsZBILCgNrZXkYASABKAkSDQoFbGFiZWwYAiABKAkSDAoEdHlwZRgDIAEoCRIPCgdvcHRpb25zGAQgAygJIiAKEkdldE1ldGFkYXRhUmVxdWVzdBIKCgJpZBgBIAEoCSJRChNHZXRNZXRhZGF0YVJlc3BvbnNlEiUKBmZpZWxkcxgBIAMoCzIVLmdycGMuYXBpLnYxLkVjZ0ZpZWxkEhMKC3ZhbHVlc19qc29uGAIgASgJIjgKFVVwZGF0ZU1ldGFkYXRhUmVxdWVzdBIKCgJpZBgBIAEoCRITCgt2YWx1ZXNfanNvbhgCIAEoCSItChZVcGRhdGVNZXRhZGF0YVJlc3BvbnNlEhMKC3ZhbHVlc19qc29uGAEgASgJIh8KEU1hcmtWaWV3ZWRSZXF1ZXN0EgoKAmlkGAEgASgJIjAKEk1hcmtWaWV3ZWRSZXNwb25zZRIKCgJpZBgBIAEoCRIOCgZ2aWV3ZWQYAiABKAgypwMKCkVDR1NlcnZpY2USTwoKR2V0RmlsdGVycxIeLmdycGMuYXBpLnYxLkdldEZpbHRlcnNSZXF1ZXN0Gh8uZ3JwYy5hcGkudjEuR2V0RmlsdGVyc1Jlc3BvbnNlIgASRgoHTGlzdEFsbBIbLmdycGMuYXBpLnYxLkxpc3RBbGxSZXF1ZXN0GhwuZ3JwYy5hcGkudjEuTGlzdEFsbFJlc3BvbnNlIgASUgoLR2V0TWV0YWRhdGESHy5ncnBjLmFwaS52MS5HZXRNZXRhZGF0YVJlcXVlc3QaIC5ncnBjLmFwaS52MS5HZXRNZXRhZGF0YVJlc3BvbnNlIgASWwoOVXBkYXRlTWV0YWRhdGESIi5ncnBjLmFwaS52MS5VcGRhdGVNZXRhZGF0YVJlcXVlc3QaIy5ncnBjLmFwaS52MS5VcGRhdGVNZXRhZGF0YVJlc3BvbnNlIgASTwoKTWFya1ZpZXdlZBIeLmdycGMuYXBpLnYxLk1hcmtWaWV3ZWRSZXF1ZXN0Gh8uZ3JwYy5hcGkudjEuTWFya1ZpZXdlZFJlc3BvbnNlIgBCnQEKD2NvbS5ncnBjLmFwaS52MUIIRWNnUHJvdG9QAVoyZ2l0aHViLmNvbS9MSVJZQy1JSFUvZWNnLWh1Yi9pbnRlcm5hbC9hcGkvdjE7YXBpdjGiAgNHQViqAgtHcnBjLkFwaS5WMcoCC0dycGNcQXBpXFYx4gIXR3JwY1xBcGlcVjFcR1BCTWV0YWRhdGHqAg1HcnBjOjpBcGk6OlYxYgZwcm90bzM");
+  fileDesc("Cgx2MS9lY2cucHJvdG8SC2dycGMuYXBpLnYxItwBCgNFY2cSCgoCaWQYASABKAkSEgoKcGF0aWVudF9pZBgCIAEoCRIOCgZ2ZW5kb3IYAyABKAkSGQoRb3JpZ2luYWxfZmlsZW5hbWUYBCABKAkSEwoLcmVjb3JkZWRfYXQYBSABKAkSEwoLaW5nZXN0ZWRfYXQYBiABKAkSEgoKaGw3X3N0YXR1cxgHIAEoCRIOCgZ2aWV3ZWQYCCABKAgSEgoKZXh0cmFfanNvbhgJIAEoCRISCgpkZXZpY2VfbWFjGAogASgJEhQKDGRldmljZV9sYWJlbBgLIAEoCSKTAQoORWNnV2l0aFBhdGllbnQSHQoDZWNnGAEgASgLMhAuZ3JwYy5hcGkudjEuRWNnEhoKEnBhdGllbnRfZmlyc3RfbmFtZRgCIAEoCRIZChFwYXRpZW50X2xhc3RfbmFtZRgDIAEoCRIWCg5wYXRpZW50X2dlbmRlchgEIAEoCRITCgtwYXRpZW50X2RvYhgFIAEoCSITChFHZXRGaWx0ZXJzUmVxdWVzdCIqCgxEZXZpY2VPcHRpb24SCwoDbWFjGAEgASgJEg0KBWxhYmVsGAIgASgJIn4KEkdldEZpbHRlcnNSZXNwb25zZRIPCgd2ZW5kb3JzGAEgAygJEhUKDWRldmljZV9tb2RlbHMYAiADKAkSFAoMZmlsZV9mb3JtYXRzGAMgAygJEioKB2RldmljZXMYBCADKAsyGS5ncnBjLmFwaS52MS5EZXZpY2VPcHRpb24iuAEKDkxpc3RBbGxSZXF1ZXN0EgkKAXEYASABKAkSEgoKaGw3X3N0YXR1cxgCIAEoCRIOCgZ2ZW5kb3IYAyABKAkSFAoMZGV2aWNlX21vZGVsGAQgASgJEhMKC2ZpbGVfZm9ybWF0GAUgASgJEhIKCmRldmljZV9tYWMYCiABKAkSDAoEZnJvbRgGIAEoCRIKCgJ0bxgHIAEoCRIMCgRwYWdlGAggASgFEhAKCHBlcl9wYWdlGAkgASgFImsKD0xpc3RBbGxSZXNwb25zZRIpCgRkYXRhGAEgAygLMhsuZ3JwYy5hcGkudjEuRWNnV2l0aFBhdGllbnQSDQoFdG90YWwYAiABKAMSDAoEcGFnZRgDIAEoBRIQCghwZXJfcGFnZRgEIAEoBSJFCghFY2dGaWVsZBILCgNrZXkYASABKAkSDQoFbGFiZWwYAiABKAkSDAoEdHlwZRgDIAEoCRIPCgdvcHRpb25zGAQgAygJIiAKEkdldE1ldGFkYXRhUmVxdWVzdBIKCgJpZBgBIAEoCSJRChNHZXRNZXRhZGF0YVJlc3BvbnNlEiUKBmZpZWxkcxgBIAMoCzIVLmdycGMuYXBpLnYxLkVjZ0ZpZWxkEhMKC3ZhbHVlc19qc29uGAIgASgJIjgKFVVwZGF0ZU1ldGFkYXRhUmVxdWVzdBIKCgJpZBgBIAEoCRITCgt2YWx1ZXNfanNvbhgCIAEoCSItChZVcGRhdGVNZXRhZGF0YVJlc3BvbnNlEhMKC3ZhbHVlc19qc29uGAEgASgJIh8KEU1hcmtWaWV3ZWRSZXF1ZXN0EgoKAmlkGAEgASgJIjAKEk1hcmtWaWV3ZWRSZXNwb25zZRIKCgJpZBgBIAEoCRIOCgZ2aWV3ZWQYAiABKAgypwMKCkVDR1NlcnZpY2USTwoKR2V0RmlsdGVycxIeLmdycGMuYXBpLnYxLkdldEZpbHRlcnNSZXF1ZXN0Gh8uZ3JwYy5hcGkudjEuR2V0RmlsdGVyc1Jlc3BvbnNlIgASRgoHTGlzdEFsbBIbLmdycGMuYXBpLnYxLkxpc3RBbGxSZXF1ZXN0GhwuZ3JwYy5hcGkudjEuTGlzdEFsbFJlc3BvbnNlIgASUgoLR2V0TWV0YWRhdGESHy5ncnBjLmFwaS52MS5HZXRNZXRhZGF0YVJlcXVlc3QaIC5ncnBjLmFwaS52MS5HZXRNZXRhZGF0YVJlc3BvbnNlIgASWwoOVXBkYXRlTWV0YWRhdGESIi5ncnBjLmFwaS52MS5VcGRhdGVNZXRhZGF0YVJlcXVlc3QaIy5ncnBjLmFwaS52MS5VcGRhdGVNZXRhZGF0YVJlc3BvbnNlIgASTwoKTWFya1ZpZXdlZBIeLmdycGMuYXBpLnYxLk1hcmtWaWV3ZWRSZXF1ZXN0Gh8uZ3JwYy5hcGkudjEuTWFya1ZpZXdlZFJlc3BvbnNlIgBCnQEKD2NvbS5ncnBjLmFwaS52MUIIRWNnUHJvdG9QAVoyZ2l0aHViLmNvbS9MSVJZQy1JSFUvZWNnLWh1Yi9pbnRlcm5hbC9hcGkvdjE7YXBpdjGiAgNHQViqAgtHcnBjLkFwaS5WMcoCC0dycGNcQXBpXFYx4gIXR3JwY1xBcGlcVjFcR1BCTWV0YWRhdGHqAg1HcnBjOjpBcGk6OlYxYgZwcm90bzM");
 
 /**
  * Ecg mirrors dto.EcgDTO (the API representation, not the DB model). file_path is
@@ -74,6 +74,20 @@ export type Ecg = Message<"grpc.api.v1.Ecg"> & {
    * @generated from field: string extra_json = 9;
    */
   extraJson: string;
+
+  /**
+   * The hardware that sent the file. device_mac is empty when the ingestion
+   * source could not identify it; device_label is the operator's name for it,
+   * resolved through the device inventory and empty when it has none.
+   *
+   * @generated from field: string device_mac = 10;
+   */
+  deviceMac: string;
+
+  /**
+   * @generated from field: string device_label = 11;
+   */
+  deviceLabel: string;
 };
 
 /**
@@ -140,6 +154,34 @@ export const GetFiltersRequestSchema: GenMessage<GetFiltersRequest> = /*@__PURE_
   messageDesc(file_v1_ecg, 2);
 
 /**
+ * DeviceOption is one entry of the device filter. The label is what an operator
+ * reads; the MAC is what the filter sends, because a label can be renamed and a
+ * saved search should not stop matching when it is.
+ *
+ * @generated from message grpc.api.v1.DeviceOption
+ */
+export type DeviceOption = Message<"grpc.api.v1.DeviceOption"> & {
+  /**
+   * @generated from field: string mac = 1;
+   */
+  mac: string;
+
+  /**
+   * empty when the device has no name yet
+   *
+   * @generated from field: string label = 2;
+   */
+  label: string;
+};
+
+/**
+ * Describes the message grpc.api.v1.DeviceOption.
+ * Use `create(DeviceOptionSchema)` to create a new message.
+ */
+export const DeviceOptionSchema: GenMessage<DeviceOption> = /*@__PURE__*/
+  messageDesc(file_v1_ecg, 3);
+
+/**
  * @generated from message grpc.api.v1.GetFiltersResponse
  */
 export type GetFiltersResponse = Message<"grpc.api.v1.GetFiltersResponse"> & {
@@ -157,6 +199,11 @@ export type GetFiltersResponse = Message<"grpc.api.v1.GetFiltersResponse"> & {
    * @generated from field: repeated string file_formats = 3;
    */
   fileFormats: string[];
+
+  /**
+   * @generated from field: repeated grpc.api.v1.DeviceOption devices = 4;
+   */
+  devices: DeviceOption[];
 };
 
 /**
@@ -164,7 +211,7 @@ export type GetFiltersResponse = Message<"grpc.api.v1.GetFiltersResponse"> & {
  * Use `create(GetFiltersResponseSchema)` to create a new message.
  */
 export const GetFiltersResponseSchema: GenMessage<GetFiltersResponse> = /*@__PURE__*/
-  messageDesc(file_v1_ecg, 3);
+  messageDesc(file_v1_ecg, 4);
 
 /**
  * ListAllRequest is the cross-patient ECG timeline filter set (GET /ecgs).
@@ -200,6 +247,13 @@ export type ListAllRequest = Message<"grpc.api.v1.ListAllRequest"> & {
   fileFormat: string;
 
   /**
+   * one piece of hardware, by address
+   *
+   * @generated from field: string device_mac = 10;
+   */
+  deviceMac: string;
+
+  /**
    * YYYY-MM-DD (inclusive)
    *
    * @generated from field: string from = 6;
@@ -229,7 +283,7 @@ export type ListAllRequest = Message<"grpc.api.v1.ListAllRequest"> & {
  * Use `create(ListAllRequestSchema)` to create a new message.
  */
 export const ListAllRequestSchema: GenMessage<ListAllRequest> = /*@__PURE__*/
-  messageDesc(file_v1_ecg, 4);
+  messageDesc(file_v1_ecg, 5);
 
 /**
  * @generated from message grpc.api.v1.ListAllResponse
@@ -261,7 +315,7 @@ export type ListAllResponse = Message<"grpc.api.v1.ListAllResponse"> & {
  * Use `create(ListAllResponseSchema)` to create a new message.
  */
 export const ListAllResponseSchema: GenMessage<ListAllResponse> = /*@__PURE__*/
-  messageDesc(file_v1_ecg, 5);
+  messageDesc(file_v1_ecg, 6);
 
 /**
  * EcgField is one editable metadata field definition (mirrors ecgmeta.FieldDef),
@@ -300,7 +354,7 @@ export type EcgField = Message<"grpc.api.v1.EcgField"> & {
  * Use `create(EcgFieldSchema)` to create a new message.
  */
 export const EcgFieldSchema: GenMessage<EcgField> = /*@__PURE__*/
-  messageDesc(file_v1_ecg, 6);
+  messageDesc(file_v1_ecg, 7);
 
 /**
  * @generated from message grpc.api.v1.GetMetadataRequest
@@ -319,7 +373,7 @@ export type GetMetadataRequest = Message<"grpc.api.v1.GetMetadataRequest"> & {
  * Use `create(GetMetadataRequestSchema)` to create a new message.
  */
 export const GetMetadataRequestSchema: GenMessage<GetMetadataRequest> = /*@__PURE__*/
-  messageDesc(file_v1_ecg, 7);
+  messageDesc(file_v1_ecg, 8);
 
 /**
  * @generated from message grpc.api.v1.GetMetadataResponse
@@ -343,7 +397,7 @@ export type GetMetadataResponse = Message<"grpc.api.v1.GetMetadataResponse"> & {
  * Use `create(GetMetadataResponseSchema)` to create a new message.
  */
 export const GetMetadataResponseSchema: GenMessage<GetMetadataResponse> = /*@__PURE__*/
-  messageDesc(file_v1_ecg, 8);
+  messageDesc(file_v1_ecg, 9);
 
 /**
  * UpdateMetadataRequest patches an ECG's editable metadata. values_json is a JSON
@@ -368,7 +422,7 @@ export type UpdateMetadataRequest = Message<"grpc.api.v1.UpdateMetadataRequest">
  * Use `create(UpdateMetadataRequestSchema)` to create a new message.
  */
 export const UpdateMetadataRequestSchema: GenMessage<UpdateMetadataRequest> = /*@__PURE__*/
-  messageDesc(file_v1_ecg, 9);
+  messageDesc(file_v1_ecg, 10);
 
 /**
  * @generated from message grpc.api.v1.UpdateMetadataResponse
@@ -387,7 +441,7 @@ export type UpdateMetadataResponse = Message<"grpc.api.v1.UpdateMetadataResponse
  * Use `create(UpdateMetadataResponseSchema)` to create a new message.
  */
 export const UpdateMetadataResponseSchema: GenMessage<UpdateMetadataResponse> = /*@__PURE__*/
-  messageDesc(file_v1_ecg, 10);
+  messageDesc(file_v1_ecg, 11);
 
 /**
  * MarkViewedRequest stamps viewed_at on first view (clears the "new" indicator).
@@ -408,7 +462,7 @@ export type MarkViewedRequest = Message<"grpc.api.v1.MarkViewedRequest"> & {
  * Use `create(MarkViewedRequestSchema)` to create a new message.
  */
 export const MarkViewedRequestSchema: GenMessage<MarkViewedRequest> = /*@__PURE__*/
-  messageDesc(file_v1_ecg, 11);
+  messageDesc(file_v1_ecg, 12);
 
 /**
  * @generated from message grpc.api.v1.MarkViewedResponse
@@ -430,7 +484,7 @@ export type MarkViewedResponse = Message<"grpc.api.v1.MarkViewedResponse"> & {
  * Use `create(MarkViewedResponseSchema)` to create a new message.
  */
 export const MarkViewedResponseSchema: GenMessage<MarkViewedResponse> = /*@__PURE__*/
-  messageDesc(file_v1_ecg, 12);
+  messageDesc(file_v1_ecg, 13);
 
 /**
  * @generated from service grpc.api.v1.ECGService

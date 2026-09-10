@@ -150,6 +150,15 @@ func StartFTPFromDB(
 	settings.Enabled = true
 
 	server := ingestion.New(settings, queue)
+	// The gate is read here rather than passed in: a UI-triggered restart
+	// builds a fresh server, and main registers the gate once before modules
+	// start (see module.SetDeviceGate).
+	if g := module.ActiveDeviceGate(); g != nil {
+		server.WithDeviceGate(g)
+	}
+	if a := module.ActiveAuditWriter(); a != nil {
+		server.WithAuditWriter(a)
+	}
 
 	// Re-wire the FTP file-received hook: a UI-triggered restart builds a fresh
 	// server instance that would otherwise lose the hook, silently breaking
@@ -268,6 +277,9 @@ func StartDICOMFromDB(
 	settings.Enabled = true
 
 	server := dicomsrv.New(settings, queue)
+	if g := module.ActiveDeviceGate(); g != nil {
+		server.WithDeviceGate(g)
+	}
 	if err := server.Start(); err != nil {
 		return err
 	}

@@ -18,6 +18,11 @@ export interface ECG {
   id: number;
   patient_id: string;
   vendor: string;
+  // The hardware that sent this file. device_mac is empty when the ingestion
+  // source could not identify it; device_label is the operator's name for it,
+  // joined from the device inventory, so renaming a device renames it here too.
+  device_mac: string;
+  device_label: string;
   file_path: string;
   original_filename: string;
   recorded_at: string | null; // acquisition timestamp from device; null for legacy records

@@ -42,6 +42,7 @@ message SearchRequest {
   string hl7_status = 10;
   string from = 11;        // YYYY-MM-DD (inclusive)
   string to = 12;          // YYYY-MM-DD (inclusive)
+  string device_mac = 13;  // the hardware that sent the ECG, by address
 }
 
 message SearchResponse {
@@ -72,6 +73,7 @@ message ListECGsRequest {
   string device_model = 7;
   string file_format = 8;
   string hl7_status = 9;
+  string device_mac = 10;  // the hardware that sent it, by address
 }
 
 message ListECGsResponse {

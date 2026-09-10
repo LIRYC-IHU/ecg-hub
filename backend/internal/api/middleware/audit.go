@@ -21,6 +21,18 @@ import (
 // resourceID — identifier of the resource affected (e.g. ECG ID, patient ID). Pass "" if N/A.
 // details    — arbitrary key/value map stored as JSONB
 func WriteAuditLog(ctx context.Context, db *gorm.DB, userID, action, resourceID string, details map[string]any) error {
+	// Every call site discards the error — the audit is best effort, and losing
+	// one row must not fail the operation it describes. A nil handle would
+	// panic inside GORM instead and take the request with it, which is the one
+	// outcome worse than a missing row, so it is refused loudly here. Handlers
+	// are wired conditionally, so this is a wiring mistake, not an impossible
+	// state.
+	if db == nil {
+		slog.Error("audit: no database handle — entry not written",
+			"action", action, "user_id", userID, "resource_id", resourceID)
+		return fmt.Errorf("audit: write log: no database handle")
+	}
+
 	raw, err := json.Marshal(details)
 	if err != nil {
 		return fmt.Errorf("audit: write log: marshal details: %w", err)

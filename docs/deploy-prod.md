@@ -85,7 +85,10 @@ those cannot be applied to a running stack.
 
 ## FTP on the privileged port 21
 
-Already handled. The compose file publishes `${FTP_PORT:-21}:2121`: dockerd runs
+Already handled **on the bridge network**. Under `network_mode: host` there are
+no port mappings and this does not apply — see the next section.
+
+The compose file publishes `${FTP_PORT:-21}:2121`: dockerd runs
 as root and performs the privileged bind, while the backend keeps binding 2121
 as a non-root user inside the container.
 
@@ -97,6 +100,92 @@ Do not add `cap_add: NET_BIND_SERVICE`, and do not `setcap` the binary: a
 capability the bounding set cannot grant makes `execve` itself fail, and the
 container crash-loops with `exec /app/ecg-hub: operation not permitted` before
 running a line of code.
+
+## Host networking, and the device whitelist
+
+The bridge deployment above cannot identify devices. A container on a bridge
+network has its own network namespace, so `/proc/net/arp` inside it lists the
+other containers and never the hardware on the site network — and every device
+connection arrives from the Docker gateway, so they all look like one address.
+The MAC-address whitelist (Admin > Devices) then identifies nothing and, failing
+open, lets every device through.
+
+Two ways out. Either mount the host's neighbour tables read-only and keep the
+bridge:
+
+```yaml
+backend:
+  volumes:
+    - /proc/net/arp:/host/proc/net/arp:ro
+    - /proc/net/route:/host/proc/net/route:ro
+  environment:
+    HOST_PROC_NET: /host/proc/net
+```
+
+or run the whole stack with `network_mode: host`, where the backend shares the
+host's namespace and sees both the real client addresses and the real ARP table
+with no extra mount. `HOST_PROC_NET` is then unnecessary. `docker-compose.host.yml`
+is that variant:
+
+```sh
+docker compose -f docker-compose.host.yml up -d
+```
+
+It differs from the bridge file in four places, and each is forced:
+
+- `backend` and `frontend` take `network_mode: host`. nginx then reaches the
+  API on loopback, which is why it mounts `nginx/nginx.host.conf` instead —
+  the same file with `127.0.0.1:4444` as the upstream and no Docker resolver.
+- `db` stays on its own bridge network, published on `127.0.0.1:5432`. Point
+  `DATABASE_URL` there rather than at `db`: there is no Docker DNS in the host
+  namespace.
+- `SERVER_HOST` and `METRICS_HOST` are set to `127.0.0.1`. Without the port
+  mappings, an unset bind address puts the API on the site network past nginx,
+  and publishes the unauthenticated metrics endpoint with it.
+- Nothing publishes ports, so nothing binds 21 — see below.
+
+Host networking changes three things in this document:
+
+- **There are no port mappings.** `${FTP_PORT:-21}:2121` is ignored, so nothing
+  performs the privileged bind on 21 any more — see below.
+- **`PublicHost` is no longer required.** The server sees the host's own
+  address and advertises it correctly in PASV.
+- **`DOCKER-USER` no longer applies.** With no DNAT there is nothing to filter
+  there; the rules belong in `INPUT`, where `ufw` works normally again.
+- **What used to confine a port is gone.** On the bridge network the compose
+  file publishes `127.0.0.1:9091` for metrics and does not publish 4444 at all;
+  in the host namespace both are as reachable as the process binds them. That
+  is what `SERVER_HOST` and `METRICS_HOST` are for.
+
+### Port 21 without a port mapping
+
+The backend runs as a non-root user under `cap_drop: ALL`, so it binds 2121 and
+nothing else. Redirect in the kernel:
+
+```sh
+iptables -t nat -A PREROUTING -p tcp --dport 21 -j REDIRECT --to-port 2121
+```
+
+Persist it (`iptables-persistent`, an nftables rule, or a systemd unit) or it is
+gone at the next reboot. `PREROUTING` covers traffic arriving on an interface
+but not the host talking to its own address — add the matching `OUTPUT` rule if
+you want `ftp localhost 21` to work for testing.
+
+The alternative is no NAT at all:
+
+```sh
+sysctl -w net.ipv4.ip_unprivileged_port_start=21   # persist in /etc/sysctl.d/
+```
+
+and set the FTP port to 21 in Admin > Modules. Simpler, but it lowers the
+privileged-port floor for every process on the host, not just this one.
+
+**Do not** bridge 21 to 2121 with `socat`, `haproxy` or an nginx `stream` block.
+Those terminate the connection and open a new one, so every device arrives from
+the host itself: the whitelist sees a single identity for the whole site, and
+approving one device approves all of them. `REDIRECT` and `DNAT` rewrite only
+the destination and leave the source address — which is what the whitelist reads
+— untouched.
 
 ## FTP passive mode
 
@@ -122,8 +211,9 @@ the INPUT chain. Filtering belongs in `DOCKER-USER`, e.g.
 iptables -I DOCKER-USER -i eth0 ! -s 10.0.0.0/8 -p tcp --dport 21 -j DROP
 ```
 
-Note also that the backend sees the Docker gateway address rather than the real
-client IP, so FTP logs and anything keyed on client IP reflect that.
+Note also that on a bridge network the backend sees the Docker gateway address
+rather than the real client IP, so FTP logs and anything keyed on client IP
+reflect that. Under `network_mode: host` it sees the real addresses.
 
 The FTP module throttles failed logins — a delay that grows with the count, per
 source address, exported as `ftp_auth_failures_total`. It does not lock an

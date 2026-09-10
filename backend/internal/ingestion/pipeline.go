@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
+	"github.com/LIRYC-IHU/ecg-hub/internal/device"
 	appmetrics "github.com/LIRYC-IHU/ecg-hub/internal/metrics"
 	"github.com/LIRYC-IHU/ecg-hub/internal/module"
 )
@@ -24,6 +25,15 @@ type IngestItem struct {
 	Data []byte
 	// Source identifies the ingestion channel (e.g. "ftp", "dicom"). Used for metrics.
 	Source string
+	// DeviceMAC is the hardware address of the device that sent the file, when
+	// the ingestion source could resolve one. Empty on a deployment where the
+	// devices are not on the server's own network segment, and on the manual
+	// upload route.
+	DeviceMAC string
+	// Pairing marks a file sent by a device that is asking to be enrolled. It
+	// is parsed to identify the hardware and then held in memory for an
+	// operator — never routed, never stored.
+	Pairing bool
 	// RejectReason, when non-empty, marks a file the source refused at its own
 	// boundary — over the size cap, today. The dispatcher quarantines it
 	// instead of routing, and Data then holds only the head of the file that
@@ -75,6 +85,7 @@ type Dispatcher struct {
 	router     *Router
 	quarantine QuarantineRecorder  // optional; nil disables quarantine recording
 	connectors quarantineForwarder // optional; nil disables proxying of quarantined files
+	pairing    pairingRecorder     // optional; nil drops pairing files
 	ctx        context.Context
 	cancel     context.CancelFunc
 	startOnce  sync.Once
@@ -86,6 +97,14 @@ type Dispatcher struct {
 // to the configured PACS regardless of local ingestion outcome.
 type quarantineForwarder interface {
 	DispatchQuarantined(quarantineID, vendor, filename, filePath string)
+}
+
+// pairingRecorder holds the one file a device sent while asking to be enrolled,
+// and records what a vendor module read out of it. Implemented by
+// device.Pairing.
+type pairingRecorder interface {
+	Hold(ctx context.Context, id device.Identity, filename string, data []byte, vendor, model, serial string) error
+	Len() int
 }
 
 // NewDispatcher creates a Dispatcher. Call Start() exactly once to begin consuming
@@ -107,6 +126,13 @@ func NewDispatcher(ingest IngestQueue, routed RoutedQueue, router *Router) *Disp
 // Returns d for chaining.
 func (d *Dispatcher) WithQuarantineRecorder(q QuarantineRecorder) *Dispatcher {
 	d.quarantine = q
+	return d
+}
+
+// WithPairing attaches the pairing store so files from devices awaiting
+// approval are identified and held instead of dropped. Returns d for chaining.
+func (d *Dispatcher) WithPairing(p pairingRecorder) *Dispatcher {
+	d.pairing = p
 	return d
 }
 
@@ -145,6 +171,10 @@ func (d *Dispatcher) run() {
 			return
 		case item := <-d.ingest:
 			appmetrics.IngestQueueDepth.Set(float64(len(d.ingest)))
+			if item.Pairing {
+				d.recordPairing(item)
+				continue
+			}
 			if item.RejectReason != "" {
 				d.recordRejected(item)
 				continue
@@ -214,6 +244,37 @@ func (d *Dispatcher) run() {
 			}
 		}
 	}
+}
+
+// recordPairing identifies the device behind a pairing file and holds the file
+// for the operator who will approve it.
+//
+// The file is routed only to read it: whatever the module makes of it never
+// reaches the persister, so an unapproved device cannot put an ECG on the
+// volume. A file no module can parse still identifies its device — the MAC is
+// what matters here, the vendor and model are what make the approval screen
+// readable — so a routing failure is not a failure of pairing.
+func (d *Dispatcher) recordPairing(item IngestItem) {
+	if d.pairing == nil {
+		slog.Error("ingestion: pairing file received with no recorder attached — dropped",
+			"filename", item.Filename, "mac", item.DeviceMAC)
+		return
+	}
+	var vendor, model, serial string
+	if ri, _, ok := d.router.Route(d.ctx, item); ok && ri.Meta != nil {
+		vendor, model = ri.Meta.VendorName, ri.Meta.DeviceModel
+		serial, _ = ri.Meta.Extra["serial_number"].(string)
+	}
+	id := device.Identity{MAC: item.DeviceMAC, Source: item.Source}
+	if err := d.pairing.Hold(d.ctx, id, item.Filename, item.Data, vendor, model, serial); err != nil {
+		slog.Warn("ingestion: cannot hold the pairing file",
+			"filename", item.Filename, "mac", item.DeviceMAC, "error", err)
+		return
+	}
+	appmetrics.DevicePairingHeld.Set(float64(d.pairing.Len()))
+	slog.Info("ingestion: device awaiting approval",
+		"mac", item.DeviceMAC, "source", item.Source,
+		"vendor", vendor, "model", model, "filename", item.Filename)
 }
 
 // recordRejected quarantines a file the ingestion source refused at its own

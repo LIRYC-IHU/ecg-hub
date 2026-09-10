@@ -7,8 +7,8 @@ import (
 	"connectrpc.com/connect"
 	"gorm.io/gorm"
 
-	apiv1 "github.com/LIRYC-IHU/ecg-hub/internal/api/v1"
 	mw "github.com/LIRYC-IHU/ecg-hub/internal/api/middleware"
+	apiv1 "github.com/LIRYC-IHU/ecg-hub/internal/api/v1"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
 )
 

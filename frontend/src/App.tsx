@@ -14,6 +14,7 @@ import {
   Activity,
   Palette,
   UploadCloud,
+  HardDrive,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Spinner } from "./components/ui/Spinner";
@@ -32,6 +33,7 @@ import { AdminRolesPage } from "./components/admin/AdminRolesPage";
 import { AdminAppUsersPage } from "./components/admin/AdminAppUsersPage";
 import { AdminQuarantinePage } from "./components/admin/AdminQuarantinePage";
 import { AdminAuthPage } from "./components/admin/AdminAuthPage";
+import { AdminDevicesPage } from "./components/admin/AdminDevicesPage";
 import { AdminModulesPage } from "./components/admin/AdminModulesPage";
 import { AdminHL7Page } from "./components/admin/AdminHL7Page";
 import { AdminBrandingPage } from "./components/admin/AdminBrandingPage";
@@ -55,7 +57,13 @@ function App() {
   const [filters, setFilters] = useState<
     Pick<
       AllECGFilters,
-      "vendor" | "device_model" | "file_format" | "hl7_status" | "from" | "to"
+      | "vendor"
+      | "device_model"
+      | "device_mac"
+      | "file_format"
+      | "hl7_status"
+      | "from"
+      | "to"
     >
   >({});
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -110,6 +118,8 @@ function App() {
     status === "authenticated" && hasPermission("quarantine.assign");
   const canViewAuthConfig =
     status === "authenticated" && hasPermission("admin.auth_config");
+  const canViewDevices =
+    status === "authenticated" && hasPermission("device.read");
   const canManageWebhooks =
     status === "authenticated" && hasPermission("webhook.manage");
   const canManageApiKeys =
@@ -183,6 +193,11 @@ function App() {
       labelKey: "nav.modulesConfig",
     },
     canViewHL7 && { to: "/hl7", icon: Activity, labelKey: "nav.hl7" },
+    canViewDevices && {
+      to: "/devices",
+      icon: HardDrive,
+      labelKey: "nav.devices",
+    },
     canViewAuthConfig && {
       to: "/auth-config",
       icon: KeyRound,
@@ -282,6 +297,28 @@ function App() {
                             </option>
                           ))}
                         </select>
+                        {/* One piece of hardware. Shows the operator's label,
+                            sends the MAC: renaming a device must not silently
+                            change what a saved filter matches. */}
+                        {facets?.devices.length ? (
+                          <select
+                            value={filters.device_mac ?? ""}
+                            onChange={(e) =>
+                              setFilters((f) => ({
+                                ...f,
+                                device_mac: e.target.value || undefined,
+                              }))
+                            }
+                            className="text-xs border border-border rounded-md px-2.5 py-1.5 bg-background focus:outline-none focus:ring-1 focus:ring-ring/20"
+                          >
+                            <option value="">{t("filters.allDevices")}</option>
+                            {facets.devices.map((d) => (
+                              <option key={d.mac} value={d.mac}>
+                                {d.label || d.mac}
+                              </option>
+                            ))}
+                          </select>
+                        ) : null}
                         <select
                           value={filters.file_format ?? ""}
                           onChange={(e) =>
@@ -445,6 +482,16 @@ function App() {
                 element={
                   <div className="overflow-auto">
                     <AdminModulesPage />
+                  </div>
+                }
+              />
+            )}
+            {canViewDevices && (
+              <Route
+                path="/devices"
+                element={
+                  <div className="overflow-auto">
+                    <AdminDevicesPage />
                   </div>
                 }
               />

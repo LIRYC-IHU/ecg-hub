@@ -84,6 +84,15 @@ type ServerConfig struct {
 	// config.yaml that still sets it is honoured, for a bare-metal deployment
 	// that needs a different one.
 	Port int `mapstructure:"port"`
+	// Host is the address to bind. Empty means every interface, which is right
+	// on a bridge network where the port is not published and only nginx can
+	// reach it over the Docker network.
+	//
+	// Under network_mode: host there is no such boundary — an unset Host puts
+	// the API straight on the site network, past nginx and the headers and
+	// limits it applies. Set it to 127.0.0.1 there, with nginx in the same
+	// namespace.
+	Host string `mapstructure:"host"`
 	// TLS enables TLS directly on the Echo server. Required in production (NFR-S1)
 	// for bare-metal deployments. When the server runs behind a TLS-terminating
 	// reverse proxy (nginx), keep this false and terminate TLS at the proxy.
@@ -259,6 +268,14 @@ type MetricsConfig struct {
 	// When 0, the default port 9091 is used (matches prometheus.yml and the
 	// docker-compose expose directive).
 	Port int `mapstructure:"port"`
+	// Host is the address to bind. Empty means every interface.
+	//
+	// The endpoint is unauthenticated, so on a bridge network the compose file
+	// is what confines it: it publishes 127.0.0.1:9091. Under network_mode:
+	// host that mapping does not exist and an unset Host publishes the metrics
+	// — every patient identifier in a label included — to the site network.
+	// Set it to 127.0.0.1 there.
+	Host string `mapstructure:"host"`
 }
 
 // ExportConfig holds batch export worker settings (FR19, NFR-SC3).

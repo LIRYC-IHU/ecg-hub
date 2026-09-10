@@ -124,6 +124,7 @@ interface FormState {
   clearAuthHeader: boolean;
   events: string[];
   vendors: string[];
+  devices: string[];
 }
 
 const emptyForm: FormState = {
@@ -137,6 +138,7 @@ const emptyForm: FormState = {
   clearAuthHeader: false,
   events: [],
   vendors: [],
+  devices: [],
 };
 
 function toInput(form: FormState, editing: boolean): WebhookInput {
@@ -147,6 +149,7 @@ function toInput(form: FormState, editing: boolean): WebhookInput {
     insecure_skip_verify: form.insecureSkipVerify,
     events: form.events,
     vendors: form.vendors,
+    devices: form.devices,
   };
   // Create: always send what was typed. Update: only send when changed/cleared.
   if (!editing || form.secret !== "" || form.clearSecret) {
@@ -241,6 +244,7 @@ export function WebhooksPage() {
       clearAuthHeader: false,
       events: hook.events ?? [],
       vendors: hook.vendors ?? [],
+      devices: hook.devices ?? [],
     });
     setShowForm(true);
   }
@@ -482,6 +486,46 @@ export function WebhooksPage() {
             </div>
           </div>
 
+          {/* Device filter — only worth showing once something is enrolled. */}
+          {(options?.devices ?? []).length > 0 && (
+            <div>
+              <label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                {t("webhooks.devicesLabel")}
+              </label>
+              <p className="text-[11px] text-muted-foreground mb-1.5">
+                {t("webhooks.emptyMeansAll")}
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {(options?.devices ?? []).map((d) => (
+                  <label
+                    key={d.mac}
+                    title={d.mac}
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs cursor-pointer transition-colors ${
+                      form.devices.includes(d.mac)
+                        ? "border-primary bg-primary/10 text-foreground"
+                        : "border-border bg-background text-muted-foreground hover:border-primary/40"
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      className="sr-only"
+                      checked={form.devices.includes(d.mac)}
+                      onChange={() =>
+                        setForm({
+                          ...form,
+                          devices: toggleList(form.devices, d.mac),
+                        })
+                      }
+                    />
+                    {/* The label is what is read, the address is what is
+                        stored — renaming a device must not stop deliveries. */}
+                    {d.label || d.mac}
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Toggles */}
           <div className="flex flex-wrap items-center gap-6">
             <label className="flex items-center gap-2 text-sm text-foreground cursor-pointer">
@@ -563,6 +607,17 @@ export function WebhooksPage() {
                     {(hook.events ?? []).length > 0 && (
                       <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
                         {(hook.events ?? []).length} {t("webhooks.eventsBadge")}
+                      </span>
+                    )}
+                    {(hook.devices ?? []).length > 0 && (
+                      <span className="text-[11px] text-muted-foreground">
+                        {(hook.devices ?? [])
+                          .map(
+                            (mac) =>
+                              (options?.devices ?? []).find((d) => d.mac === mac)
+                                ?.label || mac,
+                          )
+                          .join(", ")}
                       </span>
                     )}
                     {(hook.vendors ?? []).length > 0 && (

@@ -2,8 +2,10 @@ package ingestion
 
 import (
 	"bytes"
+	"context"
 	"crypto/subtle"
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net"
@@ -15,8 +17,12 @@ import (
 	"time"
 
 	ftpserver "github.com/fclairamb/ftpserverlib"
+	"gorm.io/datatypes"
+
+	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 
 	"github.com/LIRYC-IHU/ecg-hub/internal/certs"
+	"github.com/LIRYC-IHU/ecg-hub/internal/device"
 	"github.com/spf13/afero"
 
 	appmetrics "github.com/LIRYC-IHU/ecg-hub/internal/metrics"
@@ -40,6 +46,14 @@ type FTPSettings struct {
 	MaxFileBytes int64
 }
 
+// deviceGate decides whether the hardware behind a connection may ingest.
+// Implemented by device.Gate; nil disables the whitelist entirely.
+type deviceGate interface {
+	Identify(remoteAddr, source string) device.Identity
+	Decide(ctx context.Context, id device.Identity) device.Decision
+	Recheck(ctx context.Context, id device.Identity) device.Decision
+}
+
 // tlsRequirementExplicit aliases ftpserver.MandatoryEncryption for use in package-internal tests.
 const tlsRequirementExplicit = ftpserver.MandatoryEncryption
 
@@ -51,6 +65,25 @@ type Server struct {
 	srv            *ftpserver.FtpServer
 	onFileReceived func(filename string) // optional hook, called after each successful upload
 	auth           *authThrottle
+	gate           deviceGate  // optional; nil disables the device whitelist
+	audit          auditWriter // optional; nil disables the auth-failure trail
+}
+
+// ActionFTPAuthFailed is the audit action for a rejected FTP login.
+const ActionFTPAuthFailed = "ftp_auth_failed"
+
+// WithAuditWriter records refused FTP logins. The device whitelist keeps its
+// own trail for hardware it turns away; this one is for the credentials, which
+// the whitelist never sees. Returns s for chaining.
+func (s *Server) WithAuditWriter(a auditWriter) *Server {
+	s.audit = a
+	return s
+}
+
+// WithDeviceGate attaches the device whitelist. Returns s for chaining.
+func (s *Server) WithDeviceGate(g deviceGate) *Server {
+	s.gate = g
+	return s
 }
 
 // SetFileReceivedHook registers a callback invoked after each successful FTP upload.
@@ -170,17 +203,79 @@ func (s *Server) AuthUser(cc ftpserver.ClientContext, user, pass string) (ftpser
 		count, delay := s.auth.fail(addr)
 		appmetrics.FTPAuthFailures.Inc()
 		slog.Warn("ftp: authentication failed", "user", user, "remote_host", addr, "failures", count, "delay", delay)
+		s.recordAuthFailure(user, addr, count)
 		s.auth.sleep(delay)
 		return nil, fmt.Errorf("ftp: invalid credentials")
 	}
 	s.auth.succeed(remoteHost(cc))
-	slog.Info("ftp: authenticated", "user", user)
+
+	// The device whitelist is checked here rather than at ClientConnected: this
+	// is the last point before the session can transfer anything, and the
+	// decision it produces has to travel with the session anyway — a device
+	// being paired uploads normally and is sorted out downstream.
+	// The gate keeps its own audit trail for the hardware it refuses, so there
+	// is nothing to write here.
+	id, decision := s.gateDecision(cc)
+	if decision == device.Deny {
+		slog.Warn("ftp: device not approved — session refused",
+			"user", user, "mac", id.MAC, "remote_host", id.IP)
+		return nil, fmt.Errorf("ftp: device not approved")
+	}
+
+	slog.Info("ftp: authenticated", "user", user, "mac", id.MAC, "device_decision", decision.String())
 	return &clientDriver{
 		MemMapFs:       &afero.MemMapFs{},
 		queue:          s.queue,
 		onFileReceived: s.onFileReceived,
 		maxFileBytes:   s.cfg.MaxFileBytes,
+		identity:       id,
+		gate:           s.gate,
+		pairing:        decision == device.Pair,
 	}, nil
+}
+
+// gateDecision resolves the device behind cc and asks the gate about it.
+// With no gate attached every device is allowed, which is the behaviour from
+// before the whitelist existed.
+func (s *Server) gateDecision(cc ftpserver.ClientContext) (device.Identity, device.Decision) {
+	if s.gate == nil {
+		return device.Identity{}, device.Allow
+	}
+	addr := ""
+	if cc != nil && cc.RemoteAddr() != nil {
+		addr = cc.RemoteAddr().String()
+	}
+	id := s.gate.Identify(addr, "ftp")
+	return id, s.gate.Decide(context.Background(), id)
+}
+
+// recordAuthFailure writes a rejected login to the audit log.
+//
+// The throttle above is what bounds the volume: failures past the free
+// attempts are answered more and more slowly, so a password sweep cannot turn
+// this into unbounded growth of an append-only table.
+func (s *Server) recordAuthFailure(user, addr string, count int) {
+	if s.audit == nil {
+		return
+	}
+	details, err := json.Marshal(map[string]any{
+		"user":        user,
+		"remote_host": addr,
+		"failures":    count,
+	})
+	if err != nil {
+		return
+	}
+	entry := &models.AuditLog{
+		UserID:     "system",
+		Action:     ActionFTPAuthFailed,
+		ResourceID: addr,
+		Details:    datatypes.JSON(details),
+	}
+	if err := s.audit.Insert(entry); err != nil {
+		slog.Warn("ftp: cannot record the failed login in the audit log",
+			"remote_host", addr, "error", err)
+	}
 }
 
 // ─── authentication throttle ─────────────────────────────────────────────────
@@ -314,6 +409,9 @@ type clientDriver struct {
 	queue          IngestQueue
 	onFileReceived func(filename string)
 	maxFileBytes   int64
+	identity       device.Identity
+	gate           deviceGate
+	pairing        bool
 }
 
 // Create intercepts file creation (write path for FTP STOR command).
@@ -346,6 +444,9 @@ func (d *clientDriver) wrap(f afero.File, name string) afero.File {
 		queue:          d.queue,
 		onFileReceived: d.onFileReceived,
 		maxBytes:       d.maxFileBytes,
+		identity:       d.identity,
+		gate:           d.gate,
+		pairing:        d.pairing,
 	}
 }
 
@@ -366,6 +467,9 @@ type ingestFile struct {
 	maxBytes       int64 // 0 disables the check
 	written        int64
 	oversize       bool
+	identity       device.Identity
+	gate           deviceGate
+	pairing        bool
 }
 
 // Write mirrors bytes to both the underlying file and the internal buffer,
@@ -402,9 +506,11 @@ func (f *ingestFile) Close() error {
 	copy(data, f.buf.Bytes())
 
 	item := IngestItem{
-		Filename: filepath.Base(f.name),
-		Data:     data,
-		Source:   "ftp",
+		Filename:  filepath.Base(f.name),
+		Data:      data,
+		Source:    "ftp",
+		DeviceMAC: f.identity.MAC,
+		Pairing:   f.pairing,
 	}
 	if f.oversize {
 		// The transfer already failed back to the client. Hand the head of the
@@ -424,10 +530,30 @@ func (f *ingestFile) Close() error {
 		}
 		return nil
 	}
+	// The session was authorised when it opened, and it outlives that decision:
+	// these devices hold a control connection for a minute at a time and run
+	// several in parallel, so a device revoked mid-session would go on
+	// ingesting until it happened to reconnect. Ask again for this file.
+	if f.gate != nil {
+		switch f.gate.Recheck(context.Background(), f.identity) {
+		case device.Deny:
+			slog.Warn("ftp: device no longer approved — upload refused mid-session",
+				"filename", item.Filename, "mac", f.identity.MAC)
+			return fmt.Errorf("ftp: device not approved: %s", item.Filename)
+		case device.Pair:
+			item.Pairing = true
+		case device.Allow:
+			item.Pairing = false
+		}
+	}
+
 	select {
 	case f.queue <- item:
-		slog.Info("ftp: file queued for ingestion", "filename", item.Filename, "bytes", len(item.Data))
-		if f.onFileReceived != nil {
+		slog.Info("ftp: file queued for ingestion",
+			"filename", item.Filename, "bytes", len(item.Data), "pairing", item.Pairing)
+		// The hook answers the device's ECTP FILE|ENDS check. A pairing upload
+		// is never stored, so telling the device it arrived would be a lie.
+		if f.onFileReceived != nil && !f.pairing {
 			f.onFileReceived(item.Filename)
 		}
 	case <-time.After(queueFullTimeout):

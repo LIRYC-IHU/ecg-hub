@@ -1,6 +1,6 @@
 {
   "search": {
-    "placeholder": "Search patient by name or identifier…",
+    "placeholder": "Search by patient, identifier or device…",
     "noResults": "No patients found",
     "loading": "Searching…"
   },
@@ -426,7 +426,8 @@
         "quarantine": "Quarantine",
         "admin": "Administration",
         "webhook": "Webhooks",
-        "api": "API"
+        "api": "API",
+        "device": "Devices"
       },
       "perm": {
         "patient_read": "View patients",
@@ -452,7 +453,9 @@
         "admin_system": "System status & module control",
         "admin_auth_config": "Configure auth providers",
         "webhook_manage": "Configure personal webhooks",
-        "apikey_manage": "Create and manage API keys"
+        "apikey_manage": "Create and manage API keys",
+        "device_read": "View devices and the pairing queue",
+        "device_manage": "Approve, revoke and delete devices"
       }
     },
     "authProviders": {
@@ -503,6 +506,59 @@
       "active": "Active",
       "inactive": "Inactive",
       "restartNotice": "Restart the server to apply authentication changes."
+    },
+    "devices": {
+      "title": "Devices",
+      "subtitle": "Which hardware may push ECGs into the FTP, DICOM and ECTP ports. Devices are identified by MAC address, read from the ARP cache when the connection arrives.",
+      "degraded": "The last {{count}} device connections could not be identified — the hardware is not on this server's own network segment, or a NAT sits in between. Every one of them was allowed through unidentified: the whitelist cannot enforce anything here.",
+      "tab": {
+        "pairing": "Pairing",
+        "devices": "Devices"
+      },
+      "enable": "Enable the device whitelist",
+      "enableHint": "Only approved devices may send. A device is spoofable by its MAC, so this is an enrolment control, not authentication.",
+      "pairing": "Open the pairing window",
+      "pairingHint": "An unknown device may send one ECG so it can be identified. The file is kept in memory, never stored, and only appears here — approval stays manual. The window closes on its own after 30 minutes.",
+      "waiting": "Waiting for approval",
+      "noPending": "No device is waiting. With the pairing window open, send one ECG from the device to make it appear here.",
+      "none": "No device has contacted the ingestion ports yet.",
+      "seen": "Seen {{count}}× · last {{at}}",
+      "fileHeld": "an ECG is held, approving re-ingests it",
+      "willReingest": "The ECG this device sent will be ingested on approval.",
+      "approve": "Approve",
+      "approveTitle": "Approve {{mac}}",
+      "approved": "Device approved.",
+      "approvedAndIngested": "Device approved — the ECG it sent has been ingested.",
+      "dismiss": "Dismiss",
+      "revoke": "Revoke",
+      "revokeTitle": "Revoke {{mac}}",
+      "revoked": "Device revoked.",
+      "reason": "Reason",
+      "label": "Label",
+      "labelPlaceholder": "Cardio B, room 214",
+      "description": "Description",
+      "deleteTitle": "Delete this device?",
+      "deleteMessage": "{{mac}} is removed from the list. It reappears as pending on its next connection — to keep it out, revoke it instead.",
+      "deleted": "Device deleted.",
+      "settingsSaved": "Settings saved.",
+      "status": {
+        "pending": "Pending",
+        "approved": "Approved",
+        "revoked": "Revoked"
+      },
+      "col": {
+        "device": "Device",
+        "mac": "MAC",
+        "status": "Status",
+        "source": "Source",
+        "lastSeen": "Last seen",
+        "approvedBy": "Approved by"
+      },
+      "event": {
+        "pending": "{{label}} is asking to be enrolled ({{mac}})"
+      },
+      "pairingCloses": "Closes at {{at}}.",
+      "pairingExtend": "Extend 30 min"
     }
   },
   "quarantine": {
@@ -535,7 +591,8 @@
     "allFormats": "All formats",
     "allHL7": "All HL7 statuses",
     "from": "From",
-    "to": "to"
+    "to": "to",
+    "allDevices": "All devices"
   },
   "uploads": {
     "title": "Upload ECGs",
@@ -573,7 +630,8 @@
     "authConfig": "Auth",
     "quarantine": "Quarantine",
     "apiKeys": "API Keys",
-    "webhooks": "Webhooks"
+    "webhooks": "Webhooks",
+    "devices": "Devices"
   },
   "apiKeys": {
     "title": "API Keys",
@@ -793,7 +851,8 @@
       "hl7.exhausted": "HL7 retries exhausted",
       "hl7.rejected": "HL7 rejected",
       "ecg.duplicate": "ECG duplicate (skipped)"
-    }
+    },
+    "devicesLabel": "Devices"
   },
   "viewer": {
     "theme": "Theme",

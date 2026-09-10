@@ -33,6 +33,7 @@ func ecgToProto(e *models.ECG) *apiv1.Ecg {
 		Id:               e.ID,
 		PatientId:        e.PatientID,
 		Vendor:           e.Vendor,
+		DeviceMac:        e.DeviceMAC,
 		OriginalFilename: e.OriginalFilename,
 		IngestedAt:       e.IngestedAt.UTC().Format(time.RFC3339),
 		Hl7Status:        e.HL7Status,
@@ -69,6 +70,17 @@ func (h *ECGServiceHandler) GetFilters(_ context.Context, _ *apiv1.GetFiltersReq
 		Order("extra->>'device_model'").
 		Pluck("extra->>'device_model'", &deviceModels)
 
+	// The devices that actually sent something, not the whole inventory: a
+	// filter offering a device with no ECGs behind it is a dead end.
+	var devices []*apiv1.DeviceOption
+	h.DB.Model(&models.ECG{}).
+		Joins("JOIN devices ON devices.mac = ecgs.device_mac").
+		Where("ecgs.device_mac != ''").
+		Distinct("devices.mac", "devices.label").
+		Order("devices.label, devices.mac").
+		Select("devices.mac AS mac, devices.label AS label").
+		Scan(&devices)
+
 	var fileFormats []string
 	h.DB.Model(&models.ECG{}).
 		Where("original_filename LIKE '%.%'").
@@ -80,7 +92,35 @@ func (h *ECGServiceHandler) GetFilters(_ context.Context, _ *apiv1.GetFiltersReq
 		Vendors:      vendors,
 		DeviceModels: deviceModels,
 		FileFormats:  fileFormats,
+		Devices:      devices,
 	}, nil
+}
+
+// fillProtoDeviceLabels resolves the operator's name for the hardware behind a
+// page of ECGs, in one query. The timeline joins the label per row because it
+// already joins devices to filter on them; this is for the lists that load the
+// ECG model itself, where turning the scan into a custom row would take the
+// JSONB metadata with it.
+func fillProtoDeviceLabels(ctx context.Context, db *gorm.DB, ecgs []*apiv1.Ecg) {
+	macs := make([]string, 0, len(ecgs))
+	seen := map[string]bool{}
+	for _, e := range ecgs {
+		if e.DeviceMac != "" && !seen[e.DeviceMac] {
+			seen[e.DeviceMac] = true
+			macs = append(macs, e.DeviceMac)
+		}
+	}
+	if len(macs) == 0 {
+		return
+	}
+	labels, err := repository.NewDeviceRepository(db).LabelsFor(ctx, macs)
+	if err != nil {
+		slog.Warn("ecg: cannot resolve device labels", "error", err)
+		return
+	}
+	for _, e := range ecgs {
+		e.DeviceLabel = labels[e.DeviceMac]
+	}
 }
 
 // ecgWithPatientToProto maps a joined ECG+patient scan row to the wire message
@@ -95,6 +135,10 @@ func ecgWithPatientToProto(r *dto.EcgWithPatientRow) *apiv1.EcgWithPatient {
 	if r.PatientDOB != nil {
 		out.PatientDob = r.PatientDOB.UTC().Format(time.RFC3339)
 	}
+	// Joined per row rather than stored on the ECG, which records the address
+	// the file arrived from and nothing else — renaming a device renames it
+	// everywhere at once.
+	out.Ecg.DeviceLabel = r.DeviceLabel
 	return out
 }
 
@@ -116,10 +160,14 @@ func (h *ECGServiceHandler) ListAll(ctx context.Context, req *apiv1.ListAllReque
 
 	buildQ := func() *gorm.DB {
 		q := h.DB.Model(&models.ECG{}).
-			Joins("LEFT JOIN patients ON patients.patient_id = ecgs.patient_id")
+			Joins("LEFT JOIN patients ON patients.patient_id = ecgs.patient_id").
+			// LEFT: an ECG keeps its row when its device was deleted from the
+			// inventory, or when none was ever identified.
+			Joins("LEFT JOIN devices ON devices.mac = ecgs.device_mac")
 		if req.Q != "" {
 			like := "%" + req.Q + "%"
-			q = q.Where("(patients.last_name ILIKE ? OR patients.first_name ILIKE ? OR ecgs.patient_id ILIKE ? OR ecgs.original_filename ILIKE ?)", like, like, like, like)
+			q = q.Where("(patients.last_name ILIKE ? OR patients.first_name ILIKE ? OR ecgs.patient_id ILIKE ? OR ecgs.original_filename ILIKE ? OR devices.label ILIKE ? OR ecgs.device_mac ILIKE ?)",
+				like, like, like, like, like, like)
 		}
 		if req.Hl7Status != "" {
 			q = q.Where("ecgs.hl7_status = ?", req.Hl7Status)
@@ -129,6 +177,9 @@ func (h *ECGServiceHandler) ListAll(ctx context.Context, req *apiv1.ListAllReque
 		}
 		if req.DeviceModel != "" {
 			q = q.Where("ecgs.extra->>'device_model' = ?", req.DeviceModel)
+		}
+		if req.DeviceMac != "" {
+			q = q.Where("ecgs.device_mac = ?", req.DeviceMac)
 		}
 		if req.FileFormat != "" {
 			q = q.Where("LOWER(substring(ecgs.original_filename from '\\.([^.]+)$')) = LOWER(?)", strings.TrimPrefix(req.FileFormat, "."))
@@ -154,7 +205,7 @@ func (h *ECGServiceHandler) ListAll(ctx context.Context, req *apiv1.ListAllReque
 	var rows []dto.EcgWithPatientRow
 	offset := (page - 1) * perPage
 	if err := buildQ().
-		Select("ecgs.*, patients.first_name AS patient_first_name, patients.last_name AS patient_last_name, patients.gender AS patient_gender, patients.date_of_birth AS patient_dob").
+		Select("ecgs.*, patients.first_name AS patient_first_name, patients.last_name AS patient_last_name, patients.gender AS patient_gender, patients.date_of_birth AS patient_dob, devices.label AS device_label").
 		Order("COALESCE(ecgs.recorded_at, ecgs.ingested_at) DESC").
 		Offset(int(offset)).Limit(int(perPage)).
 		Scan(&rows).Error; err != nil {
@@ -171,6 +222,7 @@ func (h *ECGServiceHandler) ListAll(ctx context.Context, req *apiv1.ListAllReque
 		"q":          req.Q,
 		"hl7_status": req.Hl7Status,
 		"vendor":     req.Vendor,
+		"device_mac": req.DeviceMac,
 		"from":       req.From,
 		"to":         req.To,
 		"page":       page,

@@ -1,11 +1,14 @@
 package repository
 
 import (
+	"context"
 	"encoding/json"
+	"time"
 
 	"gorm.io/gorm"
 
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
+	"github.com/LIRYC-IHU/ecg-hub/internal/device"
 )
 
 // ModuleSettingsRepository manages the singleton module settings row.
@@ -115,5 +118,40 @@ func (r *ModuleSettingsRepository) SetActiveModules(names []string) error {
 		return err
 	}
 	s.ActiveModules = string(data)
+	return r.db.Save(s).Error
+}
+
+// DeviceSettings returns the device whitelist configuration. It implements
+// device.SettingsSource, and is called on every incoming ingestion connection —
+// the gate caches nothing, so keep it a single-row read.
+func (r *ModuleSettingsRepository) DeviceSettings(_ context.Context) (device.Settings, error) {
+	s, err := r.Get()
+	if err != nil {
+		return device.Settings{}, err
+	}
+	out := device.Settings{
+		Enabled:     s.DeviceWhitelistEnabled,
+		PairingOpen: s.DevicePairingOpen,
+	}
+	if s.DevicePairingUntil != nil {
+		out.PairingUntil = *s.DevicePairingUntil
+	}
+	return out, nil
+}
+
+// SetDeviceSettings stores the device whitelist configuration. A zero
+// pairingUntil clears the expiry, leaving the window open until it is closed.
+func (r *ModuleSettingsRepository) SetDeviceSettings(enabled, pairingOpen bool, pairingUntil time.Time) error {
+	s, err := r.Get()
+	if err != nil {
+		return err
+	}
+	s.DeviceWhitelistEnabled = enabled
+	s.DevicePairingOpen = pairingOpen
+	if pairingUntil.IsZero() {
+		s.DevicePairingUntil = nil
+	} else {
+		s.DevicePairingUntil = &pairingUntil
+	}
 	return r.db.Save(s).Error
 }

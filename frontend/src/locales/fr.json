@@ -1,6 +1,6 @@
 {
   "search": {
-    "placeholder": "Rechercher un patient par nom ou identifiant…",
+    "placeholder": "Rechercher par patient, identifiant ou appareil…",
     "noResults": "Aucun patient trouvé",
     "loading": "Recherche en cours…"
   },
@@ -426,7 +426,8 @@
         "quarantine": "Quarantaine",
         "admin": "Administration",
         "webhook": "Webhooks",
-        "api": "API"
+        "api": "API",
+        "device": "Appareils"
       },
       "perm": {
         "patient_read": "Consulter les patients",
@@ -452,7 +453,9 @@
         "admin_system": "État système & contrôle des modules",
         "admin_auth_config": "Configurer les fournisseurs d'auth",
         "webhook_manage": "Configurer ses webhooks",
-        "apikey_manage": "Créer et gérer ses clés API"
+        "apikey_manage": "Créer et gérer ses clés API",
+        "device_read": "Voir les appareils et la file d'appairage",
+        "device_manage": "Approuver, révoquer et supprimer des appareils"
       }
     },
     "authProviders": {
@@ -503,6 +506,59 @@
       "active": "Actif",
       "inactive": "Inactif",
       "restartNotice": "Redémarrez le serveur pour appliquer les modifications d'authentification."
+    },
+    "devices": {
+      "title": "Appareils",
+      "subtitle": "Quel matériel peut déposer des ECG sur les ports FTP, DICOM et ECTP. Les appareils sont identifiés par adresse MAC, lue dans le cache ARP à l'arrivée de la connexion.",
+      "degraded": "Les {{count}} dernières connexions d'appareils n'ont pas pu être identifiées — le matériel n'est pas sur le segment réseau de ce serveur, ou un NAT s'intercale. Toutes ont été laissées passer non identifiées : la liste blanche n'applique rien ici.",
+      "tab": {
+        "pairing": "Appairage",
+        "devices": "Appareils"
+      },
+      "enable": "Activer la liste blanche",
+      "enableHint": "Seuls les appareils approuvés peuvent émettre. Une MAC s'usurpe : c'est un contrôle d'enrôlement, pas une authentification.",
+      "pairing": "Ouvrir la fenêtre d'appairage",
+      "pairingHint": "Un appareil inconnu peut envoyer un ECG pour être identifié. Le fichier reste en mémoire, n'est jamais stocké et n'apparaît qu'ici — l'approbation reste manuelle. La fenêtre se ferme d'elle-même au bout de 30 minutes.",
+      "waiting": "En attente d'approbation",
+      "noPending": "Aucun appareil en attente. Fenêtre d'appairage ouverte, envoyez un ECG depuis l'appareil pour le faire apparaître ici.",
+      "none": "Aucun appareil n'a encore contacté les ports d'ingestion.",
+      "seen": "Vu {{count}}× · dernière fois {{at}}",
+      "fileHeld": "un ECG est conservé, l'approbation le réingère",
+      "willReingest": "L'ECG envoyé par cet appareil sera ingéré à l'approbation.",
+      "approve": "Approuver",
+      "approveTitle": "Approuver {{mac}}",
+      "approved": "Appareil approuvé.",
+      "approvedAndIngested": "Appareil approuvé — l'ECG qu'il a envoyé a été ingéré.",
+      "dismiss": "Écarter",
+      "revoke": "Révoquer",
+      "revokeTitle": "Révoquer {{mac}}",
+      "revoked": "Appareil révoqué.",
+      "reason": "Motif",
+      "label": "Libellé",
+      "labelPlaceholder": "Cardio B, chambre 214",
+      "description": "Description",
+      "deleteTitle": "Supprimer cet appareil ?",
+      "deleteMessage": "{{mac}} est retiré de la liste. Il réapparaîtra en attente à sa prochaine connexion — pour le tenir à l'écart, révoquez-le plutôt.",
+      "deleted": "Appareil supprimé.",
+      "settingsSaved": "Réglages enregistrés.",
+      "status": {
+        "pending": "En attente",
+        "approved": "Approuvé",
+        "revoked": "Révoqué"
+      },
+      "col": {
+        "device": "Appareil",
+        "mac": "MAC",
+        "status": "Statut",
+        "source": "Source",
+        "lastSeen": "Vu le",
+        "approvedBy": "Approuvé par"
+      },
+      "event": {
+        "pending": "{{label}} demande à être enrôlé ({{mac}})"
+      },
+      "pairingCloses": "Se ferme à {{at}}.",
+      "pairingExtend": "Prolonger 30 min"
     }
   },
   "quarantine": {
@@ -536,7 +592,8 @@
     "allFormats": "Tous les formats",
     "allHL7": "Tous les statuts HL7",
     "from": "Du",
-    "to": "au"
+    "to": "au",
+    "allDevices": "Tous les appareils"
   },
   "uploads": {
     "title": "Importer des ECG",
@@ -574,7 +631,8 @@
     "authConfig": "Authentification",
     "quarantine": "Quarantaine",
     "apiKeys": "Clés API",
-    "webhooks": "Webhooks"
+    "webhooks": "Webhooks",
+    "devices": "Appareils"
   },
   "apiKeys": {
     "title": "Clés API",
@@ -794,7 +852,8 @@
       "hl7.exhausted": "HL7 épuisé (retries)",
       "hl7.rejected": "HL7 rejeté",
       "ecg.duplicate": "ECG doublon (ignoré)"
-    }
+    },
+    "devicesLabel": "Appareils"
   },
   "viewer": {
     "theme": "Thème",

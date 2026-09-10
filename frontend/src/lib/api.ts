@@ -105,6 +105,10 @@ export interface AllECGFilters {
   hl7_status?: "pending" | "success" | "hl7_exhausted";
   vendor?: string;
   device_model?: string;
+  // The sending device, by MAC. The dropdown shows the operator's label but
+  // sends the address: a label can be renamed, and a saved search should not
+  // stop matching when it is.
+  device_mac?: string;
   file_format?: string;
   from?: string;
   to?: string;
@@ -112,10 +116,16 @@ export interface AllECGFilters {
   per_page?: number;
 }
 
+export interface DeviceFacet {
+  mac: string;
+  label: string;
+}
+
 export interface ECGFilterFacets {
   vendors: string[];
   device_models: string[];
   file_formats: string[];
+  devices: DeviceFacet[];
 }
 
 export async function fetchECGFilterFacets(): Promise<ECGFilterFacets> {
@@ -125,9 +135,10 @@ export async function fetchECGFilterFacets(): Promise<ECGFilterFacets> {
       vendors: res.vendors,
       device_models: res.deviceModels,
       file_formats: res.fileFormats,
+      devices: res.devices.map((d) => ({ mac: d.mac, label: d.label })),
     };
   } catch {
-    return { vendors: [], device_models: [], file_formats: [] };
+    return { vendors: [], device_models: [], file_formats: [], devices: [] };
   }
 }
 
@@ -138,6 +149,10 @@ export interface ECGFilters {
   to?: string;
   vendor?: string;
   device_model?: string;
+  // The sending device, by MAC. The dropdown shows the operator's label but
+  // sends the address: a label can be renamed, and a saved filter should not
+  // stop matching when it is.
+  device_mac?: string;
   file_format?: string;
   hl7_status?: "pending" | "success" | "hl7_exhausted";
   page?: number;
@@ -152,6 +167,8 @@ function ecgFromProto(e: EcgProto): ECG {
     id: e.id as unknown as number, // API id is a string; typing is historical
     patient_id: e.patientId,
     vendor: e.vendor,
+    device_mac: e.deviceMac,
+    device_label: e.deviceLabel,
     file_path: "",
     original_filename: e.originalFilename,
     recorded_at: e.recordedAt || null,
@@ -176,6 +193,7 @@ export async function fetchECGs(
     to: filters.to ?? "",
     vendor: filters.vendor ?? "",
     deviceModel: filters.device_model ?? "",
+    deviceMac: filters.device_mac ?? "",
     fileFormat: filters.file_format ?? "",
     hl7Status: filters.hl7_status ?? "",
     page: filters.page ?? 1,
@@ -622,6 +640,10 @@ export interface PatientFilters {
   // ECG-level filters: keep only patients owning at least one matching ECG.
   vendor?: string;
   device_model?: string;
+  // The sending device, by MAC. The dropdown shows the operator's label but
+  // sends the address: a label can be renamed, and a saved search should not
+  // stop matching when it is.
+  device_mac?: string;
   file_format?: string;
   hl7_status?: "pending" | "success" | "hl7_exhausted";
   from?: string;
@@ -656,6 +678,7 @@ export async function fetchPatients(
     sortOrder: filters.sort_order ?? "",
     vendor: filters.vendor ?? "",
     deviceModel: filters.device_model ?? "",
+    deviceMac: filters.device_mac ?? "",
     fileFormat: filters.file_format ?? "",
     hl7Status: filters.hl7_status ?? "",
     from: filters.from ?? "",
@@ -1896,6 +1919,9 @@ export interface UserWebhook {
   insecure_skip_verify: boolean;
   events: string[];
   vendors: string[];
+  // MAC addresses. Empty = every device. The editor shows labels and stores
+  // addresses, so renaming a device does not silently stop deliveries.
+  devices: string[];
   has_secret: boolean;
   has_auth_header: boolean;
   last_status_code: number;
@@ -1916,6 +1942,7 @@ export interface WebhookInput {
   auth_header?: string;
   events: string[];
   vendors: string[];
+  devices: string[];
 }
 
 export interface WebhookVendorOption {
@@ -1926,6 +1953,7 @@ export interface WebhookVendorOption {
 export interface WebhookOptions {
   events: string[];
   vendors: WebhookVendorOption[];
+  devices: DeviceFacet[];
 }
 
 export interface WebhookTestResult {
@@ -1945,6 +1973,7 @@ function webhookFromProto(w: {
   insecureSkipVerify: boolean;
   events: string[];
   vendors: string[];
+  devices: string[];
   hasSecret: boolean;
   hasAuthHeader: boolean;
   lastStatusCode: number;
@@ -1961,6 +1990,7 @@ function webhookFromProto(w: {
     insecure_skip_verify: w.insecureSkipVerify,
     events: w.events,
     vendors: w.vendors,
+    devices: w.devices,
     has_secret: w.hasSecret,
     has_auth_header: w.hasAuthHeader,
     last_status_code: w.lastStatusCode,
@@ -1983,6 +2013,7 @@ function webhookInputToProto(input: WebhookInput) {
     authHeader: input.auth_header,
     events: input.events,
     vendors: input.vendors,
+    devices: input.devices,
   };
 }
 
@@ -2014,9 +2045,10 @@ export async function fetchWebhookOptions(): Promise<WebhookOptions> {
         name: v.name,
         extensions: v.extensions,
       })),
+      devices: res.devices.map((d) => ({ mac: d.mac, label: d.label })),
     };
   } catch {
-    return { events: [], vendors: [] };
+    return { events: [], vendors: [], devices: [] };
   }
 }
 

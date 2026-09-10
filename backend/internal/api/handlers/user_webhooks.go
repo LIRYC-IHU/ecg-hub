@@ -16,6 +16,7 @@ import (
 	"github.com/LIRYC-IHU/ecg-hub/internal/auth"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
+	"github.com/LIRYC-IHU/ecg-hub/internal/device"
 	"github.com/LIRYC-IHU/ecg-hub/internal/module"
 	"github.com/LIRYC-IHU/ecg-hub/internal/webhook"
 )
@@ -35,6 +36,7 @@ type webhookRequest struct {
 	AuthHeader         *string  `json:"auth_header"`
 	Events             []string `json:"events"`
 	Vendors            []string `json:"vendors"`
+	Devices            []string `json:"devices"`
 }
 
 // validateWebhookRequest checks name, URL, event types and vendor filters.
@@ -62,6 +64,33 @@ func validateWebhookRequest(req *webhookRequest, knownVendors []string) string {
 	}
 	if msg := validateVendors(req.Vendors, knownVendors); msg != "" {
 		return msg
+	}
+	if msg := normaliseDeviceFilter(req); msg != "" {
+		return msg
+	}
+	return ""
+}
+
+// normaliseDeviceFilter rewrites the device filter into the form the dispatcher
+// compares against, and rejects anything that is not an address.
+//
+// Normalising is the point. The payload carries a lower-case, full-byte MAC; a
+// filter holding "00:0E:10:19:44:8A" — which is what a person reads off a label
+// and types — would match nothing, and a filter that matches nothing stops
+// every delivery without an error, a failed delivery or a history entry. The
+// same silent failure the vendor allow-list exists to prevent.
+//
+// Unknown-but-well-formed addresses are accepted rather than checked against
+// the inventory: a webhook may legitimately be set up for a machine before it
+// is enrolled, and checking would make a filter uneditable the day its device
+// is deleted.
+func normaliseDeviceFilter(req *webhookRequest) string {
+	for i, raw := range req.Devices {
+		mac := device.NormalizeMAC(raw)
+		if mac == "" {
+			return "not a MAC address: " + raw
+		}
+		req.Devices[i] = mac
 	}
 	return ""
 }

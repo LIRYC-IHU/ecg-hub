@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
+	"github.com/LIRYC-IHU/ecg-hub/internal/device"
 	"github.com/LIRYC-IHU/ecg-hub/internal/module"
 )
 
@@ -352,5 +353,117 @@ func TestDispatcher_RejectedItem_QuarantinedWithoutRouting(t *testing.T) {
 	case ri := <-routed:
 		t.Errorf("rejected item must not be routed, got %q", ri.IngestItem.Filename)
 	default:
+	}
+}
+
+// recordingPairing is a pairingRecorder that keeps what it was handed.
+type recordingPairing struct {
+	mu   sync.Mutex
+	held []struct{ mac, filename, vendor, model, serial string }
+}
+
+func (p *recordingPairing) Hold(_ context.Context, id device.Identity, filename string, _ []byte, vendor, model, serial string) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.held = append(p.held, struct{ mac, filename, vendor, model, serial string }{id.MAC, filename, vendor, model, serial})
+	return nil
+}
+
+func (p *recordingPairing) Len() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return len(p.held)
+}
+
+func (p *recordingPairing) recorded() []struct{ mac, filename, vendor, model, serial string } {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return append([]struct{ mac, filename, vendor, model, serial string }(nil), p.held...)
+}
+
+func waitFor(t *testing.T, what string, done func() bool) {
+	t.Helper()
+	deadline := time.After(time.Second)
+	for !done() {
+		select {
+		case <-deadline:
+			t.Fatalf("timeout waiting for %s", what)
+		default:
+			runtime.Gosched()
+		}
+	}
+}
+
+// A pairing file is read to identify the device and then held — it must never
+// reach the routed queue, because that is what would put it on the volume.
+func TestDispatcher_PairingItemIsHeldNotRouted(t *testing.T) {
+	meta := &module.ECGMetadata{
+		PatientID:   "P001",
+		VendorName:  "xml-vendor",
+		DeviceModel: "PageWriter TC70",
+		Extra:       map[string]any{"serial_number": "SN-1234"},
+	}
+	m := &stubModule{name: "xml-vendor", extensions: []string{".xml"}, meta: meta}
+	router := NewRouter([]module.Module{m})
+
+	pairing := &recordingPairing{}
+	quarantine := &recordingQuarantine{}
+	ingest := NewIngestQueue(1)
+	routed := NewRoutedQueue(1)
+	d := NewDispatcher(ingest, routed, router).
+		WithQuarantineRecorder(quarantine).
+		WithPairing(pairing)
+	d.Start()
+	defer d.Stop()
+
+	ingest <- IngestItem{
+		Filename:  "ecg.xml",
+		Data:      []byte("data"),
+		Source:    "ftp",
+		DeviceMAC: "00:0e:10:19:44:8a",
+		Pairing:   true,
+	}
+
+	waitFor(t, "the pairing file to be held", func() bool { return pairing.Len() == 1 })
+
+	got := pairing.recorded()[0]
+	if got.mac != "00:0e:10:19:44:8a" || got.filename != "ecg.xml" {
+		t.Errorf("held %+v, want the device MAC and filename", got)
+	}
+	if got.vendor != "xml-vendor" || got.model != "PageWriter TC70" || got.serial != "SN-1234" {
+		t.Errorf("held %+v, want the identification the module parsed out", got)
+	}
+
+	select {
+	case ri := <-routed:
+		t.Errorf("a pairing file must not be routed, got %q", ri.IngestItem.Filename)
+	default:
+	}
+	if len(quarantine.recorded()) != 0 {
+		t.Error("a pairing file must not be quarantined either — it is held in memory and dropped")
+	}
+}
+
+// A file no module can parse still identifies its device: the MAC is what the
+// approval is keyed on, the vendor and model only make the screen readable.
+func TestDispatcher_UnparseablePairingFileStillIdentifiesTheDevice(t *testing.T) {
+	router := NewRouter([]module.Module{})
+	pairing := &recordingPairing{}
+	ingest := NewIngestQueue(1)
+	d := NewDispatcher(ingest, NewRoutedQueue(1), router).WithPairing(pairing)
+	d.Start()
+	defer d.Stop()
+
+	ingest <- IngestItem{
+		Filename:  "mystery.bin",
+		Data:      []byte("data"),
+		Source:    "dicom",
+		DeviceMAC: "00:0e:10:19:44:8a",
+		Pairing:   true,
+	}
+
+	waitFor(t, "the unparseable pairing file to be held", func() bool { return pairing.Len() == 1 })
+	if got := pairing.recorded()[0]; got.vendor != "" || got.mac != "00:0e:10:19:44:8a" {
+		t.Errorf("held %+v, want the MAC with no vendor", got)
 	}
 }

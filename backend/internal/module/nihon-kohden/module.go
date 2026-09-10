@@ -208,6 +208,11 @@ func (m *Module) RegisterFTPFile(filename string) error {
 
 func (m *Module) Start(cfg *config.Config) error {
 	m.server = NewECTPServer(fmt.Sprintf(":%d", ECTPPort), cfg, m.transferRepo)
+	// Read at bind time, not at construction: main registers the gate before
+	// modules start, and a UI-triggered restart builds a fresh server here.
+	if g := module.ActiveDeviceGate(); g != nil {
+		m.server.WithDeviceGate(g)
+	}
 	// Bind synchronously so a taken port surfaces as a clean fatal startup
 	// error in main (module start failure) instead of a goroutine panic that
 	// crashes the whole process with a stack trace.

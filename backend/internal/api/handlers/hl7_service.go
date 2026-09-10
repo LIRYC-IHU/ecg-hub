@@ -21,8 +21,8 @@ type HL7ServiceHandler struct {
 	DB          *gorm.DB
 	Enricher    HL7Enricher                         // may be nil (no inbound enricher)
 	ORUService  ORUSender                           // may be nil (outbound ORU disabled)
-	ORURepo     *repository.HL7ORUAttemptRepository  // latest outbound attempt per ECG
-	AttemptRepo *repository.HL7AttemptRepository     // inbound attempt history per patient
+	ORURepo     *repository.HL7ORUAttemptRepository // latest outbound attempt per ECG
+	AttemptRepo *repository.HL7AttemptRepository    // inbound attempt history per patient
 }
 
 func oruAttemptToProto(a *models.HL7ORUAttempt) *apiv1.OruAttempt {

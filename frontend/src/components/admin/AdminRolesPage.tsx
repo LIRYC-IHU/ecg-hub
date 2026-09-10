@@ -27,6 +27,7 @@ const PERMISSION_GROUPS = [
   { key: 'admin',       labelKey: 'admin.roles.group.admin',       permissions: ['admin.users', 'admin.roles', 'admin.branding', 'admin.audit', 'admin.system', 'admin.auth_config'] },
   { key: 'api',         labelKey: 'admin.roles.group.api',         permissions: ['apikey.manage'] },
   { key: 'webhook',     labelKey: 'admin.roles.group.webhook',     permissions: ['webhook.manage'] },
+  { key: 'device',      labelKey: 'admin.roles.group.device',      permissions: ['device.read', 'device.manage'] },
 ]
 
 export function AdminRolesPage() {

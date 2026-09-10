@@ -155,3 +155,31 @@ _bmad/
 
 # Local backups (never commit medical data)
 /backups/
+
+# macOS
+.DS_Store
+
+# Local agent/tooling state. None of it describes the application: it is the
+# configuration and cache of whatever assistant or indexer a developer runs
+# locally, and it is large — a single `git add -A` otherwise stages several
+# hundred files of it.
+.claude/
+.claude-flow/
+.agents/
+.swarm/
+.grepai/
+.mcp.json
+.infisical.json
+skills-lock.json
+last_session_claude
+
+# Knowledge-graph output (`/graphify`). Generated from the source it points at,
+# regenerated on demand, megabytes of cache.
+graphify-out/
+
+# Compiled Go binaries left by `go build` in the package directory.
+/backend/main
+/backend/ecg-hub
+
+# Local dev compose override (host-specific volume/paths).
+docker-compose.dev.override.yml

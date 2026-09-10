@@ -34,6 +34,16 @@ var (
 		Help: "Failed FTP authentication attempts. A sustained rate means the port is being swept — alert on it.",
 	})
 
+	DeviceGate = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "device_gate_total",
+		Help: "Ingestion connections seen by the device whitelist, by source and decision (allow/deny/pair). A rising deny rate is a device that was never enrolled, or one that should not be there.",
+	}, []string{"source", "decision"})
+
+	DevicePairingHeld = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "device_pairing_held",
+		Help: "Files currently held in memory for devices awaiting approval.",
+	})
+
 	IngestQueueFull = prometheus.NewCounterVec(prometheus.CounterOpts{
 		Name: "ingest_queue_full_total",
 		Help: "Times a push found an ingestion queue full (FTP upload rejected or pipeline backpressure engaged). Alert on it — it means the pipeline cannot keep up.",
@@ -49,5 +59,7 @@ func init() {
 		IngestQuarantine,
 		IngestQueueFull,
 		FTPAuthFailures,
+		DeviceGate,
+		DevicePairingHeld,
 	)
 }

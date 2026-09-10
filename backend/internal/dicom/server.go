@@ -10,6 +10,7 @@ package dicom
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"fmt"
 	"github.com/LIRYC-IHU/ecg-hub/internal/certs"
@@ -24,6 +25,7 @@ import (
 	netdicom "github.com/apaladiychuk/go-netdicom"
 	"github.com/apaladiychuk/go-netdicom/dimse"
 
+	"github.com/LIRYC-IHU/ecg-hub/internal/device"
 	"github.com/LIRYC-IHU/ecg-hub/internal/ingestion"
 	appmetrics "github.com/LIRYC-IHU/ecg-hub/internal/metrics"
 )
@@ -42,12 +44,27 @@ type Settings struct {
 	MaxFileBytes int64
 }
 
+// deviceGate decides whether the hardware behind a connection may ingest.
+// Implemented by device.Gate; nil disables the whitelist entirely.
+type deviceGate interface {
+	Identify(remoteAddr, source string) device.Identity
+	Decide(ctx context.Context, id device.Identity) device.Decision
+	Recheck(ctx context.Context, id device.Identity) device.Decision
+}
+
 // Server wraps a DICOM C-STORE SCP and pushes received files onto an IngestQueue.
 type Server struct {
 	cfg      Settings
 	queue    ingestion.IngestQueue
 	listener net.Listener  // our own listener — closed in Stop() to break accept loop
 	done     chan struct{} // closed when accept loop exits
+	gate     deviceGate    // optional; nil disables the device whitelist
+}
+
+// WithDeviceGate attaches the device whitelist. Returns s for chaining.
+func (s *Server) WithDeviceGate(g deviceGate) *Server {
+	s.gate = g
+	return s
 }
 
 // New creates a Server. Call Start() to begin accepting DICOM associations.
@@ -81,7 +98,9 @@ func (s *Server) Start() error {
 	params := netdicom.ServiceProviderParams{
 		AETitle:   s.cfg.AETitle,
 		TLSConfig: tlsCfg,
-		CStore:    s.onCStore,
+		// CStore is replaced per connection in the accept loop below, so the
+		// callback knows which device it is serving.
+		CStore: s.cStoreFor(device.Identity{}, device.Allow),
 	}
 	if s.cfg.EchoEnabled {
 		params.CEcho = func(_ netdicom.ConnectionState) dimse.Status {
@@ -126,7 +145,20 @@ func (s *Server) Start() error {
 				slog.Warn("dicom: accept error", "error", err)
 				continue
 			}
-			go netdicom.RunProviderForConn(conn, params)
+			id, decision := s.gateDecision(conn)
+			if decision == device.Deny {
+				slog.Warn("dicom: device not approved — association refused",
+					"mac", id.MAC, "remote_addr", id.IP)
+				_ = conn.Close()
+				appmetrics.DICOMSCPErrors.WithLabelValues("device_denied").Inc()
+				continue
+			}
+			// Per-connection params: netdicom's ConnectionState carries only TLS
+			// state, so the C-STORE callback has no way of its own to learn who
+			// connected. Closing over the identity here is what carries it in.
+			connParams := params
+			connParams.CStore = s.cStoreFor(id, decision)
+			go netdicom.RunProviderForConn(conn, connParams)
 		}
 	}()
 
@@ -148,6 +180,35 @@ func (s *Server) Stop() {
 	s.listener = nil
 }
 
+// gateDecision resolves the device behind conn and asks the gate about it.
+// With no gate attached every device is allowed, which is the behaviour from
+// before the whitelist existed.
+func (s *Server) gateDecision(conn net.Conn) (device.Identity, device.Decision) {
+	if s.gate == nil {
+		return device.Identity{}, device.Allow
+	}
+	addr := ""
+	if conn.RemoteAddr() != nil {
+		addr = conn.RemoteAddr().String()
+	}
+	id := s.gate.Identify(addr, "dicom")
+	return id, s.gate.Decide(context.Background(), id)
+}
+
+// cStoreFor builds the C-STORE callback for one association, closing over the
+// device the association belongs to.
+func (s *Server) cStoreFor(id device.Identity, decision device.Decision) netdicom.CStoreCallback {
+	return func(
+		cs netdicom.ConnectionState,
+		transferSyntaxUID string,
+		sopClassUID string,
+		sopInstanceUID string,
+		data []byte,
+	) dimse.Status {
+		return s.onCStore(cs, transferSyntaxUID, sopClassUID, sopInstanceUID, data, id, decision)
+	}
+}
+
 // onCStore is the C-STORE callback. It is called once per received DICOM object.
 // The data parameter contains the serialised DICOM data elements (without meta-header
 // group 2 elements, which are provided separately as sopClassUID / sopInstanceUID /
@@ -159,9 +220,28 @@ func (s *Server) onCStore(
 	sopClassUID string,
 	sopInstanceUID string,
 	data []byte,
+	id device.Identity,
+	decision device.Decision,
 ) dimse.Status {
+	// An association is authorised once and then carries object after object,
+	// so a device revoked mid-association would keep storing until it
+	// disconnected. Ask again for this object.
+	if s.gate != nil && id.Resolved() {
+		switch s.gate.Recheck(context.Background(), id) {
+		case device.Deny:
+			slog.Warn("dicom: device no longer approved — C-STORE refused mid-association",
+				"mac", id.MAC, "sop_instance_uid", sopInstanceUID)
+			appmetrics.DICOMSCPErrors.WithLabelValues("device_denied").Inc()
+			return dimse.Status{Status: dimse.StatusNotAuthorized, ErrorComment: "device not approved"}
+		case device.Pair:
+			decision = device.Pair
+		case device.Allow:
+			decision = device.Allow
+		}
+	}
+
 	if s.cfg.MaxFileBytes > 0 && int64(len(data)) > s.cfg.MaxFileBytes {
-		return s.rejectOversize(data, sopInstanceUID)
+		return s.rejectOversize(data, sopInstanceUID, id)
 	}
 
 	raw, err := reconstructDICOM(transferSyntaxUID, sopClassUID, sopInstanceUID, data)
@@ -177,9 +257,11 @@ func (s *Server) onCStore(
 	filename := buildDICOMFilename(data, sopInstanceUID)
 
 	item := ingestion.IngestItem{
-		Filename: filename,
-		Data:     raw,
-		Source:   "dicom",
+		Filename:  filename,
+		Data:      raw,
+		Source:    "dicom",
+		DeviceMAC: id.MAC,
+		Pairing:   decision == device.Pair,
 	}
 
 	// Non-blocking send: if the queue is full, log and return a transient error
@@ -191,6 +273,7 @@ func (s *Server) onCStore(
 		slog.Info("dicom: file queued for ingestion",
 			"filename", filename,
 			"size_bytes", len(raw),
+			"pairing", item.Pairing,
 		)
 		return dimse.Success
 	default:
@@ -216,7 +299,7 @@ func (s *Server) onCStore(
 //
 // The head of the object is pushed as a rejected item so the rejection lands in
 // quarantine with its reason, the same as the FTP path.
-func (s *Server) rejectOversize(data []byte, sopInstanceUID string) dimse.Status {
+func (s *Server) rejectOversize(data []byte, sopInstanceUID string, id device.Identity) dimse.Status {
 	filename := buildDICOMFilename(data, sopInstanceUID)
 	reason := fmt.Sprintf("file_too_large: over the %d-byte ingestion limit", s.cfg.MaxFileBytes)
 
@@ -240,6 +323,7 @@ func (s *Server) rejectOversize(data []byte, sopInstanceUID string) dimse.Status
 		Filename:     filename,
 		Data:         head,
 		Source:       "dicom",
+		DeviceMAC:    id.MAC,
 		RejectReason: reason,
 	}:
 	default:

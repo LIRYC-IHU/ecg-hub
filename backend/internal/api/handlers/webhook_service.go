@@ -50,6 +50,7 @@ func webhookToProto(h *models.UserWebhook) *apiv1.Webhook {
 		InsecureSkipVerify: h.InsecureSkipVerify,
 		Events:             jsonStrings(h.Events),
 		Vendors:            jsonStrings(h.Vendors),
+		Devices:            jsonStrings(h.Devices),
 		HasSecret:          h.SecretEncrypted != "",
 		HasAuthHeader:      h.AuthHeaderEncrypted != "",
 		LastStatusCode:     int32(h.LastStatusCode),
@@ -74,10 +75,11 @@ func inputToRequest(in *apiv1.WebhookInput) *webhookRequest {
 		URL:                in.Url,
 		Enabled:            in.Enabled,            // *bool (proto optional)
 		InsecureSkipVerify: in.InsecureSkipVerify, // *bool (proto optional)
-		Secret:             in.Secret,     // *string
-		AuthHeader:         in.AuthHeader, // *string
+		Secret:             in.Secret,             // *string
+		AuthHeader:         in.AuthHeader,         // *string
 		Events:             in.Events,
 		Vendors:            in.Vendors,
+		Devices:            in.Devices,
 	}
 }
 
@@ -92,9 +94,21 @@ func (h *WebhookServiceHandler) GetOptions(_ context.Context, _ *apiv1.GetWebhoo
 			})
 		}
 	}
+	devices := []*apiv1.DeviceOption{}
+	if h.DB != nil {
+		var rows []struct{ MAC, Label string }
+		h.DB.Model(&models.Device{}).
+			Select("mac", "label").
+			Order("label, mac").
+			Scan(&rows)
+		for _, r := range rows {
+			devices = append(devices, &apiv1.DeviceOption{Mac: r.MAC, Label: r.Label})
+		}
+	}
 	return &apiv1.GetWebhookOptionsResponse{
 		Events:  models.AllWebhookEvents,
 		Vendors: vendors,
+		Devices: devices,
 	}, nil
 }
 
@@ -127,6 +141,7 @@ func (h *WebhookServiceHandler) CreateWebhook(ctx context.Context, req *apiv1.Cr
 		InsecureSkipVerify: in.InsecureSkipVerify != nil && *in.InsecureSkipVerify,
 		Events:             jsonArray(in.Events),
 		Vendors:            jsonArray(in.Vendors),
+		Devices:            jsonArray(in.Devices),
 	}
 	if in.Secret != nil && *in.Secret != "" {
 		enc, err := auth.EncryptString(*in.Secret, h.EncKey)
@@ -178,6 +193,7 @@ func (h *WebhookServiceHandler) UpdateWebhook(ctx context.Context, req *apiv1.Up
 	}
 	hook.Events = jsonArray(in.Events)
 	hook.Vendors = jsonArray(in.Vendors)
+	hook.Devices = jsonArray(in.Devices)
 	if in.Secret != nil {
 		hook.SecretEncrypted = ""
 		if *in.Secret != "" {

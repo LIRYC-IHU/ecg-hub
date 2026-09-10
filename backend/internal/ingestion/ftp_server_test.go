@@ -2,13 +2,19 @@ package ingestion
 
 import (
 	"bytes"
+	"context"
+	"encoding/json"
 	"log/slog"
 	"net"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	ftpserver "github.com/fclairamb/ftpserverlib"
+
+	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
+	"github.com/LIRYC-IHU/ecg-hub/internal/device"
 	"github.com/spf13/afero"
 )
 
@@ -382,4 +388,254 @@ func TestClientDriver_NoLimit_AcceptsAnySize(t *testing.T) {
 	if len(item.Data) != 1<<20 {
 		t.Errorf("Data = %d bytes, want %d", len(item.Data), 1<<20)
 	}
+}
+
+// ---- device whitelist -------------------------------------------------------
+
+// stubGate answers with a fixed decision, so the FTP wiring can be tested
+// without an ARP table.
+type stubGate struct {
+	decision device.Decision
+	recheck  *device.Decision
+	mac      string
+	seen     []string // remote addresses it was asked about
+}
+
+func (g *stubGate) Identify(remoteAddr, source string) device.Identity {
+	g.seen = append(g.seen, remoteAddr)
+	return device.Identity{MAC: g.mac, IP: remoteAddr, Source: source}
+}
+
+func (g *stubGate) Decide(context.Context, device.Identity) device.Decision { return g.decision }
+
+// recheck, when set, is what a mid-session re-evaluation answers; otherwise the
+// re-check agrees with the decision that opened the session.
+func (g *stubGate) Recheck(_ context.Context, _ device.Identity) device.Decision {
+	if g.recheck != nil {
+		return *g.recheck
+	}
+	return g.decision
+}
+
+func authWithGate(t *testing.T, g *stubGate) (ftpserver.ClientDriver, error) {
+	t.Helper()
+	s := New(testConfig("user", "pass", false), NewIngestQueue(1))
+	s.WithDeviceGate(g)
+	return s.AuthUser(clientFrom(t, "10.27.26.40:51234"), "user", "pass")
+}
+
+func TestServer_AuthUser_DeniedDeviceGetsNoSession(t *testing.T) {
+	g := &stubGate{decision: device.Deny, mac: "00:0e:10:19:44:8a"}
+	drv, err := authWithGate(t, g)
+	if err == nil {
+		t.Fatal("a device the whitelist refuses must not get a session, even with valid credentials")
+	}
+	if drv != nil {
+		t.Error("no client driver may be handed back for a refused device")
+	}
+	if len(g.seen) != 1 || g.seen[0] != "10.27.26.40:51234" {
+		t.Errorf("gate was asked about %v, want the client's remote address", g.seen)
+	}
+}
+
+func TestServer_AuthUser_ApprovedDeviceCarriesItsMAC(t *testing.T) {
+	drv, err := authWithGate(t, &stubGate{decision: device.Allow, mac: "00:0e:10:19:44:8a"})
+	if err != nil {
+		t.Fatalf("AuthUser: %v", err)
+	}
+	cd, ok := drv.(*clientDriver)
+	if !ok {
+		t.Fatalf("driver is %T, want *clientDriver", drv)
+	}
+	if cd.identity.MAC != "00:0e:10:19:44:8a" {
+		t.Errorf("identity.MAC = %q, want the resolved address", cd.identity.MAC)
+	}
+	if cd.pairing {
+		t.Error("an approved device must not be marked as pairing")
+	}
+}
+
+// A device being paired uploads normally; the file is marked so the dispatcher
+// identifies and holds it rather than storing it.
+func TestClientDriver_PairingUploadIsMarked(t *testing.T) {
+	queue := NewIngestQueue(1)
+	drv := &clientDriver{
+		MemMapFs: &afero.MemMapFs{},
+		queue:    queue,
+		identity: device.Identity{MAC: "00:0e:10:19:44:8a", Source: "ftp"},
+		pairing:  true,
+	}
+
+	f, err := drv.Create("/ecg.xml")
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if _, err := f.Write([]byte("ecg content")); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	item := <-queue
+	if !item.Pairing {
+		t.Error("an upload from a device being paired must be marked Pairing")
+	}
+	if item.DeviceMAC != "00:0e:10:19:44:8a" {
+		t.Errorf("DeviceMAC = %q, want the session's device", item.DeviceMAC)
+	}
+}
+
+// The hook answers the device's ECTP FILE|ENDS check. A pairing upload is never
+// stored, so telling the device it arrived would be a lie.
+func TestClientDriver_PairingUploadDoesNotFireTheReceivedHook(t *testing.T) {
+	fired := 0
+	drv := &clientDriver{
+		MemMapFs:       &afero.MemMapFs{},
+		queue:          NewIngestQueue(1),
+		onFileReceived: func(string) { fired++ },
+		pairing:        true,
+		identity:       device.Identity{MAC: "00:0e:10:19:44:8a", Source: "ftp"},
+	}
+	f, _ := drv.Create("/ecg.xml")
+	_, _ = f.Write([]byte("x"))
+	_ = f.Close()
+
+	if fired != 0 {
+		t.Errorf("file-received hook fired %d times for a pairing upload, want 0", fired)
+	}
+}
+
+// No gate wired is the behaviour from before the whitelist existed.
+func TestServer_AuthUser_NoGateAllowsEveryDevice(t *testing.T) {
+	s := New(testConfig("user", "pass", false), NewIngestQueue(1))
+	drv, err := s.AuthUser(clientFrom(t, "10.27.26.40:51234"), "user", "pass")
+	if err != nil || drv == nil {
+		t.Fatalf("AuthUser with no gate = (%v, %v), want a session", drv, err)
+	}
+}
+
+// Revoking a device must stop it now, not once it happens to reconnect. These
+// devices hold an FTP control connection for a minute at a time and run several
+// in parallel, so a session-scoped check let a revoked device keep uploading.
+func TestClientDriver_RevokedMidSession_RefusesTheUpload(t *testing.T) {
+	denied := device.Deny
+	gate := &stubGate{decision: device.Allow, recheck: &denied, mac: "00:0e:10:19:44:8a"}
+
+	queue := NewIngestQueue(1)
+	drv := &clientDriver{
+		MemMapFs: &afero.MemMapFs{},
+		queue:    queue,
+		gate:     gate,
+		identity: device.Identity{MAC: gate.mac, Source: "ftp"},
+	}
+
+	f, err := drv.Create("/ecg.xml")
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if _, err := f.Write([]byte("ecg content")); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	if err := f.Close(); err == nil {
+		t.Fatal("Close must fail the transfer for a device revoked during the session")
+	}
+
+	select {
+	case item := <-queue:
+		t.Errorf("queued %q — a revoked device's file must not reach the pipeline", item.Filename)
+	default:
+	}
+}
+
+// The re-check runs in both directions: a device approved while its pairing
+// session was open ingests normally instead of going back to the pairing queue.
+func TestClientDriver_ApprovedMidSession_IngestsNormally(t *testing.T) {
+	allowed := device.Allow
+	gate := &stubGate{decision: device.Pair, recheck: &allowed, mac: "00:0e:10:19:44:8a"}
+
+	queue := NewIngestQueue(1)
+	drv := &clientDriver{
+		MemMapFs: &afero.MemMapFs{},
+		queue:    queue,
+		gate:     gate,
+		identity: device.Identity{MAC: gate.mac, Source: "ftp"},
+		pairing:  true,
+	}
+
+	f, _ := drv.Create("/ecg.xml")
+	if _, err := f.Write([]byte("ecg content")); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	item := <-queue
+	if item.Pairing {
+		t.Error("the file must be ingested, not held for pairing, once the device is approved")
+	}
+}
+
+// Rejected credentials belong in the trail too: the whitelist never sees them,
+// so without this a password sweep leaves nothing behind but a metric.
+func TestServer_AuthUser_FailedLoginIsAudited(t *testing.T) {
+	audit := &recordingAudit{}
+	s := New(testConfig("user", "pass", false), NewIngestQueue(1))
+	s.WithAuditWriter(audit)
+	noSleep(s)
+
+	if _, err := s.AuthUser(clientFrom(t, "10.27.26.90:51234"), "user", "wrong"); err == nil {
+		t.Fatal("AuthUser should reject the wrong password")
+	}
+
+	entries := audit.recorded()
+	if len(entries) != 1 {
+		t.Fatalf("wrote %d entries, want 1", len(entries))
+	}
+	e := entries[0]
+	if e.Action != ActionFTPAuthFailed || e.UserID != "system" {
+		t.Errorf("entry = %+v, want a system %s", e, ActionFTPAuthFailed)
+	}
+	if e.ResourceID != "10.27.26.90" {
+		t.Errorf("ResourceID = %q, want the remote host", e.ResourceID)
+	}
+	var details map[string]any
+	if err := json.Unmarshal(e.Details, &details); err != nil {
+		t.Fatal(err)
+	}
+	if details["user"] != "user" || details["failures"] != float64(1) {
+		t.Errorf("details = %v, want the attempted user and the running count", details)
+	}
+}
+
+func TestServer_AuthUser_SuccessIsNotAudited(t *testing.T) {
+	audit := &recordingAudit{}
+	s := New(testConfig("user", "pass", false), NewIngestQueue(1))
+	s.WithAuditWriter(audit)
+
+	if _, err := s.AuthUser(clientFrom(t, "10.27.26.90:51234"), "user", "pass"); err != nil {
+		t.Fatalf("AuthUser: %v", err)
+	}
+	if n := len(audit.recorded()); n != 0 {
+		t.Errorf("wrote %d entries for a successful login, want 0", n)
+	}
+}
+
+type recordingAudit struct {
+	mu      sync.Mutex
+	entries []models.AuditLog
+}
+
+func (a *recordingAudit) Insert(e *models.AuditLog) error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.entries = append(a.entries, *e)
+	return nil
+}
+
+func (a *recordingAudit) recorded() []models.AuditLog {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return append([]models.AuditLog(nil), a.entries...)
 }

@@ -20,11 +20,12 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -40,6 +41,7 @@ import (
 	"github.com/LIRYC-IHU/ecg-hub/internal/connector/polaris"
 	dbpkg "github.com/LIRYC-IHU/ecg-hub/internal/db"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
+	"github.com/LIRYC-IHU/ecg-hub/internal/device"
 	dicomsrv "github.com/LIRYC-IHU/ecg-hub/internal/dicom"
 	"github.com/LIRYC-IHU/ecg-hub/internal/events"
 	"github.com/LIRYC-IHU/ecg-hub/internal/export"
@@ -509,8 +511,30 @@ func main() {
 		WithEventPublisher(eventHub)
 	router.WithPersister(persister)
 
+	// Device whitelist. Registered before any ingestion server starts, so the
+	// FTP/DICOM auto-start below and every later UI-triggered restart pick it
+	// up (module.ActiveDeviceGate).
+	//
+	// The resolver reads the MAC behind each connection from the ARP cache,
+	// which only works while the device shares a broadcast domain with the
+	// server. Whether it does is answered by the connections that actually
+	// arrive (Gate.Health), not by inspecting the table at startup.
+	deviceRepo := repository.NewDeviceRepository(gormDB)
+	deviceResolver := device.NewResolver()
+	devicePairing := device.NewPairing(deviceRepo).WithPublisher(eventHub)
+	deviceGate := device.NewGate(deviceResolver, deviceRepo, moduleSettingsRepo).
+		WithAuditWriter(repository.NewAuditRepository(gormDB)).
+		WithDecisionHook(func(id device.Identity, d device.Decision) {
+			appmetrics.DeviceGate.WithLabelValues(id.Source, d.String()).Inc()
+		})
+	module.SetDeviceGate(deviceGate)
+	module.SetAuditWriter(repository.NewAuditRepository(gormDB))
+
 	// Outbound HL7 ORU: expose the manual send-result route (guarded by ecg.send_result).
 	router.WithORUService(hl7ORUService)
+
+	// Device whitelist routes (device.read / device.manage).
+	router.WithDeviceWhitelist(deviceRepo, devicePairing, deviceGate)
 
 	router.RegisterRoutes()
 
@@ -573,6 +597,9 @@ func main() {
 	quarantineStore := ingestion.NewQuarantineStore(cfg.Storage.QuarantinePath, quarantineRepo).
 		WithPublisher(eventHub)
 	dispatcher.WithQuarantineRecorder(quarantineStore)
+	// Files from devices awaiting approval: identified, held in memory for the
+	// operator, never written anywhere.
+	dispatcher.WithPairing(devicePairing)
 	// Proxy role: files that fail ingestion are still forwarded to the
 	// configured PACS connectors from the quarantine volume.
 	dispatcher.WithConnectorForwarder(connDispatcher)
@@ -658,7 +685,7 @@ func main() {
 		if port == 0 {
 			port = defaultMetricsPort
 		}
-		metricsAddr := fmt.Sprintf(":%d", port)
+		metricsAddr := net.JoinHostPort(cfg.Metrics.Host, strconv.Itoa(port))
 		mux := http.NewServeMux()
 		mux.Handle("/metrics", appmetrics.Handler())
 		srv := &http.Server{Addr: metricsAddr, Handler: mux, ReadHeaderTimeout: 5 * time.Second}
@@ -700,7 +727,7 @@ func main() {
 	if serverPort == 0 {
 		serverPort = 4444
 	}
-	addr := fmt.Sprintf(":%d", serverPort)
+	addr := net.JoinHostPort(cfg.Server.Host, strconv.Itoa(serverPort))
 
 	// TLS is enabled for bare-metal production deployments (no reverse proxy).
 	// Behind nginx, TLS terminates at the proxy and server.tls stays false.

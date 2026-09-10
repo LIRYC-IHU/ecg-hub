@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"context"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -11,12 +13,13 @@ import (
 	"github.com/LIRYC-IHU/ecg-hub/internal/api/dto"
 	mw "github.com/LIRYC-IHU/ecg-hub/internal/api/middleware"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
+	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
 )
 
 // PatientSearchParams holds query parameters for GET /api/v1/patients.
 type PatientSearchParams struct {
 	Q         string `query:"q"`
-	Tags      string `query:"tags"` // comma-separated tag IDs
+	Tags      string `query:"tags"`       // comma-separated tag IDs
 	SortBy    string `query:"sort_by"`    // "patient_id" | "last_name" | "created_at"
 	SortOrder string `query:"sort_order"` // "asc" | "desc"
 	Page      int    `query:"page"`
@@ -179,6 +182,7 @@ type ECGListParams struct {
 	To          string `query:"to"`           // ISO 8601 date "YYYY-MM-DD", inclusive
 	Vendor      string `query:"vendor"`       // exact match
 	DeviceModel string `query:"device_model"` // exact device model match (from extra JSONB)
+	DeviceMAC   string `query:"device_mac"`   // the hardware that sent it, by address
 	FileFormat  string `query:"file_format"`  // file extension filter (e.g. ".xml", ".dat", ".dcm")
 	HL7Status   string `query:"hl7_status"`   // "pending"|"success"|"hl7_exhausted"
 	Page        int    `query:"page"`
@@ -269,6 +273,9 @@ func ListPatientECGsHandler(db *gorm.DB) echo.HandlerFunc {
 		if params.HL7Status != "" {
 			q = q.Where("hl7_status = ?", params.HL7Status)
 		}
+		if params.DeviceMAC != "" {
+			q = q.Where("device_mac = ?", params.DeviceMAC)
+		}
 
 		var total int64
 		if err := q.Count(&total).Error; err != nil {
@@ -285,6 +292,7 @@ func ListPatientECGsHandler(db *gorm.DB) echo.HandlerFunc {
 		for i, e := range ecgs {
 			result[i] = dto.EcgToDTO(&e)
 		}
+		fillDeviceLabels(c.Request().Context(), db, result)
 
 		// Audit log — non-blocking (NFR-R2).
 		userID, _ := c.Get(mw.CtxKeyUserID).(string)
@@ -304,5 +312,30 @@ func ListPatientECGsHandler(db *gorm.DB) echo.HandlerFunc {
 			"page":     params.Page,
 			"per_page": params.PerPage,
 		})
+	}
+}
+
+// fillDeviceLabels resolves the operator's name for the hardware behind a page
+// of ECGs, in one query. Rows whose device is unnamed, unknown, or was never
+// identified keep an empty label and the caller shows the address.
+func fillDeviceLabels(ctx context.Context, db *gorm.DB, ecgs []dto.EcgDTO) {
+	macs := make([]string, 0, len(ecgs))
+	seen := map[string]bool{}
+	for _, e := range ecgs {
+		if e.DeviceMAC != "" && !seen[e.DeviceMAC] {
+			seen[e.DeviceMAC] = true
+			macs = append(macs, e.DeviceMAC)
+		}
+	}
+	if len(macs) == 0 {
+		return
+	}
+	labels, err := repository.NewDeviceRepository(db).LabelsFor(ctx, macs)
+	if err != nil {
+		slog.Warn("ecg: cannot resolve device labels", "error", err)
+		return
+	}
+	for i := range ecgs {
+		ecgs[i].DeviceLabel = labels[ecgs[i].DeviceMAC]
 	}
 }
