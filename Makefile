@@ -5,6 +5,7 @@
 #   make init       → create .env and config.yaml from the example files
 #   make docker     → build images and start the prod stack (detached)
 #   make dev        → start the local dev stack (air + vite hot-reload)
+#   make ftp-ports  → host networking: redirect 21 → 2121 and persist it
 #   make clean      → remove build artefacts and stop containers
 #   make fclean     → clean + drop docker volumes/images and node_modules
 #   make re         → fclean then rebuild
@@ -31,7 +32,7 @@ endef
 
 .DEFAULT_GOAL := all
 .PHONY: all help init build build-backend build-frontend \
-        docker up down dev logs clean fclean re
+        docker up down dev logs clean fclean re ftp-ports ftp-ports-check
 
 # ── Build ────────────────────────────────────────────────────────────────────
 all: build ## Build backend + frontend
@@ -83,6 +84,22 @@ dev: init ## Start the local dev stack (hot-reload)
 
 logs: ## Follow prod stack logs
 	@$(COMPOSE) logs -f
+
+# ── Host networking ──────────────────────────────────────────────────────────
+# Only for a deployment running docker-compose.host.yml. On a bridge network
+# dockerd performs the privileged bind on 21 itself, through the "21:2121"
+# mapping; in the host namespace nothing does, because the backend runs as a
+# non-root user under cap_drop: ALL.
+#
+# sudo is spelled out in the recipe rather than left to the caller: running the
+# whole of make as root would be worse than one prompt.
+
+ftp-ports: ## Redirect 21 → 2121 on this host and persist it (host networking)
+	$(call log,Configuring the FTP ports on this host)
+	@sudo ./scripts/ftp-ports.sh
+
+ftp-ports-check: ## Report the FTP port setup without changing anything
+	@sudo ./scripts/ftp-ports.sh --check
 
 # ── Clean ────────────────────────────────────────────────────────────────────
 clean: ## Remove build artefacts and stop containers
