@@ -912,5 +912,11 @@
     "noMatch": "Aucun endpoint ne correspond à cette recherche.",
     "permission": "Permission :",
     "permissionHint": "Le rôle du compte ou de la clé API qui appelle doit porter cette permission, sinon la requête répond 403."
+  },
+  "intendedUse": {
+    "title": "Destination du logiciel",
+    "statement": "ECG-Hub collecte, conserve, associe au patient concerné et restitue des électrocardiogrammes 12 dérivations acquis par des électrocardiographes marqués CE. Le logiciel ne réalise aucune mesure ni interprétation automatique du signal. Il ne se substitue pas à l'appareil d'acquisition pour l'établissement du diagnostic.",
+    "status": "Le logiciel ne porte pas de marquage CE. Une demande de qualification est en cours auprès du Guichet Innovation et Orientation de l'ANSM afin d'établir son statut réglementaire.",
+    "short": "ECG-Hub ne réalise aucune mesure ni interprétation automatique et ne se substitue pas à l'appareil d'acquisition pour l'établissement du diagnostic."
   }
 }

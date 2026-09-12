@@ -42,8 +42,21 @@ backend invokes. The vendor modules here parse metadata and delegate the format
 work, so a new vendor is taught to ecg-bridge first. It is vendored under
 `backend/converter-fda/`.
 
-> **Non-diagnostic use.** ECG Hub is a data-management and visualisation tool.
-> It is not a medical device and must not be used as the basis for diagnosis.
+> **Intended use.** ECG Hub collects, stores, associates with the correct
+> patient and serves 12-lead electrocardiograms acquired by CE-marked
+> electrocardiographs. The software performs no automatic measurement and no
+> interpretation of the signal. It does not replace the acquisition device for
+> establishing a diagnosis.
+>
+> The software is not CE-marked. A qualification request is pending with the
+> ANSM's *Guichet Innovation et Orientation* to establish its regulatory
+> status — so whether it falls under EU MDR 2017/745 is the open question, not
+> something this README can settle.
+>
+> This wording is load-bearing and appears verbatim in three places: here, in
+> the application (`frontend/src/components/IntendedUse.tsx`, shown on every
+> screen and in full on `/system`) and in the ANSM filing. Change one, change
+> all three.
 
 ## Features
 
