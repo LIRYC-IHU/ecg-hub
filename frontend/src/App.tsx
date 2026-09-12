@@ -25,6 +25,7 @@ import { LoginPage } from "./components/LoginPage";
 import { SetupPage } from "./components/SetupPage";
 import { Header } from "./components/layout/Header";
 import { Sidebar } from "./components/layout/Sidebar";
+import { IntendedUse } from "./components/IntendedUse";
 import type { SidebarNavItem } from "./components/layout/Sidebar";
 import { AdminUsersPage } from "./components/admin/AdminUsersPage";
 import { AdminAuditPage } from "./components/admin/AdminAuditPage";
@@ -561,6 +562,13 @@ function App() {
           </Routes>
         </div>
       </div>
+
+      {/* Declared intended use, on every authenticated screen. What a regulator
+          assesses is foreseeable use, not documentation — so the statement has
+          to reach the people using the software. Full text on /system. */}
+      <footer className="shrink-0 border-t border-border bg-muted/30 px-4 py-1.5">
+        <IntendedUse variant="inline" />
+      </footer>
     </div>
   );
 }

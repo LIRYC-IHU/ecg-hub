@@ -911,5 +911,11 @@
     "noMatch": "No endpoint matches this search.",
     "permission": "Permission:",
     "permissionHint": "The role of the account or API key making the call must carry this permission, otherwise the request answers 403."
+  },
+  "intendedUse": {
+    "title": "Intended use",
+    "statement": "ECG-Hub collects, stores, associates with the correct patient and serves 12-lead electrocardiograms acquired by CE-marked electrocardiographs. The software performs no automatic measurement and no interpretation of the signal. It does not replace the acquisition device for establishing a diagnosis.",
+    "status": "The software is not CE-marked. A qualification request is pending with the ANSM's Guichet Innovation et Orientation to establish its regulatory status.",
+    "short": "ECG-Hub performs no automatic measurement or interpretation and does not replace the acquisition device for establishing a diagnosis."
   }
 }

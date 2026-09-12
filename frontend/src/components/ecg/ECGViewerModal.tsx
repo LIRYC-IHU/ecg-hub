@@ -2,6 +2,7 @@ import { useRef, useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { X, Download, Maximize2, Settings } from "lucide-react";
 import { ECGViewer } from "../../ecg-viewer/ECGViewer";
+import { IntendedUse } from "../IntendedUse";
 import type { ECGViewerHandle } from "../../ecg-viewer/ECGViewer";
 import type { EcgRecord } from "../../ecg-viewer/ecgTypes";
 import type { Patient } from "../../types";
@@ -266,6 +267,12 @@ export function ECGViewerModal({ ecgId, filename, patient, onClose }: Props) {
             />
           </div>
         )}
+      </div>
+
+      {/* The viewer is full-screen and covers the app shell's own notice, and
+          it is the screen where a trace is actually read. Repeat it here. */}
+      <div className="shrink-0 border-t border-border bg-card px-4 py-1.5">
+        <IntendedUse variant="inline" />
       </div>
     </div>
   );
