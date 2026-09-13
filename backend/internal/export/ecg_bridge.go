@@ -63,6 +63,19 @@ type ConvertOptions struct {
 	InjectPatient bool
 }
 
+// identityConfirmed reports whether the identity that will appear on a rendered
+// document is the establishment's record rather than whatever the acquisition
+// device wrote.
+//
+// Both conditions are needed. HL7Source says the patients table holds
+// demographics the HIS answered with; InjectPatient says those demographics are
+// what gets written into the output. Without the injection the converter emits
+// the device's own fields, which are an unconfirmed claim however good the
+// hub's own record happens to be.
+func identityConfirmed(patient *models.Patient, opts ConvertOptions) bool {
+	return opts.InjectPatient && patient != nil && patient.HL7Source != ""
+}
+
 // Converter is the interface used by the download handler to produce converted output.
 // Implemented by ECGBridge; can be stubbed in tests.
 type Converter interface {
@@ -278,7 +291,15 @@ func (b *ECGBridge) convertToPDF(ctx context.Context, sourcePath, vendor string,
 	ctx, cancel := context.WithTimeout(ctx, b.timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, b.pdfBinary, "-i", in.Name(), "-o", outPath)
+	// A document whose identity was never confirmed against the HIS says so on
+	// its face. Marking rather than refusing is deliberate: an unconfirmed
+	// trace is still clinically useful, and the HIS being unreachable is
+	// exactly the moment someone needs to read the ECG.
+	args := []string{"-i", in.Name(), "-o", outPath}
+	if !identityConfirmed(patient, opts) {
+		args = append(args, "-identity-unverified")
+	}
+	cmd := exec.CommandContext(ctx, b.pdfBinary, args...)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 
