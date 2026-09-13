@@ -17,7 +17,21 @@ type Patient struct {
 	CreatedAt time.Time
 	UpdatedAt time.Time
 
-	PatientID string `gorm:"not null;unique"` // ← CRUCIAL
+	// PatientID is the establishment's own patient identifier, and it is the
+	// ONLY key on which an ECG is attached to a patient. Nothing in this
+	// system matches on name, date of birth or sex.
+	//
+	// DEPLOYMENT PREREQUISITE: this identifier must be unique across the whole
+	// deployment, not merely within one site. The unique constraint below is
+	// global, so if two sites of a multi-site installation can issue the same
+	// number for different people, their records silently become one patient
+	// and their ECGs are mixed. There is no assigning-authority column to tell
+	// them apart.
+	//
+	// This is a property of the installation, not something the software can
+	// check: connect it to one identifier domain, or run one instance per
+	// domain. See docs/deploy-prod.md.
+	PatientID string `gorm:"not null;unique"`
 
 	FirstName   string
 	LastName    string `gorm:"index"`

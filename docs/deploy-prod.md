@@ -26,6 +26,38 @@ Three things must agree or a port silently goes nowhere: the container side of
 each mapping above, the value in Admin > Modules, and the firewall or router
 rule in front. The FTP port is the exception — see below.
 
+## Patient identifier domain — read before deploying
+
+ECG Hub attaches an ECG to a patient on the **patient identifier alone**. An ECG
+arrives carrying an identifier, that identifier keys an HL7 query to the HIS,
+and the demographics come back from the HIS. Nothing matches on name, date of
+birth or sex — deliberately, because demographic matching is how the wrong
+patient gets a trace.
+
+That design has one prerequisite, and it is on the installation rather than on
+the software:
+
+> **The patient identifier must be unique across everything this instance
+> serves.**
+
+The `patients.patient_id` column is globally unique. If two sites can issue the
+same number for two different people, the second ECG attaches to the first
+person's record — silently, with no mismatch to detect, because there are no
+demographics being compared. There is no assigning-authority column to separate
+them.
+
+So, before deploying across more than one site, establish which of these holds:
+
+- **One identifier domain across all sites.** Deploy one instance. (AP-HP is
+  this case: patient identifiers are unique across the whole institution, not
+  per site.)
+- **Per-site identifier domains.** Deploy one instance per domain, or prefix the
+  identifier at ingestion so the combined value is unique. Do not point two
+  domains at one instance.
+
+If you cannot state which case you are in, stop and find out. This is the most
+plausible severe-harm path in the system.
+
 ## Prerequisites
 
 1. **Certificates for FTPS and DICOM TLS** in `./certs`, named `fullchain.pem`

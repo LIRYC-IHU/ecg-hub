@@ -262,6 +262,11 @@ Three layers, by design:
 - Go ≥ 1.26 and Node ≥ 20 only for local (non-Docker) development
 - PostgreSQL 18. The production stack bundles it as the `db` service; point
   `DATABASE_URL` at an existing instance instead and comment that service out
+- **A patient identifier that is unique across everything the instance serves.**
+  ECGs are attached to patients on that identifier alone, and the column is
+  globally unique — two sites issuing the same number for different people would
+  silently share one record. See
+  [`docs/deploy-prod.md`](docs/deploy-prod.md#patient-identifier-domain--read-before-deploying)
 
 ### Production
 
