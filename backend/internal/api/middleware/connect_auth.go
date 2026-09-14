@@ -144,13 +144,33 @@ type PermissionChecker interface {
 // <Service><Method>Procedure constants) is the per-method mechanism the
 // service-wide interceptor can't provide alone. Must run AFTER ConnectRequireAuth
 // so the role is already in the context.
+// errUnmappedProcedure is what a procedure gets when it is missing from the
+// permission map its service was mounted with.
+//
+// Refusing is the whole point. These maps used to be consulted with a comma-ok
+// that simply skipped the check when a procedure was absent, so adding an RPC
+// and forgetting its entry published it to every authenticated caller —
+// a read-only role included — and nothing anywhere said so. The failure was
+// silent, and on the wrong side.
+//
+// Denying instead turns that same omission into the RPC not working at all,
+// which is noticed immediately and cannot be mistaken for an access decision
+// somebody made on purpose. TestEveryProcedureHasAPermission catches it earlier
+// still, at `go test`; this is the backstop for whatever that misses.
+func errUnmappedProcedure(procedure string) error {
+	return connect.NewError(connect.CodeInternal,
+		fmt.Errorf("procedure %s has no permission mapping — refusing rather than serving it unchecked", procedure))
+}
+
 func ConnectRequirePermission(checker PermissionChecker, perms map[string]string) connect.UnaryInterceptorFunc {
 	return func(next connect.UnaryFunc) connect.UnaryFunc {
 		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-			if perm, ok := perms[req.Spec().Procedure]; ok {
-				if !checker.HasPermission(ctx, RoleFromContext(ctx), perm) {
-					return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("requires permission %s", perm))
-				}
+			perm, ok := perms[req.Spec().Procedure]
+			if !ok {
+				return nil, errUnmappedProcedure(req.Spec().Procedure)
+			}
+			if !checker.HasPermission(ctx, RoleFromContext(ctx), perm) {
+				return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf("requires permission %s", perm))
 			}
 			return next(ctx, req)
 		}
@@ -190,10 +210,12 @@ func (i *streamAuthInterceptor) WrapStreamingHandler(next connect.StreamingHandl
 		if err != nil {
 			return err
 		}
-		if perm, ok := i.perms[conn.Spec().Procedure]; ok {
-			if !i.checker.HasPermission(ctx, RoleFromContext(ctx), perm) {
-				return connect.NewError(connect.CodePermissionDenied, fmt.Errorf("requires permission %s", perm))
-			}
+		perm, ok := i.perms[conn.Spec().Procedure]
+		if !ok {
+			return errUnmappedProcedure(conn.Spec().Procedure)
+		}
+		if !i.checker.HasPermission(ctx, RoleFromContext(ctx), perm) {
+			return connect.NewError(connect.CodePermissionDenied, fmt.Errorf("requires permission %s", perm))
 		}
 		return next(ctx, conn)
 	}
