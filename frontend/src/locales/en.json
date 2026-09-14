@@ -558,7 +558,15 @@
         "pending": "{{label}} is asking to be enrolled ({{mac}})"
       },
       "pairingCloses": "Closes at {{at}}.",
-      "pairingExtend": "Extend 30 min"
+      "pairingExtend": "Extend 30 min",
+      "denyUnidentified": "Refuse devices that cannot be identified",
+      "denyUnidentifiedHint": "Off, an unidentifiable device is let through and the whitelist enforces nothing on this deployment. On, it is refused — including everything listed above, so read that list first.",
+      "unknownSeen": "{{count}}× · last {{at}}",
+      "add": "Add a device",
+      "addTitle": "Add a device by MAC address",
+      "addHint": "Enrolled and approved straight away, without waiting for it to send anything. Case does not matter. A MAC already on file is approved in place.",
+      "added": "Device added and approved.",
+      "mac": "MAC address"
     }
   },
   "quarantine": {

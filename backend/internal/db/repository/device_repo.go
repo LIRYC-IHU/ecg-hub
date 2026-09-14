@@ -131,6 +131,45 @@ func (r *DeviceRepository) Describe(ctx context.Context, mac, vendor, model, ser
 		Updates(updates).Error
 }
 
+// Enrol adds a device by hand, already approved.
+//
+// The pairing flow needs the machine to be plugged in and to send something;
+// this is for the site that knows its inventory in advance, or for hardware
+// that will never reach the pairing window. A device that has already been
+// seen is approved in place rather than duplicated — the MAC is the identity
+// either way, and an operator typing one that turns out to be pending means to
+// enrol it.
+func (r *DeviceRepository) Enrol(ctx context.Context, mac, label, description, by string) error {
+	now := time.Now()
+	row := models.Device{
+		MAC:         mac,
+		OUI:         device.OUI(mac),
+		Status:      models.DeviceStatusApproved,
+		Label:       label,
+		Description: description,
+		FirstSource: "manual",
+		FirstSeenAt: now,
+		LastSeenAt:  now,
+		SeenCount:   0,
+		ApprovedBy:  by,
+		ApprovedAt:  &now,
+	}
+	return r.db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns: []clause.Column{{Name: "mac"}},
+		DoUpdates: clause.Assignments(map[string]any{
+			"status":         models.DeviceStatusApproved,
+			"label":          label,
+			"description":    description,
+			"approved_by":    by,
+			"approved_at":    now,
+			"revoked_by":     "",
+			"revoked_at":     nil,
+			"revoked_reason": "",
+			"updated_at":     now,
+		}),
+	}).Create(&row).Error
+}
+
 // List returns devices, newest contact first. An empty status returns all.
 func (r *DeviceRepository) List(ctx context.Context, status string) ([]models.Device, error) {
 	q := r.db.WithContext(ctx).Order("last_seen_at DESC")

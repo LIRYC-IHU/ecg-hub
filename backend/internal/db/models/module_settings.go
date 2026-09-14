@@ -27,6 +27,11 @@ type ModuleSettings struct {
 	// DevicePairingUntil closes the window without anyone having to remember to.
 	// Null keeps it open until an administrator closes it.
 	DevicePairingUntil *time.Time `json:"device_pairing_until"`
+	// DeviceDenyUnidentified refuses connections whose hardware cannot be
+	// identified rather than letting them through. Off by default: on a routed
+	// or NATed deployment nothing resolves, and turning it on there stops every
+	// device at once.
+	DeviceDenyUnidentified bool `gorm:"not null;default:false" json:"device_deny_unidentified"`
 
 	UpdatedAt time.Time `gorm:"autoUpdateTime" json:"updated_at"`
 }

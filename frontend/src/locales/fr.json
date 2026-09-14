@@ -558,7 +558,15 @@
         "pending": "{{label}} demande à être enrôlé ({{mac}})"
       },
       "pairingCloses": "Se ferme à {{at}}.",
-      "pairingExtend": "Prolonger 30 min"
+      "pairingExtend": "Prolonger 30 min",
+      "denyUnidentified": "Refuser les appareils non identifiables",
+      "denyUnidentifiedHint": "Désactivé, un appareil non identifiable passe et la liste blanche n'applique rien sur ce déploiement. Activé, il est refusé — y compris tout ce qui est listé ci-dessus, donc lisez cette liste d'abord.",
+      "unknownSeen": "{{count}}× · dernière fois {{at}}",
+      "add": "Ajouter un appareil",
+      "addTitle": "Ajouter un appareil par adresse MAC",
+      "addHint": "Enrôlé et approuvé immédiatement, sans attendre qu'il envoie quoi que ce soit. La casse n'a pas d'importance. Une MAC déjà connue est approuvée sur place.",
+      "added": "Appareil ajouté et approuvé.",
+      "mac": "Adresse MAC"
     }
   },
   "quarantine": {

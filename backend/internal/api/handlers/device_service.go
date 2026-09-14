@@ -38,7 +38,7 @@ type DevicePairingStore interface {
 // Implemented by the module-settings repository.
 type DeviceSettingsStore interface {
 	DeviceSettings(ctx context.Context) (device.Settings, error)
-	SetDeviceSettings(enabled, pairingOpen bool, pairingUntil time.Time) error
+	SetDeviceSettings(enabled, pairingOpen, denyUnidentified bool, pairingUntil time.Time) error
 }
 
 // DeviceIdentityHealth reports what the gate has observed about whether
@@ -129,9 +129,10 @@ func (h *DeviceServiceHandler) GetSettings(ctx context.Context, _ *apiv1.GetDevi
 	// a screen still showing it open would be an indicator that lies.
 	resp := &apiv1.GetDeviceSettingsResponse{
 		Settings: &apiv1.DeviceSettings{
-			Enabled:      set.Enabled,
-			PairingOpen:  set.PairingActive(time.Now()),
-			PairingUntil: rfc3339(set.PairingUntil),
+			Enabled:          set.Enabled,
+			PairingOpen:      set.PairingActive(time.Now()),
+			PairingUntil:     rfc3339(set.PairingUntil),
+			DenyUnidentified: set.DenyUnidentified,
 		},
 	}
 	if h.Resolver != nil {
@@ -139,6 +140,15 @@ func (h *DeviceServiceHandler) GetSettings(ctx context.Context, _ *apiv1.GetDevi
 		resp.Degraded = health.Degraded
 		resp.IdentifiedConnections = health.Resolved
 		resp.UnidentifiedConnections = health.Unresolved
+		for _, u := range health.Unknown {
+			resp.UnidentifiedSources = append(resp.UnidentifiedSources, &apiv1.UnknownSource{
+				Ip:        u.IP,
+				Source:    u.Source,
+				Count:     u.Count,
+				FirstSeen: rfc3339(u.FirstSeen),
+				LastSeen:  rfc3339(u.LastSeen),
+			})
+		}
 	}
 	return resp, nil
 }
@@ -164,22 +174,57 @@ func (h *DeviceServiceHandler) UpdateSettings(ctx context.Context, req *apiv1.Up
 	if in.PairingOpen && until.IsZero() {
 		until = time.Now().Add(device.DefaultPairingWindow)
 	}
-	if err := h.Settings.SetDeviceSettings(in.Enabled, in.PairingOpen, until); err != nil {
+	if err := h.Settings.SetDeviceSettings(in.Enabled, in.PairingOpen, in.DenyUnidentified, until); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, errors.New("failed to store device settings"))
 	}
 
 	_ = mw.WriteAuditLog(ctx, h.DB, mw.UserIDFromContext(ctx), "device_whitelist_settings", "",
 		map[string]any{
-			"enabled":       in.Enabled,
-			"pairing_open":  in.PairingOpen,
-			"pairing_until": rfc3339(until),
+			"enabled":           in.Enabled,
+			"pairing_open":      in.PairingOpen,
+			"deny_unidentified": in.DenyUnidentified,
+			"pairing_until":     rfc3339(until),
 		})
 
 	return &apiv1.UpdateDeviceSettingsResponse{Settings: &apiv1.DeviceSettings{
-		Enabled:      in.Enabled,
-		PairingOpen:  in.PairingOpen,
-		PairingUntil: rfc3339(until),
+		Enabled:          in.Enabled,
+		PairingOpen:      in.PairingOpen,
+		PairingUntil:     rfc3339(until),
+		DenyUnidentified: in.DenyUnidentified,
 	}}, nil
+}
+
+// AddDevice enrols a device by hand, already approved.
+func (h *DeviceServiceHandler) AddDevice(ctx context.Context, req *apiv1.AddDeviceRequest) (*apiv1.AddDeviceResponse, error) {
+	// Normalised before anything else: a MAC typed off a label arrives in upper
+	// case, and a row stored that way would never match the lower-case address
+	// the resolver hands the gate — an enrolment that silently enrols nothing.
+	mac := device.NormalizeMAC(req.Mac)
+	if mac == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("mac must be a hardware address, e.g. 00:0e:10:19:44:8a"))
+	}
+	label, err := boundedText(req.Label, deviceLabelMaxLen, "label")
+	if err != nil {
+		return nil, err
+	}
+	description, err := boundedText(req.Description, deviceLabelMaxLen, "description")
+	if err != nil {
+		return nil, err
+	}
+
+	if err := h.Repo.Enrol(ctx, mac, label, description, mw.UsernameFromContext(ctx)); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, errors.New("failed to add the device"))
+	}
+
+	_ = mw.WriteAuditLog(ctx, h.DB, mw.UserIDFromContext(ctx), "device_approved", mac,
+		map[string]any{"label": label, "manual": true})
+	h.publish(events.TypeDeviceApproved, mac)
+
+	d, err := h.Repo.Get(ctx, mac)
+	if err != nil {
+		return nil, deviceLookupError(err)
+	}
+	return &apiv1.AddDeviceResponse{Device: h.deviceToProto(d)}, nil
 }
 
 // ApproveDevice enrols a device and, when the device sent a file to identify

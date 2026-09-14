@@ -42,6 +42,8 @@ const (
 	// DeviceServiceUpdateSettingsProcedure is the fully-qualified name of the DeviceService's
 	// UpdateSettings RPC.
 	DeviceServiceUpdateSettingsProcedure = "/grpc.api.v1.DeviceService/UpdateSettings"
+	// DeviceServiceAddDeviceProcedure is the fully-qualified name of the DeviceService's AddDevice RPC.
+	DeviceServiceAddDeviceProcedure = "/grpc.api.v1.DeviceService/AddDevice"
 	// DeviceServiceApproveDeviceProcedure is the fully-qualified name of the DeviceService's
 	// ApproveDevice RPC.
 	DeviceServiceApproveDeviceProcedure = "/grpc.api.v1.DeviceService/ApproveDevice"
@@ -61,6 +63,7 @@ type DeviceServiceClient interface {
 	ListDevices(context.Context, *v1.ListDevicesRequest) (*v1.ListDevicesResponse, error)
 	GetSettings(context.Context, *v1.GetDeviceSettingsRequest) (*v1.GetDeviceSettingsResponse, error)
 	UpdateSettings(context.Context, *v1.UpdateDeviceSettingsRequest) (*v1.UpdateDeviceSettingsResponse, error)
+	AddDevice(context.Context, *v1.AddDeviceRequest) (*v1.AddDeviceResponse, error)
 	ApproveDevice(context.Context, *v1.ApproveDeviceRequest) (*v1.ApproveDeviceResponse, error)
 	RevokeDevice(context.Context, *v1.RevokeDeviceRequest) (*v1.RevokeDeviceResponse, error)
 	DeleteDevice(context.Context, *v1.DeleteDeviceRequest) (*v1.DeleteDeviceResponse, error)
@@ -96,6 +99,12 @@ func NewDeviceServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(deviceServiceMethods.ByName("UpdateSettings")),
 			connect.WithClientOptions(opts...),
 		),
+		addDevice: connect.NewClient[v1.AddDeviceRequest, v1.AddDeviceResponse](
+			httpClient,
+			baseURL+DeviceServiceAddDeviceProcedure,
+			connect.WithSchema(deviceServiceMethods.ByName("AddDevice")),
+			connect.WithClientOptions(opts...),
+		),
 		approveDevice: connect.NewClient[v1.ApproveDeviceRequest, v1.ApproveDeviceResponse](
 			httpClient,
 			baseURL+DeviceServiceApproveDeviceProcedure,
@@ -128,6 +137,7 @@ type deviceServiceClient struct {
 	listDevices      *connect.Client[v1.ListDevicesRequest, v1.ListDevicesResponse]
 	getSettings      *connect.Client[v1.GetDeviceSettingsRequest, v1.GetDeviceSettingsResponse]
 	updateSettings   *connect.Client[v1.UpdateDeviceSettingsRequest, v1.UpdateDeviceSettingsResponse]
+	addDevice        *connect.Client[v1.AddDeviceRequest, v1.AddDeviceResponse]
 	approveDevice    *connect.Client[v1.ApproveDeviceRequest, v1.ApproveDeviceResponse]
 	revokeDevice     *connect.Client[v1.RevokeDeviceRequest, v1.RevokeDeviceResponse]
 	deleteDevice     *connect.Client[v1.DeleteDeviceRequest, v1.DeleteDeviceResponse]
@@ -155,6 +165,15 @@ func (c *deviceServiceClient) GetSettings(ctx context.Context, req *v1.GetDevice
 // UpdateSettings calls grpc.api.v1.DeviceService.UpdateSettings.
 func (c *deviceServiceClient) UpdateSettings(ctx context.Context, req *v1.UpdateDeviceSettingsRequest) (*v1.UpdateDeviceSettingsResponse, error) {
 	response, err := c.updateSettings.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
+// AddDevice calls grpc.api.v1.DeviceService.AddDevice.
+func (c *deviceServiceClient) AddDevice(ctx context.Context, req *v1.AddDeviceRequest) (*v1.AddDeviceResponse, error) {
+	response, err := c.addDevice.CallUnary(ctx, connect.NewRequest(req))
 	if response != nil {
 		return response.Msg, err
 	}
@@ -198,6 +217,7 @@ type DeviceServiceHandler interface {
 	ListDevices(context.Context, *v1.ListDevicesRequest) (*v1.ListDevicesResponse, error)
 	GetSettings(context.Context, *v1.GetDeviceSettingsRequest) (*v1.GetDeviceSettingsResponse, error)
 	UpdateSettings(context.Context, *v1.UpdateDeviceSettingsRequest) (*v1.UpdateDeviceSettingsResponse, error)
+	AddDevice(context.Context, *v1.AddDeviceRequest) (*v1.AddDeviceResponse, error)
 	ApproveDevice(context.Context, *v1.ApproveDeviceRequest) (*v1.ApproveDeviceResponse, error)
 	RevokeDevice(context.Context, *v1.RevokeDeviceRequest) (*v1.RevokeDeviceResponse, error)
 	DeleteDevice(context.Context, *v1.DeleteDeviceRequest) (*v1.DeleteDeviceResponse, error)
@@ -227,6 +247,12 @@ func NewDeviceServiceHandler(svc DeviceServiceHandler, opts ...connect.HandlerOp
 		DeviceServiceUpdateSettingsProcedure,
 		svc.UpdateSettings,
 		connect.WithSchema(deviceServiceMethods.ByName("UpdateSettings")),
+		connect.WithHandlerOptions(opts...),
+	)
+	deviceServiceAddDeviceHandler := connect.NewUnaryHandlerSimple(
+		DeviceServiceAddDeviceProcedure,
+		svc.AddDevice,
+		connect.WithSchema(deviceServiceMethods.ByName("AddDevice")),
 		connect.WithHandlerOptions(opts...),
 	)
 	deviceServiceApproveDeviceHandler := connect.NewUnaryHandlerSimple(
@@ -261,6 +287,8 @@ func NewDeviceServiceHandler(svc DeviceServiceHandler, opts ...connect.HandlerOp
 			deviceServiceGetSettingsHandler.ServeHTTP(w, r)
 		case DeviceServiceUpdateSettingsProcedure:
 			deviceServiceUpdateSettingsHandler.ServeHTTP(w, r)
+		case DeviceServiceAddDeviceProcedure:
+			deviceServiceAddDeviceHandler.ServeHTTP(w, r)
 		case DeviceServiceApproveDeviceProcedure:
 			deviceServiceApproveDeviceHandler.ServeHTTP(w, r)
 		case DeviceServiceRevokeDeviceProcedure:
@@ -288,6 +316,10 @@ func (UnimplementedDeviceServiceHandler) GetSettings(context.Context, *v1.GetDev
 
 func (UnimplementedDeviceServiceHandler) UpdateSettings(context.Context, *v1.UpdateDeviceSettingsRequest) (*v1.UpdateDeviceSettingsResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("grpc.api.v1.DeviceService.UpdateSettings is not implemented"))
+}
+
+func (UnimplementedDeviceServiceHandler) AddDevice(context.Context, *v1.AddDeviceRequest) (*v1.AddDeviceResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("grpc.api.v1.DeviceService.AddDevice is not implemented"))
 }
 
 func (UnimplementedDeviceServiceHandler) ApproveDevice(context.Context, *v1.ApproveDeviceRequest) (*v1.ApproveDeviceResponse, error) {
