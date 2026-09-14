@@ -164,7 +164,7 @@ func TestBoundedText(t *testing.T) {
 // device goes unnoticed.
 func TestDeviceService_PairingWindowGetsADefaultExpiry(t *testing.T) {
 	repo := &stubSettings{}
-	h := &DeviceServiceHandler{Settings: repo}
+	h := &DeviceServiceHandler{Settings: repo, WhitelistAvailable: true}
 
 	before := time.Now()
 	_, err := h.UpdateSettings(context.Background(), &apiv1.UpdateDeviceSettingsRequest{
@@ -186,7 +186,7 @@ func TestDeviceService_PairingWindowGetsADefaultExpiry(t *testing.T) {
 // "leave it open" for someone who says so deliberately.
 func TestDeviceService_ExplicitPairingExpiryIsKept(t *testing.T) {
 	repo := &stubSettings{}
-	h := &DeviceServiceHandler{Settings: repo}
+	h := &DeviceServiceHandler{Settings: repo, WhitelistAvailable: true}
 	chosen := time.Now().Add(4 * time.Hour).UTC().Truncate(time.Second)
 
 	if _, err := h.UpdateSettings(context.Background(), &apiv1.UpdateDeviceSettingsRequest{
@@ -204,7 +204,7 @@ func TestDeviceService_ExplicitPairingExpiryIsKept(t *testing.T) {
 // Closing the window must not acquire an expiry it does not need.
 func TestDeviceService_ClosingPairingKeepsNoExpiry(t *testing.T) {
 	repo := &stubSettings{}
-	h := &DeviceServiceHandler{Settings: repo}
+	h := &DeviceServiceHandler{Settings: repo, WhitelistAvailable: true}
 	if _, err := h.UpdateSettings(context.Background(), &apiv1.UpdateDeviceSettingsRequest{
 		Settings: &apiv1.DeviceSettings{Enabled: true, PairingOpen: false},
 	}); err != nil {
@@ -229,7 +229,7 @@ func TestDeviceService_AddDeviceRejectsANonAddress(t *testing.T) {
 
 func TestDeviceService_UpdateSettingsCarriesTheDenyPolicy(t *testing.T) {
 	repo := &stubSettings{}
-	h := &DeviceServiceHandler{Settings: repo}
+	h := &DeviceServiceHandler{Settings: repo, WhitelistAvailable: true}
 	if _, err := h.UpdateSettings(context.Background(), &apiv1.UpdateDeviceSettingsRequest{
 		Settings: &apiv1.DeviceSettings{Enabled: true, DenyUnidentified: true},
 	}); err != nil {
@@ -237,5 +237,39 @@ func TestDeviceService_UpdateSettingsCarriesTheDenyPolicy(t *testing.T) {
 	}
 	if !repo.denyUnidentified {
 		t.Error("deny_unidentified was not stored")
+	}
+}
+
+// A deployment that cannot run the whitelist must not let anyone switch it on.
+//
+// Storing the flag would be worse than refusing it: the screen would report a
+// control that filters connections while no gate is registered to filter any,
+// which is the exact confusion the availability flag exists to remove.
+func TestDeviceService_UpdateSettingsRefusedWhenTheWhitelistIsUnavailable(t *testing.T) {
+	h := &DeviceServiceHandler{WhitelistAvailable: false}
+
+	_, err := h.UpdateSettings(context.Background(), &apiv1.UpdateDeviceSettingsRequest{
+		Settings: &apiv1.DeviceSettings{Enabled: true},
+	})
+	if got := codeOf(t, err); got != connect.CodeFailedPrecondition {
+		t.Errorf("code = %v, want FailedPrecondition", got)
+	}
+}
+
+// GetSettings stays readable either way — the screen needs the answer in order
+// to explain itself, so refusing the read would leave it with nothing to say.
+func TestDeviceService_GetSettingsReportsAvailability(t *testing.T) {
+	for _, available := range []bool{true, false} {
+		h := &DeviceServiceHandler{
+			WhitelistAvailable: available,
+			Settings:           &stubSettings{},
+		}
+		resp, err := h.GetSettings(context.Background(), &apiv1.GetDeviceSettingsRequest{})
+		if err != nil {
+			t.Fatalf("GetSettings(available=%v): %v", available, err)
+		}
+		if resp.Available != available {
+			t.Errorf("Available = %v, want %v", resp.Available, available)
+		}
 	}
 }

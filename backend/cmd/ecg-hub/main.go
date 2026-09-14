@@ -527,7 +527,31 @@ func main() {
 		WithDecisionHook(func(id device.Identity, d device.Decision) {
 			appmetrics.DeviceGate.WithLabelValues(id.Source, d.String()).Inc()
 		})
-	module.SetDeviceGate(deviceGate)
+	// The whitelist is only wired when the deployment says it can work. It
+	// identifies hardware by the MAC behind each connection, which resolves
+	// only for a device on the server's own segment — on a bridge network the
+	// ARP table holds sibling containers and never a device. Registering the
+	// gate there would offer a control that refuses nothing.
+	//
+	// Left unregistered, module.ActiveDeviceGate() stays nil and the ingestion
+	// servers keep the behaviour from before the feature existed.
+	if cfg.Devices.WhitelistEnabled {
+		module.SetDeviceGate(deviceGate)
+		slog.Info("device whitelist: available — connections are identified by MAC")
+	} else {
+		// Worth an error, not an info. The operator switched this on in the UI,
+		// so the screen says devices are being filtered, and the deployment
+		// cannot do it. Saying nothing here is how "I enabled it and it allowed
+		// everything" happens — the report this feature already came from once.
+		if set, err := moduleSettingsRepo.DeviceSettings(context.Background()); err == nil && set.Enabled {
+			slog.Error("device whitelist: enabled in the database but DEVICE_WHITELIST is not set — " +
+				"every device will be allowed through unfiltered. Set DEVICE_WHITELIST=true on a host-network " +
+				"deployment (docker-compose.host.yml), or turn the whitelist off in Admin > Devices so the " +
+				"screen stops claiming a control that is not running")
+		} else {
+			slog.Info("device whitelist: not available — DEVICE_WHITELIST is not set")
+		}
+	}
 	module.SetAuditWriter(repository.NewAuditRepository(gormDB))
 
 	// Outbound HL7 ORU: expose the manual send-result route (guarded by ecg.send_result).

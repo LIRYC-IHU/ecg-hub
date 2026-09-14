@@ -70,6 +70,13 @@ services:
       # Public origin (https://ecg.chu.example): CORS, and webhook callback links.
       HOST_URL: ${HOST_URL}
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      # The MAC device whitelist stays off on a bridge network, and overriding
+      # this will not make it work. The container has its own netns, so its ARP
+      # table lists the sibling containers and never a device on the site
+      # network: the gate would identify nothing and, failing open, let
+      # everything through — a control that refuses nothing, which reads on the
+      # screen exactly like one that works. Use docker-compose.host.yml.
+      DEVICE_WHITELIST: ${DEVICE_WHITELIST:-false}
       CONFIG_PATH: ${CONFIG_PATH:-/app/config.yaml}
       METRICS_ENABLED: ${METRICS_ENABLED:-false}
       METRICS_PORT: ${METRICS_PORT:-9091}

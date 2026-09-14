@@ -629,14 +629,15 @@ func (r *RouterConfig) RegisterRoutes() {
 	// interceptor like EventService; the unary interceptors do not cover it.
 	if r.deviceRepo != nil {
 		deviceHandler := &handlers.DeviceServiceHandler{
-			Repo:     r.deviceRepo,
-			Settings: r.moduleSettingsRepo,
-			Pairing:  r.devicePairing,
-			Resolver: r.deviceResolver,
-			Queue:    r.ftpQueue,
-			Hub:      r.eventHub,
-			Pub:      r.eventHub,
-			DB:       r.gormDB,
+			Repo:               r.deviceRepo,
+			Settings:           r.moduleSettingsRepo,
+			Pairing:            r.devicePairing,
+			Resolver:           r.deviceResolver,
+			WhitelistAvailable: r.cfg.Devices.WhitelistEnabled,
+			Queue:              r.ftpQueue,
+			Hub:                r.eventHub,
+			Pub:                r.eventHub,
+			DB:                 r.gormDB,
 		}
 		devicePath, deviceConnect := apiv1connect.NewDeviceServiceHandler(
 			deviceHandler,

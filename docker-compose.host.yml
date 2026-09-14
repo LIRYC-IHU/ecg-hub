@@ -82,6 +82,11 @@ services:
       # Public origin (https://ecg.chu.example): CORS, and webhook callback links.
       HOST_URL: ${HOST_URL}
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      # The MAC device whitelist (Admin > Devices). On by default here and only
+      # here: sharing the host namespace is what puts real devices in the ARP
+      # table, so this is the one compose file where the gate can identify
+      # anything. Set it to false to run host networking without the control.
+      DEVICE_WHITELIST: ${DEVICE_WHITELIST:-true}
       CONFIG_PATH: ${CONFIG_PATH:-/app/config.yaml}
       # Keep both off the site network. nginx shares this namespace and reaches
       # the API on loopback; Prometheus scrapes the metrics the same way.

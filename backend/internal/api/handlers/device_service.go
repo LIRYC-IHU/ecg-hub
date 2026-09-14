@@ -55,6 +55,11 @@ type DeviceServiceHandler struct {
 	Settings DeviceSettingsStore
 	Pairing  DevicePairingStore
 	Resolver DeviceIdentityHealth
+	// WhitelistAvailable is what the deployment declared through
+	// DEVICE_WHITELIST. False means no gate was registered, so nothing the
+	// operator sets here would be applied — the screen is told, and the
+	// settings become read-only rather than silently ineffective.
+	WhitelistAvailable bool
 	// Queue re-ingests the file a device sent while pairing, once approved.
 	Queue ingestion.IngestQueue
 	// Hub carries device events to the pairing screen; nil disables the stream.
@@ -135,6 +140,7 @@ func (h *DeviceServiceHandler) GetSettings(ctx context.Context, _ *apiv1.GetDevi
 			DenyUnidentified: set.DenyUnidentified,
 		},
 	}
+	resp.Available = h.WhitelistAvailable
 	if h.Resolver != nil {
 		health := h.Resolver.Health()
 		resp.Degraded = health.Degraded
@@ -173,6 +179,17 @@ func (h *DeviceServiceHandler) UpdateSettings(ctx context.Context, req *apiv1.Up
 	// so, not forgetting to.
 	if in.PairingOpen && until.IsZero() {
 		until = time.Now().Add(device.DefaultPairingWindow)
+	}
+	// Refused rather than stored, and checked here rather than on the way in:
+	// a malformed request is malformed on any deployment, so it earns its own
+	// InvalidArgument before this ever gets a say. What this refuses is a
+	// well-formed setting the server would not apply — writing a flag no gate
+	// will read is how a screen ends up reporting a control that is not
+	// running, which is the failure the availability flag exists to prevent.
+	if !h.WhitelistAvailable {
+		return nil, connect.NewError(connect.CodeFailedPrecondition,
+			errors.New("the device whitelist is not available on this deployment: it needs host networking "+
+				"(docker-compose.host.yml) and DEVICE_WHITELIST=true"))
 	}
 	if err := h.Settings.SetDeviceSettings(in.Enabled, in.PairingOpen, in.DenyUnidentified, until); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, errors.New("failed to store device settings"))

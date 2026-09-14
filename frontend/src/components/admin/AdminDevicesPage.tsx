@@ -183,6 +183,12 @@ export function AdminDevicesPage() {
     onError: failed,
   });
 
+  // The deployment declared whether the whitelist can run at all
+  // (DEVICE_WHITELIST, set by docker-compose.host.yml). Distinct from
+  // `degraded`, which is the whitelist running and failing to identify what
+  // arrives. Unavailable means no gate was registered, so every control here
+  // is read-only — the server refuses to store a setting it will not apply.
+  const available = settings?.available ?? false;
   const enabled = settings?.settings?.enabled ?? false;
   // The server reports the window as closed once its expiry has passed, so this
   // never shows open when the gate would refuse.
@@ -205,7 +211,18 @@ export function AdminDevicesPage() {
       {/* The whitelist cannot identify hardware on every deployment. Saying so
           here is the point: an administrator who enables it on a routed network
           would otherwise believe they were protected while everything passes. */}
-      {settings?.degraded && (
+      {/* Unavailable outranks degraded, and replaces it: a whitelist that is
+          not running cannot have found anything it could not identify, so
+          showing both would describe two different problems at once. */}
+      {settings && !available && (
+        <div className="flex gap-2 items-start rounded-lg border border-border bg-muted/40 p-3">
+          <ShieldOff className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
+          <p className="text-xs text-muted-foreground">
+            {t("admin.devices.unavailable")}
+          </p>
+        </div>
+      )}
+      {available && settings?.degraded && (
         <div className="flex gap-2 items-start rounded-lg border border-warning/40 bg-warning/10 p-3">
           <AlertTriangle className="w-4 h-4 text-warning shrink-0 mt-0.5" />
           <div className="space-y-1.5">
@@ -271,7 +288,7 @@ export function AdminDevicesPage() {
               <>
                 <Toggle
                   checked={enabled}
-                  disabled={!canManage || saveSettings.isPending}
+                  disabled={!canManage || !available || saveSettings.isPending}
                   onChange={(v) =>
                     saveSettings.mutate({
                       enabled: v,
@@ -284,7 +301,7 @@ export function AdminDevicesPage() {
                 />
                 <Toggle
                   checked={pairingOpen}
-                  disabled={!canManage || !enabled || saveSettings.isPending}
+                  disabled={!canManage || !available || !enabled || saveSettings.isPending}
                   onChange={(v) =>
                     saveSettings.mutate({
                       enabled,
@@ -297,7 +314,7 @@ export function AdminDevicesPage() {
                 />
                 <Toggle
                   checked={denyUnidentified}
-                  disabled={!canManage || !enabled || saveSettings.isPending}
+                  disabled={!canManage || !available || !enabled || saveSettings.isPending}
                   onChange={(v) =>
                     saveSettings.mutate({
                       enabled,
