@@ -314,12 +314,17 @@ func (x *ListDevicesResponse) GetDevices() []*Device {
 // Settings is the whitelist configuration. Stored in the module-settings
 // singleton, edited from the admin UI.
 type DeviceSettings struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Enabled       bool                   `protobuf:"varint,1,opt,name=enabled,proto3" json:"enabled,omitempty"`
-	PairingOpen   bool                   `protobuf:"varint,2,opt,name=pairing_open,json=pairingOpen,proto3" json:"pairing_open,omitempty"`
-	PairingUntil  string                 `protobuf:"bytes,3,opt,name=pairing_until,json=pairingUntil,proto3" json:"pairing_until,omitempty"` // RFC3339 UTC; empty = open until closed
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	Enabled      bool                   `protobuf:"varint,1,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	PairingOpen  bool                   `protobuf:"varint,2,opt,name=pairing_open,json=pairingOpen,proto3" json:"pairing_open,omitempty"`
+	PairingUntil string                 `protobuf:"bytes,3,opt,name=pairing_until,json=pairingUntil,proto3" json:"pairing_until,omitempty"` // RFC3339 UTC; empty = open until closed
+	// deny_unidentified refuses connections whose hardware cannot be identified
+	// rather than letting them through. Off by default: on a routed or NATed
+	// deployment nothing resolves, and turning it on there stops every device at
+	// once. unidentified_sources says which ones those would be.
+	DenyUnidentified bool `protobuf:"varint,4,opt,name=deny_unidentified,json=denyUnidentified,proto3" json:"deny_unidentified,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *DeviceSettings) Reset() {
@@ -373,6 +378,92 @@ func (x *DeviceSettings) GetPairingUntil() string {
 	return ""
 }
 
+func (x *DeviceSettings) GetDenyUnidentified() bool {
+	if x != nil {
+		return x.DenyUnidentified
+	}
+	return false
+}
+
+// UnknownSource is somewhere connections arrive from that cannot be attached to
+// any hardware. Counting them was not enough: an administrator deciding whether
+// to turn deny_unidentified on needs to see what they are about to cut off.
+type UnknownSource struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Ip            string                 `protobuf:"bytes,1,opt,name=ip,proto3" json:"ip,omitempty"`
+	Source        string                 `protobuf:"bytes,2,opt,name=source,proto3" json:"source,omitempty"` // "ftp" | "dicom" | "ectp"
+	Count         int64                  `protobuf:"varint,3,opt,name=count,proto3" json:"count,omitempty"`
+	FirstSeen     string                 `protobuf:"bytes,4,opt,name=first_seen,json=firstSeen,proto3" json:"first_seen,omitempty"` // RFC3339 UTC
+	LastSeen      string                 `protobuf:"bytes,5,opt,name=last_seen,json=lastSeen,proto3" json:"last_seen,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UnknownSource) Reset() {
+	*x = UnknownSource{}
+	mi := &file_v1_device_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UnknownSource) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UnknownSource) ProtoMessage() {}
+
+func (x *UnknownSource) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_device_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UnknownSource.ProtoReflect.Descriptor instead.
+func (*UnknownSource) Descriptor() ([]byte, []int) {
+	return file_v1_device_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *UnknownSource) GetIp() string {
+	if x != nil {
+		return x.Ip
+	}
+	return ""
+}
+
+func (x *UnknownSource) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
+}
+
+func (x *UnknownSource) GetCount() int64 {
+	if x != nil {
+		return x.Count
+	}
+	return 0
+}
+
+func (x *UnknownSource) GetFirstSeen() string {
+	if x != nil {
+		return x.FirstSeen
+	}
+	return ""
+}
+
+func (x *UnknownSource) GetLastSeen() string {
+	if x != nil {
+		return x.LastSeen
+	}
+	return ""
+}
+
 type GetDeviceSettingsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -381,7 +472,7 @@ type GetDeviceSettingsRequest struct {
 
 func (x *GetDeviceSettingsRequest) Reset() {
 	*x = GetDeviceSettingsRequest{}
-	mi := &file_v1_device_proto_msgTypes[4]
+	mi := &file_v1_device_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -393,7 +484,7 @@ func (x *GetDeviceSettingsRequest) String() string {
 func (*GetDeviceSettingsRequest) ProtoMessage() {}
 
 func (x *GetDeviceSettingsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_device_proto_msgTypes[4]
+	mi := &file_v1_device_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -406,7 +497,7 @@ func (x *GetDeviceSettingsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDeviceSettingsRequest.ProtoReflect.Descriptor instead.
 func (*GetDeviceSettingsRequest) Descriptor() ([]byte, []int) {
-	return file_v1_device_proto_rawDescGZIP(), []int{4}
+	return file_v1_device_proto_rawDescGZIP(), []int{5}
 }
 
 type GetDeviceSettingsResponse struct {
@@ -425,13 +516,15 @@ type GetDeviceSettingsResponse struct {
 	// banner quotes them so an administrator can see what it is based on.
 	IdentifiedConnections   int64 `protobuf:"varint,3,opt,name=identified_connections,json=identifiedConnections,proto3" json:"identified_connections,omitempty"`
 	UnidentifiedConnections int64 `protobuf:"varint,4,opt,name=unidentified_connections,json=unidentifiedConnections,proto3" json:"unidentified_connections,omitempty"`
-	unknownFields           protoimpl.UnknownFields
-	sizeCache               protoimpl.SizeCache
+	// Where the unidentified connections came from, most recent first.
+	UnidentifiedSources []*UnknownSource `protobuf:"bytes,5,rep,name=unidentified_sources,json=unidentifiedSources,proto3" json:"unidentified_sources,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *GetDeviceSettingsResponse) Reset() {
 	*x = GetDeviceSettingsResponse{}
-	mi := &file_v1_device_proto_msgTypes[5]
+	mi := &file_v1_device_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -443,7 +536,7 @@ func (x *GetDeviceSettingsResponse) String() string {
 func (*GetDeviceSettingsResponse) ProtoMessage() {}
 
 func (x *GetDeviceSettingsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_device_proto_msgTypes[5]
+	mi := &file_v1_device_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -456,7 +549,7 @@ func (x *GetDeviceSettingsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDeviceSettingsResponse.ProtoReflect.Descriptor instead.
 func (*GetDeviceSettingsResponse) Descriptor() ([]byte, []int) {
-	return file_v1_device_proto_rawDescGZIP(), []int{5}
+	return file_v1_device_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *GetDeviceSettingsResponse) GetSettings() *DeviceSettings {
@@ -487,6 +580,13 @@ func (x *GetDeviceSettingsResponse) GetUnidentifiedConnections() int64 {
 	return 0
 }
 
+func (x *GetDeviceSettingsResponse) GetUnidentifiedSources() []*UnknownSource {
+	if x != nil {
+		return x.UnidentifiedSources
+	}
+	return nil
+}
+
 type UpdateDeviceSettingsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Settings      *DeviceSettings        `protobuf:"bytes,1,opt,name=settings,proto3" json:"settings,omitempty"`
@@ -496,7 +596,7 @@ type UpdateDeviceSettingsRequest struct {
 
 func (x *UpdateDeviceSettingsRequest) Reset() {
 	*x = UpdateDeviceSettingsRequest{}
-	mi := &file_v1_device_proto_msgTypes[6]
+	mi := &file_v1_device_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -508,7 +608,7 @@ func (x *UpdateDeviceSettingsRequest) String() string {
 func (*UpdateDeviceSettingsRequest) ProtoMessage() {}
 
 func (x *UpdateDeviceSettingsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_device_proto_msgTypes[6]
+	mi := &file_v1_device_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -521,7 +621,7 @@ func (x *UpdateDeviceSettingsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateDeviceSettingsRequest.ProtoReflect.Descriptor instead.
 func (*UpdateDeviceSettingsRequest) Descriptor() ([]byte, []int) {
-	return file_v1_device_proto_rawDescGZIP(), []int{6}
+	return file_v1_device_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *UpdateDeviceSettingsRequest) GetSettings() *DeviceSettings {
@@ -540,7 +640,7 @@ type UpdateDeviceSettingsResponse struct {
 
 func (x *UpdateDeviceSettingsResponse) Reset() {
 	*x = UpdateDeviceSettingsResponse{}
-	mi := &file_v1_device_proto_msgTypes[7]
+	mi := &file_v1_device_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -552,7 +652,7 @@ func (x *UpdateDeviceSettingsResponse) String() string {
 func (*UpdateDeviceSettingsResponse) ProtoMessage() {}
 
 func (x *UpdateDeviceSettingsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_device_proto_msgTypes[7]
+	mi := &file_v1_device_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -565,12 +665,119 @@ func (x *UpdateDeviceSettingsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateDeviceSettingsResponse.ProtoReflect.Descriptor instead.
 func (*UpdateDeviceSettingsResponse) Descriptor() ([]byte, []int) {
-	return file_v1_device_proto_rawDescGZIP(), []int{7}
+	return file_v1_device_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *UpdateDeviceSettingsResponse) GetSettings() *DeviceSettings {
 	if x != nil {
 		return x.Settings
+	}
+	return nil
+}
+
+// AddDeviceRequest enrols a device by hand, already approved — for a site that
+// knows its inventory in advance, or hardware that will never reach the pairing
+// window. A MAC already on file is approved in place rather than duplicated.
+type AddDeviceRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Mac           string                 `protobuf:"bytes,1,opt,name=mac,proto3" json:"mac,omitempty"`
+	Label         string                 `protobuf:"bytes,2,opt,name=label,proto3" json:"label,omitempty"`
+	Description   string                 `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AddDeviceRequest) Reset() {
+	*x = AddDeviceRequest{}
+	mi := &file_v1_device_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AddDeviceRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AddDeviceRequest) ProtoMessage() {}
+
+func (x *AddDeviceRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_device_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AddDeviceRequest.ProtoReflect.Descriptor instead.
+func (*AddDeviceRequest) Descriptor() ([]byte, []int) {
+	return file_v1_device_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *AddDeviceRequest) GetMac() string {
+	if x != nil {
+		return x.Mac
+	}
+	return ""
+}
+
+func (x *AddDeviceRequest) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
+func (x *AddDeviceRequest) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+type AddDeviceResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Device        *Device                `protobuf:"bytes,1,opt,name=device,proto3" json:"device,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AddDeviceResponse) Reset() {
+	*x = AddDeviceResponse{}
+	mi := &file_v1_device_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AddDeviceResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AddDeviceResponse) ProtoMessage() {}
+
+func (x *AddDeviceResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_device_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AddDeviceResponse.ProtoReflect.Descriptor instead.
+func (*AddDeviceResponse) Descriptor() ([]byte, []int) {
+	return file_v1_device_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *AddDeviceResponse) GetDevice() *Device {
+	if x != nil {
+		return x.Device
 	}
 	return nil
 }
@@ -586,7 +793,7 @@ type ApproveDeviceRequest struct {
 
 func (x *ApproveDeviceRequest) Reset() {
 	*x = ApproveDeviceRequest{}
-	mi := &file_v1_device_proto_msgTypes[8]
+	mi := &file_v1_device_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -598,7 +805,7 @@ func (x *ApproveDeviceRequest) String() string {
 func (*ApproveDeviceRequest) ProtoMessage() {}
 
 func (x *ApproveDeviceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_device_proto_msgTypes[8]
+	mi := &file_v1_device_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -611,7 +818,7 @@ func (x *ApproveDeviceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApproveDeviceRequest.ProtoReflect.Descriptor instead.
 func (*ApproveDeviceRequest) Descriptor() ([]byte, []int) {
-	return file_v1_device_proto_rawDescGZIP(), []int{8}
+	return file_v1_device_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *ApproveDeviceRequest) GetMac() string {
@@ -647,7 +854,7 @@ type ApproveDeviceResponse struct {
 
 func (x *ApproveDeviceResponse) Reset() {
 	*x = ApproveDeviceResponse{}
-	mi := &file_v1_device_proto_msgTypes[9]
+	mi := &file_v1_device_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -659,7 +866,7 @@ func (x *ApproveDeviceResponse) String() string {
 func (*ApproveDeviceResponse) ProtoMessage() {}
 
 func (x *ApproveDeviceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_device_proto_msgTypes[9]
+	mi := &file_v1_device_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -672,7 +879,7 @@ func (x *ApproveDeviceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApproveDeviceResponse.ProtoReflect.Descriptor instead.
 func (*ApproveDeviceResponse) Descriptor() ([]byte, []int) {
-	return file_v1_device_proto_rawDescGZIP(), []int{9}
+	return file_v1_device_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *ApproveDeviceResponse) GetDevice() *Device {
@@ -699,7 +906,7 @@ type RevokeDeviceRequest struct {
 
 func (x *RevokeDeviceRequest) Reset() {
 	*x = RevokeDeviceRequest{}
-	mi := &file_v1_device_proto_msgTypes[10]
+	mi := &file_v1_device_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -711,7 +918,7 @@ func (x *RevokeDeviceRequest) String() string {
 func (*RevokeDeviceRequest) ProtoMessage() {}
 
 func (x *RevokeDeviceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_device_proto_msgTypes[10]
+	mi := &file_v1_device_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -724,7 +931,7 @@ func (x *RevokeDeviceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeDeviceRequest.ProtoReflect.Descriptor instead.
 func (*RevokeDeviceRequest) Descriptor() ([]byte, []int) {
-	return file_v1_device_proto_rawDescGZIP(), []int{10}
+	return file_v1_device_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *RevokeDeviceRequest) GetMac() string {
@@ -750,7 +957,7 @@ type RevokeDeviceResponse struct {
 
 func (x *RevokeDeviceResponse) Reset() {
 	*x = RevokeDeviceResponse{}
-	mi := &file_v1_device_proto_msgTypes[11]
+	mi := &file_v1_device_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -762,7 +969,7 @@ func (x *RevokeDeviceResponse) String() string {
 func (*RevokeDeviceResponse) ProtoMessage() {}
 
 func (x *RevokeDeviceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_device_proto_msgTypes[11]
+	mi := &file_v1_device_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -775,7 +982,7 @@ func (x *RevokeDeviceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeDeviceResponse.ProtoReflect.Descriptor instead.
 func (*RevokeDeviceResponse) Descriptor() ([]byte, []int) {
-	return file_v1_device_proto_rawDescGZIP(), []int{11}
+	return file_v1_device_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *RevokeDeviceResponse) GetDevice() *Device {
@@ -794,7 +1001,7 @@ type DeleteDeviceRequest struct {
 
 func (x *DeleteDeviceRequest) Reset() {
 	*x = DeleteDeviceRequest{}
-	mi := &file_v1_device_proto_msgTypes[12]
+	mi := &file_v1_device_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -806,7 +1013,7 @@ func (x *DeleteDeviceRequest) String() string {
 func (*DeleteDeviceRequest) ProtoMessage() {}
 
 func (x *DeleteDeviceRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_device_proto_msgTypes[12]
+	mi := &file_v1_device_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -819,7 +1026,7 @@ func (x *DeleteDeviceRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteDeviceRequest.ProtoReflect.Descriptor instead.
 func (*DeleteDeviceRequest) Descriptor() ([]byte, []int) {
-	return file_v1_device_proto_rawDescGZIP(), []int{12}
+	return file_v1_device_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *DeleteDeviceRequest) GetMac() string {
@@ -837,7 +1044,7 @@ type DeleteDeviceResponse struct {
 
 func (x *DeleteDeviceResponse) Reset() {
 	*x = DeleteDeviceResponse{}
-	mi := &file_v1_device_proto_msgTypes[13]
+	mi := &file_v1_device_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -849,7 +1056,7 @@ func (x *DeleteDeviceResponse) String() string {
 func (*DeleteDeviceResponse) ProtoMessage() {}
 
 func (x *DeleteDeviceResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_device_proto_msgTypes[13]
+	mi := &file_v1_device_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -862,7 +1069,7 @@ func (x *DeleteDeviceResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteDeviceResponse.ProtoReflect.Descriptor instead.
 func (*DeleteDeviceResponse) Descriptor() ([]byte, []int) {
-	return file_v1_device_proto_rawDescGZIP(), []int{13}
+	return file_v1_device_proto_rawDescGZIP(), []int{16}
 }
 
 // DeviceEvent is pushed as devices appear and change. The pairing screen is
@@ -879,7 +1086,7 @@ type DeviceEvent struct {
 
 func (x *DeviceEvent) Reset() {
 	*x = DeviceEvent{}
-	mi := &file_v1_device_proto_msgTypes[14]
+	mi := &file_v1_device_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -891,7 +1098,7 @@ func (x *DeviceEvent) String() string {
 func (*DeviceEvent) ProtoMessage() {}
 
 func (x *DeviceEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_device_proto_msgTypes[14]
+	mi := &file_v1_device_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -904,7 +1111,7 @@ func (x *DeviceEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeviceEvent.ProtoReflect.Descriptor instead.
 func (*DeviceEvent) Descriptor() ([]byte, []int) {
-	return file_v1_device_proto_rawDescGZIP(), []int{14}
+	return file_v1_device_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *DeviceEvent) GetType() string {
@@ -936,7 +1143,7 @@ type SubscribeDevicesRequest struct {
 
 func (x *SubscribeDevicesRequest) Reset() {
 	*x = SubscribeDevicesRequest{}
-	mi := &file_v1_device_proto_msgTypes[15]
+	mi := &file_v1_device_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -948,7 +1155,7 @@ func (x *SubscribeDevicesRequest) String() string {
 func (*SubscribeDevicesRequest) ProtoMessage() {}
 
 func (x *SubscribeDevicesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_v1_device_proto_msgTypes[15]
+	mi := &file_v1_device_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -961,7 +1168,7 @@ func (x *SubscribeDevicesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubscribeDevicesRequest.ProtoReflect.Descriptor instead.
 func (*SubscribeDevicesRequest) Descriptor() ([]byte, []int) {
-	return file_v1_device_proto_rawDescGZIP(), []int{15}
+	return file_v1_device_proto_rawDescGZIP(), []int{18}
 }
 
 var File_v1_device_proto protoreflect.FileDescriptor
@@ -1000,21 +1207,36 @@ const file_v1_device_proto_rawDesc = "" +
 	"\x12ListDevicesRequest\x12\x16\n" +
 	"\x06status\x18\x01 \x01(\tR\x06status\"D\n" +
 	"\x13ListDevicesResponse\x12-\n" +
-	"\adevices\x18\x01 \x03(\v2\x13.grpc.api.v1.DeviceR\adevices\"r\n" +
+	"\adevices\x18\x01 \x03(\v2\x13.grpc.api.v1.DeviceR\adevices\"\x9f\x01\n" +
 	"\x0eDeviceSettings\x12\x18\n" +
 	"\aenabled\x18\x01 \x01(\bR\aenabled\x12!\n" +
 	"\fpairing_open\x18\x02 \x01(\bR\vpairingOpen\x12#\n" +
-	"\rpairing_until\x18\x03 \x01(\tR\fpairingUntil\"\x1a\n" +
-	"\x18GetDeviceSettingsRequest\"\xe2\x01\n" +
+	"\rpairing_until\x18\x03 \x01(\tR\fpairingUntil\x12+\n" +
+	"\x11deny_unidentified\x18\x04 \x01(\bR\x10denyUnidentified\"\x89\x01\n" +
+	"\rUnknownSource\x12\x0e\n" +
+	"\x02ip\x18\x01 \x01(\tR\x02ip\x12\x16\n" +
+	"\x06source\x18\x02 \x01(\tR\x06source\x12\x14\n" +
+	"\x05count\x18\x03 \x01(\x03R\x05count\x12\x1d\n" +
+	"\n" +
+	"first_seen\x18\x04 \x01(\tR\tfirstSeen\x12\x1b\n" +
+	"\tlast_seen\x18\x05 \x01(\tR\blastSeen\"\x1a\n" +
+	"\x18GetDeviceSettingsRequest\"\xb1\x02\n" +
 	"\x19GetDeviceSettingsResponse\x127\n" +
 	"\bsettings\x18\x01 \x01(\v2\x1b.grpc.api.v1.DeviceSettingsR\bsettings\x12\x1a\n" +
 	"\bdegraded\x18\x02 \x01(\bR\bdegraded\x125\n" +
 	"\x16identified_connections\x18\x03 \x01(\x03R\x15identifiedConnections\x129\n" +
-	"\x18unidentified_connections\x18\x04 \x01(\x03R\x17unidentifiedConnections\"V\n" +
+	"\x18unidentified_connections\x18\x04 \x01(\x03R\x17unidentifiedConnections\x12M\n" +
+	"\x14unidentified_sources\x18\x05 \x03(\v2\x1a.grpc.api.v1.UnknownSourceR\x13unidentifiedSources\"V\n" +
 	"\x1bUpdateDeviceSettingsRequest\x127\n" +
 	"\bsettings\x18\x01 \x01(\v2\x1b.grpc.api.v1.DeviceSettingsR\bsettings\"W\n" +
 	"\x1cUpdateDeviceSettingsResponse\x127\n" +
-	"\bsettings\x18\x01 \x01(\v2\x1b.grpc.api.v1.DeviceSettingsR\bsettings\"`\n" +
+	"\bsettings\x18\x01 \x01(\v2\x1b.grpc.api.v1.DeviceSettingsR\bsettings\"\\\n" +
+	"\x10AddDeviceRequest\x12\x10\n" +
+	"\x03mac\x18\x01 \x01(\tR\x03mac\x12\x14\n" +
+	"\x05label\x18\x02 \x01(\tR\x05label\x12 \n" +
+	"\vdescription\x18\x03 \x01(\tR\vdescription\"@\n" +
+	"\x11AddDeviceResponse\x12+\n" +
+	"\x06device\x18\x01 \x01(\v2\x13.grpc.api.v1.DeviceR\x06device\"`\n" +
 	"\x14ApproveDeviceRequest\x12\x10\n" +
 	"\x03mac\x18\x01 \x01(\tR\x03mac\x12\x14\n" +
 	"\x05label\x18\x02 \x01(\tR\x05label\x12 \n" +
@@ -1036,11 +1258,12 @@ const file_v1_device_proto_rawDesc = "" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12+\n" +
 	"\x06device\x18\x02 \x01(\v2\x13.grpc.api.v1.DeviceR\x06device\x12\x0e\n" +
 	"\x02at\x18\x03 \x01(\tR\x02at\"\x19\n" +
-	"\x17SubscribeDevicesRequest2\x8c\x05\n" +
+	"\x17SubscribeDevicesRequest2\xda\x05\n" +
 	"\rDeviceService\x12R\n" +
 	"\vListDevices\x12\x1f.grpc.api.v1.ListDevicesRequest\x1a .grpc.api.v1.ListDevicesResponse\"\x00\x12^\n" +
 	"\vGetSettings\x12%.grpc.api.v1.GetDeviceSettingsRequest\x1a&.grpc.api.v1.GetDeviceSettingsResponse\"\x00\x12g\n" +
-	"\x0eUpdateSettings\x12(.grpc.api.v1.UpdateDeviceSettingsRequest\x1a).grpc.api.v1.UpdateDeviceSettingsResponse\"\x00\x12X\n" +
+	"\x0eUpdateSettings\x12(.grpc.api.v1.UpdateDeviceSettingsRequest\x1a).grpc.api.v1.UpdateDeviceSettingsResponse\"\x00\x12L\n" +
+	"\tAddDevice\x12\x1d.grpc.api.v1.AddDeviceRequest\x1a\x1e.grpc.api.v1.AddDeviceResponse\"\x00\x12X\n" +
 	"\rApproveDevice\x12!.grpc.api.v1.ApproveDeviceRequest\x1a\".grpc.api.v1.ApproveDeviceResponse\"\x00\x12U\n" +
 	"\fRevokeDevice\x12 .grpc.api.v1.RevokeDeviceRequest\x1a!.grpc.api.v1.RevokeDeviceResponse\"\x00\x12U\n" +
 	"\fDeleteDevice\x12 .grpc.api.v1.DeleteDeviceRequest\x1a!.grpc.api.v1.DeleteDeviceResponse\"\x00\x12V\n" +
@@ -1059,52 +1282,59 @@ func file_v1_device_proto_rawDescGZIP() []byte {
 	return file_v1_device_proto_rawDescData
 }
 
-var file_v1_device_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_v1_device_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
 var file_v1_device_proto_goTypes = []any{
 	(*Device)(nil),                       // 0: grpc.api.v1.Device
 	(*ListDevicesRequest)(nil),           // 1: grpc.api.v1.ListDevicesRequest
 	(*ListDevicesResponse)(nil),          // 2: grpc.api.v1.ListDevicesResponse
 	(*DeviceSettings)(nil),               // 3: grpc.api.v1.DeviceSettings
-	(*GetDeviceSettingsRequest)(nil),     // 4: grpc.api.v1.GetDeviceSettingsRequest
-	(*GetDeviceSettingsResponse)(nil),    // 5: grpc.api.v1.GetDeviceSettingsResponse
-	(*UpdateDeviceSettingsRequest)(nil),  // 6: grpc.api.v1.UpdateDeviceSettingsRequest
-	(*UpdateDeviceSettingsResponse)(nil), // 7: grpc.api.v1.UpdateDeviceSettingsResponse
-	(*ApproveDeviceRequest)(nil),         // 8: grpc.api.v1.ApproveDeviceRequest
-	(*ApproveDeviceResponse)(nil),        // 9: grpc.api.v1.ApproveDeviceResponse
-	(*RevokeDeviceRequest)(nil),          // 10: grpc.api.v1.RevokeDeviceRequest
-	(*RevokeDeviceResponse)(nil),         // 11: grpc.api.v1.RevokeDeviceResponse
-	(*DeleteDeviceRequest)(nil),          // 12: grpc.api.v1.DeleteDeviceRequest
-	(*DeleteDeviceResponse)(nil),         // 13: grpc.api.v1.DeleteDeviceResponse
-	(*DeviceEvent)(nil),                  // 14: grpc.api.v1.DeviceEvent
-	(*SubscribeDevicesRequest)(nil),      // 15: grpc.api.v1.SubscribeDevicesRequest
+	(*UnknownSource)(nil),                // 4: grpc.api.v1.UnknownSource
+	(*GetDeviceSettingsRequest)(nil),     // 5: grpc.api.v1.GetDeviceSettingsRequest
+	(*GetDeviceSettingsResponse)(nil),    // 6: grpc.api.v1.GetDeviceSettingsResponse
+	(*UpdateDeviceSettingsRequest)(nil),  // 7: grpc.api.v1.UpdateDeviceSettingsRequest
+	(*UpdateDeviceSettingsResponse)(nil), // 8: grpc.api.v1.UpdateDeviceSettingsResponse
+	(*AddDeviceRequest)(nil),             // 9: grpc.api.v1.AddDeviceRequest
+	(*AddDeviceResponse)(nil),            // 10: grpc.api.v1.AddDeviceResponse
+	(*ApproveDeviceRequest)(nil),         // 11: grpc.api.v1.ApproveDeviceRequest
+	(*ApproveDeviceResponse)(nil),        // 12: grpc.api.v1.ApproveDeviceResponse
+	(*RevokeDeviceRequest)(nil),          // 13: grpc.api.v1.RevokeDeviceRequest
+	(*RevokeDeviceResponse)(nil),         // 14: grpc.api.v1.RevokeDeviceResponse
+	(*DeleteDeviceRequest)(nil),          // 15: grpc.api.v1.DeleteDeviceRequest
+	(*DeleteDeviceResponse)(nil),         // 16: grpc.api.v1.DeleteDeviceResponse
+	(*DeviceEvent)(nil),                  // 17: grpc.api.v1.DeviceEvent
+	(*SubscribeDevicesRequest)(nil),      // 18: grpc.api.v1.SubscribeDevicesRequest
 }
 var file_v1_device_proto_depIdxs = []int32{
 	0,  // 0: grpc.api.v1.ListDevicesResponse.devices:type_name -> grpc.api.v1.Device
 	3,  // 1: grpc.api.v1.GetDeviceSettingsResponse.settings:type_name -> grpc.api.v1.DeviceSettings
-	3,  // 2: grpc.api.v1.UpdateDeviceSettingsRequest.settings:type_name -> grpc.api.v1.DeviceSettings
-	3,  // 3: grpc.api.v1.UpdateDeviceSettingsResponse.settings:type_name -> grpc.api.v1.DeviceSettings
-	0,  // 4: grpc.api.v1.ApproveDeviceResponse.device:type_name -> grpc.api.v1.Device
-	0,  // 5: grpc.api.v1.RevokeDeviceResponse.device:type_name -> grpc.api.v1.Device
-	0,  // 6: grpc.api.v1.DeviceEvent.device:type_name -> grpc.api.v1.Device
-	1,  // 7: grpc.api.v1.DeviceService.ListDevices:input_type -> grpc.api.v1.ListDevicesRequest
-	4,  // 8: grpc.api.v1.DeviceService.GetSettings:input_type -> grpc.api.v1.GetDeviceSettingsRequest
-	6,  // 9: grpc.api.v1.DeviceService.UpdateSettings:input_type -> grpc.api.v1.UpdateDeviceSettingsRequest
-	8,  // 10: grpc.api.v1.DeviceService.ApproveDevice:input_type -> grpc.api.v1.ApproveDeviceRequest
-	10, // 11: grpc.api.v1.DeviceService.RevokeDevice:input_type -> grpc.api.v1.RevokeDeviceRequest
-	12, // 12: grpc.api.v1.DeviceService.DeleteDevice:input_type -> grpc.api.v1.DeleteDeviceRequest
-	15, // 13: grpc.api.v1.DeviceService.SubscribeDevices:input_type -> grpc.api.v1.SubscribeDevicesRequest
-	2,  // 14: grpc.api.v1.DeviceService.ListDevices:output_type -> grpc.api.v1.ListDevicesResponse
-	5,  // 15: grpc.api.v1.DeviceService.GetSettings:output_type -> grpc.api.v1.GetDeviceSettingsResponse
-	7,  // 16: grpc.api.v1.DeviceService.UpdateSettings:output_type -> grpc.api.v1.UpdateDeviceSettingsResponse
-	9,  // 17: grpc.api.v1.DeviceService.ApproveDevice:output_type -> grpc.api.v1.ApproveDeviceResponse
-	11, // 18: grpc.api.v1.DeviceService.RevokeDevice:output_type -> grpc.api.v1.RevokeDeviceResponse
-	13, // 19: grpc.api.v1.DeviceService.DeleteDevice:output_type -> grpc.api.v1.DeleteDeviceResponse
-	14, // 20: grpc.api.v1.DeviceService.SubscribeDevices:output_type -> grpc.api.v1.DeviceEvent
-	14, // [14:21] is the sub-list for method output_type
-	7,  // [7:14] is the sub-list for method input_type
-	7,  // [7:7] is the sub-list for extension type_name
-	7,  // [7:7] is the sub-list for extension extendee
-	0,  // [0:7] is the sub-list for field type_name
+	4,  // 2: grpc.api.v1.GetDeviceSettingsResponse.unidentified_sources:type_name -> grpc.api.v1.UnknownSource
+	3,  // 3: grpc.api.v1.UpdateDeviceSettingsRequest.settings:type_name -> grpc.api.v1.DeviceSettings
+	3,  // 4: grpc.api.v1.UpdateDeviceSettingsResponse.settings:type_name -> grpc.api.v1.DeviceSettings
+	0,  // 5: grpc.api.v1.AddDeviceResponse.device:type_name -> grpc.api.v1.Device
+	0,  // 6: grpc.api.v1.ApproveDeviceResponse.device:type_name -> grpc.api.v1.Device
+	0,  // 7: grpc.api.v1.RevokeDeviceResponse.device:type_name -> grpc.api.v1.Device
+	0,  // 8: grpc.api.v1.DeviceEvent.device:type_name -> grpc.api.v1.Device
+	1,  // 9: grpc.api.v1.DeviceService.ListDevices:input_type -> grpc.api.v1.ListDevicesRequest
+	5,  // 10: grpc.api.v1.DeviceService.GetSettings:input_type -> grpc.api.v1.GetDeviceSettingsRequest
+	7,  // 11: grpc.api.v1.DeviceService.UpdateSettings:input_type -> grpc.api.v1.UpdateDeviceSettingsRequest
+	9,  // 12: grpc.api.v1.DeviceService.AddDevice:input_type -> grpc.api.v1.AddDeviceRequest
+	11, // 13: grpc.api.v1.DeviceService.ApproveDevice:input_type -> grpc.api.v1.ApproveDeviceRequest
+	13, // 14: grpc.api.v1.DeviceService.RevokeDevice:input_type -> grpc.api.v1.RevokeDeviceRequest
+	15, // 15: grpc.api.v1.DeviceService.DeleteDevice:input_type -> grpc.api.v1.DeleteDeviceRequest
+	18, // 16: grpc.api.v1.DeviceService.SubscribeDevices:input_type -> grpc.api.v1.SubscribeDevicesRequest
+	2,  // 17: grpc.api.v1.DeviceService.ListDevices:output_type -> grpc.api.v1.ListDevicesResponse
+	6,  // 18: grpc.api.v1.DeviceService.GetSettings:output_type -> grpc.api.v1.GetDeviceSettingsResponse
+	8,  // 19: grpc.api.v1.DeviceService.UpdateSettings:output_type -> grpc.api.v1.UpdateDeviceSettingsResponse
+	10, // 20: grpc.api.v1.DeviceService.AddDevice:output_type -> grpc.api.v1.AddDeviceResponse
+	12, // 21: grpc.api.v1.DeviceService.ApproveDevice:output_type -> grpc.api.v1.ApproveDeviceResponse
+	14, // 22: grpc.api.v1.DeviceService.RevokeDevice:output_type -> grpc.api.v1.RevokeDeviceResponse
+	16, // 23: grpc.api.v1.DeviceService.DeleteDevice:output_type -> grpc.api.v1.DeleteDeviceResponse
+	17, // 24: grpc.api.v1.DeviceService.SubscribeDevices:output_type -> grpc.api.v1.DeviceEvent
+	17, // [17:25] is the sub-list for method output_type
+	9,  // [9:17] is the sub-list for method input_type
+	9,  // [9:9] is the sub-list for extension type_name
+	9,  // [9:9] is the sub-list for extension extendee
+	0,  // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_v1_device_proto_init() }
@@ -1118,7 +1348,7 @@ func file_v1_device_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_device_proto_rawDesc), len(file_v1_device_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   16,
+			NumMessages:   19,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

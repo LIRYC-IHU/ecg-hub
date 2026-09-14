@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -281,5 +282,79 @@ func TestGateDoesNotAuditAllowedDevices(t *testing.T) {
 	gateWith(store, Settings{Enabled: true}).WithAuditWriter(w).Decide(context.Background(), known)
 	if w.count() != 0 {
 		t.Errorf("wrote %d entries for an approved device, want 0", w.count())
+	}
+}
+
+// On a routed or NATed deployment nothing resolves, so the whitelist enforces
+// nothing however carefully it was configured. That is honest, and it is not
+// what an administrator who just switched it on expects — so the answer is
+// theirs to give.
+func TestGateDenyUnidentified(t *testing.T) {
+	unresolved := Identity{IP: "192.168.1.254", Source: "ftp"}
+	store := &fakeStore{status: map[string]string{}}
+
+	if got := gateWith(store, Settings{Enabled: true}).Decide(context.Background(), unresolved); got != Allow {
+		t.Errorf("decision = %v, want Allow by default — the wrong guess stops every device at once", got)
+	}
+
+	w := &fakeAudit{}
+	g := gateWith(store, Settings{Enabled: true, DenyUnidentified: true}).WithAuditWriter(w)
+	if got := g.Decide(context.Background(), unresolved); got != Deny {
+		t.Errorf("decision = %v, want Deny once the operator asks for it", got)
+	}
+	if w.count() != 1 {
+		t.Errorf("wrote %d audit entries, want the refusal recorded like any other", w.count())
+	}
+}
+
+// An approved device is unaffected by the policy: it has an identity, so the
+// branch never applies to it.
+func TestGateDenyUnidentifiedLeavesApprovedDevicesAlone(t *testing.T) {
+	store := &fakeStore{status: map[string]string{known.MAC: models.DeviceStatusApproved}}
+	g := gateWith(store, Settings{Enabled: true, DenyUnidentified: true})
+	if got := g.Decide(context.Background(), known); got != Allow {
+		t.Errorf("decision = %v, want Allow for an approved device", got)
+	}
+}
+
+// "17 connections could not be identified" says something is wrong and nothing
+// about what. The list is what makes turning the policy on a decision rather
+// than a gamble.
+func TestGateListsWhereUnidentifiedConnectionsCameFrom(t *testing.T) {
+	r := testResolver(map[string]string{"10.27.26.40": "00:0e:10:19:44:8a"}, nil)
+	g := NewGate(r, &fakeStore{status: map[string]string{}}, fakeSettings{set: Settings{Enabled: true}})
+
+	g.Identify("192.168.1.254:55024", "ftp")
+	g.Identify("192.168.1.254:55025", "ftp") // same source, second contact
+	g.Identify("10.9.9.9:4242", "dicom")
+	g.Identify("10.27.26.40:2121", "ftp") // this one resolves
+
+	h := g.Health()
+	if len(h.Unknown) != 2 {
+		t.Fatalf("listed %d sources, want 2 (the port must not split one source in two)", len(h.Unknown))
+	}
+	byIP := map[string]UnknownSource{}
+	for _, u := range h.Unknown {
+		byIP[u.IP] = u
+	}
+	if got := byIP["192.168.1.254"]; got.Count != 2 || got.Source != "ftp" {
+		t.Errorf("192.168.1.254 = %+v, want two ftp contacts", got)
+	}
+	if got := byIP["10.9.9.9"]; got.Count != 1 || got.Source != "dicom" {
+		t.Errorf("10.9.9.9 = %+v, want one dicom contact", got)
+	}
+	if h.Resolved != 1 || h.Unresolved != 3 {
+		t.Errorf("counts = %d/%d, want 1 resolved and 3 unresolved", h.Resolved, h.Unresolved)
+	}
+}
+
+// A scanner sweeping from many addresses must not grow the list without end.
+func TestGateBoundsTheUnidentifiedList(t *testing.T) {
+	g := NewGate(testResolver(nil, nil), &fakeStore{}, fakeSettings{set: Settings{Enabled: true}})
+	for i := 0; i < maxUnknownSources+25; i++ {
+		g.Identify(fmt.Sprintf("10.0.%d.%d:1234", i/256, i%256), "dicom")
+	}
+	if n := len(g.Health().Unknown); n != maxUnknownSources {
+		t.Errorf("listed %d sources, want the list capped at %d", n, maxUnknownSources)
 	}
 }

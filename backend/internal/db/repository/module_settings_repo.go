@@ -130,8 +130,9 @@ func (r *ModuleSettingsRepository) DeviceSettings(_ context.Context) (device.Set
 		return device.Settings{}, err
 	}
 	out := device.Settings{
-		Enabled:     s.DeviceWhitelistEnabled,
-		PairingOpen: s.DevicePairingOpen,
+		Enabled:          s.DeviceWhitelistEnabled,
+		PairingOpen:      s.DevicePairingOpen,
+		DenyUnidentified: s.DeviceDenyUnidentified,
 	}
 	if s.DevicePairingUntil != nil {
 		out.PairingUntil = *s.DevicePairingUntil
@@ -141,13 +142,14 @@ func (r *ModuleSettingsRepository) DeviceSettings(_ context.Context) (device.Set
 
 // SetDeviceSettings stores the device whitelist configuration. A zero
 // pairingUntil clears the expiry, leaving the window open until it is closed.
-func (r *ModuleSettingsRepository) SetDeviceSettings(enabled, pairingOpen bool, pairingUntil time.Time) error {
+func (r *ModuleSettingsRepository) SetDeviceSettings(enabled, pairingOpen, denyUnidentified bool, pairingUntil time.Time) error {
 	s, err := r.Get()
 	if err != nil {
 		return err
 	}
 	s.DeviceWhitelistEnabled = enabled
 	s.DevicePairingOpen = pairingOpen
+	s.DeviceDenyUnidentified = denyUnidentified
 	if pairingUntil.IsZero() {
 		s.DevicePairingUntil = nil
 	} else {

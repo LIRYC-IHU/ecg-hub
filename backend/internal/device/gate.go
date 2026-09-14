@@ -3,6 +3,7 @@ package device
 import (
 	"context"
 	"log/slog"
+	"sort"
 	"sync"
 	"time"
 
@@ -49,6 +50,17 @@ type Settings struct {
 	// an operator closes it — which is what nobody should be relying on, so
 	// the API fills it in when a caller opens the window without one.
 	PairingUntil time.Time
+	// DenyUnidentified refuses connections the gate cannot attach to any
+	// hardware, instead of letting them through.
+	//
+	// Off by default, and that default is deliberate: a MAC only exists on the
+	// server's own network segment, so on a routed or NATed deployment nothing
+	// resolves and turning this on stops every device at once. Left off, the
+	// whitelist enforces nothing on such a deployment — which is honest, but it
+	// is not what an administrator who just switched it on expects, so the
+	// choice belongs to them rather than to this code. The admin screen lists
+	// what is currently unidentified so the decision is made on evidence.
+	DenyUnidentified bool
 }
 
 // DefaultPairingWindow is how long a pairing window stays open when the caller
@@ -109,10 +121,31 @@ type Gate struct {
 	audit *refusalAudit
 
 	// Evidence for Health: how many incoming connections carried a hardware
-	// identity and how many did not.
+	// identity and how many did not, and where the unidentified ones came from.
 	mu         sync.Mutex
 	resolved   int64
 	unresolved int64
+	unknown    map[string]*UnknownSource
+}
+
+// maxUnknownSources bounds the unidentified list. It is keyed by address and
+// port, so a scanner sweeping from many addresses would otherwise grow it
+// without end; past the bound the oldest entry goes.
+const maxUnknownSources = 50
+
+// UnknownSource is somewhere connections arrive from that the gate cannot
+// attach to any hardware.
+//
+// Counting them was not enough. "17 connections could not be identified" tells
+// an administrator that something is wrong and nothing about what, and the
+// answer they need before turning DenyUnidentified on is which of these they
+// are about to cut off.
+type UnknownSource struct {
+	IP        string
+	Source    string
+	Count     int64
+	FirstSeen time.Time
+	LastSeen  time.Time
 }
 
 // Health describes whether this deployment can identify devices at all.
@@ -125,6 +158,9 @@ type Gate struct {
 type Health struct {
 	// Resolved and Unresolved count connections since startup.
 	Resolved, Unresolved int64
+	// Unknown lists where the unidentified connections came from, most recent
+	// first. Bounded; see maxUnknownSources.
+	Unknown []UnknownSource
 	// Degraded is true once connections have arrived and none of them could be
 	// identified: a routed network, or a NAT the server cannot see past. With
 	// the whitelist enabled, every one of those devices was let through.
@@ -138,9 +174,15 @@ type Health struct {
 func (g *Gate) Health() Health {
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	out := make([]UnknownSource, 0, len(g.unknown))
+	for _, u := range g.unknown {
+		out = append(out, *u)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].LastSeen.After(out[j].LastSeen) })
 	return Health{
 		Resolved:   g.resolved,
 		Unresolved: g.unresolved,
+		Unknown:    out,
 		Degraded:   g.unresolved > 0 && g.resolved == 0,
 	}
 }
@@ -178,6 +220,7 @@ func (g *Gate) Identify(remoteAddr, source string) Identity {
 		slog.Debug("device: no hardware identity for connection",
 			"ip", id.IP, "source", source, "error", err)
 		g.count(false)
+		g.noteUnknown(id)
 		return id
 	}
 	id.MAC = mac
@@ -193,6 +236,34 @@ func (g *Gate) count(resolved bool) {
 		return
 	}
 	g.unresolved++
+}
+
+// noteUnknown records where an unidentified connection came from.
+func (g *Gate) noteUnknown(id Identity) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.unknown == nil {
+		g.unknown = map[string]*UnknownSource{}
+	}
+	now := time.Now()
+	key := id.Source + "|" + id.IP
+	if u, seen := g.unknown[key]; seen {
+		u.Count++
+		u.LastSeen = now
+		return
+	}
+	if len(g.unknown) >= maxUnknownSources {
+		oldest, at := "", now
+		for k, u := range g.unknown {
+			if !u.LastSeen.After(at) {
+				oldest, at = k, u.LastSeen
+			}
+		}
+		delete(g.unknown, oldest)
+	}
+	g.unknown[key] = &UnknownSource{
+		IP: id.IP, Source: id.Source, Count: 1, FirstSeen: now, LastSeen: now,
+	}
 }
 
 // Decide answers whether the connection behind id may ingest, and records the
@@ -234,13 +305,19 @@ func (g *Gate) decide(ctx context.Context, id Identity, record bool) Decision {
 		return Allow
 	}
 
-	// No MAC, no whitelist. This is the routed-network and the
-	// behind-a-NAT case, and it is the one place where failing open is a real
-	// choice rather than a fallback: refusing would stop every device on a
-	// deployment where the identity simply cannot be read, and allowing keeps
-	// clinical ingestion working on exactly the deployments the operator was
-	// told the feature does not cover. Resolver.Degraded surfaces it in the UI.
+	// No MAC. This is the routed-network and the behind-a-NAT case, and it is
+	// the one place where the answer is an operator's to give rather than this
+	// code's: allowing keeps clinical ingestion working on a deployment the
+	// feature cannot cover, refusing is what an administrator who has just
+	// enabled the whitelist expects it to do. Off by default, because the wrong
+	// guess in that direction stops every device at once.
 	if !id.Resolved() {
+		if set.DenyUnidentified {
+			slog.Warn("device: no hardware identity — refused (deny_unidentified is on)",
+				"ip", id.IP, "source", id.Source)
+			g.audit.record(id, "unidentified")
+			return Deny
+		}
 		slog.Warn("device: whitelist enabled but no hardware identity available — allowing",
 			"ip", id.IP, "source", id.Source)
 		return Allow

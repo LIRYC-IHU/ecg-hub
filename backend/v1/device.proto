@@ -56,6 +56,22 @@ message DeviceSettings {
   bool enabled = 1;
   bool pairing_open = 2;
   string pairing_until = 3;  // RFC3339 UTC; empty = open until closed
+  // deny_unidentified refuses connections whose hardware cannot be identified
+  // rather than letting them through. Off by default: on a routed or NATed
+  // deployment nothing resolves, and turning it on there stops every device at
+  // once. unidentified_sources says which ones those would be.
+  bool deny_unidentified = 4;
+}
+
+// UnknownSource is somewhere connections arrive from that cannot be attached to
+// any hardware. Counting them was not enough: an administrator deciding whether
+// to turn deny_unidentified on needs to see what they are about to cut off.
+message UnknownSource {
+  string ip = 1;
+  string source = 2;   // "ftp" | "dicom" | "ectp"
+  int64 count = 3;
+  string first_seen = 4;  // RFC3339 UTC
+  string last_seen = 5;
 }
 
 message GetDeviceSettingsRequest {}
@@ -74,6 +90,8 @@ message GetDeviceSettingsResponse {
   // banner quotes them so an administrator can see what it is based on.
   int64 identified_connections = 3;
   int64 unidentified_connections = 4;
+  // Where the unidentified connections came from, most recent first.
+  repeated UnknownSource unidentified_sources = 5;
 }
 
 message UpdateDeviceSettingsRequest {
@@ -81,6 +99,18 @@ message UpdateDeviceSettingsRequest {
 }
 message UpdateDeviceSettingsResponse {
   DeviceSettings settings = 1;
+}
+
+// AddDeviceRequest enrols a device by hand, already approved — for a site that
+// knows its inventory in advance, or hardware that will never reach the pairing
+// window. A MAC already on file is approved in place rather than duplicated.
+message AddDeviceRequest {
+  string mac = 1;
+  string label = 2;
+  string description = 3;
+}
+message AddDeviceResponse {
+  Device device = 1;
 }
 
 message ApproveDeviceRequest {
@@ -123,6 +153,7 @@ service DeviceService {
   rpc ListDevices(ListDevicesRequest) returns (ListDevicesResponse) {}
   rpc GetSettings(GetDeviceSettingsRequest) returns (GetDeviceSettingsResponse) {}
   rpc UpdateSettings(UpdateDeviceSettingsRequest) returns (UpdateDeviceSettingsResponse) {}
+  rpc AddDevice(AddDeviceRequest) returns (AddDeviceResponse) {}
   rpc ApproveDevice(ApproveDeviceRequest) returns (ApproveDeviceResponse) {}
   rpc RevokeDevice(RevokeDeviceRequest) returns (RevokeDeviceResponse) {}
   rpc DeleteDevice(DeleteDeviceRequest) returns (DeleteDeviceResponse) {}

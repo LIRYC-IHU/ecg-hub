@@ -14,18 +14,19 @@ import (
 
 // stubSettings stands in for the module-settings repository.
 type stubSettings struct {
-	set         device.Settings
-	enabled     bool
-	pairingOpen bool
-	until       time.Time
+	set              device.Settings
+	enabled          bool
+	pairingOpen      bool
+	denyUnidentified bool
+	until            time.Time
 }
 
 func (s *stubSettings) DeviceSettings(context.Context) (device.Settings, error) {
 	return s.set, nil
 }
 
-func (s *stubSettings) SetDeviceSettings(enabled, pairingOpen bool, pairingUntil time.Time) error {
-	s.enabled, s.pairingOpen, s.until = enabled, pairingOpen, pairingUntil
+func (s *stubSettings) SetDeviceSettings(enabled, pairingOpen, denyUnidentified bool, pairingUntil time.Time) error {
+	s.enabled, s.pairingOpen, s.denyUnidentified, s.until = enabled, pairingOpen, denyUnidentified, pairingUntil
 	return nil
 }
 
@@ -211,5 +212,30 @@ func TestDeviceService_ClosingPairingKeepsNoExpiry(t *testing.T) {
 	}
 	if !repo.until.IsZero() {
 		t.Errorf("expiry = %v, want none when the window is closed", repo.until)
+	}
+}
+
+// A MAC typed off a label arrives in upper case; stored that way it would never
+// match the lower-case address the resolver hands the gate — an enrolment that
+// silently enrols nothing.
+func TestDeviceService_AddDeviceRejectsANonAddress(t *testing.T) {
+	h := &DeviceServiceHandler{}
+	for _, bad := range []string{"", "cardio-b", "00:0e:10:19:44"} {
+		if _, err := h.AddDevice(context.Background(), &apiv1.AddDeviceRequest{Mac: bad}); codeOf(t, err) != connect.CodeInvalidArgument {
+			t.Errorf("AddDevice(%q) code = %v, want InvalidArgument", bad, codeOf(t, err))
+		}
+	}
+}
+
+func TestDeviceService_UpdateSettingsCarriesTheDenyPolicy(t *testing.T) {
+	repo := &stubSettings{}
+	h := &DeviceServiceHandler{Settings: repo}
+	if _, err := h.UpdateSettings(context.Background(), &apiv1.UpdateDeviceSettingsRequest{
+		Settings: &apiv1.DeviceSettings{Enabled: true, DenyUnidentified: true},
+	}); err != nil {
+		t.Fatalf("UpdateSettings: %v", err)
+	}
+	if !repo.denyUnidentified {
+		t.Error("deny_unidentified was not stored")
 	}
 }

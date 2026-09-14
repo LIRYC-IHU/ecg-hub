@@ -647,6 +647,7 @@ func (r *RouterConfig) RegisterRoutes() {
 					apiv1connect.DeviceServiceListDevicesProcedure:    auth.PermDeviceRead,
 					apiv1connect.DeviceServiceGetSettingsProcedure:    auth.PermDeviceRead,
 					apiv1connect.DeviceServiceUpdateSettingsProcedure: auth.PermDeviceManage,
+					apiv1connect.DeviceServiceAddDeviceProcedure:      auth.PermDeviceManage,
 					apiv1connect.DeviceServiceApproveDeviceProcedure:  auth.PermDeviceManage,
 					apiv1connect.DeviceServiceRevokeDeviceProcedure:   auth.PermDeviceManage,
 					apiv1connect.DeviceServiceDeleteDeviceProcedure:   auth.PermDeviceManage,

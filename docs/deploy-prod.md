@@ -110,6 +110,25 @@ connection arrives from the Docker gateway, so they all look like one address.
 The MAC-address whitelist (Admin > Devices) then identifies nothing and, failing
 open, lets every device through.
 
+### When nothing can be identified
+
+Note what that means before reaching for a fix: the whitelist enforces nothing
+there, so switching it on changes no outcome at all. That is the honest default
+— the wrong guess in the other direction stops every device at once — but it is
+not what an administrator who has just enabled it expects to happen.
+
+Admin > Devices lists where the unidentified connections came from, address by
+address, and **Refuse devices that cannot be identified** turns them into
+refusals. Read the list before turning it on: those are exactly what it cuts
+off, and on a deployment behind a NAT that is everything.
+
+Devices can also be enrolled by hand, by MAC address, without waiting for one to
+send anything — useful for a site that knows its inventory in advance. It only
+helps where the address can be read at connection time: a manually enrolled
+device behind a NAT is still unidentifiable, and its entry matches nothing.
+
+### Making the address readable
+
 Two ways out. Either mount the host's neighbour tables read-only and keep the
 bridge:
 

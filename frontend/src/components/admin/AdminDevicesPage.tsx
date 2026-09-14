@@ -6,6 +6,7 @@ import {
   Check,
   Clock,
   HardDrive,
+  Plus,
   Radio,
   ShieldOff,
   Trash2,
@@ -67,6 +68,8 @@ export function AdminDevicesPage() {
   const [revoking, setRevoking] = useState<Device | null>(null);
   const [revokeReason, setRevokeReason] = useState("");
   const [deleting, setDeleting] = useState<Device | null>(null);
+  const [adding, setAdding] = useState(false);
+  const [newMac, setNewMac] = useState("");
 
   useDeviceEvents(true);
 
@@ -96,12 +99,17 @@ export function AdminDevicesPage() {
   const failed = () => notify("error", t("common.error"));
 
   const saveSettings = useMutation({
-    mutationFn: (next: { enabled: boolean; pairingOpen: boolean }) =>
+    mutationFn: (next: {
+      enabled: boolean;
+      pairingOpen: boolean;
+      denyUnidentified: boolean;
+    }) =>
       deviceClient.updateSettings({
         settings: {
           $typeName: "grpc.api.v1.DeviceSettings",
           enabled: next.enabled,
           pairingOpen: next.pairingOpen,
+          denyUnidentified: next.denyUnidentified,
           // Opening the window always sets an expiry. Leaving one open is how
           // the pending queue fills with noise, and noise is where a real
           // device goes unnoticed.
@@ -147,6 +155,24 @@ export function AdminDevicesPage() {
     onError: failed,
   });
 
+  const add = useMutation({
+    mutationFn: () =>
+      deviceClient.addDevice({ mac: newMac, label, description }),
+    onSuccess: () => {
+      void refresh();
+      setAdding(false);
+      setNewMac("");
+      setLabel("");
+      setDescription("");
+      notify("success", t("admin.devices.added"));
+    },
+    onError: (e) =>
+      notify(
+        "error",
+        e instanceof Error && e.message ? e.message : t("common.error"),
+      ),
+  });
+
   const remove = useMutation({
     mutationFn: (mac: string) => deviceClient.deleteDevice({ mac }),
     onSuccess: () => {
@@ -162,6 +188,7 @@ export function AdminDevicesPage() {
   // never shows open when the gate would refuse.
   const pairingOpen = settings?.settings?.pairingOpen ?? false;
   const pairingUntil = settings?.settings?.pairingUntil ?? "";
+  const denyUnidentified = settings?.settings?.denyUnidentified ?? false;
 
   return (
     <div className="p-6 space-y-4 max-w-6xl">
@@ -181,11 +208,29 @@ export function AdminDevicesPage() {
       {settings?.degraded && (
         <div className="flex gap-2 items-start rounded-lg border border-warning/40 bg-warning/10 p-3">
           <AlertTriangle className="w-4 h-4 text-warning shrink-0 mt-0.5" />
-          <p className="text-xs text-warning">
-            {t("admin.devices.degraded", {
-              count: Number(settings.unidentifiedConnections),
-            })}
-          </p>
+          <div className="space-y-1.5">
+            <p className="text-xs text-warning">
+              {t("admin.devices.degraded", {
+                count: Number(settings.unidentifiedConnections),
+              })}
+            </p>
+            {/* Naming them is the point. A count says something is wrong and
+                nothing about what, and these are exactly what turning the
+                refusal on would cut off. */}
+            {settings.unidentifiedSources.length > 0 && (
+              <ul className="text-[11px] text-warning/90 font-mono space-y-0.5">
+                {settings.unidentifiedSources.map((u) => (
+                  <li key={`${u.source}|${u.ip}`}>
+                    {u.ip} · {u.source} ·{" "}
+                    {t("admin.devices.unknownSeen", {
+                      count: Number(u.count),
+                      at: formatTime(u.lastSeen),
+                    })}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
       )}
 
@@ -228,7 +273,11 @@ export function AdminDevicesPage() {
                   checked={enabled}
                   disabled={!canManage || saveSettings.isPending}
                   onChange={(v) =>
-                    saveSettings.mutate({ enabled: v, pairingOpen })
+                    saveSettings.mutate({
+                      enabled: v,
+                      pairingOpen,
+                      denyUnidentified,
+                    })
                   }
                   title={t("admin.devices.enable")}
                   hint={t("admin.devices.enableHint")}
@@ -237,10 +286,27 @@ export function AdminDevicesPage() {
                   checked={pairingOpen}
                   disabled={!canManage || !enabled || saveSettings.isPending}
                   onChange={(v) =>
-                    saveSettings.mutate({ enabled, pairingOpen: v })
+                    saveSettings.mutate({
+                      enabled,
+                      pairingOpen: v,
+                      denyUnidentified,
+                    })
                   }
                   title={t("admin.devices.pairing")}
                   hint={t("admin.devices.pairingHint")}
+                />
+                <Toggle
+                  checked={denyUnidentified}
+                  disabled={!canManage || !enabled || saveSettings.isPending}
+                  onChange={(v) =>
+                    saveSettings.mutate({
+                      enabled,
+                      pairingOpen,
+                      denyUnidentified: v,
+                    })
+                  }
+                  title={t("admin.devices.denyUnidentified")}
+                  hint={t("admin.devices.denyUnidentifiedHint")}
                 />
                 {pairingOpen && pairingUntil && (
                   <p className="flex items-center gap-2 pl-6 text-[11px] text-muted-foreground">
@@ -251,7 +317,11 @@ export function AdminDevicesPage() {
                     {canManage && (
                       <button
                         onClick={() =>
-                          saveSettings.mutate({ enabled, pairingOpen: true })
+                          saveSettings.mutate({
+                            enabled,
+                            pairingOpen: true,
+                            denyUnidentified,
+                          })
                         }
                         disabled={saveSettings.isPending}
                         className="cursor-pointer underline underline-offset-2 hover:text-foreground disabled:cursor-not-allowed"
@@ -334,6 +404,23 @@ export function AdminDevicesPage() {
               </ul>
             )}
           </div>
+        </div>
+      )}
+
+      {tab === "devices" && canManage && (
+        <div className="flex justify-end">
+          <button
+            onClick={() => {
+              setAdding(true);
+              setNewMac("");
+              setLabel("");
+              setDescription("");
+            }}
+            className="cursor-pointer inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium hover:border-primary/40"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            {t("admin.devices.add")}
+          </button>
         </div>
       )}
 
@@ -487,6 +574,55 @@ export function AdminDevicesPage() {
               className="cursor-pointer px-3 py-1.5 text-xs rounded-md bg-destructive text-destructive-foreground disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {t("admin.devices.revoke")}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {/* Manual enrolment — for a site that knows its inventory in advance, or
+          hardware that will never reach the pairing window. */}
+      {adding && (
+        <Modal
+          title={t("admin.devices.addTitle")}
+          onClose={() => setAdding(false)}
+        >
+          <Field
+            label={t("admin.devices.mac")}
+            value={newMac}
+            onChange={setNewMac}
+            placeholder="00:0e:10:19:44:8a"
+            maxLength={17}
+          />
+          <Field
+            label={t("admin.devices.label")}
+            value={label}
+            onChange={setLabel}
+            placeholder={t("admin.devices.labelPlaceholder")}
+            maxLength={255}
+            options={knownLabels}
+          />
+          <Field
+            label={t("admin.devices.description")}
+            value={description}
+            onChange={setDescription}
+            maxLength={255}
+          />
+          <p className="text-[11px] text-muted-foreground">
+            {t("admin.devices.addHint")}
+          </p>
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              onClick={() => setAdding(false)}
+              className="cursor-pointer px-3 py-1.5 text-xs rounded-md text-muted-foreground hover:text-foreground"
+            >
+              {t("common.cancel")}
+            </button>
+            <button
+              onClick={() => add.mutate()}
+              disabled={add.isPending || newMac.trim() === ""}
+              className="cursor-pointer px-3 py-1.5 text-xs rounded-md bg-primary text-primary-foreground disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {t("admin.devices.add")}
             </button>
           </div>
         </Modal>

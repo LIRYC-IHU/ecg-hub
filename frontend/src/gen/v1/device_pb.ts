@@ -10,7 +10,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file v1/device.proto.
  */
 export const file_v1_device: GenFile = /*@__PURE__*/
-  fileDesc("Cg92MS9kZXZpY2UucHJvdG8SC2dycGMuYXBpLnYxIogDCgZEZXZpY2USCgoCaWQYASABKAkSCwoDbWFjGAIgASgJEgsKA291aRgDIAEoCRIOCgZzdGF0dXMYBCABKAkSDQoFbGFiZWwYBSABKAkSEwoLZGVzY3JpcHRpb24YBiABKAkSDgoGdmVuZG9yGAcgASgJEhQKDGRldmljZV9tb2RlbBgIIAEoCRIVCg1zZXJpYWxfbnVtYmVyGAkgASgJEhQKDGZpcnN0X3NvdXJjZRgKIAEoCRIPCgdsYXN0X2lwGAsgASgJEhUKDWZpcnN0X3NlZW5fYXQYDCABKAkSFAoMbGFzdF9zZWVuX2F0GA0gASgJEhIKCnNlZW5fY291bnQYDiABKAMSEwoLYXBwcm92ZWRfYnkYDyABKAkSEwoLYXBwcm92ZWRfYXQYECABKAkSEgoKcmV2b2tlZF9ieRgRIAEoCRISCgpyZXZva2VkX2F0GBIgASgJEhYKDnJldm9rZWRfcmVhc29uGBMgASgJEhUKDWhhc19oZWxkX2ZpbGUYFCABKAgiJAoSTGlzdERldmljZXNSZXF1ZXN0Eg4KBnN0YXR1cxgBIAEoCSI7ChNMaXN0RGV2aWNlc1Jlc3BvbnNlEiQKB2RldmljZXMYASADKAsyEy5ncnBjLmFwaS52MS5EZXZpY2UiTgoORGV2aWNlU2V0dGluZ3MSDwoHZW5hYmxlZBgBIAEoCBIUCgxwYWlyaW5nX29wZW4YAiABKAgSFQoNcGFpcmluZ191bnRpbBgDIAEoCSIaChhHZXREZXZpY2VTZXR0aW5nc1JlcXVlc3QingEKGUdldERldmljZVNldHRpbmdzUmVzcG9uc2USLQoIc2V0dGluZ3MYASABKAsyGy5ncnBjLmFwaS52MS5EZXZpY2VTZXR0aW5ncxIQCghkZWdyYWRlZBgCIAEoCBIeChZpZGVudGlmaWVkX2Nvbm5lY3Rpb25zGAMgASgDEiAKGHVuaWRlbnRpZmllZF9jb25uZWN0aW9ucxgEIAEoAyJMChtVcGRhdGVEZXZpY2VTZXR0aW5nc1JlcXVlc3QSLQoIc2V0dGluZ3MYASABKAsyGy5ncnBjLmFwaS52MS5EZXZpY2VTZXR0aW5ncyJNChxVcGRhdGVEZXZpY2VTZXR0aW5nc1Jlc3BvbnNlEi0KCHNldHRpbmdzGAEgASgLMhsuZ3JwYy5hcGkudjEuRGV2aWNlU2V0dGluZ3MiRwoUQXBwcm92ZURldmljZVJlcXVlc3QSCwoDbWFjGAEgASgJEg0KBWxhYmVsGAIgASgJEhMKC2Rlc2NyaXB0aW9uGAMgASgJIlAKFUFwcHJvdmVEZXZpY2VSZXNwb25zZRIjCgZkZXZpY2UYASABKAsyEy5ncnBjLmFwaS52MS5EZXZpY2USEgoKcmVpbmdlc3RlZBgCIAEoCCIyChNSZXZva2VEZXZpY2VSZXF1ZXN0EgsKA21hYxgBIAEoCRIOCgZyZWFzb24YAiABKAkiOwoUUmV2b2tlRGV2aWNlUmVzcG9uc2USIwoGZGV2aWNlGAEgASgLMhMuZ3JwYy5hcGkudjEuRGV2aWNlIiIKE0RlbGV0ZURldmljZVJlcXVlc3QSCwoDbWFjGAEgASgJIhYKFERlbGV0ZURldmljZVJlc3BvbnNlIkwKC0RldmljZUV2ZW50EgwKBHR5cGUYASABKAkSIwoGZGV2aWNlGAIgASgLMhMuZ3JwYy5hcGkudjEuRGV2aWNlEgoKAmF0GAMgASgJIhkKF1N1YnNjcmliZURldmljZXNSZXF1ZXN0MowFCg1EZXZpY2VTZXJ2aWNlElIKC0xpc3REZXZpY2VzEh8uZ3JwYy5hcGkudjEuTGlzdERldmljZXNSZXF1ZXN0GiAuZ3JwYy5hcGkudjEuTGlzdERldmljZXNSZXNwb25zZSIAEl4KC0dldFNldHRpbmdzEiUuZ3JwYy5hcGkudjEuR2V0RGV2aWNlU2V0dGluZ3NSZXF1ZXN0GiYuZ3JwYy5hcGkudjEuR2V0RGV2aWNlU2V0dGluZ3NSZXNwb25zZSIAEmcKDlVwZGF0ZVNldHRpbmdzEiguZ3JwYy5hcGkudjEuVXBkYXRlRGV2aWNlU2V0dGluZ3NSZXF1ZXN0GikuZ3JwYy5hcGkudjEuVXBkYXRlRGV2aWNlU2V0dGluZ3NSZXNwb25zZSIAElgKDUFwcHJvdmVEZXZpY2USIS5ncnBjLmFwaS52MS5BcHByb3ZlRGV2aWNlUmVxdWVzdBoiLmdycGMuYXBpLnYxLkFwcHJvdmVEZXZpY2VSZXNwb25zZSIAElUKDFJldm9rZURldmljZRIgLmdycGMuYXBpLnYxLlJldm9rZURldmljZVJlcXVlc3QaIS5ncnBjLmFwaS52MS5SZXZva2VEZXZpY2VSZXNwb25zZSIAElUKDERlbGV0ZURldmljZRIgLmdycGMuYXBpLnYxLkRlbGV0ZURldmljZVJlcXVlc3QaIS5ncnBjLmFwaS52MS5EZWxldGVEZXZpY2VSZXNwb25zZSIAElYKEFN1YnNjcmliZURldmljZXMSJC5ncnBjLmFwaS52MS5TdWJzY3JpYmVEZXZpY2VzUmVxdWVzdBoYLmdycGMuYXBpLnYxLkRldmljZUV2ZW50IgAwAUKgAQoPY29tLmdycGMuYXBpLnYxQgtEZXZpY2VQcm90b1ABWjJnaXRodWIuY29tL0xJUllDLUlIVS9lY2ctaHViL2ludGVybmFsL2FwaS92MTthcGl2MaICA0dBWKoCC0dycGMuQXBpLlYxygILR3JwY1xBcGlcVjHiAhdHcnBjXEFwaVxWMVxHUEJNZXRhZGF0YeoCDUdycGM6OkFwaTo6VjFiBnByb3RvMw");
+  fileDesc("Cg92MS9kZXZpY2UucHJvdG8SC2dycGMuYXBpLnYxIogDCgZEZXZpY2USCgoCaWQYASABKAkSCwoDbWFjGAIgASgJEgsKA291aRgDIAEoCRIOCgZzdGF0dXMYBCABKAkSDQoFbGFiZWwYBSABKAkSEwoLZGVzY3JpcHRpb24YBiABKAkSDgoGdmVuZG9yGAcgASgJEhQKDGRldmljZV9tb2RlbBgIIAEoCRIVCg1zZXJpYWxfbnVtYmVyGAkgASgJEhQKDGZpcnN0X3NvdXJjZRgKIAEoCRIPCgdsYXN0X2lwGAsgASgJEhUKDWZpcnN0X3NlZW5fYXQYDCABKAkSFAoMbGFzdF9zZWVuX2F0GA0gASgJEhIKCnNlZW5fY291bnQYDiABKAMSEwoLYXBwcm92ZWRfYnkYDyABKAkSEwoLYXBwcm92ZWRfYXQYECABKAkSEgoKcmV2b2tlZF9ieRgRIAEoCRISCgpyZXZva2VkX2F0GBIgASgJEhYKDnJldm9rZWRfcmVhc29uGBMgASgJEhUKDWhhc19oZWxkX2ZpbGUYFCABKAgiJAoSTGlzdERldmljZXNSZXF1ZXN0Eg4KBnN0YXR1cxgBIAEoCSI7ChNMaXN0RGV2aWNlc1Jlc3BvbnNlEiQKB2RldmljZXMYASADKAsyEy5ncnBjLmFwaS52MS5EZXZpY2UiaQoORGV2aWNlU2V0dGluZ3MSDwoHZW5hYmxlZBgBIAEoCBIUCgxwYWlyaW5nX29wZW4YAiABKAgSFQoNcGFpcmluZ191bnRpbBgDIAEoCRIZChFkZW55X3VuaWRlbnRpZmllZBgEIAEoCCJhCg1Vbmtub3duU291cmNlEgoKAmlwGAEgASgJEg4KBnNvdXJjZRgCIAEoCRINCgVjb3VudBgDIAEoAxISCgpmaXJzdF9zZWVuGAQgASgJEhEKCWxhc3Rfc2VlbhgFIAEoCSIaChhHZXREZXZpY2VTZXR0aW5nc1JlcXVlc3Qi2AEKGUdldERldmljZVNldHRpbmdzUmVzcG9uc2USLQoIc2V0dGluZ3MYASABKAsyGy5ncnBjLmFwaS52MS5EZXZpY2VTZXR0aW5ncxIQCghkZWdyYWRlZBgCIAEoCBIeChZpZGVudGlmaWVkX2Nvbm5lY3Rpb25zGAMgASgDEiAKGHVuaWRlbnRpZmllZF9jb25uZWN0aW9ucxgEIAEoAxI4ChR1bmlkZW50aWZpZWRfc291cmNlcxgFIAMoCzIaLmdycGMuYXBpLnYxLlVua25vd25Tb3VyY2UiTAobVXBkYXRlRGV2aWNlU2V0dGluZ3NSZXF1ZXN0Ei0KCHNldHRpbmdzGAEgASgLMhsuZ3JwYy5hcGkudjEuRGV2aWNlU2V0dGluZ3MiTQocVXBkYXRlRGV2aWNlU2V0dGluZ3NSZXNwb25zZRItCghzZXR0aW5ncxgBIAEoCzIbLmdycGMuYXBpLnYxLkRldmljZVNldHRpbmdzIkMKEEFkZERldmljZVJlcXVlc3QSCwoDbWFjGAEgASgJEg0KBWxhYmVsGAIgASgJEhMKC2Rlc2NyaXB0aW9uGAMgASgJIjgKEUFkZERldmljZVJlc3BvbnNlEiMKBmRldmljZRgBIAEoCzITLmdycGMuYXBpLnYxLkRldmljZSJHChRBcHByb3ZlRGV2aWNlUmVxdWVzdBILCgNtYWMYASABKAkSDQoFbGFiZWwYAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkiUAoVQXBwcm92ZURldmljZVJlc3BvbnNlEiMKBmRldmljZRgBIAEoCzITLmdycGMuYXBpLnYxLkRldmljZRISCgpyZWluZ2VzdGVkGAIgASgIIjIKE1Jldm9rZURldmljZVJlcXVlc3QSCwoDbWFjGAEgASgJEg4KBnJlYXNvbhgCIAEoCSI7ChRSZXZva2VEZXZpY2VSZXNwb25zZRIjCgZkZXZpY2UYASABKAsyEy5ncnBjLmFwaS52MS5EZXZpY2UiIgoTRGVsZXRlRGV2aWNlUmVxdWVzdBILCgNtYWMYASABKAkiFgoURGVsZXRlRGV2aWNlUmVzcG9uc2UiTAoLRGV2aWNlRXZlbnQSDAoEdHlwZRgBIAEoCRIjCgZkZXZpY2UYAiABKAsyEy5ncnBjLmFwaS52MS5EZXZpY2USCgoCYXQYAyABKAkiGQoXU3Vic2NyaWJlRGV2aWNlc1JlcXVlc3Qy2gUKDURldmljZVNlcnZpY2USUgoLTGlzdERldmljZXMSHy5ncnBjLmFwaS52MS5MaXN0RGV2aWNlc1JlcXVlc3QaIC5ncnBjLmFwaS52MS5MaXN0RGV2aWNlc1Jlc3BvbnNlIgASXgoLR2V0U2V0dGluZ3MSJS5ncnBjLmFwaS52MS5HZXREZXZpY2VTZXR0aW5nc1JlcXVlc3QaJi5ncnBjLmFwaS52MS5HZXREZXZpY2VTZXR0aW5nc1Jlc3BvbnNlIgASZwoOVXBkYXRlU2V0dGluZ3MSKC5ncnBjLmFwaS52MS5VcGRhdGVEZXZpY2VTZXR0aW5nc1JlcXVlc3QaKS5ncnBjLmFwaS52MS5VcGRhdGVEZXZpY2VTZXR0aW5nc1Jlc3BvbnNlIgASTAoJQWRkRGV2aWNlEh0uZ3JwYy5hcGkudjEuQWRkRGV2aWNlUmVxdWVzdBoeLmdycGMuYXBpLnYxLkFkZERldmljZVJlc3BvbnNlIgASWAoNQXBwcm92ZURldmljZRIhLmdycGMuYXBpLnYxLkFwcHJvdmVEZXZpY2VSZXF1ZXN0GiIuZ3JwYy5hcGkudjEuQXBwcm92ZURldmljZVJlc3BvbnNlIgASVQoMUmV2b2tlRGV2aWNlEiAuZ3JwYy5hcGkudjEuUmV2b2tlRGV2aWNlUmVxdWVzdBohLmdycGMuYXBpLnYxLlJldm9rZURldmljZVJlc3BvbnNlIgASVQoMRGVsZXRlRGV2aWNlEiAuZ3JwYy5hcGkudjEuRGVsZXRlRGV2aWNlUmVxdWVzdBohLmdycGMuYXBpLnYxLkRlbGV0ZURldmljZVJlc3BvbnNlIgASVgoQU3Vic2NyaWJlRGV2aWNlcxIkLmdycGMuYXBpLnYxLlN1YnNjcmliZURldmljZXNSZXF1ZXN0GhguZ3JwYy5hcGkudjEuRGV2aWNlRXZlbnQiADABQqABCg9jb20uZ3JwYy5hcGkudjFCC0RldmljZVByb3RvUAFaMmdpdGh1Yi5jb20vTElSWUMtSUhVL2VjZy1odWIvaW50ZXJuYWwvYXBpL3YxO2FwaXYxogIDR0FYqgILR3JwYy5BcGkuVjHKAgtHcnBjXEFwaVxWMeICF0dycGNcQXBpXFYxXEdQQk1ldGFkYXRh6gINR3JwYzo6QXBpOjpWMWIGcHJvdG8z");
 
 /**
  * Device is one piece of hardware, enrolled or awaiting a decision.
@@ -202,6 +202,16 @@ export type DeviceSettings = Message<"grpc.api.v1.DeviceSettings"> & {
    * @generated from field: string pairing_until = 3;
    */
   pairingUntil: string;
+
+  /**
+   * deny_unidentified refuses connections whose hardware cannot be identified
+   * rather than letting them through. Off by default: on a routed or NATed
+   * deployment nothing resolves, and turning it on there stops every device at
+   * once. unidentified_sources says which ones those would be.
+   *
+   * @generated from field: bool deny_unidentified = 4;
+   */
+  denyUnidentified: boolean;
 };
 
 /**
@@ -210,6 +220,51 @@ export type DeviceSettings = Message<"grpc.api.v1.DeviceSettings"> & {
  */
 export const DeviceSettingsSchema: GenMessage<DeviceSettings> = /*@__PURE__*/
   messageDesc(file_v1_device, 3);
+
+/**
+ * UnknownSource is somewhere connections arrive from that cannot be attached to
+ * any hardware. Counting them was not enough: an administrator deciding whether
+ * to turn deny_unidentified on needs to see what they are about to cut off.
+ *
+ * @generated from message grpc.api.v1.UnknownSource
+ */
+export type UnknownSource = Message<"grpc.api.v1.UnknownSource"> & {
+  /**
+   * @generated from field: string ip = 1;
+   */
+  ip: string;
+
+  /**
+   * "ftp" | "dicom" | "ectp"
+   *
+   * @generated from field: string source = 2;
+   */
+  source: string;
+
+  /**
+   * @generated from field: int64 count = 3;
+   */
+  count: bigint;
+
+  /**
+   * RFC3339 UTC
+   *
+   * @generated from field: string first_seen = 4;
+   */
+  firstSeen: string;
+
+  /**
+   * @generated from field: string last_seen = 5;
+   */
+  lastSeen: string;
+};
+
+/**
+ * Describes the message grpc.api.v1.UnknownSource.
+ * Use `create(UnknownSourceSchema)` to create a new message.
+ */
+export const UnknownSourceSchema: GenMessage<UnknownSource> = /*@__PURE__*/
+  messageDesc(file_v1_device, 4);
 
 /**
  * @generated from message grpc.api.v1.GetDeviceSettingsRequest
@@ -222,7 +277,7 @@ export type GetDeviceSettingsRequest = Message<"grpc.api.v1.GetDeviceSettingsReq
  * Use `create(GetDeviceSettingsRequestSchema)` to create a new message.
  */
 export const GetDeviceSettingsRequestSchema: GenMessage<GetDeviceSettingsRequest> = /*@__PURE__*/
-  messageDesc(file_v1_device, 4);
+  messageDesc(file_v1_device, 5);
 
 /**
  * @generated from message grpc.api.v1.GetDeviceSettingsResponse
@@ -259,6 +314,13 @@ export type GetDeviceSettingsResponse = Message<"grpc.api.v1.GetDeviceSettingsRe
    * @generated from field: int64 unidentified_connections = 4;
    */
   unidentifiedConnections: bigint;
+
+  /**
+   * Where the unidentified connections came from, most recent first.
+   *
+   * @generated from field: repeated grpc.api.v1.UnknownSource unidentified_sources = 5;
+   */
+  unidentifiedSources: UnknownSource[];
 };
 
 /**
@@ -266,7 +328,7 @@ export type GetDeviceSettingsResponse = Message<"grpc.api.v1.GetDeviceSettingsRe
  * Use `create(GetDeviceSettingsResponseSchema)` to create a new message.
  */
 export const GetDeviceSettingsResponseSchema: GenMessage<GetDeviceSettingsResponse> = /*@__PURE__*/
-  messageDesc(file_v1_device, 5);
+  messageDesc(file_v1_device, 6);
 
 /**
  * @generated from message grpc.api.v1.UpdateDeviceSettingsRequest
@@ -283,7 +345,7 @@ export type UpdateDeviceSettingsRequest = Message<"grpc.api.v1.UpdateDeviceSetti
  * Use `create(UpdateDeviceSettingsRequestSchema)` to create a new message.
  */
 export const UpdateDeviceSettingsRequestSchema: GenMessage<UpdateDeviceSettingsRequest> = /*@__PURE__*/
-  messageDesc(file_v1_device, 6);
+  messageDesc(file_v1_device, 7);
 
 /**
  * @generated from message grpc.api.v1.UpdateDeviceSettingsResponse
@@ -300,7 +362,55 @@ export type UpdateDeviceSettingsResponse = Message<"grpc.api.v1.UpdateDeviceSett
  * Use `create(UpdateDeviceSettingsResponseSchema)` to create a new message.
  */
 export const UpdateDeviceSettingsResponseSchema: GenMessage<UpdateDeviceSettingsResponse> = /*@__PURE__*/
-  messageDesc(file_v1_device, 7);
+  messageDesc(file_v1_device, 8);
+
+/**
+ * AddDeviceRequest enrols a device by hand, already approved — for a site that
+ * knows its inventory in advance, or hardware that will never reach the pairing
+ * window. A MAC already on file is approved in place rather than duplicated.
+ *
+ * @generated from message grpc.api.v1.AddDeviceRequest
+ */
+export type AddDeviceRequest = Message<"grpc.api.v1.AddDeviceRequest"> & {
+  /**
+   * @generated from field: string mac = 1;
+   */
+  mac: string;
+
+  /**
+   * @generated from field: string label = 2;
+   */
+  label: string;
+
+  /**
+   * @generated from field: string description = 3;
+   */
+  description: string;
+};
+
+/**
+ * Describes the message grpc.api.v1.AddDeviceRequest.
+ * Use `create(AddDeviceRequestSchema)` to create a new message.
+ */
+export const AddDeviceRequestSchema: GenMessage<AddDeviceRequest> = /*@__PURE__*/
+  messageDesc(file_v1_device, 9);
+
+/**
+ * @generated from message grpc.api.v1.AddDeviceResponse
+ */
+export type AddDeviceResponse = Message<"grpc.api.v1.AddDeviceResponse"> & {
+  /**
+   * @generated from field: grpc.api.v1.Device device = 1;
+   */
+  device?: Device | undefined;
+};
+
+/**
+ * Describes the message grpc.api.v1.AddDeviceResponse.
+ * Use `create(AddDeviceResponseSchema)` to create a new message.
+ */
+export const AddDeviceResponseSchema: GenMessage<AddDeviceResponse> = /*@__PURE__*/
+  messageDesc(file_v1_device, 10);
 
 /**
  * @generated from message grpc.api.v1.ApproveDeviceRequest
@@ -327,7 +437,7 @@ export type ApproveDeviceRequest = Message<"grpc.api.v1.ApproveDeviceRequest"> &
  * Use `create(ApproveDeviceRequestSchema)` to create a new message.
  */
 export const ApproveDeviceRequestSchema: GenMessage<ApproveDeviceRequest> = /*@__PURE__*/
-  messageDesc(file_v1_device, 8);
+  messageDesc(file_v1_device, 11);
 
 /**
  * @generated from message grpc.api.v1.ApproveDeviceResponse
@@ -352,7 +462,7 @@ export type ApproveDeviceResponse = Message<"grpc.api.v1.ApproveDeviceResponse">
  * Use `create(ApproveDeviceResponseSchema)` to create a new message.
  */
 export const ApproveDeviceResponseSchema: GenMessage<ApproveDeviceResponse> = /*@__PURE__*/
-  messageDesc(file_v1_device, 9);
+  messageDesc(file_v1_device, 12);
 
 /**
  * @generated from message grpc.api.v1.RevokeDeviceRequest
@@ -374,7 +484,7 @@ export type RevokeDeviceRequest = Message<"grpc.api.v1.RevokeDeviceRequest"> & {
  * Use `create(RevokeDeviceRequestSchema)` to create a new message.
  */
 export const RevokeDeviceRequestSchema: GenMessage<RevokeDeviceRequest> = /*@__PURE__*/
-  messageDesc(file_v1_device, 10);
+  messageDesc(file_v1_device, 13);
 
 /**
  * @generated from message grpc.api.v1.RevokeDeviceResponse
@@ -391,7 +501,7 @@ export type RevokeDeviceResponse = Message<"grpc.api.v1.RevokeDeviceResponse"> &
  * Use `create(RevokeDeviceResponseSchema)` to create a new message.
  */
 export const RevokeDeviceResponseSchema: GenMessage<RevokeDeviceResponse> = /*@__PURE__*/
-  messageDesc(file_v1_device, 11);
+  messageDesc(file_v1_device, 14);
 
 /**
  * @generated from message grpc.api.v1.DeleteDeviceRequest
@@ -408,7 +518,7 @@ export type DeleteDeviceRequest = Message<"grpc.api.v1.DeleteDeviceRequest"> & {
  * Use `create(DeleteDeviceRequestSchema)` to create a new message.
  */
 export const DeleteDeviceRequestSchema: GenMessage<DeleteDeviceRequest> = /*@__PURE__*/
-  messageDesc(file_v1_device, 12);
+  messageDesc(file_v1_device, 15);
 
 /**
  * @generated from message grpc.api.v1.DeleteDeviceResponse
@@ -421,7 +531,7 @@ export type DeleteDeviceResponse = Message<"grpc.api.v1.DeleteDeviceResponse"> &
  * Use `create(DeleteDeviceResponseSchema)` to create a new message.
  */
 export const DeleteDeviceResponseSchema: GenMessage<DeleteDeviceResponse> = /*@__PURE__*/
-  messageDesc(file_v1_device, 13);
+  messageDesc(file_v1_device, 16);
 
 /**
  * DeviceEvent is pushed as devices appear and change. The pairing screen is
@@ -456,7 +566,7 @@ export type DeviceEvent = Message<"grpc.api.v1.DeviceEvent"> & {
  * Use `create(DeviceEventSchema)` to create a new message.
  */
 export const DeviceEventSchema: GenMessage<DeviceEvent> = /*@__PURE__*/
-  messageDesc(file_v1_device, 14);
+  messageDesc(file_v1_device, 17);
 
 /**
  * @generated from message grpc.api.v1.SubscribeDevicesRequest
@@ -469,7 +579,7 @@ export type SubscribeDevicesRequest = Message<"grpc.api.v1.SubscribeDevicesReque
  * Use `create(SubscribeDevicesRequestSchema)` to create a new message.
  */
 export const SubscribeDevicesRequestSchema: GenMessage<SubscribeDevicesRequest> = /*@__PURE__*/
-  messageDesc(file_v1_device, 15);
+  messageDesc(file_v1_device, 18);
 
 /**
  * @generated from service grpc.api.v1.DeviceService
@@ -498,6 +608,14 @@ export const DeviceService: GenService<{
     methodKind: "unary";
     input: typeof UpdateDeviceSettingsRequestSchema;
     output: typeof UpdateDeviceSettingsResponseSchema;
+  },
+  /**
+   * @generated from rpc grpc.api.v1.DeviceService.AddDevice
+   */
+  addDevice: {
+    methodKind: "unary";
+    input: typeof AddDeviceRequestSchema;
+    output: typeof AddDeviceResponseSchema;
   },
   /**
    * @generated from rpc grpc.api.v1.DeviceService.ApproveDevice
