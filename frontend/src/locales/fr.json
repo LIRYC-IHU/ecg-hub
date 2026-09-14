@@ -566,7 +566,8 @@
       "addTitle": "Ajouter un appareil par adresse MAC",
       "addHint": "Enrôlé et approuvé immédiatement, sans attendre qu'il envoie quoi que ce soit. La casse n'a pas d'importance. Une MAC déjà connue est approuvée sur place.",
       "added": "Appareil ajouté et approuvé.",
-      "mac": "Adresse MAC"
+      "mac": "Adresse MAC",
+      "unavailable": "La whitelist d'appareils ne tourne pas sur ce déploiement. Elle identifie le matériel par l'adresse MAC derrière chaque connexion, lue dans le cache ARP, qui ne se résout que pour un appareil sur le segment réseau du serveur — un conteneur sur un réseau bridge voit les autres conteneurs et jamais un appareil. Elle nécessite le réseau host (docker-compose.host.yml) avec DEVICE_WHITELIST=true. D'ici là ces réglages sont en lecture seule, car le serveur ne les appliquerait pas."
     }
   },
   "quarantine": {

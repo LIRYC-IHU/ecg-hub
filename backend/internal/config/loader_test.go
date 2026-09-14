@@ -243,3 +243,34 @@ func TestLoad_WebhookRetentionFromEnv(t *testing.T) {
 		}
 	}
 }
+
+// The whitelist is off unless the deployment says otherwise: a deployment that
+// has not declared host networking is assumed not to have it, and offering the
+// control there would offer one that refuses nothing.
+func TestDeviceWhitelistDefaultsOffAndIsEnvControlled(t *testing.T) {
+	cases := map[string]struct {
+		set   bool
+		value string
+		want  bool
+	}{
+		"unset":      {set: false, want: false},
+		"true":       {set: true, value: "true", want: true},
+		"1":          {set: true, value: "1", want: true},
+		"false":      {set: true, value: "false", want: false},
+		"not a bool": {set: true, value: "yes please", want: false},
+	}
+	for name, tt := range cases {
+		t.Run(name, func(t *testing.T) {
+			if tt.set {
+				t.Setenv("DEVICE_WHITELIST", tt.value)
+			} else {
+				os.Unsetenv("DEVICE_WHITELIST")
+			}
+			var cfg Config
+			applyEnvOverrides(&cfg)
+			if cfg.Devices.WhitelistEnabled != tt.want {
+				t.Errorf("WhitelistEnabled = %v, want %v", cfg.Devices.WhitelistEnabled, tt.want)
+			}
+		})
+	}
+}

@@ -12,6 +12,26 @@ import (
 // YAML fields are loaded from config.yaml via Viper.
 // Secret fields are populated from environment variables after YAML loading — they
 // must never appear in config.yaml (NFR-S2).
+// DevicesConfig gates the MAC device whitelist.
+//
+// The control identifies hardware by the MAC behind each connection, read from
+// the ARP cache. That only resolves for a device sharing a broadcast domain
+// with the server, which on Linux means the container runs in the host network
+// namespace: on a bridge network the ARP table holds the sibling containers and
+// never a device, so the gate identifies nothing and — failing open — lets
+// everything through. Enabled there, the screen would offer a control that
+// refuses nothing, which is worse than not offering it.
+//
+// So the deployment declares whether the feature is available at all, and
+// docker-compose.host.yml is the one that turns it on. The database flag
+// operators toggle in Admin > Devices still governs whether it is applied; this
+// is the prior question of whether it can be.
+type DevicesConfig struct {
+	// WhitelistEnabled makes the whitelist available. Default false: a
+	// deployment that has not said it runs host networking is assumed not to.
+	WhitelistEnabled bool `mapstructure:"whitelist_enabled"`
+}
+
 type Config struct {
 	Server   ServerConfig   `mapstructure:"server"`
 	Database DatabaseConfig `mapstructure:"database"`
@@ -21,6 +41,7 @@ type Config struct {
 	Export   ExportConfig   `mapstructure:"export"`
 	Metrics  MetricsConfig  `mapstructure:"metrics"`
 	Webhooks WebhooksConfig `mapstructure:"webhooks"`
+	Devices  DevicesConfig  `mapstructure:"devices"`
 	// Secrets — populated via os.Getenv after Viper unmarshal. Never from config.yaml.
 
 	// DatabaseURL is the PostgreSQL connection string. Set via DATABASE_URL env var.

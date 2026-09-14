@@ -518,8 +518,21 @@ type GetDeviceSettingsResponse struct {
 	UnidentifiedConnections int64 `protobuf:"varint,4,opt,name=unidentified_connections,json=unidentifiedConnections,proto3" json:"unidentified_connections,omitempty"`
 	// Where the unidentified connections came from, most recent first.
 	UnidentifiedSources []*UnknownSource `protobuf:"bytes,5,rep,name=unidentified_sources,json=unidentifiedSources,proto3" json:"unidentified_sources,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// available is false when the deployment cannot run the whitelist at all.
+	//
+	// The control identifies hardware by the MAC behind a connection, read from
+	// the ARP cache, which resolves only for a device on the server's own
+	// segment — on a bridge network the table holds sibling containers and never
+	// a device. The deployment declares it with DEVICE_WHITELIST, which
+	// docker-compose.host.yml sets.
+	//
+	// Distinct from `degraded`: that is the whitelist running and finding it
+	// cannot identify what arrives, observed from real connections. This is the
+	// whitelist not running. The screen must not offer a control the server will
+	// not apply, and must say which of the two it is.
+	Available     bool `protobuf:"varint,6,opt,name=available,proto3" json:"available,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetDeviceSettingsResponse) Reset() {
@@ -585,6 +598,13 @@ func (x *GetDeviceSettingsResponse) GetUnidentifiedSources() []*UnknownSource {
 		return x.UnidentifiedSources
 	}
 	return nil
+}
+
+func (x *GetDeviceSettingsResponse) GetAvailable() bool {
+	if x != nil {
+		return x.Available
+	}
+	return false
 }
 
 type UpdateDeviceSettingsRequest struct {
@@ -1220,13 +1240,14 @@ const file_v1_device_proto_rawDesc = "" +
 	"\n" +
 	"first_seen\x18\x04 \x01(\tR\tfirstSeen\x12\x1b\n" +
 	"\tlast_seen\x18\x05 \x01(\tR\blastSeen\"\x1a\n" +
-	"\x18GetDeviceSettingsRequest\"\xb1\x02\n" +
+	"\x18GetDeviceSettingsRequest\"\xcf\x02\n" +
 	"\x19GetDeviceSettingsResponse\x127\n" +
 	"\bsettings\x18\x01 \x01(\v2\x1b.grpc.api.v1.DeviceSettingsR\bsettings\x12\x1a\n" +
 	"\bdegraded\x18\x02 \x01(\bR\bdegraded\x125\n" +
 	"\x16identified_connections\x18\x03 \x01(\x03R\x15identifiedConnections\x129\n" +
 	"\x18unidentified_connections\x18\x04 \x01(\x03R\x17unidentifiedConnections\x12M\n" +
-	"\x14unidentified_sources\x18\x05 \x03(\v2\x1a.grpc.api.v1.UnknownSourceR\x13unidentifiedSources\"V\n" +
+	"\x14unidentified_sources\x18\x05 \x03(\v2\x1a.grpc.api.v1.UnknownSourceR\x13unidentifiedSources\x12\x1c\n" +
+	"\tavailable\x18\x06 \x01(\bR\tavailable\"V\n" +
 	"\x1bUpdateDeviceSettingsRequest\x127\n" +
 	"\bsettings\x18\x01 \x01(\v2\x1b.grpc.api.v1.DeviceSettingsR\bsettings\"W\n" +
 	"\x1cUpdateDeviceSettingsResponse\x127\n" +

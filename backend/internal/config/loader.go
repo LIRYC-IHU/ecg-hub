@@ -87,7 +87,8 @@ func Load(cfgPath string) (*Config, error) {
 }
 
 // applyEnvOverrides applies the environment variables that override config.yaml:
-// SERVER_HOST, METRICS_ENABLED, METRICS_HOST, METRICS_PORT, INGEST_MAX_FILE_BYTES
+// SERVER_HOST, METRICS_ENABLED, METRICS_HOST, METRICS_PORT, DEVICE_WHITELIST,
+// INGEST_MAX_FILE_BYTES
 // and WEBHOOKS_RETENTION_DAYS.
 //
 // An unparsable value is ignored with a warning rather than fatal: none of these
@@ -100,6 +101,13 @@ func applyEnvOverrides(cfg *Config) {
 			cfg.Metrics.Enabled = enabled
 		} else {
 			slog.Warn("config: ignoring METRICS_ENABLED — not a boolean", "value", raw)
+		}
+	}
+	if raw, ok := os.LookupEnv("DEVICE_WHITELIST"); ok {
+		if enabled, err := strconv.ParseBool(strings.TrimSpace(raw)); err == nil {
+			cfg.Devices.WhitelistEnabled = enabled
+		} else {
+			slog.Warn("config: ignoring DEVICE_WHITELIST — not a boolean", "value", raw)
 		}
 	}
 	if raw, ok := os.LookupEnv("SERVER_HOST"); ok {

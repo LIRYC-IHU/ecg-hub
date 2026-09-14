@@ -92,6 +92,20 @@ message GetDeviceSettingsResponse {
   int64 unidentified_connections = 4;
   // Where the unidentified connections came from, most recent first.
   repeated UnknownSource unidentified_sources = 5;
+
+  // available is false when the deployment cannot run the whitelist at all.
+  //
+  // The control identifies hardware by the MAC behind a connection, read from
+  // the ARP cache, which resolves only for a device on the server's own
+  // segment — on a bridge network the table holds sibling containers and never
+  // a device. The deployment declares it with DEVICE_WHITELIST, which
+  // docker-compose.host.yml sets.
+  //
+  // Distinct from `degraded`: that is the whitelist running and finding it
+  // cannot identify what arrives, observed from real connections. This is the
+  // whitelist not running. The screen must not offer a control the server will
+  // not apply, and must say which of the two it is.
+  bool available = 6;
 }
 
 message UpdateDeviceSettingsRequest {

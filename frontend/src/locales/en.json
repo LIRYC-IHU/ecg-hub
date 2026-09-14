@@ -566,7 +566,8 @@
       "addTitle": "Add a device by MAC address",
       "addHint": "Enrolled and approved straight away, without waiting for it to send anything. Case does not matter. A MAC already on file is approved in place.",
       "added": "Device added and approved.",
-      "mac": "MAC address"
+      "mac": "MAC address",
+      "unavailable": "The device whitelist is not running on this deployment. It identifies hardware by the MAC address behind each connection, read from the ARP cache, which only resolves for a device on the server's own network segment — a container on a bridge network sees the other containers and never a device. It needs host networking (docker-compose.host.yml) with DEVICE_WHITELIST=true. Until then these settings are read-only, because the server would not apply them."
     }
   },
   "quarantine": {
