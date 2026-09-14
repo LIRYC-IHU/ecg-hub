@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"strings"
@@ -28,6 +29,37 @@ type EcgRecord struct {
 	PatientName       string
 	AcquisitionDate   string
 	RawLeadOrder      []string
+}
+
+// Errors returned when a file cannot be decoded without inventing something.
+// Both are refusals by design: the decoded samples feed the on-screen trace and
+// the scale its caliper measures against, so a plausible-looking guess here is
+// worse than a visible failure.
+var (
+	// ErrMissingAcquisitionParameter is returned when the DICOM object omits a
+	// parameter that has no neutral value.
+	ErrMissingAcquisitionParameter = errors.New("ecgwaveform: missing acquisition parameter")
+	// ErrTruncatedWaveform is returned when Waveform Data is shorter than the
+	// header announces.
+	ErrTruncatedWaveform = errors.New("ecgwaveform: truncated waveform data")
+)
+
+// sensitivityUnitToMv returns the factor converting one unit of Channel
+// Sensitivity into millivolts. The unit is read, never assumed: an absent or
+// unrecognised one is an error.
+func sensitivityUnitToMv(code string) (float64, error) {
+	switch strings.ToLower(strings.TrimSpace(code)) {
+	case "uv", "µv":
+		return 0.001, nil
+	case "mv":
+		return 1.0, nil
+	case "v":
+		return 1000.0, nil
+	case "":
+		return 0, fmt.Errorf("Channel Sensitivity Units (003A,0211) absent")
+	default:
+		return 0, fmt.Errorf("unsupported Channel Sensitivity unit %q", code)
+	}
 }
 
 // standardLeads12 is the required output order.
@@ -133,18 +165,31 @@ func Parse(data []byte) (*EcgRecord, error) {
 			}
 		}
 
-		sensitivity := 1.0
-		if s, err := getFloat64FromSeq(cd, tag.Tag{Group: 0x003A, Element: 0x0210}); err == nil {
-			sensitivity = s
+		// Channel Sensitivity (003A,0210) is what turns a stored integer into a
+		// voltage. There is no neutral value for it, so it is required rather
+		// than defaulted: a channel decoded at an assumed 1 unit/LSB is drawn
+		// at a scale nothing on screen distinguishes from a measured one, and
+		// it is that scale the viewer's caliper measures against.
+		sensitivity, err := getFloat64FromSeq(cd, tag.Tag{Group: 0x003A, Element: 0x0210})
+		if err != nil || sensitivity == 0 {
+			return nil, fmt.Errorf("%w: channel %d (%s) carries no Channel Sensitivity (003A,0210)", ErrMissingAcquisitionParameter, i+1, label)
 		}
 
-		sensitivityUnit := "mV"
+		// Its unit is equally load-bearing: read uV as mV and the trace is a
+		// thousandfold too large.
+		sensitivityUnit := ""
 		if unitSeqs, err := getSeqItems(cd, tag.Tag{Group: 0x003A, Element: 0x0211}); err == nil && len(unitSeqs) > 0 {
 			if code, err := getStringFromSeq(unitSeqs[0], tag.Tag{Group: 0x0008, Element: 0x0100}); err == nil {
 				sensitivityUnit = strings.TrimSpace(code)
 			}
 		}
+		if _, err := sensitivityUnitToMv(sensitivityUnit); err != nil {
+			return nil, fmt.Errorf("%w: channel %d (%s): %v", ErrMissingAcquisitionParameter, i+1, label, err)
+		}
 
+		// Correction factor (003A,0212) and baseline (003A,0213) are Type 1C
+		// and have a neutral value — 1 and 0 — so their absence is usable as
+		// written. Sensitivity has none, which is why it is refused above.
 		correction := 1.0
 		if c, err := getFloat64FromSeq(cd, tag.Tag{Group: 0x003A, Element: 0x0212}); err == nil {
 			correction = c
@@ -170,6 +215,16 @@ func Parse(data []byte) (*EcgRecord, error) {
 
 	n := int(numSamples)
 	ch := int(numChannels)
+
+	// A short Waveform Data element used to be tolerated: the sample loop broke
+	// out of bounds and left the remainder of every channel at zero, which
+	// draws as a flat isoelectric line — on an ECG, indistinguishable from
+	// recorded asystole. A file that does not carry the samples it announces is
+	// refused instead.
+	if want := n * ch * bytesPerSample; len(rawData) < want {
+		return nil, fmt.Errorf("%w: waveform data holds %d bytes, header announces %d samples x %d channels x %d bytes = %d",
+			ErrTruncatedWaveform, len(rawData), n, ch, bytesPerSample, want)
+	}
 
 	rawChannels := make([][]float32, ch)
 	for i := range rawChannels {
@@ -209,10 +264,9 @@ func Parse(data []byte) (*EcgRecord, error) {
 			break
 		}
 		rawLeadOrder[i] = meta.label
-		uv := strings.ToLower(meta.sensitivityUnit)
-		unitToMv := 1.0
-		if strings.Contains(uv, "uv") || uv == "µv" {
-			unitToMv = 0.001
+		unitToMv, err := sensitivityUnitToMv(meta.sensitivityUnit)
+		if err != nil {
+			return nil, fmt.Errorf("ecgwaveform: channel %s: %w", meta.label, err)
 		}
 		factor := meta.sensitivity * meta.correction * unitToMv
 		baselineMv := meta.baseline * unitToMv

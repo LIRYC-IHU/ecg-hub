@@ -36,7 +36,6 @@ func TestConvertToXMLFDA_BinaryNotFound(t *testing.T) {
 	}
 }
 
-
 // ─── ConvertOptions: anonymize flag + HL7 metadata injection ─────────────────
 
 // writeEchoScript creates a shell script that prints its arguments and stdin,
@@ -108,5 +107,35 @@ func TestConvert_NoOptions_NoExtraArgsNoStdin(t *testing.T) {
 	}
 	if strings.Contains(string(out), "--anonymize") || strings.Contains(string(out), "patientID") {
 		t.Errorf("zero options must not alter args or stdin, got: %s", out)
+	}
+}
+
+// --- identity provenance ---------------------------------------------------
+
+// A rendered document must carry the identity marking unless the identity on it
+// came from the HIS. Both halves matter: knowing the HIS demographics is not
+// the same as putting them on the document.
+func TestIdentityConfirmed(t *testing.T) {
+	his := &models.Patient{PatientID: "1", HL7Source: "ADT^A19"}
+	deviceOnly := &models.Patient{PatientID: "1"}
+
+	for _, tc := range []struct {
+		name    string
+		patient *models.Patient
+		opts    ConvertOptions
+		want    bool
+	}{
+		{"HIS demographics injected", his, ConvertOptions{InjectPatient: true}, true},
+		{"HIS known but not injected", his, ConvertOptions{}, false},
+		{"injected but never enriched", deviceOnly, ConvertOptions{InjectPatient: true}, false},
+		{"neither", deviceOnly, ConvertOptions{}, false},
+		{"no patient at all", nil, ConvertOptions{InjectPatient: true}, false},
+		{"anonymised", his, ConvertOptions{Anonymize: true}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := identityConfirmed(tc.patient, tc.opts); got != tc.want {
+				t.Errorf("identityConfirmed() = %v, want %v", got, tc.want)
+			}
+		})
 	}
 }

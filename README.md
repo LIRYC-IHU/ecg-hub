@@ -42,8 +42,21 @@ backend invokes. The vendor modules here parse metadata and delegate the format
 work, so a new vendor is taught to ecg-bridge first. It is vendored under
 `backend/converter-fda/`.
 
-> **Non-diagnostic use.** ECG Hub is a data-management and visualisation tool.
-> It is not a medical device and must not be used as the basis for diagnosis.
+> **Intended use.** ECG Hub collects, stores, associates with the correct
+> patient and serves 12-lead electrocardiograms acquired by CE-marked
+> electrocardiographs. The software performs no automatic measurement and no
+> interpretation of the signal. It does not replace the acquisition device for
+> establishing a diagnosis.
+>
+> The software is not CE-marked. A qualification request is pending with the
+> ANSM's *Guichet Innovation et Orientation* to establish its regulatory
+> status — so whether it falls under EU MDR 2017/745 is the open question, not
+> something this README can settle.
+>
+> This wording is load-bearing and appears verbatim in three places: here, in
+> the application (`frontend/src/components/IntendedUse.tsx`, shown on every
+> screen and in full on `/system`) and in the ANSM filing. Change one, change
+> all three.
 
 ## Features
 
@@ -249,6 +262,11 @@ Three layers, by design:
 - Go ≥ 1.26 and Node ≥ 20 only for local (non-Docker) development
 - PostgreSQL 18. The production stack bundles it as the `db` service; point
   `DATABASE_URL` at an existing instance instead and comment that service out
+- **A patient identifier that is unique across everything the instance serves.**
+  ECGs are attached to patients on that identifier alone, and the column is
+  globally unique — two sites issuing the same number for different people would
+  silently share one record. See
+  [`docs/deploy-prod.md`](docs/deploy-prod.md#patient-identifier-domain--read-before-deploying)
 
 ### Production
 

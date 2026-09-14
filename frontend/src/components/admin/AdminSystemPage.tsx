@@ -1,4 +1,5 @@
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+import { IntendedUse } from "../IntendedUse";
 import { useTranslation } from "react-i18next";
 import {
   CheckCircle,
@@ -217,6 +218,8 @@ export function AdminSystemPage() {
 
   return (
     <div className="p-6 space-y-6">
+      <IntendedUse />
+
       {/* Header */}
       <div className="flex items-center gap-3">
         <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/20">

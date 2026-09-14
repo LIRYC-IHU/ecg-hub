@@ -3,6 +3,7 @@ package ingestion
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -53,13 +54,20 @@ func (m *mockVolume) ExistsForPatient(patientID, filename string) bool {
 	return m.existing[patientID+"/"+filename]
 }
 
+// mockECGRepo is written from the Persister's own goroutine while a test reads
+// it, so every field it exposes is guarded. Reach for insertedECGs() rather
+// than the slice: an unsynchronised read of it is a data race that the race
+// detector only surfaces on some interleavings, which is how it survived.
 type mockECGRepo struct {
+	mu       sync.Mutex
 	inserted []*models.ECG
 	err      error
 	hashes   map[string]bool
 }
 
 func (m *mockECGRepo) Insert(ecg *models.ECG) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.inserted = append(m.inserted, ecg)
 	if m.hashes == nil {
 		m.hashes = make(map[string]bool)
@@ -70,7 +78,16 @@ func (m *mockECGRepo) Insert(ecg *models.ECG) error {
 	return m.err
 }
 
+// insertedECGs returns a snapshot of what has been inserted so far.
+func (m *mockECGRepo) insertedECGs() []*models.ECG {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return append([]*models.ECG(nil), m.inserted...)
+}
+
 func (m *mockECGRepo) ExistsByContentHash(hash string) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if m.hashes == nil {
 		return false, nil
 	}
@@ -81,20 +98,34 @@ type upsertCall struct {
 	patientID, firstName, lastName, gender string
 }
 
+// mockPatRepo is written from the Persister's goroutine for the same reason as
+// mockECGRepo, so it is guarded the same way. Use upsertCalls()/upserted()
+// rather than reading calls directly.
 type mockPatRepo struct {
+	mu    sync.Mutex
 	calls []upsertCall
 	err   error
 }
 
 func (m *mockPatRepo) UpsertWithDemographics(patientID, firstName, lastName, gender string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.calls = append(m.calls, upsertCall{patientID, firstName, lastName, gender})
 	return m.err
 }
 
+// upsertCalls returns a snapshot of the recorded calls.
+func (m *mockPatRepo) upsertCalls() []upsertCall {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return append([]upsertCall(nil), m.calls...)
+}
+
 // upserted returns just the patient IDs for backward-compatible assertions.
 func (m *mockPatRepo) upserted() []string {
-	ids := make([]string, len(m.calls))
-	for i, c := range m.calls {
+	calls := m.upsertCalls()
+	ids := make([]string, len(calls))
+	for i, c := range calls {
 		ids[i] = c.patientID
 	}
 	return ids
@@ -164,10 +195,10 @@ func TestPersister_Persist_Success(t *testing.T) {
 	}
 
 	// ECG inserted with correct fields
-	if len(ecgRepo.inserted) != 1 {
-		t.Fatalf("expected 1 ECG insert, got %d", len(ecgRepo.inserted))
+	if len(ecgRepo.insertedECGs()) != 1 {
+		t.Fatalf("expected 1 ECG insert, got %d", len(ecgRepo.insertedECGs()))
 	}
-	ecg := ecgRepo.inserted[0]
+	ecg := ecgRepo.insertedECGs()[0]
 	if ecg.PatientID != "P001" {
 		t.Errorf("ECG.PatientID = %q, want %q", ecg.PatientID, "P001")
 	}
@@ -208,8 +239,8 @@ func TestPersister_Persist_Duplicate_AuditsAndSkips(t *testing.T) {
 	}
 
 	// Only one ECG is inserted — the duplicate is skipped.
-	if len(ecgRepo.inserted) != 1 {
-		t.Errorf("ECG inserts = %d, want 1 (duplicate must be skipped)", len(ecgRepo.inserted))
+	if n := len(ecgRepo.insertedECGs()); n != 1 {
+		t.Errorf("ECG inserts = %d, want 1 (duplicate must be skipped)", n)
 	}
 
 	// A duplicate audit entry must be written so the re-send leaves a trace.
@@ -297,16 +328,22 @@ func TestPersister_RoutesItemFromQueue(t *testing.T) {
 	ri := makeRoutedItem("P001", "philips", "ecg.xml", ts)
 	routed <- ri
 
-	// Poll until ECG is inserted or timeout
-	deadline := time.After(500 * time.Millisecond)
+	// Poll until the ECG is inserted, or give up. Through the accessor, so the
+	// read is synchronised against the Persister's goroutine — reading the
+	// slice directly here was a data race, and it is what made this test fail
+	// intermittently under -race.
+	//
+	// The sleep matters too: the original loop spun without yielding, burning a
+	// core and starving the very goroutine it was waiting on.
+	deadline := time.After(2 * time.Second)
 	for {
+		if len(ecgRepo.insertedECGs()) > 0 {
+			return // success
+		}
 		select {
 		case <-deadline:
-			t.Fatal("timeout: ECG was not persisted within 500ms")
-		default:
-			if len(ecgRepo.inserted) > 0 {
-				return // success
-			}
+			t.Fatal("timeout: ECG was not persisted")
+		case <-time.After(time.Millisecond):
 		}
 	}
 }
@@ -324,10 +361,11 @@ func TestPersister_Persist_Demographics_FromECG(t *testing.T) {
 		t.Fatalf("persist returned error: %v", err)
 	}
 
-	if len(patRepo.calls) != 1 {
-		t.Fatalf("expected 1 upsert call, got %d", len(patRepo.calls))
+	calls := patRepo.upsertCalls()
+	if len(calls) != 1 {
+		t.Fatalf("expected 1 upsert call, got %d", len(calls))
 	}
-	c := patRepo.calls[0]
+	c := calls[0]
 	if c.patientID != "BS1170" {
 		t.Errorf("patientID = %q, want BS1170", c.patientID)
 	}
@@ -375,8 +413,8 @@ func TestPersister_CancelledContext_NoProcessing(t *testing.T) {
 	}
 
 	// No ECG should have been inserted
-	if len(ecgRepo.inserted) != 0 {
-		t.Errorf("expected 0 inserts after Stop, got %d", len(ecgRepo.inserted))
+	if n := len(ecgRepo.insertedECGs()); n != 0 {
+		t.Errorf("expected 0 inserts after Stop, got %d", n)
 	}
 }
 
