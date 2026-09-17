@@ -56,6 +56,7 @@ services:
       # - ecg-quarantine:/data/ecg-quarantine
     expose:
       - "4444"
+      - "8443"
       - "9091" # metrics scrape port (metrics.port in config.yaml)
     ports:
       - "${FTP_PORT:-2121}:2121" # Port FTP (le serveur écoute sur 2121 dans le conteneur)
@@ -64,6 +65,7 @@ services:
       - "30000-30002:30000-30002" # FTP passive ports (range split around ECTP 30003)
       - "30004-30010:30004-30010" # FTP passive ports
       - "9091:9091"
+      - "8443:8443"
   frontend:
     build:
       context: ./frontend

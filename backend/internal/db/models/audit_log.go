@@ -23,6 +23,11 @@ import (
 //	              "branding_updated", "hl7_settings_saved", "hl7_bulk_retry",
 //	              "system_initialized"
 //	Pipeline:     "ecg_ingested", "ecg_duplicate_skipped", "hl7_exhausted"
+//	IHE:          "ihe_retrieve_list" (a Display asked for a patient's ECG list;
+//	              ResourceID is the patient ID), "ihe_retrieve_document" (a
+//	              Display fetched one ECG document; ResourceID is its UID).
+//	              UserID is "ihe:<client certificate CN>" — these transactions
+//	              authenticate a machine, not a user.
 //	Devices:      "device_approved", "device_revoked", "device_deleted",
 //	              "device_whitelist_settings",
 //	              "device_refused" (a connection the whitelist turned away, on
