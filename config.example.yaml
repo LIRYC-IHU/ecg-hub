@@ -82,3 +82,41 @@ export:
   workers: 2
   # How long generated export files are kept in the temp area before cleanup.
   tmp_ttl: 2h
+
+# IHE — Information Source actor of the Retrieve ECG for Display profile
+# (CARD-5, CARD-6 and the summary requestTypes of ITI-11).
+#
+# A second HTTP listener on its own port. It is NOT the API: these transactions
+# carry no authentication of their own — the profile is from 2013 and expects
+# security from a grouped ATNA actor — so they never share a middleware chain
+# with the authenticated API, and the port is meant to be exposed to the DPI
+# while /api stays behind nginx.
+#
+# mTLS is the only authentication this surface has, and the documents it serves
+# carry the patient's name and identifier by specification (CARD TF-2
+# §4.6.4.2.2.1 forbids anonymous ECG documents here). So cert_file, key_file and
+# client_ca_file are all required when enabled is true, and the server refuses to
+# start without them rather than falling back to anything.
+#
+# Certificates are read from mounted paths for the same reason as `certs` above:
+# hospital IT already runs a PKI and renewal must stay upstream of the
+# application.
+ihe:
+  enabled: false
+  port: 8443
+  # Empty binds every interface, which is the point here — the Display actor
+  # lives on the site network. Narrow it if the DPI reaches a single address.
+  host: ""
+  # Certificate this listener presents to the Display.
+  cert_file: /certs/ihe/server.pem
+  key_file: /certs/ihe/server-key.pem
+  # CA that signs the Display actors' client certificates. Without it there is
+  # no mTLS, and without mTLS this is an open endpoint serving named patient
+  # documents — hence a required field, never a default.
+  client_ca_file: /certs/ihe/clients-ca.pem
+  # The patient identifier domain this installation answers for, matched against
+  # the assigning authority of the HL7 CX in a CARD-5 query. Set it on a
+  # multi-site deployment: patients.patient_id is unique installation-wide with
+  # no authority column, so two domains issuing the same number would silently
+  # resolve to one person. Empty ignores the authority component.
+  assigning_authority: ""

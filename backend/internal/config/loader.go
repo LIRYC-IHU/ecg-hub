@@ -42,6 +42,10 @@ func Load(cfgPath string) (*Config, error) {
 	// works with no configuration at all.
 	v.SetDefault("certs.cert_file", "/certs/fullchain.pem")
 	v.SetDefault("certs.key_file", "/certs/privkey.pem")
+	// The IHE listener is off unless a deployment asks for it, on the port the
+	// profile's sample URLs and our own Display tool assume.
+	v.SetDefault("ihe.enabled", false)
+	v.SetDefault("ihe.port", 8443)
 	// Note: AutomaticEnv is intentionally omitted. Without SetEnvKeyReplacer("." → "_"),
 	// Viper cannot map env vars like SERVER_PORT to nested YAML keys like server.port.
 	// All secrets are read explicitly via os.Getenv after unmarshal (see below).
@@ -211,6 +215,28 @@ func validate(cfg *Config) error {
 	}
 	if cfg.Metrics.Enabled && cfg.Metrics.Port != 0 && cfg.Metrics.Port == cfg.Server.Port {
 		errs = append(errs, "metrics.port must differ from server.port")
+	}
+
+	// The IHE listener carries patient-identifying documents and has no
+	// authentication of its own, so every part of its mTLS setup is refused at
+	// startup rather than defaulted. A missing client CA would turn it into an
+	// open PHI endpoint, which is exactly the failure this check exists for.
+	if cfg.IHE.Enabled {
+		if cfg.IHE.Port < 1 || cfg.IHE.Port > 65535 {
+			errs = append(errs, "ihe.port must be between 1 and 65535")
+		}
+		if cfg.IHE.Port == cfg.Server.Port {
+			errs = append(errs, "ihe.port must differ from server.port")
+		}
+		if cfg.Metrics.Enabled && cfg.IHE.Port == cfg.Metrics.Port {
+			errs = append(errs, "ihe.port must differ from metrics.port")
+		}
+		if cfg.IHE.CertFile == "" || cfg.IHE.KeyFile == "" {
+			errs = append(errs, "ihe.cert_file and ihe.key_file are required when ihe.enabled is true")
+		}
+		if cfg.IHE.ClientCAFile == "" {
+			errs = append(errs, "ihe.client_ca_file is required when ihe.enabled is true (mTLS is the only authentication this listener has)")
+		}
 	}
 
 	if len(errs) > 0 {
