@@ -16,7 +16,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /bin/ecg-hub ./cmd/ecg
 # `go install` instead of being built from the local converter-fda tree.
 # Pinned so a tagged release can be rebuilt byte-for-byte later. Bump this
 # deliberately; `latest` would make the image depend on when it was built.
-ARG ECG_BRIDGE_VERSION=v1.1.2
+ARG ECG_BRIDGE_VERSION=v1.4.0
 ENV GOBIN=/converters
 RUN set -eux; \
   for tool in \

@@ -12,7 +12,7 @@ ENV GOBIN=/usr/local/bin
 RUN go install github.com/air-verse/air@v1.63.0
 
 # Conversion tools, same source and pin as the production image.
-ARG ECG_BRIDGE_VERSION=v1.1.2
+ARG ECG_BRIDGE_VERSION=v1.4.0
 RUN set -eux; \
   for tool in \
   fda-to-dicom fda-to-pdf \
