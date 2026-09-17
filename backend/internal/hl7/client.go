@@ -57,23 +57,80 @@ type MSHConfig struct {
 	ProcessingID         string // P, T, or D
 }
 
+// Target is where a query is sent and how the message identifies itself.
+type Target struct {
+	Host    string
+	Port    int
+	Timeout time.Duration
+	MSH     MSHConfig
+}
+
+// valid reports whether a target is complete enough to dial.
+func (t Target) valid() bool { return t.Host != "" && t.Port != 0 }
+
+// withDefaults fills the MSH fields the HL7 standard requires but an operator
+// may leave blank.
+func (t Target) withDefaults() Target {
+	if t.MSH.Version == "" {
+		t.MSH.Version = "2.5"
+	}
+	if t.MSH.ProcessingID == "" {
+		t.MSH.ProcessingID = "P"
+	}
+	return t
+}
+
 // Client is an HL7 v2 MLLP client. Each query opens a fresh TCP connection.
 type Client struct {
-	host    string
-	port    int
-	timeout time.Duration
-	msh     MSHConfig
+	// boot is the target the client was constructed with — the settings as they
+	// stood at startup, and the fallback whenever resolve cannot answer.
+	boot Target
+	// resolve, when set, is consulted before every query so that a host changed
+	// in the admin UI takes effect without restarting the process. See
+	// WithLiveTarget.
+	resolve func() (Target, bool)
 }
 
 // NewClient returns an HL7 Client targeting host:port with the given timeout and MSH config.
 func NewClient(host string, port int, timeout time.Duration, msh MSHConfig) *Client {
-	if msh.Version == "" {
-		msh.Version = "2.5"
+	return &Client{boot: Target{Host: host, Port: port, Timeout: timeout, MSH: msh}.withDefaults()}
+}
+
+// WithLiveTarget makes the client re-read its target before every query instead
+// of keeping the one it was built with.
+//
+// Without it, connection settings are frozen at startup: saving a new host in
+// the admin UI updates the database and reloads the scheduler's cron, but every
+// component holding this client — the ingestion enricher and the retry
+// scheduler — keeps querying the old address until the process restarts. The
+// symptom is a "test connection" button that succeeds against the new host,
+// because it builds a throwaway client from the database, while real enrichment
+// silently still talks to the previous one.
+//
+// The outbound ORU sender is not affected: it reads the settings and builds its
+// sender on every send.
+//
+// The resolver is a function rather than a repository so that this package stays
+// free of a dependency on the persistence layer, which already imports it.
+//
+// Returns c for chaining.
+func (c *Client) WithLiveTarget(resolve func() (Target, bool)) *Client {
+	c.resolve = resolve
+	return c
+}
+
+// target returns the settings the next query should use.
+//
+// A resolver that fails or answers with an incomplete target falls back to the
+// boot settings rather than failing the query: a momentary database problem must
+// not stop enrichment that was working a second earlier.
+func (c *Client) target() Target {
+	if c.resolve != nil {
+		if t, ok := c.resolve(); ok && t.valid() {
+			return t.withDefaults()
+		}
 	}
-	if msh.ProcessingID == "" {
-		msh.ProcessingID = "P"
-	}
-	return &Client{host: host, port: port, timeout: timeout, msh: msh}
+	return c.boot
 }
 
 // QueryPatient sends a QRY^A19 message for patientID and returns the parsed PID segment.
@@ -86,19 +143,20 @@ func (c *Client) QueryPatient(_ context.Context, patientID string) (*PatientDemo
 		return nil, fmt.Errorf("hl7: invalid patient_id: contains HL7 control characters")
 	}
 
-	addr := net.JoinHostPort(c.host, strconv.Itoa(c.port))
-	conn, err := net.DialTimeout("tcp", addr, c.timeout)
+	t := c.target()
+	addr := net.JoinHostPort(t.Host, strconv.Itoa(t.Port))
+	conn, err := net.DialTimeout("tcp", addr, t.Timeout)
 	if err != nil {
 		return nil, fmt.Errorf("hl7: dial %s: %w", addr, err)
 	}
 	defer conn.Close()
 
 	// Enforce total read+write deadline from the moment we connect.
-	if err := conn.SetDeadline(time.Now().Add(c.timeout)); err != nil {
+	if err := conn.SetDeadline(time.Now().Add(t.Timeout)); err != nil {
 		return nil, fmt.Errorf("hl7: set deadline: %w", err)
 	}
 
-	msg := c.buildQRYMessage(patientID)
+	msg := c.buildQRYMessage(patientID, t.MSH)
 	frame := append([]byte{mllpStart}, append([]byte(msg), mllpEnd, mllpCR)...)
 	if _, err := conn.Write(frame); err != nil {
 		return nil, fmt.Errorf("hl7: write: %w", err)
@@ -130,7 +188,7 @@ func (c *Client) QueryPatient(_ context.Context, patientID string) (*PatientDemo
 	}
 
 	// H1 — set Source to the HL7 host so UpdateDemographics can populate hl7_source (AC #2).
-	d.Source = c.host
+	d.Source = t.Host
 	return d, nil
 }
 
@@ -148,18 +206,19 @@ func (c *Client) QueryPatientFull(_ context.Context, patientID string) (*QueryRe
 		return nil, fmt.Errorf("hl7: invalid patient_id: contains HL7 control characters")
 	}
 
-	addr := net.JoinHostPort(c.host, strconv.Itoa(c.port))
-	conn, err := net.DialTimeout("tcp", addr, c.timeout)
+	t := c.target()
+	addr := net.JoinHostPort(t.Host, strconv.Itoa(t.Port))
+	conn, err := net.DialTimeout("tcp", addr, t.Timeout)
 	if err != nil {
 		return nil, fmt.Errorf("hl7: dial %s: %w", addr, err)
 	}
 	defer conn.Close()
 
-	if err := conn.SetDeadline(time.Now().Add(c.timeout)); err != nil {
+	if err := conn.SetDeadline(time.Now().Add(t.Timeout)); err != nil {
 		return nil, fmt.Errorf("hl7: set deadline: %w", err)
 	}
 
-	msg := c.buildQRYMessage(patientID)
+	msg := c.buildQRYMessage(patientID, t.MSH)
 	frame := append([]byte{mllpStart}, append([]byte(msg), mllpEnd, mllpCR)...)
 	if _, err := conn.Write(frame); err != nil {
 		return nil, fmt.Errorf("hl7: write: %w", err)
@@ -183,7 +242,7 @@ func (c *Client) QueryPatientFull(_ context.Context, patientID string) (*QueryRe
 
 	d, err := parsePID(raw)
 	if err == nil {
-		d.Source = c.host
+		d.Source = t.Host
 		result.Demographics = d
 	}
 
@@ -199,13 +258,13 @@ func (c *Client) QueryPatientFull(_ context.Context, patientID string) (*QueryRe
 // -- it comes from parsed ECG metadata, i.e. from the device or the uploaded
 // file -- and this query runs unattended on a schedule, so a malformed one is
 // re-sent by the retry job rather than failing once.
-func (c *Client) buildQRYMessage(patientID string) string {
+func (c *Client) buildQRYMessage(patientID string, msh MSHConfig) string {
 	ts := time.Now().UTC().Format("20060102150405")
 	return strings.Join([]string{
 		fmt.Sprintf("MSH|^~\\&|%s|%s|%s|%s|%s||QRY^A19|%s|%s|%s",
-			esc(c.msh.SendingApplication), esc(c.msh.SendingFacility),
-			esc(c.msh.ReceivingApplication), esc(c.msh.ReceivingFacility),
-			ts, ts, esc(c.msh.ProcessingID), esc(c.msh.Version)),
+			esc(msh.SendingApplication), esc(msh.SendingFacility),
+			esc(msh.ReceivingApplication), esc(msh.ReceivingFacility),
+			ts, ts, esc(msh.ProcessingID), esc(msh.Version)),
 		fmt.Sprintf("QRD|%s|R|I|Q001|||1^RD|%s|DEM|||", ts, esc(patientID)),
 	}, "\r") + "\r"
 }

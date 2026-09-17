@@ -331,19 +331,37 @@ func main() {
 	// HL7 client: created from DB settings if host/port are configured (regardless of config.yaml).
 	var hl7Client *hl7.Client
 	if dbSettings, err := hl7SettingsRepo.Get(); err == nil && dbSettings.Host != "" && dbSettings.Port != 0 && dbSettings.Enabled {
-		hl7Timeout := 10 * time.Second
-		if dbSettings.Timeout != "" {
-			if d, err := time.ParseDuration(dbSettings.Timeout); err == nil {
-				hl7Timeout = d
-			}
-		}
-		hl7Client = hl7.NewClient(dbSettings.Host, dbSettings.Port, hl7Timeout, hl7.MSHConfig{
+		hl7Client = hl7.NewClient(dbSettings.Host, dbSettings.Port, hl7SettingsTimeout(dbSettings.Timeout), hl7.MSHConfig{
 			SendingApplication:   dbSettings.SendingApplication,
 			SendingFacility:      dbSettings.SendingFacility,
 			ReceivingApplication: dbSettings.ReceivingApplication,
 			ReceivingFacility:    dbSettings.ReceivingFacility,
 			Version:              dbSettings.Version,
 			ProcessingID:         dbSettings.ProcessingID,
+		})
+		// Re-read the settings before every query so a host changed in the admin
+		// UI takes effect immediately. Without this the address above is frozen
+		// for the life of the process: the settings screen's test button would
+		// reach the new host while enrichment and the retry scheduler kept
+		// talking to the old one.
+		hl7Client.WithLiveTarget(func() (hl7.Target, bool) {
+			cur, err := hl7SettingsRepo.Get()
+			if err != nil || !cur.Enabled {
+				return hl7.Target{}, false
+			}
+			return hl7.Target{
+				Host:    cur.Host,
+				Port:    cur.Port,
+				Timeout: hl7SettingsTimeout(cur.Timeout),
+				MSH: hl7.MSHConfig{
+					SendingApplication:   cur.SendingApplication,
+					SendingFacility:      cur.SendingFacility,
+					ReceivingApplication: cur.ReceivingApplication,
+					ReceivingFacility:    cur.ReceivingFacility,
+					Version:              cur.Version,
+					ProcessingID:         cur.ProcessingID,
+				},
+			}, true
 		})
 		slog.Info("hl7: client created from DB settings", "host", dbSettings.Host, "port", dbSettings.Port)
 	}
@@ -1034,3 +1052,16 @@ func validateJWTSecret(cfg *config.Config) {
 // Converter binary paths come from bridgeutil.ResolveBin: per-binary env var
 // (absolute path only, e.g. BRIDGE_PHILIPS_TO_FDA) takes precedence, then
 // BRIDGE_BIN_DIR/name, else bare name (relies on $PATH).
+
+// hl7SettingsTimeout turns the timeout stored in the HL7 settings into a
+// duration, falling back to 10s when it is empty or unparseable. Shared by the
+// client's boot target and its live resolver so both read the column the same
+// way.
+func hl7SettingsTimeout(raw string) time.Duration {
+	if raw != "" {
+		if d, err := time.ParseDuration(raw); err == nil {
+			return d
+		}
+	}
+	return 10 * time.Second
+}
