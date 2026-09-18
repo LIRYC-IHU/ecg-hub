@@ -243,7 +243,7 @@ func TestBuildQRYMessage_EscapesRemainingDelimiters(t *testing.T) {
 		Version:            "2.5",
 	})
 
-	msg := c.buildQRYMessage(`P001^inject~more&deep\end`)
+	msg := c.buildQRYMessage(`P001^inject~more&deep\end`, c.target().MSH)
 
 	// Note: a raw-substring check cannot be used for the backslash. esc turns
 	// `\end` into `\E\end`, which still contains `\end` -- the escape is
