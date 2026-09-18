@@ -27,7 +27,9 @@ type rjExhaustedCall struct {
 // retryJobRepo stub.
 type stubRetryJobRepo struct {
 	jobs         []models.ConnectorJob
+	held         []models.ConnectorJob
 	findErr      error
+	heldErr      error
 	markedSent   []string
 	markedFailed []rjFailedCall
 	exhausted    []rjExhaustedCall
@@ -35,6 +37,10 @@ type stubRetryJobRepo struct {
 
 func (s *stubRetryJobRepo) FindPendingRetry(_ int) ([]models.ConnectorJob, error) {
 	return s.jobs, s.findErr
+}
+
+func (s *stubRetryJobRepo) FindHeldForHL7(_ int) ([]models.ConnectorJob, error) {
+	return s.held, s.heldErr
 }
 
 func (s *stubRetryJobRepo) MarkSent(id string) error {

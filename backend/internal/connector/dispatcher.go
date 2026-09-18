@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
+	"github.com/LIRYC-IHU/ecg-hub/internal/hl7"
 	appmetrics "github.com/LIRYC-IHU/ecg-hub/internal/metrics"
 
 	"gorm.io/datatypes"
@@ -37,6 +38,18 @@ type ConnectorSettings struct {
 	Connector   Connector
 	Interval    time.Duration // time between retries on failure
 	MaxAttempts int           // total attempts before exhaustion
+	// WaitForHL7 holds the forward back until the ECG's HL7 enrichment has run.
+	// See connector.Config.
+	WaitForHL7 bool
+}
+
+// HL7Settled reports whether an ECG's enrichment has finished, successfully or
+// not. A connector configured to wait for HL7 waits for this and no longer: a
+// HIS that never answers must delay a delivery, not cancel it, which is the same
+// stance the dispatcher already takes by forwarding files that failed ingestion
+// outright.
+func HL7Settled(status string) bool {
+	return status != "" && status != hl7.StatusPending
 }
 
 // Dispatcher fires outbound connectors for every received file: after each
@@ -115,11 +128,25 @@ func (d *Dispatcher) dispatch(ecg *models.ECG, ecgID, quarantineID *string, file
 			continue
 		}
 
+		// A connector that waits for HL7 gets its job row now and its delivery
+		// later: the row is what the job runner picks up once the enrichment has
+		// settled, and what an operator sees in the meantime.
+		//
+		// The wait never applies to a quarantined file. Nothing identified a
+		// patient on it, so no enrichment will ever run and waiting would mean
+		// never forwarding — the opposite of why quarantined files are proxied at
+		// all.
+		holdForHL7 := s.WaitForHL7 && ecgID != nil && !HL7Settled(ecg.HL7Status)
+
+		status := StatusPending
+		if holdForHL7 {
+			status = StatusHeld
+		}
 		job := &models.ConnectorJob{
 			ECGID:         ecgID,
 			QuarantineID:  quarantineID,
 			ConnectorName: s.Connector.Name(),
-			Status:        StatusPending,
+			Status:        status,
 			Attempts:      0,
 			MaxAttempts:   s.MaxAttempts,
 		}
@@ -128,6 +155,16 @@ func (d *Dispatcher) dispatch(ecg *models.ECG, ecgID, quarantineID *string, file
 				"connector", s.Connector.Name(),
 				"file", ecg.OriginalFilename,
 				"error", err,
+			)
+			continue
+		}
+
+		if holdForHL7 {
+			slog.Info("connector: holding for HL7 enrichment",
+				"connector", s.Connector.Name(),
+				"ecg_id", ecg.ID,
+				"job_id", job.ID,
+				"hl7_status", ecg.HL7Status,
 			)
 			continue
 		}

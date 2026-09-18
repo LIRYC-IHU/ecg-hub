@@ -1070,24 +1070,28 @@ func (x *SaveModuleSettingsResponse) GetActive() []string {
 }
 
 type ConnectorConfig struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Protocol      string                 `protobuf:"bytes,2,opt,name=protocol,proto3" json:"protocol,omitempty"` // "ectp_ftp" | "dicom_cstore"
-	Extensions    []string               `protobuf:"bytes,3,rep,name=extensions,proto3" json:"extensions,omitempty"`
-	Vendors       []string               `protobuf:"bytes,4,rep,name=vendors,proto3" json:"vendors,omitempty"`
-	MaxAttempts   int32                  `protobuf:"varint,5,opt,name=max_attempts,json=maxAttempts,proto3" json:"max_attempts,omitempty"`
-	Interval      string                 `protobuf:"bytes,6,opt,name=interval,proto3" json:"interval,omitempty"`
-	EctpHost      string                 `protobuf:"bytes,7,opt,name=ectp_host,json=ectpHost,proto3" json:"ectp_host,omitempty"`
-	EctpPort      int32                  `protobuf:"varint,8,opt,name=ectp_port,json=ectpPort,proto3" json:"ectp_port,omitempty"`
-	FtpHost       string                 `protobuf:"bytes,9,opt,name=ftp_host,json=ftpHost,proto3" json:"ftp_host,omitempty"`
-	FtpPort       int32                  `protobuf:"varint,10,opt,name=ftp_port,json=ftpPort,proto3" json:"ftp_port,omitempty"`
-	FtpUsername   string                 `protobuf:"bytes,11,opt,name=ftp_username,json=ftpUsername,proto3" json:"ftp_username,omitempty"`
-	FtpPassword   string                 `protobuf:"bytes,12,opt,name=ftp_password,json=ftpPassword,proto3" json:"ftp_password,omitempty"` // masked on read; masked/empty on write preserves the stored value
-	DicomHost     string                 `protobuf:"bytes,13,opt,name=dicom_host,json=dicomHost,proto3" json:"dicom_host,omitempty"`
-	DicomPort     int32                  `protobuf:"varint,14,opt,name=dicom_port,json=dicomPort,proto3" json:"dicom_port,omitempty"`
-	CallingAe     string                 `protobuf:"bytes,15,opt,name=calling_ae,json=callingAe,proto3" json:"calling_ae,omitempty"`
-	CalledAe      string                 `protobuf:"bytes,16,opt,name=called_ae,json=calledAe,proto3" json:"called_ae,omitempty"`
-	DicomTimeout  string                 `protobuf:"bytes,17,opt,name=dicom_timeout,json=dicomTimeout,proto3" json:"dicom_timeout,omitempty"`
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	Name         string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Protocol     string                 `protobuf:"bytes,2,opt,name=protocol,proto3" json:"protocol,omitempty"` // "ectp_ftp" | "dicom_cstore"
+	Extensions   []string               `protobuf:"bytes,3,rep,name=extensions,proto3" json:"extensions,omitempty"`
+	Vendors      []string               `protobuf:"bytes,4,rep,name=vendors,proto3" json:"vendors,omitempty"`
+	MaxAttempts  int32                  `protobuf:"varint,5,opt,name=max_attempts,json=maxAttempts,proto3" json:"max_attempts,omitempty"`
+	Interval     string                 `protobuf:"bytes,6,opt,name=interval,proto3" json:"interval,omitempty"`
+	EctpHost     string                 `protobuf:"bytes,7,opt,name=ectp_host,json=ectpHost,proto3" json:"ectp_host,omitempty"`
+	EctpPort     int32                  `protobuf:"varint,8,opt,name=ectp_port,json=ectpPort,proto3" json:"ectp_port,omitempty"`
+	FtpHost      string                 `protobuf:"bytes,9,opt,name=ftp_host,json=ftpHost,proto3" json:"ftp_host,omitempty"`
+	FtpPort      int32                  `protobuf:"varint,10,opt,name=ftp_port,json=ftpPort,proto3" json:"ftp_port,omitempty"`
+	FtpUsername  string                 `protobuf:"bytes,11,opt,name=ftp_username,json=ftpUsername,proto3" json:"ftp_username,omitempty"`
+	FtpPassword  string                 `protobuf:"bytes,12,opt,name=ftp_password,json=ftpPassword,proto3" json:"ftp_password,omitempty"` // masked on read; masked/empty on write preserves the stored value
+	DicomHost    string                 `protobuf:"bytes,13,opt,name=dicom_host,json=dicomHost,proto3" json:"dicom_host,omitempty"`
+	DicomPort    int32                  `protobuf:"varint,14,opt,name=dicom_port,json=dicomPort,proto3" json:"dicom_port,omitempty"`
+	CallingAe    string                 `protobuf:"bytes,15,opt,name=calling_ae,json=callingAe,proto3" json:"calling_ae,omitempty"`
+	CalledAe     string                 `protobuf:"bytes,16,opt,name=called_ae,json=calledAe,proto3" json:"called_ae,omitempty"`
+	DicomTimeout string                 `protobuf:"bytes,17,opt,name=dicom_timeout,json=dicomTimeout,proto3" json:"dicom_timeout,omitempty"`
+	// Hold a forward back until the ECG's HL7 enrichment has settled, so what
+	// reaches the PACS carries the establishment's demographics rather than
+	// whatever the acquisition device recorded.
+	WaitForHl7    bool `protobuf:"varint,18,opt,name=wait_for_hl7,json=waitForHl7,proto3" json:"wait_for_hl7,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1239,6 +1243,13 @@ func (x *ConnectorConfig) GetDicomTimeout() string {
 		return x.DicomTimeout
 	}
 	return ""
+}
+
+func (x *ConnectorConfig) GetWaitForHl7() bool {
+	if x != nil {
+		return x.WaitForHl7
+	}
+	return false
 }
 
 type ConnectorConfigEntry struct {
@@ -1988,7 +1999,7 @@ const file_v1_module_proto_rawDesc = "" +
 	"\x19SaveModuleSettingsRequest\x12\x16\n" +
 	"\x06active\x18\x01 \x03(\tR\x06active\"4\n" +
 	"\x1aSaveModuleSettingsResponse\x12\x16\n" +
-	"\x06active\x18\x01 \x03(\tR\x06active\"\x8f\x04\n" +
+	"\x06active\x18\x01 \x03(\tR\x06active\"\xb1\x04\n" +
 	"\x0fConnectorConfig\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1a\n" +
 	"\bprotocol\x18\x02 \x01(\tR\bprotocol\x12\x1e\n" +
@@ -2012,7 +2023,9 @@ const file_v1_module_proto_rawDesc = "" +
 	"\n" +
 	"calling_ae\x18\x0f \x01(\tR\tcallingAe\x12\x1b\n" +
 	"\tcalled_ae\x18\x10 \x01(\tR\bcalledAe\x12#\n" +
-	"\rdicom_timeout\x18\x11 \x01(\tR\fdicomTimeout\"\x87\x01\n" +
+	"\rdicom_timeout\x18\x11 \x01(\tR\fdicomTimeout\x12 \n" +
+	"\fwait_for_hl7\x18\x12 \x01(\bR\n" +
+	"waitForHl7\"\x87\x01\n" +
 	"\x14ConnectorConfigEntry\x12\x1f\n" +
 	"\vmodule_type\x18\x01 \x01(\tR\n" +
 	"moduleType\x12\x18\n" +

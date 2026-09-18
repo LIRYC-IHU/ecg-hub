@@ -7,9 +7,18 @@ type Config struct {
 	Name     string
 	Protocol string // "ectp_ftp" | "dicom_cstore"
 	Filters  Filters
-	ECTP     Endpoint
-	FTP      FTPEndpoint
-	DICOM    DICOMEndpoint
+	// WaitForHL7 holds a forward back until the ECG's HL7 enrichment has run, so
+	// what reaches the PACS carries the establishment's demographics rather than
+	// whatever the acquisition device recorded. The wait ends as soon as the
+	// enrichment reaches any terminal state: a HIS that never answers delays a
+	// delivery, it does not cancel it.
+	//
+	// Off by default, which is the behaviour every existing connector already
+	// has.
+	WaitForHL7 bool
+	ECTP       Endpoint
+	FTP        FTPEndpoint
+	DICOM      DICOMEndpoint
 }
 
 // Filters restricts which files a connector forwards.

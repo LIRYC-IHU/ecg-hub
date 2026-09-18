@@ -16,7 +16,13 @@ import (
 
 // Job status constants — lifecycle of a connector_job row.
 const (
-	StatusPending   = "pending"
+	StatusPending = "pending"
+	// StatusHeld is a job waiting for the ECG's HL7 enrichment to settle before
+	// it is delivered. It is a state of its own rather than a pending job that
+	// nobody has picked up, because a pending job is already being forwarded by
+	// the goroutine that created it — a runner claiming those would deliver them
+	// twice.
+	StatusHeld      = "held"
 	StatusSent      = "sent"
 	StatusFailed    = "failed"
 	StatusExhausted = "exhausted"

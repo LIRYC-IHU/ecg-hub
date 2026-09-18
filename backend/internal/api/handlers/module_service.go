@@ -374,6 +374,7 @@ func connectorConfigToProto(cfg ConnectorStoredConfig) *apiv1.ConnectorConfig {
 		CallingAe:    cfg.CallingAE,
 		CalledAe:     cfg.CalledAE,
 		DicomTimeout: cfg.DICOMTimeout,
+		WaitForHl7:   cfg.WaitForHL7,
 	}
 }
 
@@ -404,6 +405,7 @@ func connectorConfigFromProto(p *apiv1.ConnectorConfig) ConnectorStoredConfig {
 		CallingAE:    p.CallingAe,
 		CalledAE:     p.CalledAe,
 		DICOMTimeout: p.DicomTimeout,
+		WaitForHL7:   p.WaitForHl7,
 	}
 }
 

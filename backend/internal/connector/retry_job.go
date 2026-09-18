@@ -14,6 +14,7 @@ import (
 // retryJobRepo is the job repository interface used by RetryJob.
 type retryJobRepo interface {
 	FindPendingRetry(limit int) ([]models.ConnectorJob, error)
+	FindHeldForHL7(limit int) ([]models.ConnectorJob, error)
 	MarkSent(id string) error
 	MarkFailed(id string, errMsg string, nextRetryAt time.Time) error
 	Exhaust(id string, errMsg string) error
@@ -144,6 +145,27 @@ func (j *RetryJob) processPending() {
 		return
 	}
 	for _, job := range jobs {
+		j.processOne(job)
+	}
+	j.releaseHeld()
+}
+
+// releaseHeld delivers the jobs that were waiting on HL7 enrichment and whose
+// ECG has since settled.
+//
+// Polling rather than being called by the enricher is deliberate: a job held
+// when the process restarts is still in the table, and the next tick picks it
+// up. A notification from the enricher would have been lost with the process
+// that was going to send it.
+func (j *RetryJob) releaseHeld() {
+	jobs, err := j.jobRepo.FindHeldForHL7(50)
+	if err != nil {
+		slog.Warn("connector: retry job find held failed", "error", err)
+		return
+	}
+	for _, job := range jobs {
+		slog.Info("connector: releasing job held for HL7",
+			"connector", job.ConnectorName, "job_id", job.ID)
 		j.processOne(job)
 	}
 }

@@ -426,7 +426,7 @@ func main() {
 	// Build outbound PACS connectors from the DB (single source of truth — the
 	// admin UI edits these configs). Hot reload: saving or deleting a connector
 	// in the UI rebuilds the dispatcher/retry-job settings without a restart.
-	connSettings, connCheckers := buildConnectorsFromDB(moduleConfigRepo, authEncKey)
+	connSettings, connCheckers := buildConnectorsFromDB(moduleConfigRepo, authEncKey, bridge, patRepo)
 	connJobRepo := repository.NewConnectorJobRepository(gormDB)
 	connAuditRepo := repository.NewAuditRepository(gormDB)
 	connDispatcher := connector.NewDispatcher(connSettings, connJobRepo).
@@ -435,7 +435,7 @@ func main() {
 		WithQuarantineRepo(repository.NewQuarantineRepository(gormDB)).
 		WithAuditWriter(connAuditRepo)
 	reloadConnectors := func() {
-		s, _ := buildConnectorsFromDB(moduleConfigRepo, authEncKey)
+		s, _ := buildConnectorsFromDB(moduleConfigRepo, authEncKey, bridge, patRepo)
 		connDispatcher.UpdateSettings(s)
 		connRetryJob.UpdateSettings(s)
 	}
@@ -894,7 +894,16 @@ func isProduction(cfg *config.Config) bool {
 // single source of truth — config.yaml definitions are seeded into it on first
 // run by seedConnectorsIfMissing. Invalid entries are skipped with a warning
 // (never fatal: this also runs on hot reload from the admin UI).
-func buildConnectorsFromDB(repo *repository.ModuleConfigRepository, encKey string) ([]connector.ConnectorSettings, []apihandlers.ConnectorHealthChecker) {
+// buildConnectorsFromDB also wires the conversion dependencies a DICOM
+// connector needs: a C-STORE peer speaks DICOM only, so a vendor file accepted
+// by the extension filter has to be converted before it can be sent, and the
+// patient repository supplies the demographics written into it.
+func buildConnectorsFromDB(
+	repo *repository.ModuleConfigRepository,
+	encKey string,
+	bridge dicomconn.Converter,
+	patients dicomconn.PatientLookup,
+) ([]connector.ConnectorSettings, []apihandlers.ConnectorHealthChecker) {
 	stored, err := apihandlers.ListDecryptedConnectorConfigs(repo, encKey)
 	if err != nil {
 		slog.Error("connector: failed to load configs from DB", "error", err)
@@ -914,7 +923,8 @@ func buildConnectorsFromDB(repo *repository.ModuleConfigRepository, encKey strin
 				Extensions: sc.Config.Extensions,
 				Vendors:    sc.Config.Vendors,
 			},
-			ECTP: connector.Endpoint{Host: sc.Config.ECTPHost, Port: sc.Config.ECTPPort},
+			WaitForHL7: sc.Config.WaitForHL7,
+			ECTP:       connector.Endpoint{Host: sc.Config.ECTPHost, Port: sc.Config.ECTPPort},
 			FTP: connector.FTPEndpoint{
 				Host:     sc.Config.FTPHost,
 				Port:     sc.Config.FTPPort,
@@ -948,7 +958,7 @@ func buildConnectorsFromDB(repo *repository.ModuleConfigRepository, encKey strin
 				slog.Error("connector: build failed, skipping", "name", cc.Name, "error", err)
 				continue
 			}
-			c = dc
+			c = dc.WithConverter(bridge, patients)
 		default:
 			slog.Warn("connector: unknown protocol, skipping", "name", cc.Name, "protocol", cc.Protocol)
 			continue
@@ -969,6 +979,7 @@ func buildConnectorsFromDB(repo *repository.ModuleConfigRepository, encKey strin
 			Connector:   c,
 			Interval:    interval,
 			MaxAttempts: maxAttempts,
+			WaitForHL7:  sc.Config.WaitForHL7,
 		})
 		checkers = append(checkers, c)
 		slog.Info("connector: loaded", "name", cc.Name, "protocol", cc.Protocol, "enabled", true)
