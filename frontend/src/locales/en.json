@@ -708,6 +708,8 @@
       "extensions": "Extensions (comma-sep, empty=all)",
       "vendors": "Vendors (comma-sep, empty=all)",
       "maxAttempts": "Max attempts",
+      "waitForHl7": "Wait for HL7 enrichment before forwarding",
+      "waitForHl7Hint": "The PACS receives the establishment's demographics instead of what the device recorded. A file whose enrichment never succeeds is forwarded anyway, once the retries are over.",
       "interval": "Retry interval",
       "ectpHost": "ECTP host",
       "ectpPort": "ECTP port",

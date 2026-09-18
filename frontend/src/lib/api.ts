@@ -1734,6 +1734,8 @@ export interface ConnectorConfig {
   vendors: string[];
   max_attempts: number;
   interval: string;
+  // Hold the forward until HL7 enrichment has settled (DICOM connectors).
+  wait_for_hl7?: boolean;
   ectp_host?: string;
   ectp_port?: number;
   ftp_host?: string;
@@ -1765,6 +1767,7 @@ function connectorConfigFromProto(
     vendors: c.vendors,
     max_attempts: c.maxAttempts,
     interval: c.interval,
+    wait_for_hl7: c.waitForHl7,
     ectp_host: c.ectpHost || undefined,
     ectp_port: c.ectpPort || undefined,
     ftp_host: c.ftpHost || undefined,
@@ -1809,6 +1812,7 @@ export async function saveConnectorConfig(
       vendors: config.vendors ?? [],
       maxAttempts: config.max_attempts ?? 0,
       interval: config.interval ?? "",
+      waitForHl7: config.wait_for_hl7 ?? false,
       ectpHost: config.ectp_host ?? "",
       ectpPort: config.ectp_port ?? 0,
       ftpHost: config.ftp_host ?? "",

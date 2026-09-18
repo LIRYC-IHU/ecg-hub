@@ -1306,6 +1306,21 @@ function PacsCard({
         </div>
       </div>
 
+      <label className="flex items-start gap-2 mb-4 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={cfg.wait_for_hl7 ?? false}
+          onChange={(e) => set("wait_for_hl7", e.target.checked)}
+          className="mt-0.5"
+        />
+        <span className="text-xs">
+          {t("modules.connectors.waitForHl7")}
+          <span className="block text-[10px] text-muted-foreground">
+            {t("modules.connectors.waitForHl7Hint")}
+          </span>
+        </span>
+      </label>
+
       <ConnectorCardActions logic={logic} canSave={!!cfg.name} />
     </div>
   );

@@ -21,12 +21,15 @@ func connectorModuleType(name string) string {
 // Shared by ModuleService (module_service.go) and main.go's dispatcher wiring;
 // the former REST connector config handlers were removed with the gRPC migration.
 type ConnectorStoredConfig struct {
-	Name        string   `json:"name"`
-	Protocol    string   `json:"protocol"`   // "ectp_ftp" | "dicom_cstore"
-	Extensions  []string `json:"extensions"` // filter: empty = all
-	Vendors     []string `json:"vendors"`    // filter: empty = all
-	MaxAttempts int      `json:"max_attempts"`
-	Interval    string   `json:"interval"`
+	Name       string   `json:"name"`
+	Protocol   string   `json:"protocol"`   // "ectp_ftp" | "dicom_cstore"
+	Extensions []string `json:"extensions"` // filter: empty = all
+	Vendors    []string `json:"vendors"`    // filter: empty = all
+	// WaitForHL7 delays forwarding until HL7 enrichment has run, so the PACS
+	// receives the establishment's demographics. See connector.Config.
+	WaitForHL7  bool   `json:"wait_for_hl7"`
+	MaxAttempts int    `json:"max_attempts"`
+	Interval    string `json:"interval"`
 	// ECTP
 	ECTPHost string `json:"ectp_host,omitempty"`
 	ECTPPort int    `json:"ectp_port,omitempty"`

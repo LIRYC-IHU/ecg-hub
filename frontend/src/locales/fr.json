@@ -709,6 +709,8 @@
       "extensions": "Extensions (séparées par virgule, vide=toutes)",
       "vendors": "Fabricants (séparés par virgule, vide=tous)",
       "maxAttempts": "Tentatives max",
+      "waitForHl7": "Attendre l'enrichissement HL7 avant d'envoyer",
+      "waitForHl7Hint": "Le PACS reçoit les données du SIH plutôt que celles de l'appareil. Un fichier dont l'enrichissement n'aboutit jamais est envoyé quand même, une fois les tentatives épuisées.",
       "interval": "Intervalle de relance",
       "ectpHost": "Hôte ECTP",
       "ectpPort": "Port ECTP",

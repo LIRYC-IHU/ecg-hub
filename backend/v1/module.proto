@@ -135,6 +135,10 @@ message ConnectorConfig {
   string calling_ae = 15;
   string called_ae = 16;
   string dicom_timeout = 17;
+  // Hold a forward back until the ECG's HL7 enrichment has settled, so what
+  // reaches the PACS carries the establishment's demographics rather than
+  // whatever the acquisition device recorded.
+  bool wait_for_hl7 = 18;
 }
 
 message ConnectorConfigEntry {

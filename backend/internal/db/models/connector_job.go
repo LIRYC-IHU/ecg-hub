@@ -5,6 +5,11 @@ import "time"
 // ConnectorJob tracks a single outbound forwarding attempt to a PACS connector.
 // Lifecycle: pending → sent | failed → exhausted
 //
+// A connector configured to wait for HL7 starts its jobs at "held" instead:
+// held → pending → sent | failed → exhausted. The job runner releases them once
+// the ECG's enrichment has settled. "held" is distinct from "pending" because a
+// pending job is already in flight in the goroutine that created it.
+//
 // A job is created for each (file, connector) pair when the ConnectorDispatcher
 // fires. Two kinds of source exist (exactly one of ECGID / QuarantineID is set):
 //   - ECGID: the file was successfully ingested — forwarded from the main volume.

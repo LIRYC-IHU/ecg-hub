@@ -95,3 +95,22 @@ func (r *ConnectorJobRepository) FindPendingRetry(limit int) ([]models.Connector
 	}
 	return jobs, nil
 }
+
+// FindHeldForHL7 returns jobs waiting on HL7 enrichment whose ECG has since
+// settled — successfully or not — oldest first.
+//
+// Only "held" jobs are returned. A "pending" job is one the dispatcher is
+// already forwarding in its own goroutine; picking those up here would deliver
+// them a second time.
+func (r *ConnectorJobRepository) FindHeldForHL7(limit int) ([]models.ConnectorJob, error) {
+	var jobs []models.ConnectorJob
+	if err := r.db.
+		Joins("JOIN ecgs ON ecgs.id = connector_jobs.ecg_id").
+		Where("connector_jobs.status = ? AND ecgs.hl7_status <> ?", "held", "pending").
+		Order("connector_jobs.created_at ASC").
+		Limit(limit).
+		Find(&jobs).Error; err != nil {
+		return nil, fmt.Errorf("connector_job_repo: find_held_for_hl7: %w", err)
+	}
+	return jobs, nil
+}
