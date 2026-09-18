@@ -119,6 +119,10 @@ func (e *Enricher) Enrich(ctx context.Context, ecgID string, patientID string) e
 		})
 	}
 
+	// UpdateDemographics also moves the patient when the HIS answered about a
+	// different identifier than the one it was asked about. It is done there
+	// rather than here because the scheduler and the retry job write
+	// demographics through the same call and need the same behaviour.
 	if err := e.patRepo.UpdateDemographics(patientID, d); err != nil {
 		slog.Warn("hl7: patient update failed", "patient_id", patientID, "error", err)
 	}

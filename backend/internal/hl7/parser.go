@@ -9,20 +9,20 @@ import (
 
 // SegmentNode represents a segment in the HL7 message tree.
 type SegmentNode struct {
-	Name     string      `json:"name"`
-	Fields   []FieldNode `json:"fields"`
+	Name   string      `json:"name"`
+	Fields []FieldNode `json:"fields"`
 }
 
 // FieldNode represents a field within a segment.
 type FieldNode struct {
-	Path       string      `json:"path"`       // e.g. "PID.5"
-	Value      string      `json:"value"`
-	Components []CompNode  `json:"components,omitempty"`
+	Path       string     `json:"path"` // e.g. "PID.5"
+	Value      string     `json:"value"`
+	Components []CompNode `json:"components,omitempty"`
 }
 
 // CompNode represents a component within a field.
 type CompNode struct {
-	Path  string `json:"path"`  // e.g. "PID.5.1"
+	Path  string `json:"path"` // e.g. "PID.5.1"
 	Value string `json:"value"`
 }
 
@@ -199,14 +199,17 @@ func ApplyErrorMapping(raw string, mappings []models.HL7Mapping) (code string, m
 // a value from the raw message, and the TargetField determines which demographics field
 // receives the extracted value.
 //
-// Supported TargetField values: "last_name", "first_name", "date_of_birth", "gender",
-// "nda", "address", "phone". The "error_code"/"error_message" fields are handled
-// separately by ApplyErrorMapping and ignored here.
+// Supported TargetField values: "patient_id", "last_name", "first_name",
+// "date_of_birth", "gender", "nda", "address", "phone". The
+// "error_code"/"error_message" fields are handled separately by
+// ApplyErrorMapping and ignored here.
 func ApplyMappings(raw string, mappings []models.HL7Mapping) *PatientDemographics {
 	d := &PatientDemographics{}
 	for _, m := range mappings {
 		value := ExtractByPath(raw, m.SourcePath)
 		switch m.TargetField {
+		case "patient_id":
+			d.PatientID = value
 		case "last_name":
 			d.LastName = value
 		case "first_name":

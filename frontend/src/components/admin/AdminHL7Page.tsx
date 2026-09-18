@@ -849,11 +849,14 @@ function HL7FieldItem({
 // ─── HL7 Mapping Drop Zone ──────────────────────────────────────────────────
 
 const TARGET_FIELDS = [
+  // The identifier the HIS answers with, which need not be the one it was asked
+  // about: map it when a device records a medical record number the HIS resolves
+  // to the establishment's own identifier. The patient is moved onto it.
+  "patient_id",
   "last_name",
   "first_name",
   "date_of_birth",
   "gender",
-  "nip",
   "address",
   "phone",
   "error_code",

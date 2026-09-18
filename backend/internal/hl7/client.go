@@ -37,6 +37,11 @@ type MSAResult struct {
 // PatientDemographics holds the demographic fields extracted from a PID segment.
 // Source is set by Client.QueryPatient to the HL7 host that answered the query (AC #2).
 type PatientDemographics struct {
+	// PatientID is the identifier the HIS answered with, which is not
+	// necessarily the one it was queried with: a site may let a device record a
+	// medical record number and have the HIS resolve it to the establishment's
+	// own identifier. Empty unless a mapping targets "patient_id".
+	PatientID   string
 	LastName    string
 	FirstName   string
 	DateOfBirth string // "YYYYMMDD" raw from HL7 PID-7
@@ -295,4 +300,24 @@ func checkMSA(raw string) error {
 		return fmt.Errorf("%w (MSA=%s: %s)", ErrMSARejected, msa.Code, msg)
 	}
 	return nil
+}
+
+// ResolvedPatientID reports the identifier a HIS answer says the patient should
+// be filed under, and whether that differs from the one that was queried.
+//
+// A site may let a device record a medical record number and have the HIS
+// resolve it to the establishment's own identifier, so the answer is not
+// necessarily about the identifier it was asked about. Only an explicit,
+// different, non-empty answer counts: a HIS that echoes the query, or a response
+// with no patient_id mapping configured, must never be read as "this patient has
+// no identifier".
+func ResolvedPatientID(queried string, d *PatientDemographics) (string, bool) {
+	if d == nil {
+		return queried, false
+	}
+	resolved := strings.TrimSpace(d.PatientID)
+	if resolved == "" || resolved == strings.TrimSpace(queried) {
+		return queried, false
+	}
+	return resolved, true
 }
