@@ -41,6 +41,18 @@ func NewServer(cfg config.IHEConfig, d Deps) (*http.Server, error) {
 		return nil, fmt.Errorf("ihe: server needs a database handle and a converter")
 	}
 
+	// Resolved here so an unusable name is a startup failure rather than a
+	// query that quietly filters on the wrong hour.
+	if cfg.Timezone != "" {
+		loc, err := time.LoadLocation(cfg.Timezone)
+		if err != nil {
+			return nil, fmt.Errorf("ihe: timezone %q: %w", cfg.Timezone, err)
+		}
+		d.Timezone = loc
+	}
+	slog.Info("ihe: zone-less query bounds will be read in this timezone",
+		"timezone", d.Location().String())
+
 	cert, err := tls.LoadX509KeyPair(cfg.CertFile, cfg.KeyFile)
 	if err != nil {
 		return nil, fmt.Errorf("ihe: load server certificate: %w", err)

@@ -207,7 +207,7 @@ func TestParseXSDateTime(t *testing.T) {
 		{"not a date", false},
 	}
 	for _, tc := range tests {
-		if _, ok := parseXSDateTime(tc.raw); ok != tc.ok {
+		if _, _, ok := parseXSDateTime(tc.raw, time.UTC); ok != tc.ok {
 			t.Errorf("parseXSDateTime(%q) ok = %v, want %v", tc.raw, ok, tc.ok)
 		}
 	}

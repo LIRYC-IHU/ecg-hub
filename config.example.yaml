@@ -120,3 +120,13 @@ ihe:
   # no authority column, so two domains issuing the same number would silently
   # resolve to one person. Empty ignores the authority component.
   assigning_authority: ""
+  # The site's wall clock, as an IANA name. A CARD-5 date bound that carries no
+  # zone is read in it — which is what a Display sends, because it forwards the
+  # time a clinician typed.
+  #
+  # Deliberately not the container's TZ: servers are usually left on UTC so
+  # their logs are, while the times on screen are local. Left empty, a zone-less
+  # bound is read in the process timezone — UTC in a container — and the window
+  # is off by the site's offset, enough to hide the ECG that was being looked
+  # for.
+  timezone: "Europe/Paris"

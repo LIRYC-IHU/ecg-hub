@@ -47,6 +47,11 @@ import (
 	"github.com/LIRYC-IHU/ecg-hub/internal/export"
 	"github.com/LIRYC-IHU/ecg-hub/internal/hl7"
 	"github.com/LIRYC-IHU/ecg-hub/internal/ihe"
+
+	// Embeds the IANA timezone database in the binary. The runtime image is
+	// alpine, which ships no tzdata, so time.LoadLocation would fail on every
+	// name — and the site timezone is what a zone-less IHE query bound is read
+	// in.
 	"github.com/LIRYC-IHU/ecg-hub/internal/ingestion"
 	appmetrics "github.com/LIRYC-IHU/ecg-hub/internal/metrics"
 	"github.com/LIRYC-IHU/ecg-hub/internal/module"
@@ -62,6 +67,7 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
+	_ "time/tzdata"
 )
 
 func main() {

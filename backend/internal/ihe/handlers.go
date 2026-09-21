@@ -54,6 +54,18 @@ type Deps struct {
 	Bridge export.Converter
 	// AssigningAuthority is ihe.assigning_authority; see IHEConfig.
 	AssigningAuthority string
+	// Timezone is the site's wall clock, used to read a query bound that
+	// carries no zone. Nil falls back to the process's own, which in a container
+	// with no TZ is UTC — see IHEConfig.Timezone.
+	Timezone *time.Location
+}
+
+// Location returns the timezone zone-less query bounds are read in.
+func (d Deps) Location() *time.Location {
+	if d.Timezone != nil {
+		return d.Timezone
+	}
+	return time.Local
 }
 
 // fail writes an error response.
@@ -86,22 +98,42 @@ func actor(c echo.Context) string {
 // parseXSDateTime accepts the xs:dateTime ITI-11 specifies, and the same value
 // without a zone — which is what an HTML datetime-local field produces and what
 // Displays send in practice.
-func parseXSDateTime(raw string) (time.Time, bool) {
+//
+// A value carrying no zone is read in loc, not UTC. XML Schema leaves a
+// zone-less dateTime implementation-defined, and CARD TF-2 §4.6.4.2.2.2 states
+// the framework's reading of such a timestamp: local to where the recording was
+// made. A Display sends the wall-clock time a clinician typed, so reading
+// 14:29 as UTC silently shifts the window by the site's offset — in France, far
+// enough to drop the very ECG that was being looked for.
+//
+// dateOnly reports that the value named a day rather than an instant, which the
+// caller needs: as an upper bound, midnight on that day would exclude the whole
+// of it.
+func parseXSDateTime(raw string, loc *time.Location) (t time.Time, dateOnly, ok bool) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
-		return time.Time{}, false
+		return time.Time{}, false, false
 	}
-	for _, layout := range []string{
-		time.RFC3339,
-		"2006-01-02T15:04:05",
-		"2006-01-02T15:04",
-		"2006-01-02",
+	if loc == nil {
+		loc = time.Local
+	}
+	// Zoned first: an explicit offset is never reinterpreted.
+	if parsed, err := time.Parse(time.RFC3339, raw); err == nil {
+		return parsed, false, true
+	}
+	for _, l := range []struct {
+		layout string
+		day    bool
+	}{
+		{"2006-01-02T15:04:05", false},
+		{"2006-01-02T15:04", false},
+		{"2006-01-02", true},
 	} {
-		if t, err := time.Parse(layout, raw); err == nil {
-			return t, true
+		if parsed, err := time.ParseInLocation(l.layout, raw, loc); err == nil {
+			return parsed, l.day, true
 		}
 	}
-	return time.Time{}, false
+	return time.Time{}, false, false
 }
 
 // RetrieveSummaryInfo serves CARD-5 and the two ITI-11 summary requestTypes.
@@ -137,11 +169,17 @@ func RetrieveSummaryInfo(d Deps) echo.HandlerFunc {
 		}
 
 		q := d.DB.Model(&models.ECG{}).Where("patient_id = ?", cx.ID)
-		if t, ok := parseXSDateTime(c.QueryParam("lowerDateTime")); ok {
+		if t, _, ok := parseXSDateTime(c.QueryParam("lowerDateTime"), d.Location()); ok {
 			q = q.Where("COALESCE(recorded_at, ingested_at) >= ?", t)
 		}
-		if t, ok := parseXSDateTime(c.QueryParam("upperDateTime")); ok {
-			q = q.Where("COALESCE(recorded_at, ingested_at) <= ?", t)
+		if t, dateOnly, ok := parseXSDateTime(c.QueryParam("upperDateTime"), d.Location()); ok {
+			if dateOnly {
+				// "up to the 7th" means the whole of the 7th. Taken literally it
+				// is midnight, which excludes every ECG recorded that day.
+				q = q.Where("COALESCE(recorded_at, ingested_at) < ?", t.AddDate(0, 0, 1))
+			} else {
+				q = q.Where("COALESCE(recorded_at, ingested_at) <= ?", t)
+			}
 		}
 		// Newest first, so that mostRecentResults=n means the n latest.
 		// COALESCE because recorded_at is null on legacy rows, and a null would

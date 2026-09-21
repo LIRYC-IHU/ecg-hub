@@ -190,6 +190,15 @@ type IHEConfig struct {
 	// Empty means the authority component of the CX is ignored, which is only
 	// safe on a single-domain deployment.
 	AssigningAuthority string `mapstructure:"assigning_authority"`
+	// Timezone is the site's wall clock, as an IANA name such as
+	// "Europe/Paris". A CARD-5 query bound that carries no zone is read in it.
+	//
+	// It is deliberately not the container's TZ. Servers are usually left on UTC
+	// so their logs are, while the times a clinician types into a Display are
+	// local — setting TZ to fix a query filter would move every log line with
+	// it. Empty falls back to the process timezone, which in a container with no
+	// TZ means UTC, and a zone-less bound is then off by the site's offset.
+	Timezone string `mapstructure:"timezone"`
 }
 
 // StorageConfig holds file volume settings (FR10).
