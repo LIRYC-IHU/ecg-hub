@@ -305,6 +305,23 @@ func RetrieveDocument(d Deps) echo.HandlerFunc {
 			patPtr = nil
 		}
 
+		if reason := anonymousDocumentReason(&ecg, patPtr); reason != "" {
+			// Refused rather than sent, because the profile says shall: "The
+			// Cardiology Technical Framework does not support the delivery of
+			// anonymous ECG documents in this transaction."
+			//
+			// Logged at error level with the reason, because every case is a
+			// deployment problem an operator can fix — enrich the patient, or
+			// give the vendor a converter that can write demographics — and
+			// none of them is visible from the Display, which only sees a
+			// document it cannot have.
+			slog.Error("ihe: refusing to serve a document that would carry no identity",
+				"document_uid", uid, "patient_id", ecg.PatientID,
+				"vendor", ecg.Vendor, "reason", reason)
+			return fail(c, http.StatusNotAcceptable,
+				"this document cannot be produced with the patient identity CARD-6 requires: "+reason)
+		}
+
 		localPath, cleanup, err := stor.Materialize(c.Request().Context(), ecg.FilePath)
 		if err != nil {
 			slog.Error("ihe: materialize failed", "document_uid", uid, "file", ecg.FilePath, "error", err)
@@ -342,4 +359,34 @@ func RetrieveDocument(d Deps) echo.HandlerFunc {
 		c.Response().Header().Set("Expires", time.Now().AddDate(0, 0, 7).UTC().Format(http.TimeFormat))
 		return c.Blob(http.StatusOK, contentTypePDF, pdf)
 	}
+}
+
+// anonymousDocumentReason reports why a rendered document would not carry the
+// patient's name and identifier, or "" when it will.
+//
+// CARD-6 §4.6.4.2.2.1 makes both mandatory, so this is a precondition and not a
+// preference. It is answered from what the hub controls — the demographics it
+// holds, and whether the conversion can write them onto the page — rather than
+// by inspecting the rendered file: a document is only conformant here if the
+// establishment can say whose it is, and reading a name back out of a PDF would
+// only tell us what the acquisition device happened to record.
+//
+// That makes it deliberately conservative. A device file may well carry a usable
+// name of its own, and such a document is refused all the same, because nothing
+// in the hub can vouch for it. Serving an anonymous document is the failure the
+// profile names; withholding one the operator can fix is not.
+func anonymousDocumentReason(ecg *models.ECG, patient *models.Patient) string {
+	if !export.CanInjectPatient(ecg.Vendor) {
+		return "no converter can write demographics into a " + ecg.Vendor + " source, so the page would carry only what the device recorded"
+	}
+	if patient == nil {
+		return "no patient record for " + ecg.PatientID
+	}
+	if strings.TrimSpace(patient.PatientID) == "" {
+		return "the patient record has no identifier"
+	}
+	if strings.TrimSpace(patient.LastName) == "" && strings.TrimSpace(patient.FirstName) == "" {
+		return "the patient record has no name — enrich it from the HIS first"
+	}
+	return ""
 }

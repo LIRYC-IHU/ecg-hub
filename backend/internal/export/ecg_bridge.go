@@ -118,6 +118,17 @@ func (b *ECGBridge) WithPDFBinary(path string) *ECGBridge {
 // renderer's input, which is why the PDF path treats it as a special case.
 const vendorFDA = "fda"
 
+// CanInjectPatient reports whether a rendered document for this vendor will
+// carry the establishment's demographics rather than the acquisition device's.
+//
+// It is false for an FDA aECG source: that path skips the conversion step, and
+// the conversion step is what applies the injection — nothing rewrites an FDA
+// document in place. A caller that has to guarantee what appears on the page,
+// rather than merely prefer it, needs to know that before it produces one.
+func CanInjectPatient(vendor string) bool {
+	return vendor != vendorFDA
+}
+
 // SupportsFormat returns true if a binary is registered for the given vendor+format combination,
 // or if format is "original" (which never requires a binary).
 func (b *ECGBridge) SupportsFormat(vendor, format string) bool {
