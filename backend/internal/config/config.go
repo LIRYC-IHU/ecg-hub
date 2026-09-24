@@ -42,6 +42,7 @@ type Config struct {
 	Metrics  MetricsConfig  `mapstructure:"metrics"`
 	Webhooks WebhooksConfig `mapstructure:"webhooks"`
 	Devices  DevicesConfig  `mapstructure:"devices"`
+	IHE      IHEConfig      `mapstructure:"ihe"`
 	// Secrets — populated via os.Getenv after Viper unmarshal. Never from config.yaml.
 
 	// DatabaseURL is the PostgreSQL connection string. Set via DATABASE_URL env var.
@@ -145,6 +146,59 @@ type CertsConfig struct {
 	CertFile string `mapstructure:"cert_file"`
 	// KeyFile is the matching private key in PEM.
 	KeyFile string `mapstructure:"key_file"`
+}
+
+// IHEConfig configures the IHE listener — the Information Source actor of the
+// Retrieve ECG for Display profile (CARD-5, CARD-6, ITI-11).
+//
+// It is a second HTTP listener on its own port, deliberately not mounted on the
+// main Echo instance: the IHE transactions carry no authentication of their own
+// (the profile is from 2013 and expects security from a grouped ATNA actor), so
+// they must never share a middleware chain with the authenticated API. Keeping
+// them on a separate port also lets the infrastructure expose one surface to the
+// hospital network and the other to nginx only.
+//
+// Certificates are read from mounted paths, like CertsConfig and for the same
+// reason: hospital IT already manages a PKI, and renewal must stay upstream of
+// the application. Whether they should instead be uploadable from the admin UI
+// is still open — see the architecture note.
+type IHEConfig struct {
+	// Enabled starts the IHE listener. Default false: a deployment that has not
+	// asked for IHE conformance does not get an extra open port.
+	Enabled bool `mapstructure:"enabled"`
+	// Port is the TCP port of the IHE listener. Defaults to 8443.
+	Port int `mapstructure:"port"`
+	// Host is the address to bind. Empty means every interface — which is what
+	// this listener is for, since the Display actor lives on the site network.
+	Host string `mapstructure:"host"`
+	// CertFile / KeyFile are the server certificate this listener presents.
+	// Required when enabled: the profile transports patient-identifying
+	// documents, so there is no cleartext mode.
+	CertFile string `mapstructure:"cert_file"`
+	KeyFile  string `mapstructure:"key_file"`
+	// ClientCAFile is the PEM bundle of the certificate authority that signs the
+	// Display actors' client certificates. Required when enabled: it is what
+	// makes the listener mutually authenticated, and mTLS is the whole security
+	// model of this surface. No bundle would mean an open PHI endpoint.
+	ClientCAFile string `mapstructure:"client_ca_file"`
+	// AssigningAuthority, when set, is the only patient identifier domain this
+	// installation answers for. A CARD-5 query whose CX names a different
+	// assigning authority is refused rather than silently answered from a
+	// different domain's identifiers — the patients table has no authority
+	// column to tell them apart (see models.Patient.PatientID).
+	//
+	// Empty means the authority component of the CX is ignored, which is only
+	// safe on a single-domain deployment.
+	AssigningAuthority string `mapstructure:"assigning_authority"`
+	// Timezone is the site's wall clock, as an IANA name such as
+	// "Europe/Paris". A CARD-5 query bound that carries no zone is read in it.
+	//
+	// It is deliberately not the container's TZ. Servers are usually left on UTC
+	// so their logs are, while the times a clinician types into a Display are
+	// local — setting TZ to fix a query filter would move every log line with
+	// it. Empty falls back to the process timezone, which in a container with no
+	// TZ means UTC, and a zone-less bound is then off by the site's offset.
+	Timezone string `mapstructure:"timezone"`
 }
 
 // StorageConfig holds file volume settings (FR10).

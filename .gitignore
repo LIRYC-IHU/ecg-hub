@@ -152,6 +152,8 @@ _bmad/
 *.pem
 *.key
 *.crt
+*.p12
+*.pfx
 
 # Local backups (never commit medical data)
 /backups/

@@ -46,6 +46,12 @@ import (
 	"github.com/LIRYC-IHU/ecg-hub/internal/events"
 	"github.com/LIRYC-IHU/ecg-hub/internal/export"
 	"github.com/LIRYC-IHU/ecg-hub/internal/hl7"
+	"github.com/LIRYC-IHU/ecg-hub/internal/ihe"
+
+	// Embeds the IANA timezone database in the binary. The runtime image is
+	// alpine, which ships no tzdata, so time.LoadLocation would fail on every
+	// name — and the site timezone is what a zone-less IHE query bound is read
+	// in.
 	"github.com/LIRYC-IHU/ecg-hub/internal/ingestion"
 	appmetrics "github.com/LIRYC-IHU/ecg-hub/internal/metrics"
 	"github.com/LIRYC-IHU/ecg-hub/internal/module"
@@ -61,6 +67,7 @@ import (
 	"github.com/labstack/echo/v4/middleware"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
+	_ "time/tzdata"
 )
 
 func main() {
@@ -740,6 +747,33 @@ func main() {
 		defer srv.Close()
 	} else {
 		slog.Info("metrics: disabled by config (metrics.enabled: false)")
+	}
+
+	// IHE listener — the Information Source actor of the Retrieve ECG for
+	// Display profile, on its own mutually-authenticated port. Deliberately not
+	// mounted on e: these transactions have no authentication of their own, so
+	// they must never share a middleware chain with the authenticated API.
+	if iheSrv, err := ihe.NewServer(cfg.IHE, ihe.Deps{
+		DB:                 gormDB,
+		Bridge:             bridge,
+		AssigningAuthority: cfg.IHE.AssigningAuthority,
+	}); err != nil {
+		// Refused rather than skipped: a deployment that asked for IHE and did
+		// not get it would look conformant and answer nothing, and a broken mTLS
+		// setup is exactly what must not be started past.
+		slog.Error("FATAL: IHE listener could not be built", "error", err)
+		os.Exit(1)
+	} else if iheSrv != nil {
+		go func() {
+			slog.Info("ihe: listener started (mTLS)", "addr", iheSrv.Addr)
+			// Certificates already live in TLSConfig, hence the empty paths.
+			if err := iheSrv.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
+				slog.Error("ihe: server error", "error", err)
+			}
+		}()
+		defer iheSrv.Close()
+	} else {
+		slog.Info("ihe: disabled by config (ihe.enabled: false)")
 	}
 
 	// Graceful shutdown: on SIGTERM/SIGINT (docker stop, systemd) drain the HTTP

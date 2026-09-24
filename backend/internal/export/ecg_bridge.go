@@ -113,6 +113,22 @@ func (b *ECGBridge) WithPDFBinary(path string) *ECGBridge {
 	return b
 }
 
+// vendorFDA is the vendor name of an ECG ingested as FDA aECG XML — the format
+// every other vendor is converted *into*. Its files are therefore already the
+// renderer's input, which is why the PDF path treats it as a special case.
+const vendorFDA = "fda"
+
+// CanInjectPatient reports whether a rendered document for this vendor will
+// carry the establishment's demographics rather than the acquisition device's.
+//
+// It is false for an FDA aECG source: that path skips the conversion step, and
+// the conversion step is what applies the injection — nothing rewrites an FDA
+// document in place. A caller that has to guarantee what appears on the page,
+// rather than merely prefer it, needs to know that before it produces one.
+func CanInjectPatient(vendor string) bool {
+	return vendor != vendorFDA
+}
+
 // SupportsFormat returns true if a binary is registered for the given vendor+format combination,
 // or if format is "original" (which never requires a binary).
 func (b *ECGBridge) SupportsFormat(vendor, format string) bool {
@@ -120,10 +136,20 @@ func (b *ECGBridge) SupportsFormat(vendor, format string) bool {
 		return true
 	}
 	if format == "pdf" {
-		// PDF is rendered from the vendor's FDA aECG XML, so it is available
-		// wherever both the fda-to-pdf binary and an xmlfda converter exist.
+		if b.pdfBinary == "" {
+			return false
+		}
+		// An FDA aECG file is already what the renderer reads, so it needs no
+		// conversion step and no xmlfda binary of its own. Without this an ECG
+		// ingested as FDA XML reports "format not supported" for the one format
+		// it is closest to.
+		if vendor == vendorFDA {
+			return true
+		}
+		// Every other vendor is rendered from its FDA aECG XML, so PDF is
+		// available wherever an xmlfda converter exists.
 		_, hasXML := b.binaries[vendor+":xmlfda"]
-		return b.pdfBinary != "" && hasXML
+		return hasXML
 	}
 	_, ok := b.binaries[vendor+":"+format]
 	return ok
@@ -269,22 +295,56 @@ func (b *ECGBridge) convertToPDF(ctx context.Context, sourcePath, vendor string,
 		return nil, fmt.Errorf("%w: %s:pdf (no fda-to-pdf binary)", ErrFormatNotSupported, vendor)
 	}
 
-	xml, err := b.Convert(ctx, sourcePath, vendor, "xmlfda", patient, opts)
-	if err != nil {
-		return nil, err
+	// Patient-data options are applied by the xmlfda step, which an FDA source
+	// skips. Anonymisation must therefore be refused rather than ignored: an
+	// export the caller believes is anonymous but is not would leak the very
+	// identifiers it was asked to remove. Injection is merely not applied, so
+	// it is logged and the conversion proceeds — the document still carries the
+	// identity the acquisition device recorded.
+	if vendor == vendorFDA && opts.Anonymize {
+		return nil, fmt.Errorf("%w: %s:pdf cannot be anonymised (no converter rewrites an FDA aECG source)",
+			ErrFormatNotSupported, vendor)
 	}
 
-	in, err := os.CreateTemp("", "ecg-*.fda.xml")
-	if err != nil {
-		return nil, fmt.Errorf("%w: create temp xml: %v", ErrConversionFailed, err)
-	}
-	defer os.Remove(in.Name())
-	if _, err := in.Write(xml); err != nil {
+	inPath := sourcePath
+	if vendor != vendorFDA {
+		xml, err := b.Convert(ctx, sourcePath, vendor, "xmlfda", patient, opts)
+		if err != nil {
+			return nil, err
+		}
+
+		in, err := os.CreateTemp("", "ecg-*.fda.xml")
+		if err != nil {
+			return nil, fmt.Errorf("%w: create temp xml: %v", ErrConversionFailed, err)
+		}
+		defer os.Remove(in.Name())
+		if _, err := in.Write(xml); err != nil {
+			in.Close()
+			return nil, fmt.Errorf("%w: write temp xml: %v", ErrConversionFailed, err)
+		}
 		in.Close()
-		return nil, fmt.Errorf("%w: write temp xml: %v", ErrConversionFailed, err)
+		inPath = in.Name()
+	} else if opts.InjectPatient {
+		slog.Warn("ecg-bridge: pdf from an FDA source keeps the device's own demographics",
+			"vendor", vendor, "reason", "no converter rewrites an FDA aECG source")
+		// The identity on the page is the device's, not the establishment's, so
+		// the document is unverified whatever the caller asked for. Clearing the
+		// flag here keeps identityConfirmed below telling the truth instead of
+		// reporting a confirmation that never happened.
+		opts.InjectPatient = false
 	}
-	in.Close()
-	outPath := in.Name() + ".pdf"
+
+	// The output always goes to a temp file, never next to the input. For a
+	// converted source inPath is already temporary, but for an FDA source it is
+	// the stored ECG itself — writing the render beside it would put a derived
+	// file in the storage volume, and leave it there if the process died before
+	// the cleanup below.
+	outFile, err := os.CreateTemp("", "ecg-*.pdf")
+	if err != nil {
+		return nil, fmt.Errorf("%w: create temp pdf: %v", ErrConversionFailed, err)
+	}
+	outPath := outFile.Name()
+	outFile.Close()
 	defer os.Remove(outPath)
 
 	start := time.Now()
@@ -295,7 +355,7 @@ func (b *ECGBridge) convertToPDF(ctx context.Context, sourcePath, vendor string,
 	// its face. Marking rather than refusing is deliberate: an unconfirmed
 	// trace is still clinically useful, and the HIS being unreachable is
 	// exactly the moment someone needs to read the ECG.
-	args := []string{"-i", in.Name(), "-o", outPath}
+	args := []string{"-i", inPath, "-o", outPath}
 	if !identityConfirmed(patient, opts) {
 		args = append(args, "-identity-unverified")
 	}
@@ -316,9 +376,9 @@ func (b *ECGBridge) convertToPDF(ctx context.Context, sourcePath, vendor string,
 
 // buildInjectJSON serialises the HL7-enriched patient demographics into the
 // converters' stdin-JSON protocol. Keys: patientID, patientName ("LAST^First",
-// HL7 PN order), gender. Only populated fields are included so file values are
-// preserved for anything the HIS did not provide. Returns nil when there is
-// nothing to inject.
+// HL7 PN order), gender, birthDate ("YYYYMMDD") and age. Only populated fields
+// are included so file values are preserved for anything the HIS did not
+// provide. Returns nil when there is nothing to inject.
 func buildInjectJSON(p *models.Patient) []byte {
 	fields := map[string]string{}
 	if p.PatientID != "" {
@@ -329,6 +389,22 @@ func buildInjectJSON(p *models.Patient) []byte {
 	}
 	if p.Gender != "" {
 		fields["gender"] = p.Gender
+	}
+	if p.DateOfBirth != nil {
+		fields["birthDate"] = p.DateOfBirth.Format("20060102")
+		// The renderer prints the age as its own field, read from the source
+		// file, so injecting a birth date alone leaves the establishment's date
+		// next to the device's age — one person's name above another's age, on a
+		// document whose date of birth is exactly what a clinician cross-checks.
+		//
+		// The empty string is meaningful in this protocol: a field that is
+		// present overwrites, so this clears the file's age rather than leaving
+		// it to contradict the date above it. It is not computed here because
+		// age is only correct relative to the acquisition date, which this
+		// function does not have — a reader with the date of birth in front of
+		// them is better served by a blank than by a number that is wrong for
+		// any ECG recorded more than a year ago.
+		fields["age"] = ""
 	}
 	if len(fields) == 0 {
 		return nil

@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Display IHE — ECG Hub</title>
+<style>
+  :root {
+    --bg: #14161a; --panel: #1c1f26; --line: #2c313b; --fg: #e6e9ef;
+    --muted: #9aa3b2; --accent: #4da3ff; --ok: #3fb950; --err: #f85149;
+    --warn: #d29922; --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--fg);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  header {
+    padding: 14px 20px; border-bottom: 1px solid var(--line); background: var(--panel);
+    display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+  }
+  header h1 { margin: 0; font-size: 15px; font-weight: 600; }
+  header .sub { color: var(--muted); font-size: 12px; }
+  header .role {
+    margin-left: auto; font-size: 11px; color: var(--muted);
+    border: 1px solid var(--line); border-radius: 4px; padding: 3px 8px;
+  }
+  main { display: grid; grid-template-columns: 380px 1fr; min-height: calc(100vh - 52px); }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  aside { border-right: 1px solid var(--line); padding: 16px; overflow-y: auto; }
+  section.card {
+    border: 1px solid var(--line); border-radius: 6px; padding: 14px; margin-bottom: 16px;
+    background: var(--panel);
+  }
+  section.card > h2 {
+    margin: 0 0 12px; font-size: 12px; text-transform: uppercase;
+    letter-spacing: .06em; color: var(--accent);
+  }
+  label { display: block; margin-bottom: 10px; font-size: 12px; color: var(--muted); }
+  label > span.hint { display: block; font-size: 11px; color: #6f7888; margin-top: 2px; }
+  input, select {
+    width: 100%; margin-top: 4px; padding: 6px 8px; border-radius: 4px;
+    border: 1px solid var(--line); background: #11131790; color: var(--fg);
+    font: 13px/1.4 var(--mono);
+  }
+  input:focus, select:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
+  .row { display: flex; gap: 8px; }
+  .row > label { flex: 1; }
+  button {
+    padding: 7px 12px; border-radius: 4px; border: 1px solid var(--line);
+    background: #262b34; color: var(--fg); font-size: 13px; cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #0b1620; font-weight: 600; }
+  .btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+  .url {
+    font: 11px/1.5 var(--mono); word-break: break-all; background: #0f1115;
+    border: 1px solid var(--line); border-radius: 4px; padding: 8px; margin: 10px 0 8px;
+    color: #b9c2d0;
+  }
+  .viewer { display: flex; flex-direction: column; min-width: 0; }
+  .viewer-bar {
+    padding: 8px 14px; border-bottom: 1px solid var(--line);
+    display: flex; gap: 10px; align-items: center; font-size: 12px; color: var(--muted);
+  }
+  iframe { flex: 1; width: 100%; border: 0; background: #fff; min-height: 340px; }
+  pre.raw {
+    flex: 1; margin: 0; padding: 14px; overflow: auto; font: 12px/1.6 var(--mono);
+    white-space: pre-wrap; word-break: break-word; background: #0f1115;
+  }
+  table.log { width: 100%; border-collapse: collapse; font: 11px/1.5 var(--mono); }
+  table.log th, table.log td {
+    text-align: left; padding: 4px 6px; border-bottom: 1px solid var(--line);
+    vertical-align: top;
+  }
+  table.log th { color: var(--muted); font-weight: 500; }
+  table.log td.u { word-break: break-all; color: #b9c2d0; max-width: 0; }
+  .ok { color: var(--ok); } .err { color: var(--err); } .warn { color: var(--warn); }
+  details { border-top: 1px solid var(--line); padding-top: 12px; font-size: 12px; color: var(--muted); }
+  details summary { cursor: pointer; color: var(--accent); }
+  details p { margin: 8px 0; }
+  code { font: 11px var(--mono); background: #0f1115; padding: 1px 4px; border-radius: 3px; }
+  .log-wrap { max-height: 190px; overflow-y: auto; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Display IHE</h1>
+  <span class="sub">Retrieve ECG for Display — CARD-5 / CARD-6 / ITI-11</span>
+  <span class="role">acteur&nbsp;: Display &nbsp;·&nbsp; cible&nbsp;: Information Source</span>
+</header>
+
+<main>
+<aside>
+
+  <section class="card">
+    <h2>Information Source</h2>
+    <label>URL de base
+      <input id="base" value="https://localhost:8443" spellcheck="false">
+      <span class="hint">Racine du listener IHE, sans slash final.</span>
+    </label>
+  </section>
+
+  <section class="card">
+    <h2>CARD-5 · liste des ECG</h2>
+    <label>requestType
+      <select id="requestType">
+        <option>SUMMARY-CARDIOLOGY-ECG</option>
+        <option>SUMMARY-CARDIOLOGY</option>
+        <option>SUMMARY</option>
+      </select>
+    </label>
+    <label>patientID
+      <input id="patientID" value="12345^^^&amp;1.2.250.1.213.1.4.8&amp;ISO" spellcheck="false">
+      <span class="hint">HL7 CX, autorité incluse. Encodé automatiquement.</span>
+    </label>
+    <div class="row">
+      <label>lowerDateTime<input id="lowerDateTime" type="datetime-local"></label>
+      <label>upperDateTime<input id="upperDateTime" type="datetime-local"></label>
+    </div>
+    <label>mostRecentResults
+      <input id="mostRecentResults" type="number" min="0" value="0">
+      <span class="hint">0 = tous les résultats.</span>
+    </label>
+    <div class="url" id="url5"></div>
+    <div class="btns">
+      <button class="primary" data-act="render" data-tx="card5">Afficher</button>
+      <button data-act="inspect" data-tx="card5">Inspecter</button>
+      <button data-act="tab" data-tx="card5">Onglet</button>
+      <button data-act="copy" data-tx="card5">Copier</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>CARD-6 · document</h2>
+    <label>documentUID
+      <input id="documentUID" placeholder="UUID de l'ECG, ou OID" spellcheck="false">
+      <span class="hint">Rempli automatiquement en cliquant un lien de la liste.</span>
+    </label>
+    <label>preferredContentType
+      <select id="preferredContentType">
+        <option>application/pdf</option>
+        <option>image/svg+xml</option>
+      </select>
+    </label>
+    <div class="url" id="url6"></div>
+    <div class="btns">
+      <button class="primary" data-act="render" data-tx="card6">Afficher</button>
+      <button data-act="inspect" data-tx="card6">Inspecter</button>
+      <button data-act="tab" data-tx="card6">Onglet</button>
+      <button data-act="copy" data-tx="card6">Copier</button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Journal</h2>
+    <div class="log-wrap">
+      <table class="log">
+        <thead><tr><th>h</th><th>tx</th><th>statut</th><th>type</th><th>ms</th></tr></thead>
+        <tbody id="log"><tr><td colspan="5" style="color:#6f7888">aucune requête</td></tr></tbody>
+      </table>
+    </div>
+  </section>
+
+  <details>
+    <summary>Afficher / Inspecter / Onglet — lequel utiliser&nbsp;?</summary>
+    <p><strong>Afficher</strong> charge la réponse dans une <code>iframe</code>. C'est le
+    comportement réel d'un acteur Display&nbsp;: le navigateur rend le PDF nativement, et
+    applique seul la feuille XSLT référencée par le XML. Pas de CORS. <em>À utiliser en démo.</em></p>
+    <p><strong>Inspecter</strong> fait un <code>fetch()</code> et montre la réponse brute
+    plus les entrées extraites. Utile en développement. Soumis au CORS&nbsp;: depuis un
+    fichier <code>file://</code> vers un hôte distant, le navigateur bloquera, sauf à servir
+    cette page depuis la même origine que l'Information Source.</p>
+    <p><strong>Onglet</strong> ouvre l'URL telle quelle. Marche toujours, y compris pour
+    déclencher l'invite de certificat client en mTLS.</p>
+    <p><strong>mTLS</strong>&nbsp;: installer le certificat client dans le trousseau du
+    système, le navigateur le proposera à la connexion.</p>
+  </details>
+
+</aside>
+
+<div class="viewer">
+  <div class="viewer-bar">
+    <span id="vstate">prêt</span>
+    <span id="vurl" style="font:11px var(--mono); word-break:break-all; color:#6f7888"></span>
+  </div>
+  <iframe id="frame" title="Réponse de l'Information Source"></iframe>
+  <pre class="raw" id="raw" hidden></pre>
+</div>
+</main>
+
+<script>
+"use strict";
+
+const $ = (id) => document.getElementById(id);
+const FIELDS = ["base","requestType","patientID","lowerDateTime","upperDateTime",
+                "mostRecentResults","documentUID","preferredContentType"];
+
+/* ---------- construction des URL ------------------------------------------
+   Les deux transactions sont de simples GET. Tout le soin est dans l'encodage :
+   le patientID CX contient ^ et &, qui cassent la query string si on les laisse
+   nus. encodeURIComponent s'en charge.                                       */
+
+// datetime-local rend "2026-09-17T14:30" ; ITI-11 attend un xs:dateTime.
+function toXsDateTime(v) {
+  if (!v) return "";
+  return v.length === 16 ? v + ":00" : v;
+}
+
+function qs(params) {
+  return params
+    .filter(([, v]) => v !== "" && v != null)
+    .map(([k, v]) => k + "=" + encodeURIComponent(v))
+    .join("&");
+}
+
+function buildCard5(o) {
+  return o.base.replace(/\/+$/, "") + "/IHERetrieveSummaryInfo?" + qs([
+    ["requestType", o.requestType],
+    ["patientID", o.patientID],
+    ["lowerDateTime", toXsDateTime(o.lowerDateTime)],
+    ["upperDateTime", toXsDateTime(o.upperDateTime)],
+    ["mostRecentResults", o.mostRecentResults],
+  ]);
+}
+
+function buildCard6(o) {
+  return o.base.replace(/\/+$/, "") + "/IHERetrieveDocument?" + qs([
+    ["requestType", "DOCUMENT"],
+    ["documentUID", o.documentUID],
+    ["preferredContentType", o.preferredContentType],
+  ]);
+}
+
+function values() {
+  const o = {};
+  for (const f of FIELDS) o[f] = $(f).value.trim();
+  return o;
+}
+
+function refresh() {
+  const o = values();
+  $("url5").textContent = buildCard5(o);
+  $("url6").textContent = o.documentUID ? buildCard6(o) : "— documentUID requis —";
+  save(o);
+}
+
+/* ---------- persistance (confort, jamais critique) ------------------------ */
+
+function save(o) {
+  try { localStorage.setItem("ihe-display", JSON.stringify(o)); } catch (e) { /* mode privé */ }
+}
+
+function restore() {
+  let o = null;
+  try { o = JSON.parse(localStorage.getItem("ihe-display") || "null"); } catch (e) { /* ignore */ }
+  if (!o) return;
+  for (const f of FIELDS) if (o[f] != null && $(f)) $(f).value = o[f];
+}
+
+/* ---------- journal -------------------------------------------------------- */
+
+let logged = false;
+function log(tx, status, type, ms, cls) {
+  const body = $("log");
+  if (!logged) { body.innerHTML = ""; logged = true; }
+  const tr = document.createElement("tr");
+  const cells = [
+    new Date().toLocaleTimeString("fr-FR"),
+    tx,
+    status,
+    (type || "—").split(";")[0],
+    ms == null ? "—" : String(ms),
+  ];
+  cells.forEach((v, i) => {
+    const td = document.createElement("td");
+    td.textContent = v;
+    if (i === 2 && cls) td.className = cls;
+    tr.appendChild(td);
+  });
+  body.prepend(tr);
+}
+
+/* ---------- actions -------------------------------------------------------- */
+
+function showFrame(url, tx) {
+  $("raw").hidden = true;
+  $("frame").hidden = false;
+  $("frame").src = url;
+  $("vstate").textContent = "rendu " + tx;
+  $("vurl").textContent = url;
+  // Une iframe ne remonte pas son statut HTTP : le journal note l'envoi, pas le résultat.
+  log(tx, "envoyé", "iframe", null, null);
+}
+
+function showRaw(text) {
+  $("frame").hidden = true;
+  $("raw").hidden = false;
+  $("raw").textContent = text;
+}
+
+// Les liens vers CARD-6 posés par la feuille de style contiennent un documentUID.
+// On les extrait pour peupler le formulaire sans avoir à recopier l'UUID à la main.
+function extractUIDs(text) {
+  const out = [];
+  const re = /documentUID=([^&"'\s<>]+)/g;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    const uid = decodeURIComponent(m[1]);
+    if (!out.includes(uid)) out.push(uid);
+  }
+  return out;
+}
+
+async function inspect(url, tx) {
+  $("vstate").textContent = "requête…";
+  $("vurl").textContent = url;
+  const t0 = performance.now();
+  try {
+    const res = await fetch(url, { headers: { "Accept": "application/pdf, image/svg+xml, */*" } });
+    const ms = Math.round(performance.now() - t0);
+    const type = res.headers.get("content-type") || "";
+    log(tx, res.status + " " + res.statusText, type, ms, res.ok ? "ok" : "err");
+    $("vstate").textContent = res.status + " · " + ms + " ms";
+
+    if (type.startsWith("application/pdf")) {
+      showRaw("Réponse binaire (" + type + ").\n\nUtiliser « Afficher » pour la rendre.");
+      return;
+    }
+    const text = await res.text();
+    const uids = extractUIDs(text);
+    let head = "";
+    if (uids.length) {
+      head = "documentUID trouvés (" + uids.length + ") :\n" +
+             uids.map((u) => "  · " + u).join("\n") +
+             "\n\nLe premier a été copié dans le formulaire CARD-6.\n" +
+             "-".repeat(60) + "\n\n";
+      $("documentUID").value = uids[0];
+      refresh();
+    }
+    showRaw(head + text);
+  } catch (err) {
+    const ms = Math.round(performance.now() - t0);
+    log(tx, "échec réseau", "—", ms, "err");
+    $("vstate").textContent = "échec";
+    showRaw(
+      "Échec du fetch : " + err.message + "\n\n" +
+      "Cause la plus probable : CORS. Cette page est servie depuis " +
+      (location.origin === "null" ? "file://" : location.origin) +
+      " et interroge une autre origine.\n\n" +
+      "Ce n'est pas un défaut de l'Information Source : un vrai acteur Display n'est pas\n" +
+      "soumis au CORS. Contournements :\n" +
+      "  · bouton « Afficher » — iframe, pas de CORS, c'est le rendu réel\n" +
+      "  · bouton « Onglet »   — navigation directe\n" +
+      "  · servir cette page depuis la même origine que l'Information Source\n" +
+      "  · autoriser CORS sur le listener IHE en développement uniquement\n\n" +
+      "Vérifier aussi, en HTTPS auto-signé, que le certificat a été accepté une\n" +
+      "première fois via « Onglet »."
+    );
+  }
+}
+
+function urlFor(tx) {
+  const o = values();
+  if (tx === "card6" && !o.documentUID) return null;
+  return tx === "card5" ? buildCard5(o) : buildCard6(o);
+}
+
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-act]");
+  if (!btn) return;
+  const tx = btn.dataset.tx;
+  const url = urlFor(tx);
+  if (!url) { $("vstate").textContent = "documentUID requis"; return; }
+  switch (btn.dataset.act) {
+    case "render":  showFrame(url, tx); break;
+    case "inspect": inspect(url, tx); break;
+    case "tab":     window.open(url, "_blank", "noopener"); break;
+    case "copy":
+      navigator.clipboard.writeText(url).then(
+        () => { $("vstate").textContent = "URL copiée"; },
+        () => { $("vstate").textContent = "copie refusée par le navigateur"; }
+      );
+      break;
+  }
+});
+
+for (const f of FIELDS) $(f).addEventListener("input", refresh);
+
+/* ---------- auto-test : ouvrir avec ?selftest=1 ---------------------------- */
+
+function selftest() {
+  const out = [];
+  const check = (name, got, want) => {
+    out.push((got === want ? "ok   " : "ÉCHEC") + "  " + name +
+             (got === want ? "" : "\n        obtenu : " + got + "\n        attendu: " + want));
+  };
+  const base = { base: "https://h:8443", requestType: "SUMMARY-CARDIOLOGY-ECG",
+                 patientID: "12345^^^&1.2.3&ISO", lowerDateTime: "", upperDateTime: "",
+                 mostRecentResults: "0", documentUID: "", preferredContentType: "application/pdf" };
+
+  check("CX encodé (^ et & neutralisés)",
+    buildCard5(base),
+    "https://h:8443/IHERetrieveSummaryInfo?requestType=SUMMARY-CARDIOLOGY-ECG" +
+    "&patientID=12345%5E%5E%5E%261.2.3%26ISO&mostRecentResults=0");
+
+  check("dates vides omises",
+    buildCard5(base).includes("lowerDateTime"), false);
+
+  check("datetime-local complété en xs:dateTime",
+    toXsDateTime("2026-09-17T14:30"), "2026-09-17T14:30:00");
+
+  check("xs:dateTime déjà complet laissé intact",
+    toXsDateTime("2026-09-17T14:30:00"), "2026-09-17T14:30:00");
+
+  check("slash final de la base absorbé",
+    buildCard6({ ...base, base: "https://h:8443///", documentUID: "abc" }),
+    "https://h:8443/IHERetrieveDocument?requestType=DOCUMENT&documentUID=abc" +
+    "&preferredContentType=application%2Fpdf");
+
+  check("mostRecentResults=0 conservé (0 = tous, pas une valeur vide)",
+    buildCard5(base).includes("mostRecentResults=0"), true);
+
+  check("extraction des documentUID",
+    JSON.stringify(extractUIDs('<a href="/IHERetrieveDocument?requestType=DOCUMENT&documentUID=u-1&x=1">a</a>' +
+                               '<a href="...documentUID=u-2">b</a><a href="...documentUID=u-1">c</a>')),
+    JSON.stringify(["u-1", "u-2"]));
+
+  const failed = out.filter((l) => l.startsWith("ÉCHEC")).length;
+  showRaw("AUTO-TEST — " + (out.length - failed) + "/" + out.length + " réussis\n\n" + out.join("\n"));
+  $("vstate").textContent = failed ? failed + " échec(s)" : "auto-test ok";
+}
+
+restore();
+refresh();
+if (new URLSearchParams(location.search).get("selftest") === "1") selftest();
+</script>
+</body>
+</html>
