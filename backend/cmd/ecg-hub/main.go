@@ -776,6 +776,32 @@ func main() {
 		slog.Info("ihe: disabled by config (ihe.enabled: false)")
 	}
 
+	// Inbound ADT listener — the receiving half of RAD-12 Patient Update.
+	// Observing only for now: every message is acknowledged and logged, none is
+	// applied, because what a site's feed actually sends is worth seeing before
+	// the rules that interpret it are fixed.
+	adtTimeout := 30 * time.Second
+	if cfg.ADT.ReadTimeout != "" {
+		if d, err := time.ParseDuration(cfg.ADT.ReadTimeout); err == nil {
+			adtTimeout = d
+		}
+	}
+	adtListener := hl7.NewListener(hl7.ListenerSettings{
+		Enabled:           cfg.ADT.Enabled,
+		Port:              cfg.ADT.Port,
+		Host:              cfg.ADT.Host,
+		ReadTimeout:       adtTimeout,
+		AllowedSenders:    cfg.ADT.AllowedSenders,
+		AllowedFacilities: cfg.ADT.AllowedFacilities,
+	}, hl7.ObserveOnly)
+	if err := adtListener.Start(); err != nil {
+		// Refused rather than skipped: a deployment that asked to receive ADT
+		// and did not would look connected while the HIS retried into nothing.
+		slog.Error("FATAL: ADT listener could not start", "error", err)
+		os.Exit(1)
+	}
+	defer adtListener.Stop()
+
 	// Graceful shutdown: on SIGTERM/SIGINT (docker stop, systemd) drain the HTTP
 	// server, then let main return so every deferred Stop() above actually runs —
 	// the ingestion pipeline persists or quarantines all in-flight files instead

@@ -43,6 +43,7 @@ type Config struct {
 	Webhooks WebhooksConfig `mapstructure:"webhooks"`
 	Devices  DevicesConfig  `mapstructure:"devices"`
 	IHE      IHEConfig      `mapstructure:"ihe"`
+	ADT      ADTConfig      `mapstructure:"adt"`
 	// Secrets — populated via os.Getenv after Viper unmarshal. Never from config.yaml.
 
 	// DatabaseURL is the PostgreSQL connection string. Set via DATABASE_URL env var.
@@ -199,6 +200,47 @@ type IHEConfig struct {
 	// it. Empty falls back to the process timezone, which in a container with no
 	// TZ means UTC, and a zone-less bound is then off by the site's offset.
 	Timezone string `mapstructure:"timezone"`
+}
+
+// ADTConfig configures the inbound ADT listener — the receiving half of IHE
+// RAD-12 Patient Update, where the HIS pushes patient changes instead of being
+// asked for them.
+//
+// It is a write path into patient identity reached over the network, which is
+// why both allowlists exist. Neither is a substitute for the site controlling
+// who can reach the port.
+type ADTConfig struct {
+	// Enabled binds the listener. Default false: a deployment that has not asked
+	// to receive ADT does not get an open port.
+	Enabled bool `mapstructure:"enabled"`
+	// Port is the MLLP port. Defaults to 2576 — one above the conventional 2575
+	// used for outbound HL7, so the two do not collide on a host network.
+	Port int `mapstructure:"port"`
+	// Host to bind. Empty means every interface, which a listener the HIS has to
+	// reach generally needs.
+	Host string `mapstructure:"host"`
+	// ReadTimeout bounds one exchange, so a silent connection cannot hold a
+	// goroutine for the life of the process. Defaults to 30s.
+	ReadTimeout string `mapstructure:"read_timeout"`
+
+	// AllowedSenders restricts which source addresses may send; accepts bare
+	// addresses and CIDR ranges. Empty accepts everyone.
+	//
+	// Real access control, but only where the source address survives to us.
+	// Under Docker bridge networking every connection appears to come from the
+	// Docker gateway, so the list could only accept the gateway — and therefore
+	// anything behind it. It is worth setting on a host-network deployment and
+	// close to meaningless elsewhere.
+	AllowedSenders []string `mapstructure:"allowed_senders"`
+
+	// AllowedFacilities restricts which MSH-4 sending facilities are accepted.
+	// Empty accepts every facility.
+	//
+	// Unlike AllowedSenders this survives NAT, because it travels in the message
+	// rather than the connection — and for the same reason it proves less: the
+	// value is whatever the sender chose to write. It stops a feed pointed at
+	// the wrong system, not someone who can reach the port.
+	AllowedFacilities []string `mapstructure:"allowed_facilities"`
 }
 
 // StorageConfig holds file volume settings (FR10).

@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/spf13/viper"
 )
@@ -46,6 +47,11 @@ func Load(cfgPath string) (*Config, error) {
 	// profile's sample URLs and our own Display tool assume.
 	v.SetDefault("ihe.enabled", false)
 	v.SetDefault("ihe.port", 8443)
+	// The inbound ADT listener is off unless a deployment asks for it, on the
+	// port next to the conventional outbound HL7 one.
+	v.SetDefault("adt.enabled", false)
+	v.SetDefault("adt.port", 2576)
+	v.SetDefault("adt.read_timeout", "30s")
 	// Note: AutomaticEnv is intentionally omitted. Without SetEnvKeyReplacer("." → "_"),
 	// Viper cannot map env vars like SERVER_PORT to nested YAML keys like server.port.
 	// All secrets are read explicitly via os.Getenv after unmarshal (see below).
@@ -236,6 +242,22 @@ func validate(cfg *Config) error {
 		}
 		if cfg.IHE.ClientCAFile == "" {
 			errs = append(errs, "ihe.client_ca_file is required when ihe.enabled is true (mTLS is the only authentication this listener has)")
+		}
+	}
+
+	// The ADT listener writes to patient identity, so a port it cannot bind or a
+	// timeout nobody can parse is a startup failure rather than a surprise later.
+	if cfg.ADT.Enabled {
+		if cfg.ADT.Port < 1 || cfg.ADT.Port > 65535 {
+			errs = append(errs, "adt.port must be between 1 and 65535")
+		}
+		if cfg.ADT.Port == cfg.Server.Port {
+			errs = append(errs, "adt.port must differ from server.port")
+		}
+		if cfg.ADT.ReadTimeout != "" {
+			if _, err := time.ParseDuration(cfg.ADT.ReadTimeout); err != nil {
+				errs = append(errs, "adt.read_timeout must be a duration such as 30s")
+			}
 		}
 	}
 
