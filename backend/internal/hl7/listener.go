@@ -84,6 +84,10 @@ type Listener struct {
 	wg      sync.WaitGroup
 	stopped chan struct{}
 	once    sync.Once
+	// firstPeer logs the address of the first connection, once. An operator
+	// filling in AllowedSenders needs to know what this listener actually sees,
+	// which is not necessarily what the sender thinks it is sending from.
+	firstPeer sync.Once
 }
 
 // NewListener constructs a Listener. Call Start to bind.
@@ -125,6 +129,16 @@ func (l *Listener) Start() error {
 			"allowed_senders", len(l.cfg.AllowedSenders),
 			"allowed_facilities", len(l.cfg.AllowedFacilities),
 		)
+		if len(l.cfg.AllowedSenders) > 0 {
+			// Said once, loudly, because the failure is silent in both
+			// directions: a list that matches nothing locks the feed out, and a
+			// list that matches a shared gateway accepts everything behind it
+			// while looking like access control.
+			slog.Warn("hl7 listener: the sender allowlist is matched against the address this process sees, "+
+				"which is the last hop when anything translates addresses in between — check the "+
+				"address logged on the first connection before trusting it",
+				"allowed_senders", l.cfg.AllowedSenders)
+		}
 		for {
 			conn, err := ln.Accept()
 			if err != nil {
@@ -165,6 +179,10 @@ func (l *Listener) Stop() {
 func (l *Listener) serve(conn net.Conn) {
 	defer conn.Close()
 	remote := conn.RemoteAddr().String()
+	l.firstPeer.Do(func() {
+		slog.Info("hl7 listener: first connection — this is the address the sender allowlist is matched against",
+			"remote", remote)
+	})
 
 	if !senderAllowed(remote, l.cfg.AllowedSenders) {
 		appmetrics.HL7InboundRefused.WithLabelValues("sender").Inc()
