@@ -101,22 +101,36 @@ func itoa(n int) string {
 //
 // Returns an empty string if the segment, field, or component is not found.
 func ExtractByPath(raw string, path string) string {
+	v, _ := ExtractField(raw, path)
+	return v
+}
+
+// ExtractField is ExtractByPath with the distinction its callers sometimes
+// need: present reports whether the path resolved to a field the message
+// actually carries, as opposed to one it omitted.
+//
+// HL7 update semantics turn on exactly that difference. RAD-12 §4.12.4.3.2:
+// a field sent as two double quotes shall be removed from the receiving
+// system, while a field simply omitted leaves the stored value alone. Both
+// read as an empty string to ExtractByPath, so a caller applying an update
+// has to ask this one.
+func ExtractField(raw string, path string) (value string, present bool) {
 	parts := strings.SplitN(path, ".", 3)
 	if len(parts) < 2 {
-		return ""
+		return "", false
 	}
 
 	segName := parts[0]
 	fieldIdx, err := strconv.Atoi(parts[1])
 	if err != nil || fieldIdx < 1 {
-		return ""
+		return "", false
 	}
 
 	compIdx := 0 // 0 means "return the whole field"
 	if len(parts) == 3 {
 		compIdx, err = strconv.Atoi(parts[2])
 		if err != nil || compIdx < 1 {
-			return ""
+			return "", false
 		}
 	}
 
@@ -132,35 +146,35 @@ func ExtractByPath(raw string, path string) string {
 		if segName == "MSH" {
 			// MSH.1 = "|" (separator), MSH.2 = fields[1], MSH.3 = fields[2], etc.
 			if fieldIdx == 1 {
-				return "|"
+				return "|", true
 			}
 			actualIdx := fieldIdx - 1
 			if actualIdx >= len(fields) {
-				return ""
+				return "", false
 			}
 			return extractComponent(fields[actualIdx], compIdx)
 		}
 
 		// Non-MSH: fields[0]="PID", fields[1]=field1, etc.
 		if fieldIdx >= len(fields) {
-			return ""
+			return "", false
 		}
 		return extractComponent(fields[fieldIdx], compIdx)
 	}
-	return ""
+	return "", false
 }
 
 // extractComponent splits a field value by "^" and returns the component at the 1-based index.
 // If compIdx is 0, the whole field value is returned.
-func extractComponent(fieldValue string, compIdx int) string {
+func extractComponent(fieldValue string, compIdx int) (string, bool) {
 	if compIdx == 0 {
-		return fieldValue
+		return fieldValue, true
 	}
 	components := strings.Split(fieldValue, "^")
 	if compIdx > len(components) {
-		return ""
+		return "", false
 	}
-	return components[compIdx-1]
+	return components[compIdx-1], true
 }
 
 // Default HL7 paths for the acknowledgment/error fields when no explicit mapping

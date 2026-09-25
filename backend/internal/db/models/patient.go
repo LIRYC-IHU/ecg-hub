@@ -39,7 +39,15 @@ type Patient struct {
 	Gender      string
 	NDA         string `gorm:"column:nda;index"`
 	HL7Source   string
-	Extra       datatypes.JSON
+	// LastADTAt is when the sending system recorded the most recent inbound ADT
+	// applied to this row (EVN-2, or MSH-7 when the message carries no EVN).
+	//
+	// It exists to ignore a message older than what is already stored. The risk
+	// is not a feed that delivers out of order — one channel on one connection
+	// does not — but a retransmission: an ADT from three weeks ago replayed
+	// after a failure would otherwise put the old name back.
+	LastADTAt *time.Time
+	Extra     datatypes.JSON
 
 	ECGS []ECG `gorm:"foreignKey:PatientID;references:PatientID;constraint:OnUpdate:CASCADE,OnDelete:RESTRICT;"`
 }

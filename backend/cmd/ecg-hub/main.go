@@ -379,8 +379,11 @@ func main() {
 	hl7AttemptRepo := repository.NewHL7AttemptRepository(gormDB)
 	var hl7Enricher apihandlers.HL7Enricher
 	var hl7EnricherForPersister *hl7.Enricher
+	// Outside the block below: the inbound ADT listener reads the same mapping
+	// preset, and a site can receive patient updates without querying the HIS at
+	// all.
+	hl7MappingRepo := repository.NewHL7MappingRepository(gormDB)
 	if hl7Client != nil {
-		hl7MappingRepo := repository.NewHL7MappingRepository(gormDB)
 		hl7EnricherForPersister = hl7.NewEnricher(hl7Client, patRepo, ecgRepo, hl7.WithMappingRepo(hl7MappingRepo), hl7.WithAttemptRepo(hl7AttemptRepo))
 		hl7Enricher = hl7EnricherForPersister
 	}
@@ -777,9 +780,10 @@ func main() {
 	}
 
 	// Inbound ADT listener — the receiving half of RAD-12 Patient Update.
-	// Observing only for now: every message is acknowledged and logged, none is
-	// applied, because what a site's feed actually sends is worth seeing before
-	// the rules that interpret it are fixed.
+	// A08 applies the demographics it carries, using the same per-site field
+	// mappings the query path uses. Every other trigger is acknowledged and left
+	// alone. hl7.ObserveOnly is the handler to swap in to watch a feed without
+	// letting it change anything.
 	adtTimeout := 30 * time.Second
 	if cfg.ADT.ReadTimeout != "" {
 		if d, err := time.ParseDuration(cfg.ADT.ReadTimeout); err == nil {
@@ -793,7 +797,7 @@ func main() {
 		ReadTimeout:       adtTimeout,
 		AllowedSenders:    cfg.ADT.AllowedSenders,
 		AllowedFacilities: cfg.ADT.AllowedFacilities,
-	}, hl7.ObserveOnly)
+	}, hl7.NewPatientUpdateHandler(patRepo, hl7MappingRepo.GetActiveMappings))
 	if err := adtListener.Start(); err != nil {
 		// Refused rather than skipped: a deployment that asked to receive ADT
 		// and did not would look connected while the HIS retried into nothing.

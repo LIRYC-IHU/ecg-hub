@@ -212,3 +212,81 @@ func (r *PatientRepository) RekeyPatient(oldID, newID string) (int64, error) {
 
 	return moved, err
 }
+
+// ApplyPatientUpdate applies an inbound ADT patient update (IHE RAD-12 A08).
+//
+// Only the fields the message carried are touched, and a field it carried as
+// HL7 null is cleared. That is the difference from UpdateDemographics, which
+// answers a query where the HIS restates the whole record: here an omitted field
+// means "leave it alone", so writing the struct wholesale would erase whatever
+// the sender simply had no reason to repeat.
+//
+// A message older than the last one applied is ignored, and reported as applied:
+// the desired state is already in place. Nothing identifies the patient but
+// patients.patient_id, and an A08 may not change it — RAD-12 reserves that for
+// A40 — so this never moves a row.
+//
+// Returns found=false when no such patient exists, which is not an error: rows
+// here are created when an ECG arrives, not by an ADT feed.
+func (r *PatientRepository) ApplyPatientUpdate(u *hl7.PatientUpdate) (bool, error) {
+	var p models.Patient
+	if err := r.db.Where("patient_id = ?", u.PatientID).First(&p).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return false, nil
+		}
+		return false, fmt.Errorf("patient_repo: apply adt: load %s: %w", u.PatientID, err)
+	}
+
+	if !u.EventAt.IsZero() && p.LastADTAt != nil && u.EventAt.Before(*p.LastADTAt) {
+		slog.Warn("patient_repo: ignoring an ADT older than the last one applied",
+			"patient_id", u.PatientID, "event_at", u.EventAt, "last_applied", *p.LastADTAt)
+		return true, nil
+	}
+
+	updates := map[string]any{}
+	text := func(column string, f hl7.Field) {
+		switch {
+		case f.Clear:
+			updates[column] = ""
+		case f.Set():
+			updates[column] = f.Value
+		}
+	}
+	text("last_name", u.LastName)
+	text("first_name", u.FirstName)
+	text("gender", u.Gender)
+	text("nda", u.NDA)
+
+	switch {
+	case u.DateOfBirth.Clear:
+		updates["date_of_birth"] = nil
+	case u.DateOfBirth.Set():
+		// An unparseable date is dropped rather than stored or blanked: a date of
+		// birth is what a clinician cross-checks an identity on, so a wrong one
+		// is worse than the one already there.
+		if t, err := time.Parse("20060102", u.DateOfBirth.Value); err == nil {
+			updates["date_of_birth"] = t
+		} else {
+			slog.Warn("patient_repo: ignoring an unparseable date of birth from an ADT",
+				"patient_id", u.PatientID, "value", u.DateOfBirth.Value)
+		}
+	}
+
+	if len(updates) == 0 {
+		return true, nil
+	}
+	if u.Source != "" {
+		updates["hl7_source"] = u.Source
+	}
+	if !u.EventAt.IsZero() {
+		updates["last_adt_at"] = u.EventAt
+	}
+	updates["updated_at"] = time.Now()
+
+	if err := r.db.Model(&models.Patient{}).
+		Where("patient_id = ?", u.PatientID).
+		Updates(updates).Error; err != nil {
+		return false, fmt.Errorf("patient_repo: apply adt: update %s: %w", u.PatientID, err)
+	}
+	return true, nil
+}
