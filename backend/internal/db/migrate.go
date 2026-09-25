@@ -40,6 +40,7 @@ func RunMigrations(db *gorm.DB) error {
 		&appmodels.HL7Mapping{},
 		&appmodels.HL7Settings{},
 		&appmodels.HL7Attempt{},
+		&appmodels.HL7InboundMessage{},
 		&appmodels.HL7ORUAttempt{},
 		&appmodels.LocalUser{},
 		&appmodels.AuthProviderConfig{},

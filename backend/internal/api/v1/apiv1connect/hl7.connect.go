@@ -41,6 +41,9 @@ const (
 	HL7ServiceSendResultProcedure = "/grpc.api.v1.HL7Service/SendResult"
 	// HL7ServiceListAttemptsProcedure is the fully-qualified name of the HL7Service's ListAttempts RPC.
 	HL7ServiceListAttemptsProcedure = "/grpc.api.v1.HL7Service/ListAttempts"
+	// HL7ServiceListInboundMessagesProcedure is the fully-qualified name of the HL7Service's
+	// ListInboundMessages RPC.
+	HL7ServiceListInboundMessagesProcedure = "/grpc.api.v1.HL7Service/ListInboundMessages"
 )
 
 // HL7ServiceClient is a client for the grpc.api.v1.HL7Service service.
@@ -49,6 +52,7 @@ type HL7ServiceClient interface {
 	GetOruStatus(context.Context, *v1.GetOruStatusRequest) (*v1.GetOruStatusResponse, error)
 	SendResult(context.Context, *v1.SendResultRequest) (*v1.SendResultResponse, error)
 	ListAttempts(context.Context, *v1.ListAttemptsRequest) (*v1.ListAttemptsResponse, error)
+	ListInboundMessages(context.Context, *v1.ListInboundMessagesRequest) (*v1.ListInboundMessagesResponse, error)
 }
 
 // NewHL7ServiceClient constructs a client for the grpc.api.v1.HL7Service service. By default, it
@@ -86,15 +90,22 @@ func NewHL7ServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 			connect.WithSchema(hL7ServiceMethods.ByName("ListAttempts")),
 			connect.WithClientOptions(opts...),
 		),
+		listInboundMessages: connect.NewClient[v1.ListInboundMessagesRequest, v1.ListInboundMessagesResponse](
+			httpClient,
+			baseURL+HL7ServiceListInboundMessagesProcedure,
+			connect.WithSchema(hL7ServiceMethods.ByName("ListInboundMessages")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // hL7ServiceClient implements HL7ServiceClient.
 type hL7ServiceClient struct {
-	force        *connect.Client[v1.ForceRequest, v1.ForceResponse]
-	getOruStatus *connect.Client[v1.GetOruStatusRequest, v1.GetOruStatusResponse]
-	sendResult   *connect.Client[v1.SendResultRequest, v1.SendResultResponse]
-	listAttempts *connect.Client[v1.ListAttemptsRequest, v1.ListAttemptsResponse]
+	force               *connect.Client[v1.ForceRequest, v1.ForceResponse]
+	getOruStatus        *connect.Client[v1.GetOruStatusRequest, v1.GetOruStatusResponse]
+	sendResult          *connect.Client[v1.SendResultRequest, v1.SendResultResponse]
+	listAttempts        *connect.Client[v1.ListAttemptsRequest, v1.ListAttemptsResponse]
+	listInboundMessages *connect.Client[v1.ListInboundMessagesRequest, v1.ListInboundMessagesResponse]
 }
 
 // Force calls grpc.api.v1.HL7Service.Force.
@@ -133,12 +144,22 @@ func (c *hL7ServiceClient) ListAttempts(ctx context.Context, req *v1.ListAttempt
 	return nil, err
 }
 
+// ListInboundMessages calls grpc.api.v1.HL7Service.ListInboundMessages.
+func (c *hL7ServiceClient) ListInboundMessages(ctx context.Context, req *v1.ListInboundMessagesRequest) (*v1.ListInboundMessagesResponse, error) {
+	response, err := c.listInboundMessages.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
 // HL7ServiceHandler is an implementation of the grpc.api.v1.HL7Service service.
 type HL7ServiceHandler interface {
 	Force(context.Context, *v1.ForceRequest) (*v1.ForceResponse, error)
 	GetOruStatus(context.Context, *v1.GetOruStatusRequest) (*v1.GetOruStatusResponse, error)
 	SendResult(context.Context, *v1.SendResultRequest) (*v1.SendResultResponse, error)
 	ListAttempts(context.Context, *v1.ListAttemptsRequest) (*v1.ListAttemptsResponse, error)
+	ListInboundMessages(context.Context, *v1.ListInboundMessagesRequest) (*v1.ListInboundMessagesResponse, error)
 }
 
 // NewHL7ServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -172,6 +193,12 @@ func NewHL7ServiceHandler(svc HL7ServiceHandler, opts ...connect.HandlerOption) 
 		connect.WithSchema(hL7ServiceMethods.ByName("ListAttempts")),
 		connect.WithHandlerOptions(opts...),
 	)
+	hL7ServiceListInboundMessagesHandler := connect.NewUnaryHandlerSimple(
+		HL7ServiceListInboundMessagesProcedure,
+		svc.ListInboundMessages,
+		connect.WithSchema(hL7ServiceMethods.ByName("ListInboundMessages")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/grpc.api.v1.HL7Service/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case HL7ServiceForceProcedure:
@@ -182,6 +209,8 @@ func NewHL7ServiceHandler(svc HL7ServiceHandler, opts ...connect.HandlerOption) 
 			hL7ServiceSendResultHandler.ServeHTTP(w, r)
 		case HL7ServiceListAttemptsProcedure:
 			hL7ServiceListAttemptsHandler.ServeHTTP(w, r)
+		case HL7ServiceListInboundMessagesProcedure:
+			hL7ServiceListInboundMessagesHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -205,4 +234,8 @@ func (UnimplementedHL7ServiceHandler) SendResult(context.Context, *v1.SendResult
 
 func (UnimplementedHL7ServiceHandler) ListAttempts(context.Context, *v1.ListAttemptsRequest) (*v1.ListAttemptsResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("grpc.api.v1.HL7Service.ListAttempts is not implemented"))
+}
+
+func (UnimplementedHL7ServiceHandler) ListInboundMessages(context.Context, *v1.ListInboundMessagesRequest) (*v1.ListInboundMessagesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("grpc.api.v1.HL7Service.ListInboundMessages is not implemented"))
 }

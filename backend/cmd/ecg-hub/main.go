@@ -790,6 +790,7 @@ func main() {
 			adtTimeout = d
 		}
 	}
+	hl7InboundRepo := repository.NewHL7InboundRepository(gormDB)
 	adtListener := hl7.NewListener(hl7.ListenerSettings{
 		Enabled:           cfg.ADT.Enabled,
 		Port:              cfg.ADT.Port,
@@ -797,7 +798,8 @@ func main() {
 		ReadTimeout:       adtTimeout,
 		AllowedSenders:    cfg.ADT.AllowedSenders,
 		AllowedFacilities: cfg.ADT.AllowedFacilities,
-	}, hl7.NewADTHandler(patRepo, patRepo, hl7MappingRepo.GetActiveMappings))
+	}, hl7.NewADTHandler(patRepo, patRepo, hl7MappingRepo.GetActiveMappings)).
+		WithRecorder(hl7InboundRepo)
 	if err := adtListener.Start(); err != nil {
 		// Refused rather than skipped: a deployment that asked to receive ADT
 		// and did not would look connected while the HIS retried into nothing.
@@ -805,6 +807,31 @@ func main() {
 		os.Exit(1)
 	}
 	defer adtListener.Stop()
+
+	// Prune the record of received messages. It grows with every message a feed
+	// sends, which on a hospital ADT stream is most of what happens in a day.
+	if cfg.ADT.Enabled && cfg.ADT.HistoryRetentionDays > 0 {
+		retention := time.Duration(cfg.ADT.HistoryRetentionDays) * 24 * time.Hour
+		go func() {
+			ticker := time.NewTicker(6 * time.Hour)
+			defer ticker.Stop()
+			for {
+				// Once at startup, then on the tick: a server that was down past
+				// the window should not wait six hours to catch up.
+				n, err := hl7InboundRepo.DeleteOlderThan(time.Now().Add(-retention))
+				if err != nil {
+					slog.Warn("hl7 listener: prune message history", "error", err)
+				} else if n > 0 {
+					slog.Info("hl7 listener: message history pruned", "deleted", n)
+				}
+				select {
+				case <-shutdownCtx.Done():
+					return
+				case <-ticker.C:
+				}
+			}
+		}()
+	}
 
 	// Graceful shutdown: on SIGTERM/SIGINT (docker stop, systemd) drain the HTTP
 	// server, then let main return so every deferred Stop() above actually runs —

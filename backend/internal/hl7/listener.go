@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 	appmetrics "github.com/LIRYC-IHU/ecg-hub/internal/metrics"
 )
 
@@ -46,13 +47,38 @@ type ListenerSettings struct {
 	AllowedFacilities []string
 }
 
-// Handler acts on a parsed inbound message and returns the acknowledgement code
-// to send back: "AA" accepted, "AE" application error, "AR" rejected.
+// Handler acts on a parsed inbound message and says what to answer and what it
+// did.
 //
-// A handler that returns an error still gets an acknowledgement sent, with the
-// error as its text — the sender is entitled to an answer whatever happened
-// here, and a silent drop is the one outcome an HL7 feed cannot diagnose.
-type Handler func(msg *InboundMessage) (ackCode string, text string)
+// A handler that fails still gets an acknowledgement sent, with the reason as
+// its text — the sender is entitled to an answer whatever happened here, and a
+// silent drop is the one outcome an HL7 feed cannot diagnose.
+type Handler func(msg *InboundMessage) Result
+
+// Result is a handler's answer: what to send back, and what became of the
+// message.
+//
+// The two are not the same thing, which is why both are recorded. An A08 for a
+// patient this system does not hold and one that changed a record both answer
+// AA; only the outcome tells them apart afterwards.
+type Result struct {
+	// AckCode is ACKAccepted, ACKError or ACKReject. Empty means accepted.
+	AckCode string
+	// Text goes into MSA-3 when set.
+	Text string
+	// Outcome is one of the models.Inbound* values. Empty means ignored.
+	Outcome string
+	// PatientID is the record the message concerned, when one could be read.
+	PatientID string
+}
+
+// ack returns the code to send, defaulting to accepted.
+func (r Result) ack() string {
+	if r.AckCode == "" {
+		return ACKAccepted
+	}
+	return r.AckCode
+}
 
 // InboundMessage is one received ADT message, parsed only as far as routing
 // needs. The raw text is carried through because the field mapping configured
@@ -72,22 +98,66 @@ type InboundMessage struct {
 	RemoteAddr string
 }
 
+// InboundRecorder stores what the listener received and what became of it.
+// Implemented by repository.HL7InboundRepository.
+type InboundRecorder interface {
+	Insert(m *models.HL7InboundMessage) error
+}
+
 // Listener accepts MLLP connections and acknowledges every message it receives.
 //
 // It parses only what routing needs and hands the rest to a Handler: what a
 // site's messages mean is decided by the configured field mappings, not here.
 type Listener struct {
-	cfg     ListenerSettings
-	handle  Handler
-	ln      net.Listener
-	done    chan struct{}
-	wg      sync.WaitGroup
-	stopped chan struct{}
-	once    sync.Once
+	cfg      ListenerSettings
+	handle   Handler
+	recorder InboundRecorder
+	ln       net.Listener
+	done     chan struct{}
+	wg       sync.WaitGroup
+	stopped  chan struct{}
+	once     sync.Once
 	// firstPeer logs the address of the first connection, once. An operator
 	// filling in AllowedSenders needs to know what this listener actually sees,
 	// which is not necessarily what the sender thinks it is sending from.
 	firstPeer sync.Once
+}
+
+// WithRecorder keeps a record of every message received, refusals included —
+// the refusals especially, since a message turned away never reaches a handler
+// and would otherwise leave no trace an operator can find. Returns l for
+// chaining.
+func (l *Listener) WithRecorder(r InboundRecorder) *Listener {
+	l.recorder = r
+	return l
+}
+
+// record stores one message outcome. Best effort: a history that cannot be
+// written must never stop the sender being answered.
+func (l *Listener) record(msg *InboundMessage, res Result) {
+	if l.recorder == nil {
+		return
+	}
+	outcome := res.Outcome
+	if outcome == "" {
+		outcome = models.InboundIgnored
+	}
+	err := l.recorder.Insert(&models.HL7InboundMessage{
+		TriggerEvent:    msg.TriggerEvent,
+		MessageType:     msg.MessageType,
+		SendingFacility: msg.SendingFacility,
+		ControlID:       msg.ControlID,
+		RemoteAddr:      msg.RemoteAddr,
+		Segments:        segmentNames(msg.Raw),
+		PatientID:       res.PatientID,
+		Outcome:         outcome,
+		AckCode:         res.ack(),
+		Reason:          res.Text,
+	})
+	if err != nil {
+		slog.Warn("hl7 listener: could not record the message", "error", err,
+			"control_id", msg.ControlID)
+	}
 }
 
 // NewListener constructs a Listener. Call Start to bind.
@@ -203,9 +273,9 @@ func (l *Listener) serve(conn net.Conn) {
 		}
 
 		msg := parseInbound(raw, remote)
-		code, text := l.dispatch(msg)
+		res := l.dispatch(msg)
 
-		ack := BuildACK(msg, code, text)
+		ack := BuildACK(msg, res.ack(), res.Text)
 		if _, err := conn.Write([]byte{mllpStart}); err != nil {
 			return
 		}
@@ -219,20 +289,28 @@ func (l *Listener) serve(conn net.Conn) {
 }
 
 // dispatch applies the facility check and calls the handler.
-func (l *Listener) dispatch(msg *InboundMessage) (string, string) {
+func (l *Listener) dispatch(msg *InboundMessage) Result {
 	if !facilityAllowed(msg.SendingFacility, l.cfg.AllowedFacilities) {
 		appmetrics.HL7InboundRefused.WithLabelValues("facility").Inc()
 		slog.Warn("hl7 listener: refused a message from an unlisted sending facility",
 			"facility", msg.SendingFacility, "remote", msg.RemoteAddr,
 			"trigger", msg.TriggerEvent, "control_id", msg.ControlID)
-		return "AR", "sending facility not accepted by this system"
+		res := Result{AckCode: ACKReject, Outcome: models.InboundRefused,
+			Text: "sending facility not accepted by this system"}
+		l.record(msg, res)
+		return res
 	}
 
 	appmetrics.HL7InboundReceived.WithLabelValues(msg.TriggerEvent).Inc()
 	if l.handle == nil {
-		return "AA", ""
+		res := Result{Outcome: models.InboundIgnored}
+		l.record(msg, res)
+		return res
 	}
-	return l.handle(msg)
+
+	res := l.handle(msg)
+	l.record(msg, res)
+	return res
 }
 
 // parseInbound reads the header fields routing needs. Everything else is left
@@ -303,7 +381,7 @@ func facilityAllowed(facility string, allowed []string) bool {
 // the rules that interpret it are fixed. It answers AA, since the message was
 // received and understood — a refusal would make a sender retry a message there
 // is nothing wrong with.
-func ObserveOnly(msg *InboundMessage) (string, string) {
+func ObserveOnly(msg *InboundMessage) Result {
 	appmetrics.HL7InboundHandled.WithLabelValues(msg.TriggerEvent, ACKAccepted).Inc()
 	slog.Info("hl7 listener: message received (observing, nothing applied)",
 		"trigger", msg.TriggerEvent,
@@ -314,7 +392,7 @@ func ObserveOnly(msg *InboundMessage) (string, string) {
 		"segments", segmentNames(msg.Raw),
 		"bytes", len(msg.Raw),
 	)
-	return ACKAccepted, ""
+	return Result{Outcome: models.InboundIgnored}
 }
 
 // segmentNames lists the segments a message carries, which is what tells an

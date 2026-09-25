@@ -142,6 +142,10 @@ adt:
   port: 2576
   host: ""
   read_timeout: 30s
+  # How long the record of received messages is kept. It grows with every
+  # message a feed sends, which on a hospital ADT stream is most of what happens
+  # in a day — 0 keeps everything, and is how this table fills the disk first.
+  history_retention_days: 30
   # Source addresses allowed to send; bare addresses and CIDR ranges. Empty
   # accepts everyone, so configuring nothing locks nobody out.
   #

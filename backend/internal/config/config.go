@@ -241,6 +241,11 @@ type ADTConfig struct {
 	// value is whatever the sender chose to write. It stops a feed pointed at
 	// the wrong system, not someone who can reach the port.
 	AllowedFacilities []string `mapstructure:"allowed_facilities"`
+
+	// HistoryRetentionDays is how long the record of received messages is kept.
+	// 0 keeps everything, which on a hospital ADT feed is the table that fills
+	// the disk first. Defaults to 30.
+	HistoryRetentionDays int `mapstructure:"history_retention_days"`
 }
 
 // StorageConfig holds file volume settings (FR10).

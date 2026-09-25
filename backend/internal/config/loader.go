@@ -52,6 +52,7 @@ func Load(cfgPath string) (*Config, error) {
 	v.SetDefault("adt.enabled", false)
 	v.SetDefault("adt.port", 2576)
 	v.SetDefault("adt.read_timeout", "30s")
+	v.SetDefault("adt.history_retention_days", 30)
 	// Note: AutomaticEnv is intentionally omitted. Without SetEnvKeyReplacer("." → "_"),
 	// Viper cannot map env vars like SERVER_PORT to nested YAML keys like server.port.
 	// All secrets are read explicitly via os.Getenv after unmarshal (see below).

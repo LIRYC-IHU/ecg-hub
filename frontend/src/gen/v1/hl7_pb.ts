@@ -10,7 +10,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file v1/hl7.proto.
  */
 export const file_v1_hl7: GenFile = /*@__PURE__*/
-  fileDesc("Cgx2MS9obDcucHJvdG8SC2dycGMuYXBpLnYxItcBCgpPcnVBdHRlbXB0EgoKAmlkGAEgASgJEg4KBmVjZ19pZBgCIAEoCRISCgpwYXRpZW50X2lkGAMgASgJEg4KBnN0YXR1cxgEIAEoCRIQCghtc2FfY29kZRgFIAEoCRITCgttc2FfbWVzc2FnZRgGIAEoCRINCgVlcnJvchgHIAEoCRIUCgxpbmNsdWRlZF9wZGYYCCABKAgSFAoMdHJpZ2dlcmVkX2J5GAkgASgJEhMKC3Jlc3BvbnNlX21zGAogASgFEhIKCmNyZWF0ZWRfYXQYCyABKAkiqwEKCkhsN0F0dGVtcHQSCgoCaWQYASABKAkSDgoGZWNnX2lkGAIgASgJEhIKCnBhdGllbnRfaWQYAyABKAkSDgoGc3RhdHVzGAQgASgJEhAKCG1zYV9jb2RlGAUgASgJEhMKC21zYV9tZXNzYWdlGAYgASgJEg0KBWVycm9yGAcgASgJEhMKC3Jlc3BvbnNlX21zGAggASgFEhIKCmNyZWF0ZWRfYXQYCSABKAkiHgoMRm9yY2VSZXF1ZXN0Eg4KBmVjZ19pZBgBIAEoCSIjCg1Gb3JjZVJlc3BvbnNlEhIKCmhsN19zdGF0dXMYASABKAkiJQoTR2V0T3J1U3RhdHVzUmVxdWVzdBIOCgZlY2dfaWQYASABKAkiQAoUR2V0T3J1U3RhdHVzUmVzcG9uc2USKAoHYXR0ZW1wdBgBIAEoCzIXLmdycGMuYXBpLnYxLk9ydUF0dGVtcHQiIwoRU2VuZFJlc3VsdFJlcXVlc3QSDgoGZWNnX2lkGAEgASgJIj4KElNlbmRSZXN1bHRSZXNwb25zZRIoCgdhdHRlbXB0GAEgASgLMhcuZ3JwYy5hcGkudjEuT3J1QXR0ZW1wdCI4ChNMaXN0QXR0ZW1wdHNSZXF1ZXN0EhIKCnBhdGllbnRfaWQYASABKAkSDQoFbGltaXQYAiABKAUiPQoUTGlzdEF0dGVtcHRzUmVzcG9uc2USJQoEZGF0YRgBIAMoCzIXLmdycGMuYXBpLnYxLkhsN0F0dGVtcHQyzQIKCkhMN1NlcnZpY2USQAoFRm9yY2USGS5ncnBjLmFwaS52MS5Gb3JjZVJlcXVlc3QaGi5ncnBjLmFwaS52MS5Gb3JjZVJlc3BvbnNlIgASVQoMR2V0T3J1U3RhdHVzEiAuZ3JwYy5hcGkudjEuR2V0T3J1U3RhdHVzUmVxdWVzdBohLmdycGMuYXBpLnYxLkdldE9ydVN0YXR1c1Jlc3BvbnNlIgASTwoKU2VuZFJlc3VsdBIeLmdycGMuYXBpLnYxLlNlbmRSZXN1bHRSZXF1ZXN0Gh8uZ3JwYy5hcGkudjEuU2VuZFJlc3VsdFJlc3BvbnNlIgASVQoMTGlzdEF0dGVtcHRzEiAuZ3JwYy5hcGkudjEuTGlzdEF0dGVtcHRzUmVxdWVzdBohLmdycGMuYXBpLnYxLkxpc3RBdHRlbXB0c1Jlc3BvbnNlIgBCnQEKD2NvbS5ncnBjLmFwaS52MUIISGw3UHJvdG9QAVoyZ2l0aHViLmNvbS9MSVJZQy1JSFUvZWNnLWh1Yi9pbnRlcm5hbC9hcGkvdjE7YXBpdjGiAgNHQViqAgtHcnBjLkFwaS5WMcoCC0dycGNcQXBpXFYx4gIXR3JwY1xBcGlcVjFcR1BCTWV0YWRhdGHqAg1HcnBjOjpBcGk6OlYxYgZwcm90bzM");
+  fileDesc("Cgx2MS9obDcucHJvdG8SC2dycGMuYXBpLnYxItcBCgpPcnVBdHRlbXB0EgoKAmlkGAEgASgJEg4KBmVjZ19pZBgCIAEoCRISCgpwYXRpZW50X2lkGAMgASgJEg4KBnN0YXR1cxgEIAEoCRIQCghtc2FfY29kZRgFIAEoCRITCgttc2FfbWVzc2FnZRgGIAEoCRINCgVlcnJvchgHIAEoCRIUCgxpbmNsdWRlZF9wZGYYCCABKAgSFAoMdHJpZ2dlcmVkX2J5GAkgASgJEhMKC3Jlc3BvbnNlX21zGAogASgFEhIKCmNyZWF0ZWRfYXQYCyABKAkiqwEKCkhsN0F0dGVtcHQSCgoCaWQYASABKAkSDgoGZWNnX2lkGAIgASgJEhIKCnBhdGllbnRfaWQYAyABKAkSDgoGc3RhdHVzGAQgASgJEhAKCG1zYV9jb2RlGAUgASgJEhMKC21zYV9tZXNzYWdlGAYgASgJEg0KBWVycm9yGAcgASgJEhMKC3Jlc3BvbnNlX21zGAggASgFEhIKCmNyZWF0ZWRfYXQYCSABKAkiHgoMRm9yY2VSZXF1ZXN0Eg4KBmVjZ19pZBgBIAEoCSIjCg1Gb3JjZVJlc3BvbnNlEhIKCmhsN19zdGF0dXMYASABKAkiJQoTR2V0T3J1U3RhdHVzUmVxdWVzdBIOCgZlY2dfaWQYASABKAkiQAoUR2V0T3J1U3RhdHVzUmVzcG9uc2USKAoHYXR0ZW1wdBgBIAEoCzIXLmdycGMuYXBpLnYxLk9ydUF0dGVtcHQiIwoRU2VuZFJlc3VsdFJlcXVlc3QSDgoGZWNnX2lkGAEgASgJIj4KElNlbmRSZXN1bHRSZXNwb25zZRIoCgdhdHRlbXB0GAEgASgLMhcuZ3JwYy5hcGkudjEuT3J1QXR0ZW1wdCI4ChNMaXN0QXR0ZW1wdHNSZXF1ZXN0EhIKCnBhdGllbnRfaWQYASABKAkSDQoFbGltaXQYAiABKAUiPQoUTGlzdEF0dGVtcHRzUmVzcG9uc2USJQoEZGF0YRgBIAMoCzIXLmdycGMuYXBpLnYxLkhsN0F0dGVtcHQi/QEKEUhsN0luYm91bmRNZXNzYWdlEgoKAmlkGAEgASgJEhMKC3JlY2VpdmVkX2F0GAIgASgJEhUKDXRyaWdnZXJfZXZlbnQYAyABKAkSFAoMbWVzc2FnZV90eXBlGAQgASgJEhgKEHNlbmRpbmdfZmFjaWxpdHkYBSABKAkSEgoKY29udHJvbF9pZBgGIAEoCRITCgtyZW1vdGVfYWRkchgHIAEoCRIQCghzZWdtZW50cxgIIAEoCRISCgpwYXRpZW50X2lkGAkgASgJEg8KB291dGNvbWUYCiABKAkSEAoIYWNrX2NvZGUYCyABKAkSDgoGcmVhc29uGAwgASgJIlAKGkxpc3RJbmJvdW5kTWVzc2FnZXNSZXF1ZXN0EhIKCnBhdGllbnRfaWQYASABKAkSDwoHb3V0Y29tZRgCIAEoCRINCgVsaW1pdBgDIAEoBSJLChtMaXN0SW5ib3VuZE1lc3NhZ2VzUmVzcG9uc2USLAoEZGF0YRgBIAMoCzIeLmdycGMuYXBpLnYxLkhsN0luYm91bmRNZXNzYWdlMrkDCgpITDdTZXJ2aWNlEkAKBUZvcmNlEhkuZ3JwYy5hcGkudjEuRm9yY2VSZXF1ZXN0GhouZ3JwYy5hcGkudjEuRm9yY2VSZXNwb25zZSIAElUKDEdldE9ydVN0YXR1cxIgLmdycGMuYXBpLnYxLkdldE9ydVN0YXR1c1JlcXVlc3QaIS5ncnBjLmFwaS52MS5HZXRPcnVTdGF0dXNSZXNwb25zZSIAEk8KClNlbmRSZXN1bHQSHi5ncnBjLmFwaS52MS5TZW5kUmVzdWx0UmVxdWVzdBofLmdycGMuYXBpLnYxLlNlbmRSZXN1bHRSZXNwb25zZSIAElUKDExpc3RBdHRlbXB0cxIgLmdycGMuYXBpLnYxLkxpc3RBdHRlbXB0c1JlcXVlc3QaIS5ncnBjLmFwaS52MS5MaXN0QXR0ZW1wdHNSZXNwb25zZSIAEmoKE0xpc3RJbmJvdW5kTWVzc2FnZXMSJy5ncnBjLmFwaS52MS5MaXN0SW5ib3VuZE1lc3NhZ2VzUmVxdWVzdBooLmdycGMuYXBpLnYxLkxpc3RJbmJvdW5kTWVzc2FnZXNSZXNwb25zZSIAQp0BCg9jb20uZ3JwYy5hcGkudjFCCEhsN1Byb3RvUAFaMmdpdGh1Yi5jb20vTElSWUMtSUhVL2VjZy1odWIvaW50ZXJuYWwvYXBpL3YxO2FwaXYxogIDR0FYqgILR3JwYy5BcGkuVjHKAgtHcnBjXEFwaVxWMeICF0dycGNcQXBpXFYxXEdQQk1ldGFkYXRh6gINR3JwYzo6QXBpOjpWMWIGcHJvdG8z");
 
 /**
  * OruAttempt mirrors models.HL7ORUAttempt — the outcome of an outbound HL7 ORU
@@ -305,6 +305,146 @@ export const ListAttemptsResponseSchema: GenMessage<ListAttemptsResponse> = /*@_
   messageDesc(file_v1_hl7, 9);
 
 /**
+ * Hl7InboundMessage is one ADT message received on the inbound listener
+ * (IHE RAD-12 Patient Update) and what became of it.
+ *
+ * It carries no message body on purpose: an ADT holds the patient's name, date
+ * of birth and address, and this history exists to answer operational questions
+ * — did the feed arrive, was it accepted, why did nothing change — not to become
+ * a second copy of the demographics. Segments lists the segment names the
+ * message carried, which is what tells an operator whether the feed sends what
+ * the mappings need.
+ *
+ * @generated from message grpc.api.v1.Hl7InboundMessage
+ */
+export type Hl7InboundMessage = Message<"grpc.api.v1.Hl7InboundMessage"> & {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * RFC3339
+   *
+   * @generated from field: string received_at = 2;
+   */
+  receivedAt: string;
+
+  /**
+   * A08, A40, ...
+   *
+   * @generated from field: string trigger_event = 3;
+   */
+  triggerEvent: string;
+
+  /**
+   * @generated from field: string message_type = 4;
+   */
+  messageType: string;
+
+  /**
+   * @generated from field: string sending_facility = 5;
+   */
+  sendingFacility: string;
+
+  /**
+   * @generated from field: string control_id = 6;
+   */
+  controlId: string;
+
+  /**
+   * @generated from field: string remote_addr = 7;
+   */
+  remoteAddr: string;
+
+  /**
+   * @generated from field: string segments = 8;
+   */
+  segments: string;
+
+  /**
+   * @generated from field: string patient_id = 9;
+   */
+  patientId: string;
+
+  /**
+   * applied | ignored | refused | error
+   *
+   * @generated from field: string outcome = 10;
+   */
+  outcome: string;
+
+  /**
+   * AA | AE | AR
+   *
+   * @generated from field: string ack_code = 11;
+   */
+  ackCode: string;
+
+  /**
+   * @generated from field: string reason = 12;
+   */
+  reason: string;
+};
+
+/**
+ * Describes the message grpc.api.v1.Hl7InboundMessage.
+ * Use `create(Hl7InboundMessageSchema)` to create a new message.
+ */
+export const Hl7InboundMessageSchema: GenMessage<Hl7InboundMessage> = /*@__PURE__*/
+  messageDesc(file_v1_hl7, 10);
+
+/**
+ * @generated from message grpc.api.v1.ListInboundMessagesRequest
+ */
+export type ListInboundMessagesRequest = Message<"grpc.api.v1.ListInboundMessagesRequest"> & {
+  /**
+   * optional filter
+   *
+   * @generated from field: string patient_id = 1;
+   */
+  patientId: string;
+
+  /**
+   * optional filter
+   *
+   * @generated from field: string outcome = 2;
+   */
+  outcome: string;
+
+  /**
+   * 1..500, defaults to 100
+   *
+   * @generated from field: int32 limit = 3;
+   */
+  limit: number;
+};
+
+/**
+ * Describes the message grpc.api.v1.ListInboundMessagesRequest.
+ * Use `create(ListInboundMessagesRequestSchema)` to create a new message.
+ */
+export const ListInboundMessagesRequestSchema: GenMessage<ListInboundMessagesRequest> = /*@__PURE__*/
+  messageDesc(file_v1_hl7, 11);
+
+/**
+ * @generated from message grpc.api.v1.ListInboundMessagesResponse
+ */
+export type ListInboundMessagesResponse = Message<"grpc.api.v1.ListInboundMessagesResponse"> & {
+  /**
+   * @generated from field: repeated grpc.api.v1.Hl7InboundMessage data = 1;
+   */
+  data: Hl7InboundMessage[];
+};
+
+/**
+ * Describes the message grpc.api.v1.ListInboundMessagesResponse.
+ * Use `create(ListInboundMessagesResponseSchema)` to create a new message.
+ */
+export const ListInboundMessagesResponseSchema: GenMessage<ListInboundMessagesResponse> = /*@__PURE__*/
+  messageDesc(file_v1_hl7, 12);
+
+/**
  * @generated from service grpc.api.v1.HL7Service
  */
 export const HL7Service: GenService<{
@@ -339,6 +479,14 @@ export const HL7Service: GenService<{
     methodKind: "unary";
     input: typeof ListAttemptsRequestSchema;
     output: typeof ListAttemptsResponseSchema;
+  },
+  /**
+   * @generated from rpc grpc.api.v1.HL7Service.ListInboundMessages
+   */
+  listInboundMessages: {
+    methodKind: "unary";
+    input: typeof ListInboundMessagesRequestSchema;
+    output: typeof ListInboundMessagesResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_v1_hl7, 0);

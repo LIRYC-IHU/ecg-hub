@@ -41,7 +41,8 @@ func mergeHandle(t *testing.T, msg *InboundMessage, m PatientMerger) (string, st
 	h := NewADTHandler(applierNoop{}, m, func() ([]models.HL7Mapping, error) {
 		return adtMappings, nil
 	})
-	return h(msg)
+	r := h(msg)
+	return r.ack(), r.Text
 }
 
 func TestBuildPatientMerge_ReadsBothIdentifiers(t *testing.T) {
@@ -141,7 +142,7 @@ func TestMergeHandler_WithoutAMergerA40IsLeftAlone(t *testing.T) {
 	h := NewPatientUpdateHandler(applierNoop{}, func() ([]models.HL7Mapping, error) {
 		return adtMappings, nil
 	})
-	code, _ := h(mergeMsg("PID|1||BS1215", "MRG|MRN-BS1215"))
+	code := h(mergeMsg("PID|1||BS1215", "MRG|MRN-BS1215")).ack()
 	if code != ACKAccepted {
 		t.Errorf("ack = %q, want AA", code)
 	}

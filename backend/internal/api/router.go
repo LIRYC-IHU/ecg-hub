@@ -567,6 +567,7 @@ func (r *RouterConfig) RegisterRoutes() {
 			ORUService:  r.oruService,
 			ORURepo:     repository.NewHL7ORUAttemptRepository(r.gormDB),
 			AttemptRepo: repository.NewHL7AttemptRepository(r.gormDB),
+			InboundRepo: repository.NewHL7InboundRepository(r.gormDB),
 		},
 		connect.WithInterceptors(metricsInterceptor,
 			validateInterceptor,
@@ -576,6 +577,10 @@ func (r *RouterConfig) RegisterRoutes() {
 				apiv1connect.HL7ServiceGetOruStatusProcedure: auth.PermECGRead,
 				apiv1connect.HL7ServiceSendResultProcedure:   auth.PermECGSendResult,
 				apiv1connect.HL7ServiceListAttemptsProcedure: auth.PermPatientRead,
+				// The received-message history is operational rather than clinical —
+				// what a feed sent and whether it was accepted — and it carries no
+				// demographics, so it sits with the other HL7 administration.
+				apiv1connect.HL7ServiceListInboundMessagesProcedure: auth.PermHL7Config,
 			}),
 		),
 	)

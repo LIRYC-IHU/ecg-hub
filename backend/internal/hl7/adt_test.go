@@ -116,7 +116,8 @@ func (a *applierStub) ApplyPatientUpdate(u *PatientUpdate) (bool, error) {
 func handle(t *testing.T, msg *InboundMessage, stub *applierStub, maps []models.HL7Mapping) (string, string) {
 	t.Helper()
 	h := NewPatientUpdateHandler(stub, func() ([]models.HL7Mapping, error) { return maps, nil })
-	return h(msg)
+	r := h(msg)
+	return r.ack(), r.Text
 }
 
 func TestPatientUpdateHandler_AppliesAnA08(t *testing.T) {

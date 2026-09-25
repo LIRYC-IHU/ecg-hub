@@ -55,9 +55,9 @@ func send(t *testing.T, addr net.Addr, msg string) string {
 
 func TestListener_AcknowledgesAndRoutesByTriggerEvent(t *testing.T) {
 	var got *InboundMessage
-	l := startListener(t, ListenerSettings{}, func(m *InboundMessage) (string, string) {
+	l := startListener(t, ListenerSettings{}, func(m *InboundMessage) Result {
 		got = m
-		return ACKAccepted, ""
+		return Result{}
 	})
 
 	ack := send(t, l.Addr(), a08)
@@ -102,8 +102,8 @@ func TestListener_MirrorsTheAddressingInTheAcknowledgement(t *testing.T) {
 func TestListener_AcknowledgesEvenAMessageItCannotRoute(t *testing.T) {
 	// A sender that gets nothing back retries forever. An answer it can match,
 	// even a refusal, is what lets the feed move on.
-	l := startListener(t, ListenerSettings{}, func(*InboundMessage) (string, string) {
-		return ACKError, "not something this system can apply"
+	l := startListener(t, ListenerSettings{}, func(*InboundMessage) Result {
+		return Result{AckCode: ACKError, Text: "not something this system can apply"}
 	})
 
 	ack := send(t, l.Addr(), "MSH|^~\\&|X|Y|Z|W|20260924100000||ADT^A99|MSG9|P|2.5\r")
@@ -120,11 +120,11 @@ func TestListener_SeveralMessagesOnOneConnection(t *testing.T) {
 	// A feed keeps its connection open and sends message after message.
 	var mu sync.Mutex
 	var count int
-	l := startListener(t, ListenerSettings{}, func(*InboundMessage) (string, string) {
+	l := startListener(t, ListenerSettings{}, func(*InboundMessage) Result {
 		mu.Lock()
 		count++
 		mu.Unlock()
-		return ACKAccepted, ""
+		return Result{}
 	})
 
 	conn, err := net.DialTimeout("tcp", l.Addr().String(), 2*time.Second)
@@ -158,7 +158,7 @@ func TestListener_SeveralMessagesOnOneConnection(t *testing.T) {
 func TestListener_RefusesAnUnlistedSendingFacility(t *testing.T) {
 	called := false
 	l := startListener(t, ListenerSettings{AllowedFacilities: []string{"CHU_BORDEAUX"}},
-		func(*InboundMessage) (string, string) { called = true; return ACKAccepted, "" })
+		func(*InboundMessage) Result { called = true; return Result{} })
 
 	// Accepted facility.
 	if code := AckCode(send(t, l.Addr(), a08)); code != ACKAccepted {
@@ -181,8 +181,8 @@ func TestListener_RefusesAnUnlistedSendingFacility(t *testing.T) {
 
 func TestListener_AnEmptyAllowlistAcceptsEveryone(t *testing.T) {
 	// An upgrade must not lock out a deployment that has configured nothing.
-	l := startListener(t, ListenerSettings{}, func(*InboundMessage) (string, string) {
-		return ACKAccepted, ""
+	l := startListener(t, ListenerSettings{}, func(*InboundMessage) Result {
+		return Result{}
 	})
 	if code := AckCode(send(t, l.Addr(), a08)); code != ACKAccepted {
 		t.Errorf("answered %q with no allowlist configured, want AA", code)

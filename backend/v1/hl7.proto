@@ -63,9 +63,43 @@ message ListAttemptsResponse {
   repeated Hl7Attempt data = 1;
 }
 
+// Hl7InboundMessage is one ADT message received on the inbound listener
+// (IHE RAD-12 Patient Update) and what became of it.
+//
+// It carries no message body on purpose: an ADT holds the patient's name, date
+// of birth and address, and this history exists to answer operational questions
+// — did the feed arrive, was it accepted, why did nothing change — not to become
+// a second copy of the demographics. Segments lists the segment names the
+// message carried, which is what tells an operator whether the feed sends what
+// the mappings need.
+message Hl7InboundMessage {
+  string id = 1;
+  string received_at = 2; // RFC3339
+  string trigger_event = 3; // A08, A40, ...
+  string message_type = 4;
+  string sending_facility = 5;
+  string control_id = 6;
+  string remote_addr = 7;
+  string segments = 8;
+  string patient_id = 9;
+  string outcome = 10; // applied | ignored | refused | error
+  string ack_code = 11; // AA | AE | AR
+  string reason = 12;
+}
+
+message ListInboundMessagesRequest {
+  string patient_id = 1; // optional filter
+  string outcome = 2;    // optional filter
+  int32 limit = 3;       // 1..500, defaults to 100
+}
+message ListInboundMessagesResponse {
+  repeated Hl7InboundMessage data = 1;
+}
+
 service HL7Service {
   rpc Force(ForceRequest) returns (ForceResponse) {}
   rpc GetOruStatus(GetOruStatusRequest) returns (GetOruStatusResponse) {}
   rpc SendResult(SendResultRequest) returns (SendResultResponse) {}
   rpc ListAttempts(ListAttemptsRequest) returns (ListAttemptsResponse) {}
+  rpc ListInboundMessages(ListInboundMessagesRequest) returns (ListInboundMessagesResponse) {}
 }

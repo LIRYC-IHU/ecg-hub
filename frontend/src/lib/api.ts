@@ -1405,6 +1405,54 @@ export async function fetchHL7History(
   }));
 }
 
+// ─── Inbound ADT (IHE RAD-12 Patient Update) ────────────────────────────────
+
+export interface HL7InboundMessage {
+  id: string;
+  received_at: string;
+  trigger_event: string;
+  message_type: string;
+  sending_facility: string;
+  control_id: string;
+  remote_addr: string;
+  segments: string;
+  patient_id: string;
+  /** applied | ignored | refused | error — what became of the message. */
+  outcome: string;
+  /** AA | AE | AR — what was sent back. Not the same question as the outcome:
+   *  an update that changed a record and one for a patient we do not hold both
+   *  answer AA. */
+  ack_code: string;
+  reason: string;
+}
+
+export async function fetchHL7InboundMessages(params?: {
+  patientId?: string;
+  outcome?: string;
+  limit?: number;
+}): Promise<HL7InboundMessage[]> {
+  // gRPC: HL7Service.ListInboundMessages (most recent first).
+  const res = await hl7Client.listInboundMessages({
+    patientId: params?.patientId ?? "",
+    outcome: params?.outcome ?? "",
+    limit: params?.limit ?? 100,
+  });
+  return res.data.map((m) => ({
+    id: m.id,
+    received_at: m.receivedAt,
+    trigger_event: m.triggerEvent,
+    message_type: m.messageType,
+    sending_facility: m.sendingFacility,
+    control_id: m.controlId,
+    remote_addr: m.remoteAddr,
+    segments: m.segments,
+    patient_id: m.patientId,
+    outcome: m.outcome,
+    ack_code: m.ackCode,
+    reason: m.reason,
+  }));
+}
+
 // ─── Tags ───────────────────────────────────────────────────────────────────
 
 export interface TagDTO {

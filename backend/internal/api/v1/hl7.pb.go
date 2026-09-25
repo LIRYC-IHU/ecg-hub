@@ -616,6 +616,251 @@ func (x *ListAttemptsResponse) GetData() []*Hl7Attempt {
 	return nil
 }
 
+// Hl7InboundMessage is one ADT message received on the inbound listener
+// (IHE RAD-12 Patient Update) and what became of it.
+//
+// It carries no message body on purpose: an ADT holds the patient's name, date
+// of birth and address, and this history exists to answer operational questions
+// — did the feed arrive, was it accepted, why did nothing change — not to become
+// a second copy of the demographics. Segments lists the segment names the
+// message carried, which is what tells an operator whether the feed sends what
+// the mappings need.
+type Hl7InboundMessage struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Id              string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	ReceivedAt      string                 `protobuf:"bytes,2,opt,name=received_at,json=receivedAt,proto3" json:"received_at,omitempty"`       // RFC3339
+	TriggerEvent    string                 `protobuf:"bytes,3,opt,name=trigger_event,json=triggerEvent,proto3" json:"trigger_event,omitempty"` // A08, A40, ...
+	MessageType     string                 `protobuf:"bytes,4,opt,name=message_type,json=messageType,proto3" json:"message_type,omitempty"`
+	SendingFacility string                 `protobuf:"bytes,5,opt,name=sending_facility,json=sendingFacility,proto3" json:"sending_facility,omitempty"`
+	ControlId       string                 `protobuf:"bytes,6,opt,name=control_id,json=controlId,proto3" json:"control_id,omitempty"`
+	RemoteAddr      string                 `protobuf:"bytes,7,opt,name=remote_addr,json=remoteAddr,proto3" json:"remote_addr,omitempty"`
+	Segments        string                 `protobuf:"bytes,8,opt,name=segments,proto3" json:"segments,omitempty"`
+	PatientId       string                 `protobuf:"bytes,9,opt,name=patient_id,json=patientId,proto3" json:"patient_id,omitempty"`
+	Outcome         string                 `protobuf:"bytes,10,opt,name=outcome,proto3" json:"outcome,omitempty"`                // applied | ignored | refused | error
+	AckCode         string                 `protobuf:"bytes,11,opt,name=ack_code,json=ackCode,proto3" json:"ack_code,omitempty"` // AA | AE | AR
+	Reason          string                 `protobuf:"bytes,12,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *Hl7InboundMessage) Reset() {
+	*x = Hl7InboundMessage{}
+	mi := &file_v1_hl7_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Hl7InboundMessage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Hl7InboundMessage) ProtoMessage() {}
+
+func (x *Hl7InboundMessage) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_hl7_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Hl7InboundMessage.ProtoReflect.Descriptor instead.
+func (*Hl7InboundMessage) Descriptor() ([]byte, []int) {
+	return file_v1_hl7_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *Hl7InboundMessage) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *Hl7InboundMessage) GetReceivedAt() string {
+	if x != nil {
+		return x.ReceivedAt
+	}
+	return ""
+}
+
+func (x *Hl7InboundMessage) GetTriggerEvent() string {
+	if x != nil {
+		return x.TriggerEvent
+	}
+	return ""
+}
+
+func (x *Hl7InboundMessage) GetMessageType() string {
+	if x != nil {
+		return x.MessageType
+	}
+	return ""
+}
+
+func (x *Hl7InboundMessage) GetSendingFacility() string {
+	if x != nil {
+		return x.SendingFacility
+	}
+	return ""
+}
+
+func (x *Hl7InboundMessage) GetControlId() string {
+	if x != nil {
+		return x.ControlId
+	}
+	return ""
+}
+
+func (x *Hl7InboundMessage) GetRemoteAddr() string {
+	if x != nil {
+		return x.RemoteAddr
+	}
+	return ""
+}
+
+func (x *Hl7InboundMessage) GetSegments() string {
+	if x != nil {
+		return x.Segments
+	}
+	return ""
+}
+
+func (x *Hl7InboundMessage) GetPatientId() string {
+	if x != nil {
+		return x.PatientId
+	}
+	return ""
+}
+
+func (x *Hl7InboundMessage) GetOutcome() string {
+	if x != nil {
+		return x.Outcome
+	}
+	return ""
+}
+
+func (x *Hl7InboundMessage) GetAckCode() string {
+	if x != nil {
+		return x.AckCode
+	}
+	return ""
+}
+
+func (x *Hl7InboundMessage) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+type ListInboundMessagesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	PatientId     string                 `protobuf:"bytes,1,opt,name=patient_id,json=patientId,proto3" json:"patient_id,omitempty"` // optional filter
+	Outcome       string                 `protobuf:"bytes,2,opt,name=outcome,proto3" json:"outcome,omitempty"`                      // optional filter
+	Limit         int32                  `protobuf:"varint,3,opt,name=limit,proto3" json:"limit,omitempty"`                         // 1..500, defaults to 100
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListInboundMessagesRequest) Reset() {
+	*x = ListInboundMessagesRequest{}
+	mi := &file_v1_hl7_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListInboundMessagesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListInboundMessagesRequest) ProtoMessage() {}
+
+func (x *ListInboundMessagesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_hl7_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListInboundMessagesRequest.ProtoReflect.Descriptor instead.
+func (*ListInboundMessagesRequest) Descriptor() ([]byte, []int) {
+	return file_v1_hl7_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *ListInboundMessagesRequest) GetPatientId() string {
+	if x != nil {
+		return x.PatientId
+	}
+	return ""
+}
+
+func (x *ListInboundMessagesRequest) GetOutcome() string {
+	if x != nil {
+		return x.Outcome
+	}
+	return ""
+}
+
+func (x *ListInboundMessagesRequest) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+type ListInboundMessagesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Data          []*Hl7InboundMessage   `protobuf:"bytes,1,rep,name=data,proto3" json:"data,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListInboundMessagesResponse) Reset() {
+	*x = ListInboundMessagesResponse{}
+	mi := &file_v1_hl7_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListInboundMessagesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListInboundMessagesResponse) ProtoMessage() {}
+
+func (x *ListInboundMessagesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_v1_hl7_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListInboundMessagesResponse.ProtoReflect.Descriptor instead.
+func (*ListInboundMessagesResponse) Descriptor() ([]byte, []int) {
+	return file_v1_hl7_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *ListInboundMessagesResponse) GetData() []*Hl7InboundMessage {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
 var File_v1_hl7_proto protoreflect.FileDescriptor
 
 const file_v1_hl7_proto_rawDesc = "" +
@@ -672,14 +917,40 @@ const file_v1_hl7_proto_rawDesc = "" +
 	"patient_id\x18\x01 \x01(\tR\tpatientId\x12\x14\n" +
 	"\x05limit\x18\x02 \x01(\x05R\x05limit\"C\n" +
 	"\x14ListAttemptsResponse\x12+\n" +
-	"\x04data\x18\x01 \x03(\v2\x17.grpc.api.v1.Hl7AttemptR\x04data2\xcd\x02\n" +
+	"\x04data\x18\x01 \x03(\v2\x17.grpc.api.v1.Hl7AttemptR\x04data\"\xff\x02\n" +
+	"\x11Hl7InboundMessage\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1f\n" +
+	"\vreceived_at\x18\x02 \x01(\tR\n" +
+	"receivedAt\x12#\n" +
+	"\rtrigger_event\x18\x03 \x01(\tR\ftriggerEvent\x12!\n" +
+	"\fmessage_type\x18\x04 \x01(\tR\vmessageType\x12)\n" +
+	"\x10sending_facility\x18\x05 \x01(\tR\x0fsendingFacility\x12\x1d\n" +
+	"\n" +
+	"control_id\x18\x06 \x01(\tR\tcontrolId\x12\x1f\n" +
+	"\vremote_addr\x18\a \x01(\tR\n" +
+	"remoteAddr\x12\x1a\n" +
+	"\bsegments\x18\b \x01(\tR\bsegments\x12\x1d\n" +
+	"\n" +
+	"patient_id\x18\t \x01(\tR\tpatientId\x12\x18\n" +
+	"\aoutcome\x18\n" +
+	" \x01(\tR\aoutcome\x12\x19\n" +
+	"\back_code\x18\v \x01(\tR\aackCode\x12\x16\n" +
+	"\x06reason\x18\f \x01(\tR\x06reason\"k\n" +
+	"\x1aListInboundMessagesRequest\x12\x1d\n" +
+	"\n" +
+	"patient_id\x18\x01 \x01(\tR\tpatientId\x12\x18\n" +
+	"\aoutcome\x18\x02 \x01(\tR\aoutcome\x12\x14\n" +
+	"\x05limit\x18\x03 \x01(\x05R\x05limit\"Q\n" +
+	"\x1bListInboundMessagesResponse\x122\n" +
+	"\x04data\x18\x01 \x03(\v2\x1e.grpc.api.v1.Hl7InboundMessageR\x04data2\xb9\x03\n" +
 	"\n" +
 	"HL7Service\x12@\n" +
 	"\x05Force\x12\x19.grpc.api.v1.ForceRequest\x1a\x1a.grpc.api.v1.ForceResponse\"\x00\x12U\n" +
 	"\fGetOruStatus\x12 .grpc.api.v1.GetOruStatusRequest\x1a!.grpc.api.v1.GetOruStatusResponse\"\x00\x12O\n" +
 	"\n" +
 	"SendResult\x12\x1e.grpc.api.v1.SendResultRequest\x1a\x1f.grpc.api.v1.SendResultResponse\"\x00\x12U\n" +
-	"\fListAttempts\x12 .grpc.api.v1.ListAttemptsRequest\x1a!.grpc.api.v1.ListAttemptsResponse\"\x00B\x9d\x01\n" +
+	"\fListAttempts\x12 .grpc.api.v1.ListAttemptsRequest\x1a!.grpc.api.v1.ListAttemptsResponse\"\x00\x12j\n" +
+	"\x13ListInboundMessages\x12'.grpc.api.v1.ListInboundMessagesRequest\x1a(.grpc.api.v1.ListInboundMessagesResponse\"\x00B\x9d\x01\n" +
 	"\x0fcom.grpc.api.v1B\bHl7ProtoP\x01Z2github.com/LIRYC-IHU/ecg-hub/internal/api/v1;apiv1\xa2\x02\x03GAX\xaa\x02\vGrpc.Api.V1\xca\x02\vGrpc\\Api\\V1\xe2\x02\x17Grpc\\Api\\V1\\GPBMetadata\xea\x02\rGrpc::Api::V1b\x06proto3"
 
 var (
@@ -694,36 +965,42 @@ func file_v1_hl7_proto_rawDescGZIP() []byte {
 	return file_v1_hl7_proto_rawDescData
 }
 
-var file_v1_hl7_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_v1_hl7_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_v1_hl7_proto_goTypes = []any{
-	(*OruAttempt)(nil),           // 0: grpc.api.v1.OruAttempt
-	(*Hl7Attempt)(nil),           // 1: grpc.api.v1.Hl7Attempt
-	(*ForceRequest)(nil),         // 2: grpc.api.v1.ForceRequest
-	(*ForceResponse)(nil),        // 3: grpc.api.v1.ForceResponse
-	(*GetOruStatusRequest)(nil),  // 4: grpc.api.v1.GetOruStatusRequest
-	(*GetOruStatusResponse)(nil), // 5: grpc.api.v1.GetOruStatusResponse
-	(*SendResultRequest)(nil),    // 6: grpc.api.v1.SendResultRequest
-	(*SendResultResponse)(nil),   // 7: grpc.api.v1.SendResultResponse
-	(*ListAttemptsRequest)(nil),  // 8: grpc.api.v1.ListAttemptsRequest
-	(*ListAttemptsResponse)(nil), // 9: grpc.api.v1.ListAttemptsResponse
+	(*OruAttempt)(nil),                  // 0: grpc.api.v1.OruAttempt
+	(*Hl7Attempt)(nil),                  // 1: grpc.api.v1.Hl7Attempt
+	(*ForceRequest)(nil),                // 2: grpc.api.v1.ForceRequest
+	(*ForceResponse)(nil),               // 3: grpc.api.v1.ForceResponse
+	(*GetOruStatusRequest)(nil),         // 4: grpc.api.v1.GetOruStatusRequest
+	(*GetOruStatusResponse)(nil),        // 5: grpc.api.v1.GetOruStatusResponse
+	(*SendResultRequest)(nil),           // 6: grpc.api.v1.SendResultRequest
+	(*SendResultResponse)(nil),          // 7: grpc.api.v1.SendResultResponse
+	(*ListAttemptsRequest)(nil),         // 8: grpc.api.v1.ListAttemptsRequest
+	(*ListAttemptsResponse)(nil),        // 9: grpc.api.v1.ListAttemptsResponse
+	(*Hl7InboundMessage)(nil),           // 10: grpc.api.v1.Hl7InboundMessage
+	(*ListInboundMessagesRequest)(nil),  // 11: grpc.api.v1.ListInboundMessagesRequest
+	(*ListInboundMessagesResponse)(nil), // 12: grpc.api.v1.ListInboundMessagesResponse
 }
 var file_v1_hl7_proto_depIdxs = []int32{
-	0, // 0: grpc.api.v1.GetOruStatusResponse.attempt:type_name -> grpc.api.v1.OruAttempt
-	0, // 1: grpc.api.v1.SendResultResponse.attempt:type_name -> grpc.api.v1.OruAttempt
-	1, // 2: grpc.api.v1.ListAttemptsResponse.data:type_name -> grpc.api.v1.Hl7Attempt
-	2, // 3: grpc.api.v1.HL7Service.Force:input_type -> grpc.api.v1.ForceRequest
-	4, // 4: grpc.api.v1.HL7Service.GetOruStatus:input_type -> grpc.api.v1.GetOruStatusRequest
-	6, // 5: grpc.api.v1.HL7Service.SendResult:input_type -> grpc.api.v1.SendResultRequest
-	8, // 6: grpc.api.v1.HL7Service.ListAttempts:input_type -> grpc.api.v1.ListAttemptsRequest
-	3, // 7: grpc.api.v1.HL7Service.Force:output_type -> grpc.api.v1.ForceResponse
-	5, // 8: grpc.api.v1.HL7Service.GetOruStatus:output_type -> grpc.api.v1.GetOruStatusResponse
-	7, // 9: grpc.api.v1.HL7Service.SendResult:output_type -> grpc.api.v1.SendResultResponse
-	9, // 10: grpc.api.v1.HL7Service.ListAttempts:output_type -> grpc.api.v1.ListAttemptsResponse
-	7, // [7:11] is the sub-list for method output_type
-	3, // [3:7] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	0,  // 0: grpc.api.v1.GetOruStatusResponse.attempt:type_name -> grpc.api.v1.OruAttempt
+	0,  // 1: grpc.api.v1.SendResultResponse.attempt:type_name -> grpc.api.v1.OruAttempt
+	1,  // 2: grpc.api.v1.ListAttemptsResponse.data:type_name -> grpc.api.v1.Hl7Attempt
+	10, // 3: grpc.api.v1.ListInboundMessagesResponse.data:type_name -> grpc.api.v1.Hl7InboundMessage
+	2,  // 4: grpc.api.v1.HL7Service.Force:input_type -> grpc.api.v1.ForceRequest
+	4,  // 5: grpc.api.v1.HL7Service.GetOruStatus:input_type -> grpc.api.v1.GetOruStatusRequest
+	6,  // 6: grpc.api.v1.HL7Service.SendResult:input_type -> grpc.api.v1.SendResultRequest
+	8,  // 7: grpc.api.v1.HL7Service.ListAttempts:input_type -> grpc.api.v1.ListAttemptsRequest
+	11, // 8: grpc.api.v1.HL7Service.ListInboundMessages:input_type -> grpc.api.v1.ListInboundMessagesRequest
+	3,  // 9: grpc.api.v1.HL7Service.Force:output_type -> grpc.api.v1.ForceResponse
+	5,  // 10: grpc.api.v1.HL7Service.GetOruStatus:output_type -> grpc.api.v1.GetOruStatusResponse
+	7,  // 11: grpc.api.v1.HL7Service.SendResult:output_type -> grpc.api.v1.SendResultResponse
+	9,  // 12: grpc.api.v1.HL7Service.ListAttempts:output_type -> grpc.api.v1.ListAttemptsResponse
+	12, // 13: grpc.api.v1.HL7Service.ListInboundMessages:output_type -> grpc.api.v1.ListInboundMessagesResponse
+	9,  // [9:14] is the sub-list for method output_type
+	4,  // [4:9] is the sub-list for method input_type
+	4,  // [4:4] is the sub-list for extension type_name
+	4,  // [4:4] is the sub-list for extension extendee
+	0,  // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_v1_hl7_proto_init() }
@@ -737,7 +1014,7 @@ func file_v1_hl7_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_v1_hl7_proto_rawDesc), len(file_v1_hl7_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   10,
+			NumMessages:   13,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

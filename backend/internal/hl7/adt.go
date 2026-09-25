@@ -226,28 +226,30 @@ func newADTHandler(
 	merger PatientMerger,
 	mappings func() ([]models.HL7Mapping, error),
 ) Handler {
-	return func(msg *InboundMessage) (string, string) {
-		ack := func(code, text string) (string, string) {
-			appmetrics.HL7InboundHandled.WithLabelValues(msg.TriggerEvent, code).Inc()
-			return code, text
+	return func(msg *InboundMessage) Result {
+		ack := func(r Result) Result {
+			appmetrics.HL7InboundHandled.WithLabelValues(msg.TriggerEvent, r.ack()).Inc()
+			return r
 		}
 
 		if msg.TriggerEvent != "A08" && !(msg.TriggerEvent == "A40" && merger != nil) {
 			slog.Info("hl7 adt: acknowledged without acting",
 				"trigger", msg.TriggerEvent, "control_id", msg.ControlID)
-			return ack(ACKAccepted, "")
+			return ack(Result{Outcome: models.InboundIgnored})
 		}
 
 		active, err := mappings()
 		if err != nil {
 			slog.Error("hl7 adt: could not load the field mappings", "error", err)
-			return ack(ACKError, "field mappings unavailable")
+			return ack(Result{AckCode: ACKError, Text: "field mappings unavailable",
+				Outcome: models.InboundError})
 		}
 		if len(active) == 0 {
 			// Without mappings nothing can be read out of the message, and
 			// applying an empty update would blank the record.
 			slog.Error("hl7 adt: no active field mapping preset — refusing to interpret the message")
-			return ack(ACKError, "no active field mapping preset")
+			return ack(Result{AckCode: ACKError, Text: "no active field mapping preset",
+				Outcome: models.InboundError})
 		}
 
 		if msg.TriggerEvent == "A40" {
@@ -258,18 +260,20 @@ func newADTHandler(
 		if u.PatientID == "" {
 			slog.Warn("hl7 adt: no patient identifier in the message",
 				"control_id", msg.ControlID, "facility", msg.SendingFacility)
-			return ack(ACKError, "no patient identifier could be read from PID-3")
+			return ack(Result{AckCode: ACKError, Outcome: models.InboundError,
+				Text: "no patient identifier could be read from PID-3"})
 		}
 		if u.Empty() {
 			slog.Info("hl7 adt: nothing to change", "patient_id", u.PatientID, "control_id", msg.ControlID)
-			return ack(ACKAccepted, "")
+			return ack(Result{Outcome: models.InboundIgnored, PatientID: u.PatientID})
 		}
 
 		found, err := repo.ApplyPatientUpdate(u)
 		if err != nil {
 			slog.Error("hl7 adt: update failed",
 				"patient_id", u.PatientID, "control_id", msg.ControlID, "error", err)
-			return ack(ACKError, "the update could not be applied")
+			return ack(Result{AckCode: ACKError, Outcome: models.InboundError,
+				PatientID: u.PatientID, Text: "the update could not be applied"})
 		}
 		if !found {
 			// Patients here are created when an ECG arrives. Creating one from
@@ -279,13 +283,13 @@ func newADTHandler(
 			// would have the sender retry something that will never apply.
 			slog.Info("hl7 adt: no such patient — ignored",
 				"patient_id", u.PatientID, "control_id", msg.ControlID)
-			return ack(ACKAccepted, "")
+			return ack(Result{Outcome: models.InboundIgnored, PatientID: u.PatientID})
 		}
 
 		slog.Info("hl7 adt: patient updated",
 			"patient_id", u.PatientID, "control_id", msg.ControlID,
 			"facility", msg.SendingFacility, "event_at", u.EventAt)
-		return ack(ACKAccepted, "")
+		return ack(Result{Outcome: models.InboundApplied, PatientID: u.PatientID})
 	}
 }
 
@@ -299,19 +303,20 @@ func applyMerge(
 	msg *InboundMessage,
 	mappings []models.HL7Mapping,
 	merger PatientMerger,
-	ack func(string, string) (string, string),
-) (string, string) {
+	ack func(Result) Result,
+) Result {
 	m := BuildPatientMerge(msg, mappings)
 
 	if m.SurvivingID == "" || m.PriorID == "" {
 		slog.Warn("hl7 adt: a merge needs both identifiers",
 			"surviving", m.SurvivingID, "prior", m.PriorID, "control_id", msg.ControlID)
-		return ack(ACKError, "a merge needs both PID-3 and MRG-1")
+		return ack(Result{AckCode: ACKError, Outcome: models.InboundError,
+			Text: "a merge needs both PID-3 and MRG-1"})
 	}
 	if m.SurvivingID == m.PriorID {
 		slog.Info("hl7 adt: merge into itself — nothing to do",
 			"patient_id", m.SurvivingID, "control_id", msg.ControlID)
-		return ack(ACKAccepted, "")
+		return ack(Result{Outcome: models.InboundIgnored, PatientID: m.SurvivingID})
 	}
 
 	moved, err := merger.RekeyPatient(m.PriorID, m.SurvivingID)
@@ -319,7 +324,8 @@ func applyMerge(
 		slog.Error("hl7 adt: merge failed",
 			"prior", m.PriorID, "surviving", m.SurvivingID,
 			"control_id", msg.ControlID, "error", err)
-		return ack(ACKError, "the merge could not be applied")
+		return ack(Result{AckCode: ACKError, Outcome: models.InboundError,
+			PatientID: m.SurvivingID, Text: "the merge could not be applied"})
 	}
 
 	// The framework says to create the surviving patient from the A40 when the
@@ -330,5 +336,12 @@ func applyMerge(
 	slog.Info("hl7 adt: patient merged",
 		"prior", m.PriorID, "surviving", m.SurvivingID,
 		"ecgs_moved", moved, "facility", m.Source, "control_id", msg.ControlID)
-	return ack(ACKAccepted, "")
+	outcome := models.InboundApplied
+	if moved == 0 {
+		// Nothing moved: either the merge had already happened, or neither
+		// record is one this system holds. Recorded as ignored so the history
+		// does not claim a change that did not occur.
+		outcome = models.InboundIgnored
+	}
+	return ack(Result{Outcome: outcome, PatientID: m.SurvivingID})
 }
