@@ -780,10 +780,10 @@ func main() {
 	}
 
 	// Inbound ADT listener — the receiving half of RAD-12 Patient Update.
-	// A08 applies the demographics it carries, using the same per-site field
-	// mappings the query path uses. Every other trigger is acknowledged and left
-	// alone. hl7.ObserveOnly is the handler to swap in to watch a feed without
-	// letting it change anything.
+	// A08 applies the demographics it carries and A40 merges two records, both
+	// using the same per-site field mappings the query path uses. Every other
+	// trigger is acknowledged and left alone. hl7.ObserveOnly is the handler to
+	// swap in to watch a feed without letting it change anything.
 	adtTimeout := 30 * time.Second
 	if cfg.ADT.ReadTimeout != "" {
 		if d, err := time.ParseDuration(cfg.ADT.ReadTimeout); err == nil {
@@ -797,7 +797,7 @@ func main() {
 		ReadTimeout:       adtTimeout,
 		AllowedSenders:    cfg.ADT.AllowedSenders,
 		AllowedFacilities: cfg.ADT.AllowedFacilities,
-	}, hl7.NewPatientUpdateHandler(patRepo, hl7MappingRepo.GetActiveMappings))
+	}, hl7.NewADTHandler(patRepo, patRepo, hl7MappingRepo.GetActiveMappings))
 	if err := adtListener.Start(); err != nil {
 		// Refused rather than skipped: a deployment that asked to receive ADT
 		// and did not would look connected while the HIS retried into nothing.

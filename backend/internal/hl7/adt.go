@@ -84,7 +84,7 @@ func BuildPatientUpdate(msg *InboundMessage, mappings []models.HL7Mapping) *Pati
 			// else the field carries — an assigning authority, a type code. This
 			// accepts a mapping written as PID.3 or as PID.3.1 without making a
 			// site pick.
-			u.PatientID = strings.TrimSpace(strings.SplitN(f.Value, "^", 2)[0])
+			u.PatientID = firstComponent(f.Value)
 		case "last_name":
 			u.LastName = f
 		case "first_name":
@@ -137,6 +137,58 @@ func parseHL7Time(v string) (time.Time, bool) {
 	return time.Time{}, false
 }
 
+// defaultPriorPatientIDPath is where HL7 puts the identifier being merged away.
+// MRG-1 is fixed by the standard rather than chosen by a site, so it is a
+// default rather than a required mapping — the same treatment MSA.1 and MSA.3
+// get on the query path. A site whose feed puts it elsewhere can still map
+// "prior_patient_id".
+const defaultPriorPatientIDPath = "MRG.1"
+
+// PatientMerge is what an A40 asks for: two records found to be the same person.
+//
+// The direction is the whole of it, and it is easy to read backwards. PID-3
+// carries the surviving identifier — "the dominant patient information", in the
+// framework's words — and MRG-1 the one to stop referencing.
+type PatientMerge struct {
+	// SurvivingID is PID-3: the identifier that remains in use.
+	SurvivingID string
+	// PriorID is MRG-1: the identifier to stop referencing.
+	PriorID string
+	// Source identifies the sender.
+	Source string
+}
+
+// BuildPatientMerge reads the two identifiers an A40 carries.
+func BuildPatientMerge(msg *InboundMessage, mappings []models.HL7Mapping) *PatientMerge {
+	m := &PatientMerge{Source: msg.SendingFacility}
+
+	priorPath := defaultPriorPatientIDPath
+	for _, mp := range mappings {
+		switch mp.TargetField {
+		case "patient_id":
+			m.SurvivingID = firstComponent(ExtractByPath(msg.Raw, mp.SourcePath))
+		case "prior_patient_id":
+			priorPath = mp.SourcePath
+		}
+	}
+	m.PriorID = firstComponent(ExtractByPath(msg.Raw, priorPath))
+	return m
+}
+
+// firstComponent returns the identifier out of a CX, which is its first
+// component whatever else the field carries — an assigning authority, a type
+// code. Accepts a mapping written as PID.3 or PID.3.1 without making a site pick.
+func firstComponent(v string) string {
+	return strings.TrimSpace(strings.SplitN(v, "^", 2)[0])
+}
+
+// PatientMerger moves a patient onto the surviving identifier.
+type PatientMerger interface {
+	// RekeyPatient renames the record when the surviving identifier is free and
+	// merges into it when it is taken, reporting how many ECGs changed hands.
+	RekeyPatient(oldID, newID string) (int64, error)
+}
+
 // PatientUpdateApplier applies an A08 to the stored record.
 type PatientUpdateApplier interface {
 	// ApplyPatientUpdate writes the fields the message carried and clears the
@@ -152,13 +204,35 @@ type PatientUpdateApplier interface {
 // nowhere, and A40, which is a merge and belongs to its own path — none of them
 // is an error, so none of them earns a rejection that would make a sender retry.
 func NewPatientUpdateHandler(repo PatientUpdateApplier, mappings func() ([]models.HL7Mapping, error)) Handler {
+	return newADTHandler(repo, nil, mappings)
+}
+
+// NewADTHandler returns the listener handler for both messages this system acts
+// on: A08 updates the demographics of a record, A40 merges two records.
+//
+// They are separate on purpose, and the framework insists on it: an A08 may not
+// change a patient identifier, and an A40 is the only message that may. Passing
+// merger as nil leaves A40 acknowledged and unapplied.
+func NewADTHandler(
+	updates PatientUpdateApplier,
+	merger PatientMerger,
+	mappings func() ([]models.HL7Mapping, error),
+) Handler {
+	return newADTHandler(updates, merger, mappings)
+}
+
+func newADTHandler(
+	repo PatientUpdateApplier,
+	merger PatientMerger,
+	mappings func() ([]models.HL7Mapping, error),
+) Handler {
 	return func(msg *InboundMessage) (string, string) {
 		ack := func(code, text string) (string, string) {
 			appmetrics.HL7InboundHandled.WithLabelValues(msg.TriggerEvent, code).Inc()
 			return code, text
 		}
 
-		if msg.TriggerEvent != "A08" {
+		if msg.TriggerEvent != "A08" && !(msg.TriggerEvent == "A40" && merger != nil) {
 			slog.Info("hl7 adt: acknowledged without acting",
 				"trigger", msg.TriggerEvent, "control_id", msg.ControlID)
 			return ack(ACKAccepted, "")
@@ -174,6 +248,10 @@ func NewPatientUpdateHandler(repo PatientUpdateApplier, mappings func() ([]model
 			// applying an empty update would blank the record.
 			slog.Error("hl7 adt: no active field mapping preset — refusing to interpret the message")
 			return ack(ACKError, "no active field mapping preset")
+		}
+
+		if msg.TriggerEvent == "A40" {
+			return applyMerge(msg, active, merger, ack)
 		}
 
 		u := BuildPatientUpdate(msg, active)
@@ -209,4 +287,48 @@ func NewPatientUpdateHandler(repo PatientUpdateApplier, mappings func() ([]model
 			"facility", msg.SendingFacility, "event_at", u.EventAt)
 		return ack(ACKAccepted, "")
 	}
+}
+
+// applyMerge carries out an A40.
+//
+// A replay is harmless without any extra machinery: once the prior identifier
+// has been merged away there is no record under it, and the merge becomes a no
+// operation. That is why this path needs none of the staleness checking an A08
+// does — there, a replayed message would put an old name back.
+func applyMerge(
+	msg *InboundMessage,
+	mappings []models.HL7Mapping,
+	merger PatientMerger,
+	ack func(string, string) (string, string),
+) (string, string) {
+	m := BuildPatientMerge(msg, mappings)
+
+	if m.SurvivingID == "" || m.PriorID == "" {
+		slog.Warn("hl7 adt: a merge needs both identifiers",
+			"surviving", m.SurvivingID, "prior", m.PriorID, "control_id", msg.ControlID)
+		return ack(ACKError, "a merge needs both PID-3 and MRG-1")
+	}
+	if m.SurvivingID == m.PriorID {
+		slog.Info("hl7 adt: merge into itself — nothing to do",
+			"patient_id", m.SurvivingID, "control_id", msg.ControlID)
+		return ack(ACKAccepted, "")
+	}
+
+	moved, err := merger.RekeyPatient(m.PriorID, m.SurvivingID)
+	if err != nil {
+		slog.Error("hl7 adt: merge failed",
+			"prior", m.PriorID, "surviving", m.SurvivingID,
+			"control_id", msg.ControlID, "error", err)
+		return ack(ACKError, "the merge could not be applied")
+	}
+
+	// The framework says to create the surviving patient from the A40 when the
+	// prior one is unknown. This system does not: its patients are created when
+	// an ECG arrives, and a merge about two people it has never seen concerns it
+	// no more than an update about one. Accepted rather than refused, for the
+	// same reason — the sender has nothing to fix by retrying.
+	slog.Info("hl7 adt: patient merged",
+		"prior", m.PriorID, "surviving", m.SurvivingID,
+		"ecgs_moved", moved, "facility", m.Source, "control_id", msg.ControlID)
+	return ack(ACKAccepted, "")
 }
