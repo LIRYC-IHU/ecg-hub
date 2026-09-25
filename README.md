@@ -184,7 +184,7 @@ frontend/           React 19 + TypeScript + Vite + Tailwind 4 + TanStack Query
   src/components/   patient, ecg, admin, uploads, layout, ui
   src/ecg-viewer/   WebGL waveform viewer
 nginx/              nginx.conf (prod, upstream backend:4444) and nginx.dev.conf
-docs/               deploy-prod.md, POSTGRES_UPGRADE.md, TLS_CERTS.md, epics/, grafana/
+docs/               deploy-prod.md, HL7_INBOUND_ADT.md, POSTGRES_UPGRADE.md, TLS_CERTS.md, epics/, grafana/
 docker-compose.yml         production stack
 docker-compose.dev.yml     dev stack (hot reload)
 docker-compose.metrics.yml observability overlay
@@ -243,6 +243,12 @@ Three layers, by design:
      workers: 2
      # How long generated export files are kept in the temp area before cleanup.
      tmp_ttl: 2h
+
+   # Inbound ADT listener — patient updates pushed by the HIS (IHE RAD-12).
+   # Off by default; see docs/HL7_INBOUND_ADT.md.
+   adt:
+     enabled: false
+     port: 2576
    ```
 
    The listen port is fixed at 4444 (Dockerfile, nginx and compose all assume
@@ -253,6 +259,17 @@ Three layers, by design:
 
 3. **Database (via the admin UI)** — everything else: auth providers, modules,
    FTP/DICOM/HL7, connectors, webhooks. Hot-reloaded, no restart needed.
+
+### Receiving patient updates from the HIS
+
+The hub can also be pushed patient changes rather than only asking for them —
+IHE **RAD-12 Patient Update**, over an inbound MLLP listener. An `ADT^A08`
+updates demographics and an `ADT^A40` merges two records; both use the same field
+mappings the query path does.
+
+It is off by default, and it is a write path into patient identity, so read
+**[`docs/HL7_INBOUND_ADT.md`](docs/HL7_INBOUND_ADT.md)** before enabling it —
+in particular what the two sender allowlists do and do not prove behind NAT.
 
 ## Setup
 

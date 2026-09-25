@@ -302,6 +302,25 @@
           "error_code": "Code d'erreur (ACK)",
           "error_message": "Message d'erreur",
           "source": "Source"
+        },
+        "inbound": {
+          "title": "ADT entrants",
+          "subtitle": "ce que le SIH a poussé, et ce qui en a été fait",
+          "allOutcomes": "Toutes les issues",
+          "applied": "Appliqué",
+          "ignored": "Ignoré",
+          "refused": "Refusé",
+          "error": "Erreur",
+          "receivedAt": "Reçu",
+          "trigger": "Événement",
+          "facility": "Établissement",
+          "patient": "Patient",
+          "outcome": "Issue",
+          "ack": "ACK",
+          "segments": "Segments",
+          "reason": "Raison",
+          "empty": "Aucun message reçu pour l'instant.",
+          "unavailable": "Le listener ADT entrant n'est pas activé sur ce déploiement."
         }
       },
       "storage": {
@@ -803,7 +822,8 @@
     "selected": "{{count}} sélectionné",
     "selected_other": "{{count}} sélectionnés",
     "exportError": "Erreur lors de l'export",
-    "save": "Enregistrer"
+    "save": "Enregistrer",
+    "refresh": "Rafraîchir"
   },
   "webhooks": {
     "title": "Webhooks",

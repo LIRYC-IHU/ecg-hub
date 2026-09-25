@@ -38,10 +38,29 @@ var (
 		Name: "hl7_scheduler_runs_total",
 		Help: "Total number of scheduler cron ticks executed.",
 	})
+
+	// Inbound ADT — the receiving half of RAD-12 Patient Update.
+	HL7InboundReceived = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "hl7_inbound_messages_total",
+		Help: "Inbound ADT messages received, by HL7 trigger event (A08, A40, ...).",
+	}, []string{"trigger"})
+
+	HL7InboundRefused = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "hl7_inbound_refused_total",
+		Help: "Inbound ADT connections or messages refused, by reason (sender, facility).",
+	}, []string{"reason"})
+
+	HL7InboundHandled = prometheus.NewCounterVec(prometheus.CounterOpts{
+		Name: "hl7_inbound_handled_total",
+		Help: "Inbound ADT messages by the acknowledgement they were answered with (AA, AE, AR).",
+	}, []string{"trigger", "ack"})
 )
 
 func init() {
 	Registry.MustRegister(
+		HL7InboundReceived,
+		HL7InboundRefused,
+		HL7InboundHandled,
 		HL7RetryAttempts,
 		HL7PendingGauge,
 		HL7ExhaustedGauge,

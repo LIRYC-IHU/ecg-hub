@@ -379,8 +379,11 @@ func main() {
 	hl7AttemptRepo := repository.NewHL7AttemptRepository(gormDB)
 	var hl7Enricher apihandlers.HL7Enricher
 	var hl7EnricherForPersister *hl7.Enricher
+	// Outside the block below: the inbound ADT listener reads the same mapping
+	// preset, and a site can receive patient updates without querying the HIS at
+	// all.
+	hl7MappingRepo := repository.NewHL7MappingRepository(gormDB)
 	if hl7Client != nil {
-		hl7MappingRepo := repository.NewHL7MappingRepository(gormDB)
 		hl7EnricherForPersister = hl7.NewEnricher(hl7Client, patRepo, ecgRepo, hl7.WithMappingRepo(hl7MappingRepo), hl7.WithAttemptRepo(hl7AttemptRepo))
 		hl7Enricher = hl7EnricherForPersister
 	}
@@ -774,6 +777,60 @@ func main() {
 		defer iheSrv.Close()
 	} else {
 		slog.Info("ihe: disabled by config (ihe.enabled: false)")
+	}
+
+	// Inbound ADT listener — the receiving half of RAD-12 Patient Update.
+	// A08 applies the demographics it carries and A40 merges two records, both
+	// using the same per-site field mappings the query path uses. Every other
+	// trigger is acknowledged and left alone. hl7.ObserveOnly is the handler to
+	// swap in to watch a feed without letting it change anything.
+	adtTimeout := 30 * time.Second
+	if cfg.ADT.ReadTimeout != "" {
+		if d, err := time.ParseDuration(cfg.ADT.ReadTimeout); err == nil {
+			adtTimeout = d
+		}
+	}
+	hl7InboundRepo := repository.NewHL7InboundRepository(gormDB)
+	adtListener := hl7.NewListener(hl7.ListenerSettings{
+		Enabled:           cfg.ADT.Enabled,
+		Port:              cfg.ADT.Port,
+		Host:              cfg.ADT.Host,
+		ReadTimeout:       adtTimeout,
+		AllowedSenders:    cfg.ADT.AllowedSenders,
+		AllowedFacilities: cfg.ADT.AllowedFacilities,
+	}, hl7.NewADTHandler(patRepo, patRepo, hl7MappingRepo.GetActiveMappings)).
+		WithRecorder(hl7InboundRepo)
+	if err := adtListener.Start(); err != nil {
+		// Refused rather than skipped: a deployment that asked to receive ADT
+		// and did not would look connected while the HIS retried into nothing.
+		slog.Error("FATAL: ADT listener could not start", "error", err)
+		os.Exit(1)
+	}
+	defer adtListener.Stop()
+
+	// Prune the record of received messages. It grows with every message a feed
+	// sends, which on a hospital ADT stream is most of what happens in a day.
+	if cfg.ADT.Enabled && cfg.ADT.HistoryRetentionDays > 0 {
+		retention := time.Duration(cfg.ADT.HistoryRetentionDays) * 24 * time.Hour
+		go func() {
+			ticker := time.NewTicker(6 * time.Hour)
+			defer ticker.Stop()
+			for {
+				// Once at startup, then on the tick: a server that was down past
+				// the window should not wait six hours to catch up.
+				n, err := hl7InboundRepo.DeleteOlderThan(time.Now().Add(-retention))
+				if err != nil {
+					slog.Warn("hl7 listener: prune message history", "error", err)
+				} else if n > 0 {
+					slog.Info("hl7 listener: message history pruned", "deleted", n)
+				}
+				select {
+				case <-shutdownCtx.Done():
+					return
+				case <-ticker.C:
+				}
+			}
+		}()
 	}
 
 	// Graceful shutdown: on SIGTERM/SIGINT (docker stop, systemd) drain the HTTP

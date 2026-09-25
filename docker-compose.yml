@@ -47,6 +47,15 @@ services:
       - "${FTP_PORT:-21}:2121" # FTP control
       - "${DICOM_PORT:-4242}:4242" # DICOM C-STORE
       - "30003:30003" # ECTP (Nihon Kohden)
+      # Inbound ADT (IHE RAD-12 Patient Update). Published only so the HIS can
+      # reach it; the listener stays bound to nothing until adt.enabled is set.
+      #
+      # Worth knowing before relying on adt.allowed_senders here: dockerd
+      # source-NATs this mapping, so the listener sees the Docker gateway rather
+      # than the sending system. The address allowlist can only tell the gateway
+      # apart, which is to say not much — allowed_facilities travels in the
+      # message and survives.
+      - "${ADT_PORT:-2576}:2576"
       # FTP passive range. One port is held per in-flight data connection, so
       # the range width IS the concurrent-transfer ceiling: on the original
       # eleven-port range, uploads started timing out at ten in parallel.

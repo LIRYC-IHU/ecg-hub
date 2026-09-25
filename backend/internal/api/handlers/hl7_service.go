@@ -23,6 +23,7 @@ type HL7ServiceHandler struct {
 	ORUService  ORUSender                           // may be nil (outbound ORU disabled)
 	ORURepo     *repository.HL7ORUAttemptRepository // latest outbound attempt per ECG
 	AttemptRepo *repository.HL7AttemptRepository    // inbound attempt history per patient
+	InboundRepo *repository.HL7InboundRepository    // ADT messages received; nil disables the listing
 }
 
 func oruAttemptToProto(a *models.HL7ORUAttempt) *apiv1.OruAttempt {
@@ -138,4 +139,42 @@ func (h *HL7ServiceHandler) ListAttempts(_ context.Context, req *apiv1.ListAttem
 		data[i] = hl7AttemptToProto(&attempts[i])
 	}
 	return &apiv1.ListAttemptsResponse{Data: data}, nil
+}
+
+// ListInboundMessages returns what the inbound ADT listener received, most
+// recent first, optionally narrowed to one patient or one outcome.
+//
+// Refusals are in here too, and they are the reason this exists: a message
+// turned away never reaches a handler, so nothing else would show an operator
+// that a feed is being rejected and why.
+func (h *HL7ServiceHandler) ListInboundMessages(
+	_ context.Context, req *apiv1.ListInboundMessagesRequest,
+) (*apiv1.ListInboundMessagesResponse, error) {
+	if h.InboundRepo == nil {
+		return nil, connect.NewError(connect.CodeUnavailable,
+			errors.New("the inbound ADT listener is not configured"))
+	}
+	msgs, err := h.InboundRepo.ListRecent(req.PatientId, req.Outcome, int(req.Limit))
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	data := make([]*apiv1.Hl7InboundMessage, len(msgs))
+	for i := range msgs {
+		m := &msgs[i]
+		data[i] = &apiv1.Hl7InboundMessage{
+			Id:              m.ID,
+			ReceivedAt:      m.ReceivedAt.Format(time.RFC3339),
+			TriggerEvent:    m.TriggerEvent,
+			MessageType:     m.MessageType,
+			SendingFacility: m.SendingFacility,
+			ControlId:       m.ControlID,
+			RemoteAddr:      m.RemoteAddr,
+			Segments:        m.Segments,
+			PatientId:       m.PatientID,
+			Outcome:         m.Outcome,
+			AckCode:         m.AckCode,
+			Reason:          m.Reason,
+		}
+	}
+	return &apiv1.ListInboundMessagesResponse{Data: data}, nil
 }

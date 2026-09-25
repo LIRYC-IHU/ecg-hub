@@ -130,3 +130,35 @@ ihe:
   # is off by the site's offset, enough to hide the ECG that was being looked
   # for.
   timezone: "Europe/Paris"
+
+# Inbound ADT listener — the receiving half of IHE RAD-12 Patient Update, where
+# the HIS pushes patient changes instead of being asked for them.
+#
+# Observing only at this stage: every message is acknowledged and logged, none
+# is applied. Point the HIS at it to see what the feed actually sends before the
+# rules that interpret it are fixed.
+adt:
+  enabled: false
+  port: 2576
+  host: ""
+  read_timeout: 30s
+  # How long the record of received messages is kept. It grows with every
+  # message a feed sends, which on a hospital ADT stream is most of what happens
+  # in a day — 0 keeps everything, and is how this table fills the disk first.
+  history_retention_days: 30
+  # Source addresses allowed to send; bare addresses and CIDR ranges. Empty
+  # accepts everyone, so configuring nothing locks nobody out.
+  #
+  # Real access control, but only where the source address reaches us intact.
+  # Under Docker bridge networking every connection appears to come from the
+  # Docker gateway, so this could only accept the gateway — and therefore
+  # anything behind it. Worth setting on a host-network deployment, close to
+  # meaningless elsewhere.
+  allowed_senders: []
+  # MSH-4 sending facilities allowed to send. Empty accepts every facility.
+  #
+  # Unlike allowed_senders this survives NAT, because it travels in the message
+  # rather than the connection — and proves less for the same reason: the value
+  # is whatever the sender wrote. It stops a feed pointed at the wrong system,
+  # not someone who can reach the port.
+  allowed_facilities: []

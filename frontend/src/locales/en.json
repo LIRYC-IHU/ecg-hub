@@ -302,6 +302,25 @@
           "error_code": "Error code (ACK)",
           "error_message": "Error message",
           "source": "Source"
+        },
+        "inbound": {
+          "title": "Inbound ADT",
+          "subtitle": "what the HIS pushed, and what became of it",
+          "allOutcomes": "All outcomes",
+          "applied": "Applied",
+          "ignored": "Ignored",
+          "refused": "Refused",
+          "error": "Error",
+          "receivedAt": "Received",
+          "trigger": "Event",
+          "facility": "Facility",
+          "patient": "Patient",
+          "outcome": "Outcome",
+          "ack": "ACK",
+          "segments": "Segments",
+          "reason": "Reason",
+          "empty": "No message received yet.",
+          "unavailable": "The inbound ADT listener is not enabled on this deployment."
         }
       },
       "storage": {
@@ -802,7 +821,8 @@
     "selected": "{{count}} selected",
     "selected_other": "{{count}} selected",
     "exportError": "Export error",
-    "save": "Save"
+    "save": "Save",
+    "refresh": "Refresh"
   },
   "webhooks": {
     "title": "Webhooks",

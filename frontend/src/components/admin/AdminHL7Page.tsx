@@ -14,6 +14,8 @@ import {
   Server,
   Power,
   AlertTriangle,
+  Inbox,
+  RefreshCw,
 } from "lucide-react";
 import {
   fetchHL7Settings,
@@ -31,6 +33,8 @@ import {
   type HL7SegmentNode,
   type HL7Preset,
   type HL7Settings,
+  fetchHL7InboundMessages,
+  type HL7InboundMessage,
 } from "../../lib/api";
 import { Spinner } from "../ui/Spinner";
 import { useNotification } from "../../context/NotificationContext";
@@ -1564,6 +1568,125 @@ function HL7MasterSwitchSection() {
 
 // ─── AdminHL7Page ─────────────────────────────────────────────────────────────
 
+
+// ─── Inbound ADT (IHE RAD-12 Patient Update) ────────────────────────────────
+
+// Colour by what became of the message, not by the acknowledgement. They answer
+// different questions: an update that changed a record and one for a patient we
+// do not hold are both AA.
+const OUTCOME_STYLES: Record<string, string> = {
+  applied: "bg-emerald-500/10 text-emerald-600 ring-emerald-500/20",
+  ignored: "bg-muted text-muted-foreground ring-border",
+  refused: "bg-amber-500/10 text-amber-600 ring-amber-500/20",
+  error: "bg-destructive/10 text-destructive ring-destructive/20",
+};
+
+function HL7InboundSection() {
+  const { t } = useTranslation();
+  const [outcome, setOutcome] = useState("");
+
+  const {
+    data: messages = [],
+    isLoading,
+    isFetching,
+    refetch,
+    error,
+  } = useQuery<HL7InboundMessage[]>({
+    queryKey: ["hl7-inbound", outcome],
+    queryFn: () => fetchHL7InboundMessages({ outcome, limit: 100 }),
+    // The listener is only configured in config.yaml, so a deployment that has
+    // not enabled it answers unavailable. That is not worth retrying.
+    retry: false,
+  });
+
+  return (
+    <section className="rounded-2xl border border-border bg-card p-5">
+      <div className="mb-4 flex items-center gap-3">
+        <Inbox className="h-4 w-4 text-primary" />
+        <h2 className="font-display text-sm font-semibold tracking-tight">
+          {t("admin.system.hl7.inbound.title")}
+        </h2>
+        <span className="text-[11px] text-muted-foreground">
+          {t("admin.system.hl7.inbound.subtitle")}
+        </span>
+        <div className="ml-auto flex items-center gap-2">
+          <select
+            value={outcome}
+            onChange={(e) => setOutcome(e.target.value)}
+            className="rounded-lg border border-border bg-background px-2 py-1 text-xs"
+          >
+            <option value="">{t("admin.system.hl7.inbound.allOutcomes")}</option>
+            <option value="applied">{t("admin.system.hl7.inbound.applied")}</option>
+            <option value="ignored">{t("admin.system.hl7.inbound.ignored")}</option>
+            <option value="refused">{t("admin.system.hl7.inbound.refused")}</option>
+            <option value="error">{t("admin.system.hl7.inbound.error")}</option>
+          </select>
+          <button
+            type="button"
+            onClick={() => refetch()}
+            disabled={isFetching}
+            className="rounded-lg border border-border p-1.5 hover:bg-muted disabled:opacity-50"
+            aria-label={t("common.refresh")}
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`} />
+          </button>
+        </div>
+      </div>
+
+      {isLoading ? (
+        <Spinner />
+      ) : error ? (
+        <p className="text-xs text-muted-foreground">{t("admin.system.hl7.inbound.unavailable")}</p>
+      ) : messages.length === 0 ? (
+        <p className="text-xs text-muted-foreground">{t("admin.system.hl7.inbound.empty")}</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-left text-[10px] uppercase tracking-wide text-muted-foreground">
+                <th className="py-2 pr-3 font-medium">{t("admin.system.hl7.inbound.receivedAt")}</th>
+                <th className="py-2 pr-3 font-medium">{t("admin.system.hl7.inbound.trigger")}</th>
+                <th className="py-2 pr-3 font-medium">{t("admin.system.hl7.inbound.facility")}</th>
+                <th className="py-2 pr-3 font-medium">{t("admin.system.hl7.inbound.patient")}</th>
+                <th className="py-2 pr-3 font-medium">{t("admin.system.hl7.inbound.outcome")}</th>
+                <th className="py-2 pr-3 font-medium">{t("admin.system.hl7.inbound.ack")}</th>
+                <th className="py-2 pr-3 font-medium">{t("admin.system.hl7.inbound.segments")}</th>
+                <th className="py-2 font-medium">{t("admin.system.hl7.inbound.reason")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {messages.map((m) => (
+                <tr key={m.id} className="border-t border-border/60">
+                  <td className="py-2 pr-3 whitespace-nowrap text-muted-foreground">
+                    {new Date(m.received_at).toLocaleString()}
+                  </td>
+                  <td className="py-2 pr-3 font-mono">{m.trigger_event || "—"}</td>
+                  <td className="py-2 pr-3">{m.sending_facility || "—"}</td>
+                  <td className="py-2 pr-3 font-mono">{m.patient_id || "—"}</td>
+                  <td className="py-2 pr-3">
+                    <span
+                      className={`rounded-md px-1.5 py-0.5 text-[10px] ring-1 ${
+                        OUTCOME_STYLES[m.outcome] ?? OUTCOME_STYLES.ignored
+                      }`}
+                    >
+                      {m.outcome}
+                    </span>
+                  </td>
+                  <td className="py-2 pr-3 font-mono">{m.ack_code}</td>
+                  <td className="py-2 pr-3 font-mono text-muted-foreground">
+                    {m.segments || "—"}
+                  </td>
+                  <td className="py-2 text-muted-foreground">{m.reason || "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function AdminHL7Page() {
   const { t } = useTranslation();
 
@@ -1595,6 +1718,9 @@ export function AdminHL7Page() {
 
       {/* 4. Query Test + Field Mapping */}
       <HL7TestSection />
+
+      {/* 5. What the inbound ADT listener received */}
+      <HL7InboundSection />
     </div>
   );
 }

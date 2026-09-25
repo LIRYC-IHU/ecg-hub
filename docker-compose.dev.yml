@@ -57,6 +57,7 @@ services:
     expose:
       - "4444"
       - "8443"
+      - "2576" # inbound ADT (RAD-12 Patient Update)
       - "9091" # metrics scrape port (metrics.port in config.yaml)
     ports:
       - "${FTP_PORT:-2121}:2121" # Port FTP (le serveur écoute sur 2121 dans le conteneur)
@@ -66,6 +67,7 @@ services:
       - "30004-30010:30004-30010" # FTP passive ports
       - "9091:9091"
       - "8443:8443"
+      - "${ADT_PORT:-2576}:2576"
   frontend:
     build:
       context: ./frontend
