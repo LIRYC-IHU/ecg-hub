@@ -3,6 +3,80 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org/).
 
+## [1.1.0] — 2026-10-01
+
+Interoperability release. The hub now answers to a DPI over IHE, is pushed
+patient updates by the HIS, and proxies to a PACS whatever vendor format it was
+given.
+
+### Interoperability — IHE
+
+- **Retrieve ECG for Display** as an Information Source: Retrieve ECG List
+  [CARD-5], Retrieve ECG Document for Display [CARD-6] and the two summary
+  requestTypes of Retrieve Specific Information [ITI-11]. A DPI lists a
+  patient's ECGs and opens a trace without leaving its own screen and without an
+  integration written for this hub in particular.
+- The transactions live on their own mutually-authenticated listener, never on
+  the API. They carry no authentication of their own — the profile expects it
+  from a grouped ATNA actor — so mTLS is the whole security model, and every
+  part of it is refused at startup rather than defaulted.
+- CARD-6 refuses a document that would carry no patient identity: §4.6.4.2.2.1
+  does not allow anonymous ECG documents on that transaction.
+- `tools/ihe-display.html` is a Display actor to test and demonstrate against,
+  and `scripts/gen-ihe-certs.sh` issues a throwaway PKI for it.
+
+- **Patient Update [RAD-12]** as a receiver: an inbound MLLP listener applies
+  `ADT^A08` demographic updates and `ADT^A40` merges, using the same field
+  mappings the query path uses. Off by default — it is a write path into patient
+  identity reached over the network. See
+  [`docs/HL7_INBOUND_ADT.md`](docs/HL7_INBOUND_ADT.md).
+- An omitted field keeps its stored value and a field sent as `""` is removed,
+  as the profile requires. A replayed message older than the last one applied is
+  ignored, which is what stops a retransmission putting a three-week-old name
+  back.
+- Admin > HL7 lists what arrived and what became of it, refusals included. No
+  message body is stored.
+
+### Patient identity
+
+- The HIS may answer a query with a different identifier than the one it was
+  asked about, so a site can let a device record the number scanned off a
+  wristband and have it resolved to the establishment's own identifier. The
+  patient is moved there, ECGs included.
+- MAC-address whitelist for the FTP, DICOM and ECTP ports, with manual enrolment
+  and the ability to refuse what cannot be identified. It only works where the
+  device is on the same layer-2 segment, which the deployment now declares
+  explicitly rather than leaving to chance.
+
+### Distribution
+
+- A DICOM proxy connector converts what it is given. A vendor file accepted by
+  the extension filter used to be handed to the C-STORE association raw and
+  refused by the PACS — a failure reported by the wrong side of the link.
+- A connector can wait for HL7 enrichment before forwarding, so the document
+  carries the establishment's demographics rather than what the device recorded.
+  The wait ends on any terminal enrichment state: a HIS that never answers
+  delays a delivery, it does not cancel it.
+
+### Fixed
+
+- A changed HL7 host took effect only after a restart. The settings screen built
+  its own client for the test query, so the button reached the new address while
+  enrichment, the retry job and the scheduler kept using the old one — silently,
+  and with no error to show for it.
+- A Connect procedure with no permission mapping was served unchecked to every
+  authenticated caller. It is refused now, and a test catches the omission
+  earlier still.
+- Conversion tools come from ecg-bridge v1.4.0, which the hub already expected:
+  `fda-to-pdf` now knows `-identity-unverified`, so a PDF for a patient the HIS
+  had not confirmed no longer fails outright. The renderer also gained the
+  calibration pulse and the acquisition date, and an injected date of birth
+  reaches the document.
+- An ECG ingested as FDA aECG XML could not be rendered as PDF at all.
+- A date bound sent without a timezone in a CARD-5 query was read as UTC rather
+  than the site's wall clock, shifting the window far enough to hide the ECG
+  being looked for.
+
 ## [1.0.0] — 2026-09-08
 
 First release.
