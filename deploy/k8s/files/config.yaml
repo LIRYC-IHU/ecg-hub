@@ -1,0 +1,31 @@
+# config.yaml du backend : infrastructure seule.
+#
+# Tout le fonctionnel — modules et leurs ports, paramètres HL7, mappings de
+# champs, connecteurs, webhooks, fournisseurs d'authentification, rôles — est en
+# base et se configure depuis l'interface d'administration. Ne rien ajouter ici
+# qui s'y règle déjà : la valeur serait ignorée.
+
+server:
+  # TLS termine sur Traefik, pas sur le serveur Go.
+  tls: false
+
+database:
+  max_open_conns: 10
+  max_idle_conns: 5
+
+storage:
+  # "local" = volume monté (NFS ici). "s3" = stockage objet, le volume
+  # servant alors de file d'attente de téléversement.
+  backend: local
+  volume_path: /data/ecg
+  quarantine_path: /data/ecg-quarantine
+  # Plafond souple. La rotation ne supprime aucun fichier clinique si elle
+  # n'est pas explicitement activée, et jamais en mode s3.
+  max_size: "8Gi"
+
+ingest:
+  # Chaque étape du pipeline tient le fichier en mémoire, et les ports FTP et
+  # DICOM sont exposés aux appareils : un envoi non borné suffit à pousser le
+  # backend vers le tueur de processus. À relever seulement si le parc produit
+  # des fichiers plus volumineux.
+  max_file_bytes: "1Mi"

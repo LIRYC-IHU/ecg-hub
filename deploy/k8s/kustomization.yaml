@@ -1,0 +1,35 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: ecg-hub
+
+resources:
+  - namespace.yaml
+  - deployment-backend.yaml
+  - deployment-frontend.yaml
+  - service-web.yaml
+  - service-devices.yaml
+  - ingress.yaml
+  # Stockage : NFS par défaut. Voir README.md pour les autres options.
+  - storage-nfs.yaml
+
+# secret.yaml n'est pas listé ici : il s'applique à part et git l'ignore.
+# Voir secret.example.yaml.
+
+# Le nom généré porte un hash du contenu, et kustomize réécrit les références
+# dans les pods. Un config.yaml modifié produit donc un nouveau nom, donc un
+# nouveau pod — ce qui est nécessaire, car le backend ne lit son fichier qu'au
+# démarrage : un ConfigMap monté est bien rafraîchi dans le volume, mais
+# personne ne le relit.
+configMapGenerator:
+  - name: ecg-hub-config
+    files:
+      - files/config.yaml
+  - name: ecg-hub-nginx
+    files:
+      - default.conf=files/nginx-default.conf
+
+images:
+  - name: zot.waxmaker.fr/ecg-hub/backend
+    newTag: 1.1.0
+  - name: zot.waxmaker.fr/ecg-hub/frontend
+    newTag: 1.1.0

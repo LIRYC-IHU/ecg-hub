@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: ecg-hub
+spec:
+  # Sans état : la SPA et le proxy inverse. Deux réplicas tolèrent la perte d'un
+  # nœud sans couper l'interface, alors que le backend ne le permet pas.
+  replicas: 2
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      # Zot exige une authentification en lecture. Le Secret est créé à part :
+      #   kubectl -n ecg-hub create secret docker-registry zot \
+      #     --docker-server=zot.waxmaker.fr \
+      #     --docker-username=<utilisateur> --docker-password=<mot de passe>
+      #
+      # Déclaré ici plutôt qu'attaché au ServiceAccount : un lecteur du
+      # manifeste voit d'où viennent les droits de pull.
+      imagePullSecrets:
+        - name: zot
+      containers:
+        - name: nginx
+          image: zot.waxmaker.fr/ecg-hub/frontend:1.1.0
+          imagePullPolicy: IfNotPresent
+          # L'image est un nginx:alpine standard : elle démarre en root pour lier
+          # le port 80, puis bascule sur son utilisateur non privilégié. Les
+          # capacités conservées sont celles du jeu par défaut, donc admises par
+          # PodSecurity baseline.
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+              add: [NET_BIND_SERVICE, CHOWN, SETUID, SETGID, DAC_OVERRIDE]
+          ports:
+            - { name: http, containerPort: 80 }
+          volumeMounts:
+            - { name: nginx-conf, mountPath: /etc/nginx/conf.d/default.conf, subPath: default.conf, readOnly: true }
+          readinessProbe:
+            httpGet: { path: /, port: 80 }
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 25m, memory: 32Mi }
+            limits: { memory: 128Mi }
+      volumes:
+        - name: nginx-conf
+          configMap: { name: ecg-hub-nginx }

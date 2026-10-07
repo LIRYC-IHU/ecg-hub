@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ecg-hub
+  # "baseline", le défaut qu'applique Talos au cluster, est posé explicitement
+  # pour que le niveau soit lisible dans le manifeste plutôt que subi.
+  #
+  # Pourquoi pas "restricted" : le backend le satisferait (uid 10001, aucune
+  # capacité, aucune escalade), mais l'image frontend est un nginx:alpine
+  # standard qui démarre en root pour lier le port 80. Passer le namespace en
+  # "restricted" ferait refuser le frontend. Le jour où son image devient
+  # nginxinc/nginx-unprivileged, les trois libellés ci-dessous peuvent passer à
+  # "restricted" sans autre changement.
+  #
+  # Dans les deux cas, baseline interdit hostNetwork ET les volumes hostPath :
+  #   - le filtrage par adresse MAC (DEVICE_WHITELIST) exige hostNetwork, il est
+  #     donc inopérant ici — voir README.md ;
+  #   - le stockage passe par des PersistentVolume, jamais par hostPath.
+  labels:
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted

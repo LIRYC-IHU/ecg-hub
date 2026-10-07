@@ -1,0 +1,74 @@
+# Stockage NFS — variante par défaut.
+#
+# Pourquoi pas de hostPath : PodSecurity baseline, appliqué par Talos à tout le
+# cluster, interdit les volumes hostPath. Et pourquoi pas de StorageClass
+# dynamique : ce cluster n'en a aucune (kubectl get storageclass renvoie « No
+# resources found »), si bien qu'un PVC sans PersistentVolume statique reste
+# Pending indéfiniment. D'où ces PV déclarés à la main.
+#
+# À RENSEIGNER : server et path ci-dessous.
+#
+# Côté export NFS, le processus tourne en uid/gid 10001. Deux options :
+#   - exporter sans no_root_squash et chown 10001:10001 les répertoires ;
+#   - ou compter sur fsGroup: 10001 du pod, qui aligne le groupe propriétaire.
+#
+# ReadWriteOnce et non ReadWriteMany, volontairement : l'application tourne en
+# instance unique (voir deployment-backend.yaml), et RWO rend l'erreur de
+# configuration visible plutôt que silencieuse.
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: ecg-hub-ecg
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes: [ReadWriteOnce]
+  # Retain et non Delete : un PV de données cliniques ne se recycle pas à la
+  # suppression du PVC.
+  persistentVolumeReclaimPolicy: Retain
+  # Chaîne vide, et non absente : empêche l'attribution d'une StorageClass par
+  # défaut si l'une était installée plus tard.
+  storageClassName: ""
+  nfs:
+    server: 10.10.20.4
+    path: /mnt/ZFS-Mirror/kube/ecg-hub
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ecg-hub-ecg
+  namespace: ecg-hub
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: ""
+  volumeName: ecg-hub-ecg
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: ecg-hub-quarantine
+spec:
+  capacity:
+    storage: 2Gi
+  accessModes: [ReadWriteOnce]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""
+  nfs:
+    server: 10.10.20.4
+    path: /mnt/ZFS-Mirror/kube/ecg-hub
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ecg-hub-quarantine
+  namespace: ecg-hub
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: ""
+  volumeName: ecg-hub-quarantine
+  resources:
+    requests:
+      storage: 2Gi

@@ -1,0 +1,77 @@
+# Services appareils — couche 4, jamais d'Ingress.
+#
+# Pourquoi LoadBalancer et pas NodePort : la plage NodePort par défaut d'un
+# cluster est 30000-32767, ce qui exclut 21 et 4242. Or les électrocardiographes
+# Nihon Kohden composent le 21 et ne sont pas paramétrables. MetalLB fournit un
+# vrai LoadBalancer ici, donc le problème ne se pose pas.
+#
+# L'adresse est FIGÉE dans la plage MetalLB (10.10.50.100-150, .100 étant pris
+# par Traefik). Les appareils sont configurés à la main avec cette adresse : la
+# laisser flotter imposerait de repasser sur chaque appareil.
+#
+# externalTrafficPolicy: Local préserve l'adresse source de l'appareil. C'est la
+# seule identité du client enregistrée dans la traçabilité d'ingestion, le
+# filtrage par adresse MAC étant hors d'atteinte dans ce namespace. Effet de
+# bord utile avec MetalLB en L2 : l'adresse n'est annoncée que depuis le nœud
+# qui porte le pod.
+#
+# APRÈS DÉPLOIEMENT, dans Administration > Modules :
+#   FTP    port 2121, Public host 10.10.50.101, Public port 21,
+#          plage passive 30010-30029
+#   DICOM  port 4242
+#   ECTP   port 30003
+#
+# La plage passive doit correspondre EXACTEMENT à celle déclarée ci-dessous : le
+# serveur annonce un port dans sa réponse 227, et un port non publié fait échouer
+# le transfert juste après.
+#
+# Sa largeur est le plafond de transferts simultanés — un port est retenu par
+# connexion de données en cours. 20 suffisent pour des essais ; en production
+# le dépôt utilise 30000-30100. L'élargir ici ET dans Administration > Modules.
+#
+# 30003 est volontairement hors de la plage passive : ECTP l'occupe, et un port
+# dupliqué fait refuser le Service par l'API.
+apiVersion: v1
+kind: Service
+metadata:
+  name: devices
+  namespace: ecg-hub
+  annotations:
+    # spec.loadBalancerIP est déprécié depuis Kubernetes 1.24 et MetalLB prévoit
+    # de le retirer : l'annotation est la forme à utiliser.
+    metallb.io/loadBalancerIPs: 10.10.50.101
+    metallb.io/address-pool: default
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: Local
+  selector:
+    app: backend
+  ports:
+    - { name: ftp-ctl, port: 21, targetPort: 2121 }
+    - { name: dicom, port: 4242, targetPort: 4242 }
+    - { name: ectp, port: 30003, targetPort: 30003 }
+    # Inbound HL7 ADT (IHE RAD-12). Décommenter après avoir activé adt dans
+    # config.yaml — c'est un chemin d'écriture dans l'identité patient, atteint
+    # par le réseau.
+    # - { name: adt, port: 2576, targetPort: 2576 }
+    # Plage passive FTP.
+    - { name: pasv-30010, port: 30010, targetPort: 30010 }
+    - { name: pasv-30011, port: 30011, targetPort: 30011 }
+    - { name: pasv-30012, port: 30012, targetPort: 30012 }
+    - { name: pasv-30013, port: 30013, targetPort: 30013 }
+    - { name: pasv-30014, port: 30014, targetPort: 30014 }
+    - { name: pasv-30015, port: 30015, targetPort: 30015 }
+    - { name: pasv-30016, port: 30016, targetPort: 30016 }
+    - { name: pasv-30017, port: 30017, targetPort: 30017 }
+    - { name: pasv-30018, port: 30018, targetPort: 30018 }
+    - { name: pasv-30019, port: 30019, targetPort: 30019 }
+    - { name: pasv-30020, port: 30020, targetPort: 30020 }
+    - { name: pasv-30021, port: 30021, targetPort: 30021 }
+    - { name: pasv-30022, port: 30022, targetPort: 30022 }
+    - { name: pasv-30023, port: 30023, targetPort: 30023 }
+    - { name: pasv-30024, port: 30024, targetPort: 30024 }
+    - { name: pasv-30025, port: 30025, targetPort: 30025 }
+    - { name: pasv-30026, port: 30026, targetPort: 30026 }
+    - { name: pasv-30027, port: 30027, targetPort: 30027 }
+    - { name: pasv-30028, port: 30028, targetPort: 30028 }
+    - { name: pasv-30029, port: 30029, targetPort: 30029 }

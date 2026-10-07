@@ -1,0 +1,121 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: ecg-hub
+spec:
+  replicas: 1
+  # Instance unique, et pas par prudence excessive :
+  #   - les appareils sont configurés à la main avec une adresse, sans découverte
+  #     de service côté appareil ;
+  #   - le pipeline d'ingestion vit en mémoire dans le processus, deux instances
+  #     ne partagent aucun état de traitement ;
+  #   - une connexion de contrôle FTP et sa connexion de données doivent
+  #     atteindre le même processus.
+  #
+  # Recreate, et non RollingUpdate : deux pods simultanés se disputeraient le
+  # volume ReadWriteOnce et casseraient les transferts FTP en cours.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      # Laisse un transfert en cours se terminer. Le code arrête les modules
+      # d'ingestion puis vide le serveur HTTP en 15 s ; les fichiers déjà reçus
+      # sont enregistrés ou mis en quarantaine, non perdus.
+      # Zot exige une authentification en lecture. Le Secret est créé à part :
+      #   kubectl -n ecg-hub create secret docker-registry zot \
+      #     --docker-server=zot.waxmaker.fr \
+      #     --docker-username=<utilisateur> --docker-password=<mot de passe>
+      #
+      # Déclaré ici plutôt qu'attaché au ServiceAccount : un lecteur du
+      # manifeste voit d'où viennent les droits de pull.
+      imagePullSecrets:
+        - name: zot
+      terminationGracePeriodSeconds: 120
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        # Les volumes NFS arrivent avec les droits du serveur : fsGroup aligne le
+        # groupe propriétaire sur celui du processus, sinon l'écriture échoue.
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: backend
+          image: zot.waxmaker.fr/ecg-hub/backend:1.1.0
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          ports:
+            # Informatif : Kubernetes route par le Service, pas par containerPort.
+            # La plage passive FTP n'est donc pas énumérée ici — seulement dans
+            # service-devices.yaml, où elle compte.
+            - { name: http, containerPort: 4444 }
+            - { name: ftp-ctl, containerPort: 2121 }
+            - { name: dicom, containerPort: 4242 }
+            - { name: ectp, containerPort: 30003 }
+            - { name: metrics, containerPort: 9091 }
+          env:
+            - name: DATABASE_URL
+              valueFrom: { secretKeyRef: { name: ecg-hub, key: DATABASE_URL } }
+            - name: JWT_SECRET
+              valueFrom: { secretKeyRef: { name: ecg-hub, key: JWT_SECRET } }
+            - name: AUTH_ENCRYPTION_KEY
+              valueFrom: { secretKeyRef: { name: ecg-hub, key: AUTH_ENCRYPTION_KEY } }
+            # APP_ENV n'est PAS défini : toute valeur autre que development/dev/
+            # test/local vaut production, et c'est là que les contrôles de
+            # robustesse des secrets s'appliquent. Le laisser absent est correct.
+            - { name: HOST_URL, value: "https://ecg-k8s.waxmaker.fr" }
+            - { name: LOG_LEVEL, value: "info" }
+            - { name: CONFIG_PATH, value: "/app/config.yaml" }
+            - { name: METRICS_ENABLED, value: "true" }
+            - { name: METRICS_PORT, value: "9091" }
+            # Sans effet dans ce namespace : le filtrage lit la table de voisinage
+            # de l'hôte, ce qui exige hostNetwork — interdit par PodSecurity
+            # baseline. Laissé à false explicitement pour que personne ne croie
+            # le contrôle actif.
+            - { name: DEVICE_WHITELIST, value: "false" }
+            # Mode S3 : voir README.md, section « Tester le mode S3 ».
+            - { name: STORAGE_BACKEND, value: "local" }
+          volumeMounts:
+            - { name: config, mountPath: /app/config.yaml, subPath: config.yaml, readOnly: true }
+            - { name: ecg, mountPath: /data/ecg }
+            - { name: quarantine, mountPath: /data/ecg-quarantine }
+          # Sonde TCP et non HTTP : /healthz est servi par un handler Connect,
+          # qui répond sur POST. Un httpGet recevrait 405 et ferait boucler le
+          # pod sur un backend sain.
+          readinessProbe:
+            tcpSocket: { port: 4444 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket: { port: 4444 }
+            # Les migrations de schéma sont appliquées au démarrage : laisser le
+            # temps avant de conclure à une panne.
+            initialDelaySeconds: 60
+            periodSeconds: 20
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 250m
+              memory: 384Mi
+            # Les nœuds de ce cluster ont 2 Go : la limite de 2 Gi du DAT ne
+            # tient pas ici. 1 Gi laisse de la marge au nœud.
+            limits:
+              memory: 1Gi
+      volumes:
+        - name: config
+          configMap: { name: ecg-hub-config }
+        - name: ecg
+          persistentVolumeClaim: { claimName: ecg-hub-ecg }
+        - name: quarantine
+          persistentVolumeClaim: { claimName: ecg-hub-quarantine }
