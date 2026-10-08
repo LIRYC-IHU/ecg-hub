@@ -185,3 +185,8 @@ graphify-out/
 
 # Local dev compose override (host-specific volume/paths).
 docker-compose.dev.override.yml
+
+# Clone de travail de LIRYC-IHU/ecg-bridge. Les convertisseurs sont tires par
+# `go install` depuis ce depot public (voir backend/Dockerfile), jamais depuis
+# cet arbre local : il n'a pas a etre suivi ici.
+backend/converter-fda/
