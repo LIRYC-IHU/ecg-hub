@@ -6,6 +6,7 @@ import (
 	"crypto/subtle"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -383,10 +384,18 @@ func remoteHost(cc ftpserver.ClientContext) string {
 }
 
 // GetTLSConfig loads the TLS certificate when ftp.tls is enabled.
-// Returns nil, nil when TLS is disabled (dev mode).
+//
+// Returns an error -- never (nil, nil) -- when TLS is disabled. ftpserverlib's
+// AUTH handler only checks the error: on a nil error it hands the config
+// straight to tls.Server, and a nil config there makes the handshake
+// nil-dereference on the first ClientHello (handle_misc.go:15, against
+// server.go:224 which does test for nil on the implicit-TLS listener). That
+// panic runs on the client's own goroutine, so any client sending AUTH TLS to
+// a server started without a certificate killed the whole process -- the
+// clinical API included -- and the pod restarted under it.
 func (s *Server) GetTLSConfig() (*tls.Config, error) {
 	if !s.cfg.TLS {
-		return nil, nil
+		return nil, errors.New("ftp: TLS is not enabled on this server")
 	}
 	cert, err := tls.LoadX509KeyPair(s.cfg.CertFile, s.cfg.KeyFile)
 	if err != nil {
