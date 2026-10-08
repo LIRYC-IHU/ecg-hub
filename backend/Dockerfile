@@ -81,7 +81,7 @@ RUN mkdir -p /data/ecg /data/ecg-quarantine && chown -R app:app /data /app
 # bind error. Nothing needs it either: docker-compose publishes the device
 # ports, so dockerd does the privileged bind and the app binds >1024 inside.
 
-ENV LOG_LEVEL debug
+ENV LOG_LEVEL=info
 
 USER app
 
