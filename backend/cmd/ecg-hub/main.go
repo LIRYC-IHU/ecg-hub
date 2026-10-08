@@ -70,6 +70,20 @@ import (
 	_ "time/tzdata"
 )
 
+// requestLogLevel maps a response status to the level its log line deserves.
+// Anything served is debug: the audit trail records what was done and by whom,
+// so this line only earns attention when the request did not succeed.
+func requestLogLevel(status int) slog.Level {
+	switch {
+	case status >= 500:
+		return slog.LevelError
+	case status >= 400:
+		return slog.LevelWarn
+	default:
+		return slog.LevelDebug
+	}
+}
+
 func main() {
 	logLevel := slog.LevelInfo
 	if os.Getenv("LOG_LEVEL") == "debug" {
@@ -177,16 +191,24 @@ func main() {
 	// throughput (incl. gRPC/Connect load tests) and DoS protection is handled
 	// upstream by the DSI infrastructure (reverse proxy / WAF). Strict per-route
 	// limits still apply to /auth (see router).
+	// A served request is operational noise, not an audit record -- the audit
+	// trail is written separately, and it carries the user behind the call,
+	// which this line never did. The admin screens poll several procedures on a
+	// timer, so logging every 200 buried the lines that matter under thousands
+	// that do not, and filled the log retention with them. Only what failed is
+	// worth INFO or above; the rest stays available at debug level.
 	e.Use(middleware.RequestLoggerWithConfig(middleware.RequestLoggerConfig{
 		LogStatus: true,
 		LogURI:    true,
 		LogMethod: true,
+		LogError:  true,
 		LogValuesFunc: func(c echo.Context, v middleware.RequestLoggerValues) error {
-			slog.Info("request",
-				"method", v.Method,
-				"uri", v.URI,
-				"status", v.Status,
-			)
+			level := requestLogLevel(v.Status)
+			attrs := []any{"method", v.Method, "uri", v.URI, "status", v.Status}
+			if v.Error != nil {
+				attrs = append(attrs, "error", v.Error)
+			}
+			slog.Log(c.Request().Context(), level, "request", attrs...)
 			return nil
 		},
 	}))
