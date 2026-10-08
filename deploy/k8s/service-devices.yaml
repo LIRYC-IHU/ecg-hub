@@ -17,7 +17,7 @@
 #
 # APRÈS DÉPLOIEMENT, dans Administration > Modules :
 #   FTP    port 2121, Public host 10.10.50.101, Public port 21,
-#          plage passive 30010-30029
+#          plage passive 30000-30100
 #   DICOM  port 4242
 #   ECTP   port 30003
 #
@@ -26,11 +26,11 @@
 # le transfert juste après.
 #
 # Sa largeur est le plafond de transferts simultanés — un port est retenu par
-# connexion de données en cours. 20 suffisent pour des essais ; en production
-# le dépôt utilise 30000-30100. L'élargir ici ET dans Administration > Modules.
+# connexion de données en cours. Alignée sur la production (30000-30100).
+# La modifier ici ET dans Administration > Modules.
 #
-# 30003 est volontairement hors de la plage passive : ECTP l'occupe, et un port
-# dupliqué fait refuser le Service par l'API.
+# 30003 est retiré de la liste : ECTP l'occupe, et un port dupliqué fait refuser
+# le Service par l'API. Le serveur FTP, trouvant 30003 pris, passe au suivant.
 apiVersion: v1
 kind: Service
 metadata:
@@ -43,6 +43,10 @@ metadata:
     metallb.io/address-pool: default
 spec:
   type: LoadBalancer
+  # MetalLB route l'IP du LoadBalancer directement vers les pods : les NodePort
+  # ne servent à rien ici, et 103 ports en consommeraient autant dans la plage
+  # NodePort (30000-32767).
+  allocateLoadBalancerNodePorts: false
   externalTrafficPolicy: Local
   selector:
     app: backend
@@ -55,6 +59,15 @@ spec:
     # par le réseau.
     # - { name: adt, port: 2576, targetPort: 2576 }
     # Plage passive FTP.
+    - { name: pasv-30000, port: 30000, targetPort: 30000 }
+    - { name: pasv-30001, port: 30001, targetPort: 30001 }
+    - { name: pasv-30002, port: 30002, targetPort: 30002 }
+    - { name: pasv-30004, port: 30004, targetPort: 30004 }
+    - { name: pasv-30005, port: 30005, targetPort: 30005 }
+    - { name: pasv-30006, port: 30006, targetPort: 30006 }
+    - { name: pasv-30007, port: 30007, targetPort: 30007 }
+    - { name: pasv-30008, port: 30008, targetPort: 30008 }
+    - { name: pasv-30009, port: 30009, targetPort: 30009 }
     - { name: pasv-30010, port: 30010, targetPort: 30010 }
     - { name: pasv-30011, port: 30011, targetPort: 30011 }
     - { name: pasv-30012, port: 30012, targetPort: 30012 }
@@ -75,3 +88,74 @@ spec:
     - { name: pasv-30027, port: 30027, targetPort: 30027 }
     - { name: pasv-30028, port: 30028, targetPort: 30028 }
     - { name: pasv-30029, port: 30029, targetPort: 30029 }
+    - { name: pasv-30030, port: 30030, targetPort: 30030 }
+    - { name: pasv-30031, port: 30031, targetPort: 30031 }
+    - { name: pasv-30032, port: 30032, targetPort: 30032 }
+    - { name: pasv-30033, port: 30033, targetPort: 30033 }
+    - { name: pasv-30034, port: 30034, targetPort: 30034 }
+    - { name: pasv-30035, port: 30035, targetPort: 30035 }
+    - { name: pasv-30036, port: 30036, targetPort: 30036 }
+    - { name: pasv-30037, port: 30037, targetPort: 30037 }
+    - { name: pasv-30038, port: 30038, targetPort: 30038 }
+    - { name: pasv-30039, port: 30039, targetPort: 30039 }
+    - { name: pasv-30040, port: 30040, targetPort: 30040 }
+    - { name: pasv-30041, port: 30041, targetPort: 30041 }
+    - { name: pasv-30042, port: 30042, targetPort: 30042 }
+    - { name: pasv-30043, port: 30043, targetPort: 30043 }
+    - { name: pasv-30044, port: 30044, targetPort: 30044 }
+    - { name: pasv-30045, port: 30045, targetPort: 30045 }
+    - { name: pasv-30046, port: 30046, targetPort: 30046 }
+    - { name: pasv-30047, port: 30047, targetPort: 30047 }
+    - { name: pasv-30048, port: 30048, targetPort: 30048 }
+    - { name: pasv-30049, port: 30049, targetPort: 30049 }
+    - { name: pasv-30050, port: 30050, targetPort: 30050 }
+    - { name: pasv-30051, port: 30051, targetPort: 30051 }
+    - { name: pasv-30052, port: 30052, targetPort: 30052 }
+    - { name: pasv-30053, port: 30053, targetPort: 30053 }
+    - { name: pasv-30054, port: 30054, targetPort: 30054 }
+    - { name: pasv-30055, port: 30055, targetPort: 30055 }
+    - { name: pasv-30056, port: 30056, targetPort: 30056 }
+    - { name: pasv-30057, port: 30057, targetPort: 30057 }
+    - { name: pasv-30058, port: 30058, targetPort: 30058 }
+    - { name: pasv-30059, port: 30059, targetPort: 30059 }
+    - { name: pasv-30060, port: 30060, targetPort: 30060 }
+    - { name: pasv-30061, port: 30061, targetPort: 30061 }
+    - { name: pasv-30062, port: 30062, targetPort: 30062 }
+    - { name: pasv-30063, port: 30063, targetPort: 30063 }
+    - { name: pasv-30064, port: 30064, targetPort: 30064 }
+    - { name: pasv-30065, port: 30065, targetPort: 30065 }
+    - { name: pasv-30066, port: 30066, targetPort: 30066 }
+    - { name: pasv-30067, port: 30067, targetPort: 30067 }
+    - { name: pasv-30068, port: 30068, targetPort: 30068 }
+    - { name: pasv-30069, port: 30069, targetPort: 30069 }
+    - { name: pasv-30070, port: 30070, targetPort: 30070 }
+    - { name: pasv-30071, port: 30071, targetPort: 30071 }
+    - { name: pasv-30072, port: 30072, targetPort: 30072 }
+    - { name: pasv-30073, port: 30073, targetPort: 30073 }
+    - { name: pasv-30074, port: 30074, targetPort: 30074 }
+    - { name: pasv-30075, port: 30075, targetPort: 30075 }
+    - { name: pasv-30076, port: 30076, targetPort: 30076 }
+    - { name: pasv-30077, port: 30077, targetPort: 30077 }
+    - { name: pasv-30078, port: 30078, targetPort: 30078 }
+    - { name: pasv-30079, port: 30079, targetPort: 30079 }
+    - { name: pasv-30080, port: 30080, targetPort: 30080 }
+    - { name: pasv-30081, port: 30081, targetPort: 30081 }
+    - { name: pasv-30082, port: 30082, targetPort: 30082 }
+    - { name: pasv-30083, port: 30083, targetPort: 30083 }
+    - { name: pasv-30084, port: 30084, targetPort: 30084 }
+    - { name: pasv-30085, port: 30085, targetPort: 30085 }
+    - { name: pasv-30086, port: 30086, targetPort: 30086 }
+    - { name: pasv-30087, port: 30087, targetPort: 30087 }
+    - { name: pasv-30088, port: 30088, targetPort: 30088 }
+    - { name: pasv-30089, port: 30089, targetPort: 30089 }
+    - { name: pasv-30090, port: 30090, targetPort: 30090 }
+    - { name: pasv-30091, port: 30091, targetPort: 30091 }
+    - { name: pasv-30092, port: 30092, targetPort: 30092 }
+    - { name: pasv-30093, port: 30093, targetPort: 30093 }
+    - { name: pasv-30094, port: 30094, targetPort: 30094 }
+    - { name: pasv-30095, port: 30095, targetPort: 30095 }
+    - { name: pasv-30096, port: 30096, targetPort: 30096 }
+    - { name: pasv-30097, port: 30097, targetPort: 30097 }
+    - { name: pasv-30098, port: 30098, targetPort: 30098 }
+    - { name: pasv-30099, port: 30099, targetPort: 30099 }
+    - { name: pasv-30100, port: 30100, targetPort: 30100 }

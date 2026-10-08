@@ -168,7 +168,7 @@ Sur https://ecg-k8s.waxmaker.fr, créer le compte administrateur initial, puis
 
 | Module | Port | Autres réglages |
 |---|---|---|
-| FTP | `2121` | **Public host** `10.10.50.101`, **Public port** `21`, plage passive `30010-30029` |
+| FTP | `2121` | **Public host** `10.10.50.101`, **Public port** `21`, plage passive `30000-30100` |
 | DICOM | `4242` | — |
 | ECTP | `30003` | — |
 
@@ -181,10 +181,10 @@ Trois pièges, tous silencieux :
 - **« Public host » doit porter l'adresse du LoadBalancer.** Sans elle, le
   serveur annonce son adresse de pod dans la réponse `227` — inatteignable
   depuis l'appareil.
-- **`30003` est hors de la plage passive**, car ECTP l'occupe. En Docker Compose
-  la plage 30000-30100 l'enjambe sans dommage (la bibliothèque FTP réessaie le
-  port suivant), mais un port dupliqué fait **refuser le Service** par l'API
-  Kubernetes.
+- **`30003` est dans la plage passive mais absent de sa liste dans le Service**,
+  car ECTP l'occupe : un port dupliqué fait **refuser le Service** par l'API
+  Kubernetes. La plage reste 30000-30100 côté module, comme en Docker Compose :
+  la bibliothèque FTP trouve 30003 pris et réessaie le port suivant.
 
 ## Tester le mode S3
 
