@@ -206,6 +206,18 @@ func TestServer_GetSettings_TLSDisabled(t *testing.T) {
 	}
 }
 
+// ftpserverlib's AUTH handler branches on the error alone and passes whatever
+// config it got to tls.Server, so a nil config with a nil error panics the
+// handshake on the client's goroutine and takes the process down with it. A
+// nil config must therefore always come with an error.
+func TestServer_GetTLSConfig_TLSDisabled_ReturnsError(t *testing.T) {
+	s := New(testConfig("u", "p", false), NewIngestQueue(1))
+	cfg, err := s.GetTLSConfig()
+	if cfg == nil && err == nil {
+		t.Fatal("GetTLSConfig returned a nil config with a nil error: AUTH TLS would panic the server")
+	}
+}
+
 // ---- clientDriver file upload -----------------------------------------------
 
 func TestClientDriver_FileUpload_PushesToQueue(t *testing.T) {
