@@ -5,7 +5,6 @@
 # kustomization.yaml). Le modifier change ce nom, donc le pod template, donc
 # déclenche un rollout — ce qui est nécessaire, parce que le backend ne lit ce
 # fichier qu'au démarrage et ne le surveille pas.
-#
 # Aucun secret ici : un ConfigMap est en clair pour qui peut lire le namespace.
 # Les identifiants sont dans le Secret "ecg-hub" (pas un .env — il n'y en a pas
 # en Kubernetes). Voir secret.example.yaml.
@@ -110,7 +109,7 @@ export:
   # How long generated export files are kept in the temp area before cleanup.
   tmp_ttl: 2h
 ihe:
-  enabled: true
+  enabled: false
   port: 8443
   # Empty binds every interface, which is the point here — the Display actor
   # lives on the site network. Narrow it if the DPI reaches a single address.
@@ -140,7 +139,7 @@ ihe:
 # is applied. Point the HIS at it to see what the feed actually sends before the
 # rules that interpret it are fixed.
 adt:
-  enabled: true
+  enabled: false
   port: 2576
   host: ""
   read_timeout: 30s
