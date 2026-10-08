@@ -84,8 +84,22 @@ spec:
             # baseline. Laissé à false explicitement pour que personne ne croie
             # le contrôle actif.
             - { name: DEVICE_WHITELIST, value: "false" }
-            # Mode S3 : voir README.md, section « Tester le mode S3 ».
-            - { name: STORAGE_BACKEND, value: "local" }
+            # Le stockage se règle dans config.yaml (le ConfigMap), pas ici.
+            # Surtout : ne PAS déclarer STORAGE_BACKEND / S3_ENDPOINT / S3_BUCKET
+            # / S3_REGION / S3_PREFIX / S3_PATH_STYLE en variables
+            # d'environnement. Le loader les applique avec os.LookupEnv
+            # (loader.go:143-163), qui renvoie ok=true pour une chaîne vide :
+            # une variable déclarée vide écrase donc la valeur du fichier au
+            # lieu de la laisser passer. Un STORAGE_BACKEND=local oublié ici
+            # ramène le mode local en silence, alors que config.yaml annonce s3.
+            #
+            # Seuls les identifiants restent en environnement, parce que le code
+            # refuse de les lire depuis config.yaml — qui est un ConfigMap en
+            # clair.
+            - name: S3_ACCESS_KEY
+              valueFrom: { secretKeyRef: { name: ecg-hub, key: S3_ACCESS_KEY, optional: true } }
+            - name: S3_SECRET_KEY
+              valueFrom: { secretKeyRef: { name: ecg-hub, key: S3_SECRET_KEY, optional: true } }
           volumeMounts:
             - { name: config, mountPath: /app/config.yaml, subPath: config.yaml, readOnly: true }
             - { name: ecg, mountPath: /data/ecg }

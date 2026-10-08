@@ -1,31 +1,152 @@
-# config.yaml du backend : infrastructure seule.
+# ECG Hub — config.yaml, déploiement Kubernetes.
 #
-# Tout le fonctionnel — modules et leurs ports, paramètres HL7, mappings de
-# champs, connecteurs, webhooks, fournisseurs d'authentification, rôles — est en
-# base et se configure depuis l'interface d'administration. Ne rien ajouter ici
-# qui s'y règle déjà : la valeur serait ignorée.
+# Ce fichier n'est pas copié ni monté tel quel : kustomize le transforme en
+# ConfigMap dont le nom porte un hash de son contenu (configMapGenerator dans
+# kustomization.yaml). Le modifier change ce nom, donc le pod template, donc
+# déclenche un rollout — ce qui est nécessaire, parce que le backend ne lit ce
+# fichier qu'au démarrage et ne le surveille pas.
+#
+# Aucun secret ici : un ConfigMap est en clair pour qui peut lire le namespace.
+# Les identifiants sont dans le Secret "ecg-hub" (pas un .env — il n'y en a pas
+# en Kubernetes). Voir secret.example.yaml.
+#
+# IMPORTANT: this file is INFRASTRUCTURE ONLY. Auth providers (OIDC/LDAP),
+# ingestion modules (FTP/DICOM), HL7, outbound connectors and the webhook
+# endpoints themselves are configured from the admin UI and stored in the
+# database — they are NOT read from this file. The backend only parses the
+# sections below.
 
 server:
-  # TLS termine sur Traefik, pas sur le serveur Go.
+  # The listen port is fixed at 4444: the Dockerfile exposes it, nginx proxies
+  # to it, and the compose stack binds it. Nothing to set here.
+  #
+  # tls: terminate TLS directly on the Go server (bare-metal). Behind nginx
+  # (the default prod deployment) keep false — TLS terminates at the proxy.
   tls: false
+  # cert_file: /etc/ecg-hub/certs/server.crt   # required when tls: true
+  # key_file:  /etc/ecg-hub/certs/server.key   # required when tls: true
 
 database:
+  # The connection string is DATABASE_URL (in .env). These tune the pool only.
   max_open_conns: 10
   max_idle_conns: 5
 
 storage:
-  # "local" = volume monté (NFS ici). "s3" = stockage objet, le volume
-  # servant alors de file d'attente de téléversement.
-  backend: local
+  # Where ECG files live: "local" (default) or "s3".
+  #
+  # In s3 mode the local volume is still used, as a spool: files are written to
+  # disk first and uploaded by a background worker, so ingestion never waits on
+  # the network and a bucket outage costs a backlog instead of a lost ECG. Size
+  # volume_path for the longest outage you are willing to ride out.
+  backend: s3
+  # Mount point for the main ECG file volume.
   volume_path: /data/ecg
+  # Separate volume for quarantined files (may need a different retention policy).
   quarantine_path: /data/ecg-quarantine
-  # Plafond souple. La rotation ne supprime aucun fichier clinique si elle
-  # n'est pas explicitement activée, et jamais en mode s3.
+  # Soft cap on volume_path: oldest files are rotated out when exceeded.
+  # Accepts Ki/Mi/Gi (binary) or k/m/g (decimal). Empty / "0" disables rotation
+  # (not recommended in production).
+  # Tenu sous la capacité du PersistentVolume (10Gi, voir storage-nfs.yaml) :
+  # au-delà, le plafond ne serait jamais atteint et c'est le volume qui se
+  # remplirait d'abord, l'ingestion échouant alors à l'écriture au lieu de
+  # déclencher l'alerte.
   max_size: "8Gi"
+  # Object storage — only read when backend is "s3". Credentials are NEVER in
+  # this file: they come from S3_ACCESS_KEY and S3_SECRET_KEY in the
+  # environment. Every field below also has an env override (S3_ENDPOINT,
+  # S3_BUCKET, S3_REGION, S3_PREFIX, S3_PATH_STYLE) so an injected deployment
+  # needs no templating of this file.
+  #
+  # Note: with backend "s3", max_size above stops being a rotation trigger and
+  # becomes an alert on the upload backlog. Nothing on the volume is ever
+  # deleted while it is the only copy of a record; retention on the bucket
+  # belongs to its lifecycle rules.
+  s3:
+    # Adresse LAN, et non https://s3.prod.waxmaker.fr : ce nom résout vers une
+    # adresse Tailscale (100.77.154.194) que les nœuds Talos ne savent ni
+    # résoudre ni router — vérifié depuis le pod, "bad address" puis timeout.
+    # Sur le LAN le service n'écoute qu'en clair ; 443 et 80 refusent la
+    # connexion. Le schéma http décide donc de use_ssl, qui vaut false ci-dessous
+    # pour que le fichier dise la même chose que le comportement.
+    #
+    # 9000 et 9001 répondent tous deux 403 à une requête anonyme, donc on ne les
+    # distingue pas sans identifiants. Si 9001 était la console et non l'API, le
+    # démarrage échouerait franchement sur le BucketExists de NewS3Store
+    # ("s3 bucket \"ecg-hub\" unreachable") — pas de dégradation silencieuse.
+    endpoint: "http://10.10.40.7:9001"
+    bucket: ecg-hub
+    # Vide : minio-go s'en passe sur un endpoint S3-compatible. Seul AWS exige
+    # une région réelle.
+    region: ""
+    # Préfixe de clé. Le "/" initial est retiré par le code (s3.go:79) et le "/"
+    # final est nécessaire : le préfixe est concaténé tel quel devant la clé
+    # (s3.go:107), donc sans lui les objets s'appelleraient "k8s/dev<clé>".
+    prefix: "k8s/dev/"
+    use_ssl: false
+    # Address buckets as <endpoint>/<bucket> instead of <bucket>.<endpoint>.
+    # Required by MinIO, RustFS and Ceph unless wildcard DNS is set up.
+    path_style: true
+    # How often the spool is drained. Default 10.
+    upload_interval_seconds: 10
 
-ingest:
-  # Chaque étape du pipeline tient le fichier en mémoire, et les ports FTP et
-  # DICOM sont exposés aux appareils : un envoi non borné suffit à pousser le
-  # backend vers le tueur de processus. À relever seulement si le parc produit
-  # des fichiers plus volumineux.
-  max_file_bytes: "1Mi"
+# TLS certificate presented by the device-facing servers (FTPS, DICOM TLS).
+#
+# One pair for the installation, read from a mounted directory — there is no
+# certificate field in the admin UI on purpose. Whoever already manages
+# certificates (certbot, an internal PKI, a CHU wildcard) keeps managing them:
+# the files are rewritten in place and the module is restarted, and nothing in
+# the database ever holds a path.
+#
+# The defaults are certbot's filenames, so mounting
+# /etc/letsencrypt/live/<host> at /certs needs no configuration at all.
+# Overridable with TLS_CERT_FILE / TLS_KEY_FILE.
+certs:
+  cert_file: /certs/fullchain.pem
+  key_file: /certs/privkey.pem
+
+export:
+  # Number of background export workers (PDF / FDA aECG / DICOM generation).
+  workers: 2
+  # How long generated export files are kept in the temp area before cleanup.
+  tmp_ttl: 2h
+ihe:
+  enabled: true
+  port: 8443
+  # Empty binds every interface, which is the point here — the Display actor
+  # lives on the site network. Narrow it if the DPI reaches a single address.
+  # ca-key.pem   ca.pem   ca.srl   client-key.pem   client.p12   client.pem   clients-ca.pem   server-key.pem   server.pem
+
+  host: ""
+  # Certificate this listener presents to the Display.
+  cert_file: /certs/ihe/server.pem
+  key_file: /certs/ihe/server-key.pem
+  # CA that signs the Display actors' client certificates. Without it there is
+  # no mTLS, and without mTLS this is an open endpoint serving named patient
+  # documents — hence a required field, never a default.
+  client_ca_file: /certs/ihe/clients-ca.pem
+  # The patient identifier domain this installation answers for, matched against
+  # the assigning authority of the HL7 CX in a CARD-5 query. Set it on a
+  # multi-site deployment: patients.patient_id is unique installation-wide with
+  # no authority column, so two domains issuing the same number would silently
+  # resolve to one person. Empty ignores the authority component.
+  assigning_authority: ""
+  # The site's wall clock; zone-less CARD-5 date bounds are read in it.
+  timezone: "Europe/Paris"
+
+# Inbound ADT listener — the receiving half of IHE RAD-12 Patient Update, where
+# the HIS pushes patient changes instead of being asked for them.
+#
+# Observing only at this stage: every message is acknowledged and logged, none
+# is applied. Point the HIS at it to see what the feed actually sends before the
+# rules that interpret it are fixed.
+adt:
+  enabled: true
+  port: 2576
+  host: ""
+  read_timeout: 30s
+  history_retention_days: 30
+  # Laisse vide : chez toi l'adresse source vue par le listener est 142.251.39.113,
+  # sans rapport avec l'emetteur. La remplir verrouillerait le flux sans rien proteger.
+  allowed_senders: []
+  # La seule des deux exploitable ici : MSH-4 voyage dans le message.
+  allowed_facilities: ["TESTFACILITY"]
