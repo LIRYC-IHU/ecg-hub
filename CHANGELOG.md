@@ -56,10 +56,14 @@ given.
   asked about, so a site can let a device record the number scanned off a
   wristband and have it resolved to the establishment's own identifier. The
   patient is moved there, ECGs included.
-- MAC-address whitelist for the FTP, DICOM and ECTP ports, with manual enrolment
-  and the ability to refuse what cannot be identified. It only works where the
-  device is on the same layer-2 segment, which the deployment now declares
-  explicitly rather than leaving to chance.
+- Device inventory by MAC address on the FTP, DICOM and ECTP ports, with manual
+  enrolment, revocation and the ability to refuse what cannot be identified.
+  Read it as an inventory and not as an access control: identification needs the
+  device on the same layer-2 segment as the server, so it cannot work on a
+  routed network -- which is to say wherever devices and servers sit on separate
+  VLANs -- and a MAC address is spoofable in any case. Off by default, because a
+  whitelist that identifies nothing either lets everything through or refuses
+  every device.
 
 ### Distribution
 

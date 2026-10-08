@@ -166,19 +166,38 @@ détermine une fonction de sécurité.
 | Isolation réseau | Oui, conteneurs sur réseau dédié | Non, l'application voit les interfaces de l'hôte |
 | Ports | Publiés explicitement | Liaison directe |
 | Adresse source des appareils | Perdue (traduite par Docker) | Préservée |
-| **Filtrage par adresse MAC** | **Impossible** | **Opérationnel** |
+| **Identification par adresse MAC** | **Impossible** | Possible, si et seulement si les appareils sont sur le même segment de niveau 2 que l'hôte |
 | Port 21 | Assuré par le démon Docker, l'application reste non privilégiée | Redirection 21 → 2121 sur l'hôte (`make ftp-ports`) |
 
-Le filtrage par adresse MAC lit la table de voisinage de l'hôte. En mode
-*bridge*, le conteneur possède son propre espace de noms réseau : il n'y voit
-que les conteneurs voisins, jamais un appareil du réseau médical. Le contrôle
-n'identifierait alors rien et laisserait tout passer — un contrôle qui
-n'interdit rien, indiscernable à l'écran d'un contrôle qui fonctionne. Il est
-donc désactivé dans ce mode, et le rester est délibéré.
+L'identification par adresse MAC lit la table de voisinage du système. Or une
+table ARP ne contient que des voisins du même segment de niveau 2 : aucune
+requête ARP n'est émise pour une adresse qui n'est pas sur le réseau local.
+**Dès que les appareils et le serveur sont sur des VLAN distincts — la topologie
+hospitalière habituelle — aucun appareil ne peut être identifié**, et ce quel
+que soit le mode réseau ou l'orchestrateur. Le trafic est routé, la seule
+adresse matérielle visible est celle du routeur, et le code refuse délibérément
+de la rendre : l'approuver approuverait tout ce qui se trouve derrière.
 
-**Conséquence :** si le filtrage par adresse MAC fait partie des exigences, le
-mode *host* est obligatoire, et l'hôte doit être raccordé au même segment de
-niveau 2 que les appareils.
+En mode *bridge*, l'obstacle survient plus tôt encore : le conteneur possède son
+propre espace de noms réseau et n'y voit que les conteneurs voisins.
+
+Le comportement face à un appareil non identifié est un réglage, et les deux
+valeurs sont inconfortables. Laissé à sa valeur par défaut, le contrôle
+journalise un avertissement et laisse passer — un contrôle qui n'interdit rien,
+indiscernable à l'écran d'un contrôle qui fonctionne. Activé
+(`deny_unidentified`), il refuse **tous** les appareils et interrompt
+l'ingestion clinique. D'où la désactivation par défaut, qui est délibérée.
+
+**Qualification.** Cette fonction est un **inventaire d'appareils** — nommer les
+appareils qui parlent au hub, les enrôler, en révoquer un, compter leurs
+contacts — et non une mesure de sécurité : une adresse MAC s'usurpe en une
+commande, et elle n'est de toute façon pas vérifiable sur réseau routé. Elle ne
+doit pas être comptée comme un contrôle d'accès dans une analyse de risque.
+
+**Conséquence :** le contrôle d'accès à ces ports repose sur le cloisonnement
+réseau (§6, §7), pas sur cette fonction. Si une exigence porte explicitement sur
+un filtrage matériel, elle suppose les appareils et le serveur sur un même
+segment de niveau 2, et doit être arbitrée comme telle (§Annexe B).
 
 ### 3.3 Instance unique
 
@@ -210,8 +229,13 @@ demandent une validation sur cluster réel :
 - `externalTrafficPolicy: Local` est nécessaire pour conserver l'adresse source,
   seule identité du client enregistrée dans la traçabilité d'ingestion.
 - Réplica unique, stratégie `Recreate` (§3.3).
-- Le filtrage par adresse MAC exige `hostNetwork` et l'épinglage du *pod* sur
-  les nœuds raccordés au VLAN médical (§3.2).
+- L'identification par adresse MAC suppose les nœuds raccordés au même segment
+  de niveau 2 que les appareils. Monter le `/proc/net` de l'hôte en lecture
+  seule suffit à la rendre techniquement accessible au *pod* — `hostNetwork`
+  n'est pas requis — mais cela ne change rien sur un réseau routé, où aucune
+  entrée ARP n'existe pour l'appareil (§3.2). Vérifié sur le cluster de test :
+  nœuds en `10.10.50.0/24`, appareil en `10.10.30.0/24`, aucune identification
+  possible.
 
 Un diagramme de l'architecture Kubernetes envisagée existe
 (`docs/diagrams/ecg-hub-kubernetes.html`). La production des manifestes demande
@@ -483,8 +507,10 @@ via la publication de port, l'application restant sur le 2121 non privilégié.
   derrière une traduction d'adresse tous les appareils partagent une même
   adresse, et un verrouillage permettrait à un scanner de mettre l'ingestion
   clinique hors service.
-- **Filtrage par adresse MAC** — avec enrôlement manuel et possibilité de
-  refuser ce qui n'est pas identifiable. Soumis au mode réseau (§3.2).
+- **Inventaire des appareils par adresse MAC** — enrôlement manuel, révocation,
+  et possibilité de refuser ce qui n'est pas identifiable. À ne pas compter
+  comme un contrôle d'accès : inopérant sur réseau routé, et une adresse MAC
+  s'usurpe (§3.2).
 - **Protection contre la falsification de requête côté serveur** sur les URL de
   webhooks.
 
@@ -902,7 +928,9 @@ l'établissement l'exige.
   cloisonner ni les données ni les permissions par site. Voir le prérequis du §4.
 - **Fichiers ECG non compressés.** La compression au niveau du système de
   fichiers ou du stockage est recommandée (§5.4).
-- **Filtrage par adresse MAC conditionné au mode réseau** (§3.2).
+- **Identification par adresse MAC inopérante sur réseau routé** — donc dès que
+  les appareils et le serveur sont sur des VLAN distincts. C'est une limite de
+  la couche 2, que ni le mode réseau ni l'orchestrateur ne lèvent (§3.2).
 - **Fichiers FDA aECG XML de provenance tierce non identifiés
   automatiquement.** Le module lit l'identifiant patient dans un élément
   `PatientID` sous `subjectDemographicPerson`, qui ne fait pas partie du schéma
@@ -941,7 +969,7 @@ l'établissement l'exige.
 | `FTP_PORT` | `21` | Port FTP côté hôte |
 | `DICOM_PORT` | `4242` | Port DICOM côté hôte |
 | `ADT_PORT` | `2576` | Port ADT entrant côté hôte |
-| `DEVICE_WHITELIST` | `false` | Filtrage par adresse MAC. Sans effet hors mode *host* (§3.2) |
+| `DEVICE_WHITELIST` | `false` | Inventaire par adresse MAC. Sans effet hors mode *host*, et sans effet sur réseau routé (§3.2) |
 | `METRICS_ENABLED` | `false` | Exposition Prometheus |
 | `METRICS_PORT` | `9091` | Port de collecte |
 | `TLS_CERT_FILE` | `/certs/fullchain.pem` | Certificat FTPS et DICOM TLS |
@@ -959,7 +987,7 @@ Liste complète et commentée : `.env.example`.
 
 | Réf. | Sujet | Décideur |
 |---|---|---|
-| §3.2 | Mode réseau, et filtrage par adresse MAC exigé ou non | DSI / Sécurité |
+| §3.2 | Mode réseau ; et si un filtrage matériel est exigé, adjacence de niveau 2 entre appareils et serveur à arbitrer | DSI / Sécurité |
 | §4 | **Unicité de l'identifiant patient sur le périmètre — bloquant** | DSI / Identité patient |
 | §5.6 | Volume quotidien, parc d'appareils, formats | Service biomédical |
 | §6.3 | Adresses, VLAN, ouvertures de flux (dont la plage passive FTP) | Réseau |

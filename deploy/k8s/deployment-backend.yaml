@@ -79,10 +79,24 @@ spec:
             - { name: CONFIG_PATH, value: "/app/config.yaml" }
             - { name: METRICS_ENABLED, value: "true" }
             - { name: METRICS_PORT, value: "9091" }
-            # Sans effet dans ce namespace : le filtrage lit la table de voisinage
-            # de l'hôte, ce qui exige hostNetwork — interdit par PodSecurity
-            # baseline. Laissé à false explicitement pour que personne ne croie
-            # le contrôle actif.
+            # Sans effet sur ce réseau, et pas pour la raison qu'on croit.
+            # L'identification lit une table ARP, qui ne contient que des
+            # voisins du même segment de niveau 2. Les nœuds sont en
+            # 10.10.50.0/24 et les appareils en 10.10.30.0/24 : le trafic est
+            # routé, aucune entrée ARP n'existe pour l'appareil, et la seule
+            # adresse matérielle visible serait celle du routeur — que le code
+            # refuse de rendre (ErrSharedHop), parce que l'approuver
+            # approuverait tout ce qui est derrière.
+            #
+            # hostNetwork n'y changerait rien et n'est pas nécessaire : le
+            # résolveur sait lire un /proc/net monté (HOST_PROC_NET). C'est bien
+            # un hostPath, interdit par PodSecurity baseline — mais inutile de
+            # relever le niveau du namespace pour obtenir une table qui ne
+            # contient pas l'appareil.
+            #
+            # Laissé à false explicitement : activé, ce contrôle journalise un
+            # avertissement et laisse tout passer. Avec deny_unidentified, il
+            # refuse tous les appareils et arrête l'ingestion.
             - { name: DEVICE_WHITELIST, value: "false" }
             # Le stockage se règle dans config.yaml (le ConfigMap), pas ici.
             # Surtout : ne PAS déclarer STORAGE_BACKEND / S3_ENDPOINT / S3_BUCKET

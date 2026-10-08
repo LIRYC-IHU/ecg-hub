@@ -35,8 +35,8 @@ host namespaces (hostNetwork=true)
 Sur kubeadm ou k3s, l'admission PodSecurity existe mais son défaut est
 `privileged` : rien à faire. Sur Talos, deux choses sont refusées tant que le
 namespace ne porte pas `pod-security.kubernetes.io/enforce=privileged` :
-`hostNetwork` et les volumes `hostPath`. D'où, respectivement, l'absence du
-filtrage par adresse MAC et le recours à des `PersistentVolume` déclarés.
+`hostNetwork` et les volumes `hostPath`. D'où le recours à des
+`PersistentVolume` déclarés.
 
 **Pas de SSH, racine en lecture seule, `/var` seul chemin inscriptible.** La
 redirection `21 → 2121` de `make ftp-ports` n'a pas d'équivalent : il n'y a pas
@@ -44,15 +44,37 @@ d'hôte où la poser. Le Service `LoadBalancer` fait le travail à sa place.
 
 ## Ce qui ne fonctionne pas ici, et pourquoi
 
-**Le filtrage par adresse MAC des appareils** (`DEVICE_WHITELIST`). Le contrôle
-lit la table de voisinage de l'hôte : il exige `hostNetwork` et un pod sur le
-même segment de niveau 2 que les appareils. `hostNetwork` étant refusé par
-PodSecurity `baseline`, la variable reste à `false`, explicitement, pour que
-personne ne croie le contrôle actif.
+**L'identification des appareils par adresse MAC** (`DEVICE_WHITELIST`), et la
+raison n'est pas celle qu'on attend.
 
-Pour l'activer : un namespace étiqueté `privileged`, `hostNetwork: true`, et un
-`nodeSelector` épinglant le pod sur un nœud raccordé au VLAN des appareils. Ce
-n'est pas fourni ici — c'est un autre déploiement, pas une option.
+L'identification lit une table ARP. Une table ARP ne contient que des voisins du
+même segment de niveau 2 : aucune requête ARP n'est émise pour une adresse qui
+n'est pas sur le réseau local. Ici les nœuds sont en `10.10.50.0/24` et les
+appareils en `10.10.30.0/24` — mesuré, pas supposé : une connexion FTP arrive
+bien depuis `10.10.30.2`, l'adresse source est donc préservée, mais aucun nœud
+ne peut avoir d'entrée ARP pour elle. La seule adresse matérielle visible serait
+celle du routeur, et le code refuse de la rendre (`ErrSharedHop`) : l'approuver
+approuverait tout ce qui se trouve derrière.
+
+`hostNetwork` n'est **pas** la clé. Le résolveur sait lire un `/proc/net` monté
+depuis l'hôte (`HOST_PROC_NET`), ce qui est un `hostPath` — refusé par
+PodSecurity `baseline`. Mais relever le niveau du namespace ne servirait à rien :
+on obtiendrait la table ARP du nœud, qui ne contient pas davantage l'appareil.
+
+Pour que la fonction opère, il faudrait raccorder les nœuds au VLAN des
+appareils — une seconde interface sur ce bridge, l'IP du `Service` côté
+appareils sur ce segment, puis le `hostPath` et un namespace `privileged`. Ce
+n'est pas fourni ici, et ce n'est pas qu'une option de déploiement : c'est un
+autre plan d'adressage.
+
+La variable reste donc à `false`, explicitement. Activée, cette fonction
+journalise un avertissement par connexion et laisse tout passer — un contrôle
+qui n'interdit rien, indiscernable à l'écran d'un contrôle qui fonctionne. Avec
+`deny_unidentified`, elle refuse **tous** les appareils et interrompt
+l'ingestion clinique.
+
+À lire comme un inventaire d'appareils, utile là où l'adjacence de niveau 2
+existe, et non comme un contrôle d'accès : une adresse MAC s'usurpe.
 
 ## Déployer
 
