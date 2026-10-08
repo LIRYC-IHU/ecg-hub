@@ -3,6 +3,19 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org/).
 
+## [1.1.1] — 2026-10-08
+
+### Fixed
+
+- **An FTP client could stop the whole server with one command.** `AUTH TLS`
+  sent to a server started without a certificate panicked the TLS handshake on
+  the client's own goroutine, which killed the process -- the API, the DICOM
+  listener and every in-flight ingestion with it -- and the container restarted
+  under it. `AUTH` is answered before login, so no credentials were needed.
+  `GetTLSConfig` returned no config and no error, and the library it serves
+  branches on the error alone. It now returns an error when `ftp.tls` is off,
+  and the command is refused instead.
+
 ## [1.1.0] — 2026-10-01
 
 Interoperability release. The hub now answers to a DPI over IHE, is pushed

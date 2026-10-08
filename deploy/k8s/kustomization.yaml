@@ -30,6 +30,6 @@ configMapGenerator:
 
 images:
   - name: zot.waxmaker.fr/ecg-hub/backend
-    newTag: 1.1.0
+    newTag: 1.1.1
   - name: zot.waxmaker.fr/ecg-hub/frontend
     newTag: 1.1.0
