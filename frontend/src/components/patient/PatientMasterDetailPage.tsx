@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import { gsap } from "gsap";
 import { useGSAP } from "@gsap/react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePatients } from "../../hooks/usePatients";
 import { useECGs } from "../../hooks/useECGs";
@@ -727,7 +727,62 @@ function PatientDetail({
   const { notify } = useNotification();
   const queryClient = useQueryClient();
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  const [viewerEcgId, setViewerEcgId] = useState<string | null>(null);
+  // The open ECG is a view, not a transient popup: its id lives in the URL, so
+  // the browser's back button closes the viewer and returns to the list instead
+  // of leaving the application.
+  //
+  // Nothing checks that ?ecg= belongs to this patient, and the viewer takes its
+  // identity header from the `patient` prop. Every producer of the parameter is
+  // internal -- this patient's own list, or an ingestion event the server built
+  // from one file -- so the two agree by construction. A hand-written URL
+  // pairing a patient with another patient's ECG would show the wrong name
+  // above the trace. Verifying that pairing server-side belongs to the
+  // shareable-link work (#127), which is where such a URL first becomes
+  // something a user can receive.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const viewerEcgId = searchParams.get("ecg");
+  // Opened from the list: push, so back closes the viewer. Remember that we
+  // pushed, because closing then has to go back rather than push again --
+  // otherwise the X button leaves the viewer entry ahead of the patient panel
+  // and the next back press reopens what the operator just closed.
+  const openedHere = useRef(false);
+  // A back press closes the viewer without ever calling closeViewer, so the flag
+  // has to follow the parameter rather than only our own calls. Left set, it
+  // would make the X button of a later link-opened viewer navigate back out of
+  // the patient panel.
+  useEffect(() => {
+    if (!viewerEcgId) openedHere.current = false;
+  }, [viewerEcgId]);
+  const openViewerId = useCallback(
+    (ecgId: string) => {
+      openedHere.current = true;
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("ecg", ecgId);
+        return next;
+      });
+    },
+    [setSearchParams],
+  );
+  const closeViewer = useCallback(() => {
+    if (openedHere.current) {
+      openedHere.current = false;
+      navigate(-1);
+      return;
+    }
+    // Arrived straight on ?ecg= (a notification link, a reload, a pasted URL):
+    // there is no entry of ours to go back to, and navigate(-1) would leave the
+    // application. Drop the parameter in place instead.
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("ecg");
+        return next;
+      },
+      { replace: true },
+    );
+  }, [navigate, setSearchParams]);
   const [downloadOpenId, setDownloadOpenId] = useState<string | null>(null);
   const [downloading, setDownloading] = useState(false);
   const detailRef = useRef<HTMLDivElement>(null);
@@ -755,7 +810,7 @@ function PatientDetail({
   });
 
   const openViewer = (ecg: ECG) => {
-    setViewerEcgId(String(ecg.id));
+    openViewerId(String(ecg.id));
     if (!ecg.viewed) markViewedMutation.mutate(String(ecg.id));
   };
 
@@ -1164,7 +1219,7 @@ function PatientDetail({
             ecgs.find((e) => String(e.id) === viewerEcgId)?.original_filename
           }
           patient={patient}
-          onClose={() => setViewerEcgId(null)}
+          onClose={closeViewer}
         />
       )}
     </div>
@@ -1467,22 +1522,46 @@ export function PatientMasterDetailPage({
 
   const totalPages = Math.max(1, Math.ceil(total / perPage));
 
-  // Deep-link selection: when arriving via ?patient=<patient_id> (e.g. from a
-  // realtime ingestion notification), select that patient once it is in the loaded
-  // list, then strip the params so later refetches don't re-trigger selection.
+  // ?patient=<patient_id> is what is selected -- not a one-shot instruction that
+  // gets consumed and stripped. Holding the selection in the URL is what makes
+  // back and forward move between views, and it is why an ingestion
+  // notification's link survives a refresh.
+  //
+  // patient_id and not the row id: it is `not null;unique` across the whole
+  // deployment (see the Patient model), so it stays valid across a restore,
+  // where a surrogate key would not.
+  //
+  // selectedPatient stays, but only as a cache of the resolved object. The
+  // patient is looked up in the loaded page of `patients`, and changing page
+  // drops them from it -- re-deriving on every render would then close the
+  // detail panel underneath the operator.
   const [searchParams, setSearchParams] = useSearchParams();
+  const urlPatientId = searchParams.get("patient");
   useEffect(() => {
-    const pid = searchParams.get("patient");
-    if (!pid) return;
-    const match = patients.find((p) => p.patient_id === pid);
-    if (match) {
-      setSelectedPatient(match);
-      const next = new URLSearchParams(searchParams);
-      next.delete("patient");
-      next.delete("ecg");
-      setSearchParams(next, { replace: true });
+    if (!urlPatientId) {
+      setSelectedPatient(null);
+      return;
     }
-  }, [searchParams, patients, setSearchParams]);
+    if (selectedPatient?.patient_id === urlPatientId) return;
+    const match = patients.find((p) => p.patient_id === urlPatientId);
+    if (match) setSelectedPatient(match);
+  }, [urlPatientId, patients]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Pushes rather than replaces: each selection earns a history entry to come
+  // back to. Switching or closing a patient drops ?ecg= with it, so a stale id
+  // cannot survive into another patient's panel.
+  const selectPatientInUrl = useCallback(
+    (patientId: string | null) => {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev);
+        if (patientId) next.set("patient", patientId);
+        else next.delete("patient");
+        next.delete("ecg");
+        return next;
+      });
+    },
+    [setSearchParams],
+  );
 
   // Sync selectedPatient with refetched data
   useEffect(() => {
@@ -1558,9 +1637,12 @@ export function PatientMasterDetailPage({
 
   const handleSelectPatient = async (patient: Patient) => {
     if (selectedPatient?.id === patient.id) {
-      setSelectedPatient(null);
+      selectPatientInUrl(null);
     } else {
+      // Set the cache before navigating: the effect above resolves from the
+      // loaded list, and this skips a render with the panel half-open.
       setSelectedPatient(patient);
+      selectPatientInUrl(patient.patient_id);
       void markPatientViewed(patient);
       if (checkedPatients.has(patient.id)) {
         try {
