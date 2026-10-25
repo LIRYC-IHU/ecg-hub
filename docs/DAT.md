@@ -18,6 +18,8 @@ recopier :
 - [`docs/TLS_CERTS.md`](TLS_CERTS.md) — certificats FTPS et DICOM TLS
 - [`docs/POSTGRES_UPGRADE.md`](POSTGRES_UPGRADE.md) — montées de version base
 - [`docs/HL7_INBOUND_ADT.md`](HL7_INBOUND_ADT.md) — HL7 ADT entrant (IHE RAD-12)
+- [`docs/DICOM_CONFORMANCE_STATEMENT.md`](DICOM_CONFORMANCE_STATEMENT.md) — DICOM Conformance Statement
+- [`docs/IHE_INTEGRATION_STATEMENT.md`](IHE_INTEGRATION_STATEMENT.md) — déclaration d'intégration IHE
 - [`SECURITY.md`](../SECURITY.md) — signalement de vulnérabilité
 
 Les sections marquées **[À COMPLÉTER PAR L'ÉTABLISSEMENT]** portent sur des
@@ -884,11 +886,13 @@ MSH-4, qui voyage dans le message, reste exploitable. Détails :
 
 ### 13.4 Déclaration d'intégration IHE
 
-**[À COMPLÉTER]** Aucune déclaration d'intégration IHE formelle n'est publiée à
-ce jour, et aucun passage en Connectathon n'a eu lieu. L'implémentation suit la
+Publiée : [`docs/IHE_INTEGRATION_STATEMENT.md`](IHE_INTEGRATION_STATEMENT.md),
+accompagnée d'un DICOM Conformance Statement
+([`docs/DICOM_CONFORMANCE_STATEMENT.md`](DICOM_CONFORMANCE_STATEMENT.md)).
+Aucun passage en Connectathon n'a eu lieu. L'implémentation suit la
 spécification du profil et a été éprouvée contre l'acteur *Display* fourni avec
-le dépôt. Un Connectathon est le moyen d'obtenir une déclaration opposable, si
-l'établissement l'exige.
+le dépôt. Un Connectathon est le moyen de rendre la déclaration vérifiable par
+un tiers, si l'établissement l'exige.
 
 ---
 
@@ -915,7 +919,11 @@ l'établissement l'exige.
 - **HL7 MLLP sans TLS** : protection par le cloisonnement réseau uniquement
   (§7.2).
 - **Pas de manifestes Kubernetes/Helm** (§3.4).
-- **Pas de déclaration d'intégration IHE formelle** (§13.4).
+- **Déclaration d'intégration IHE non validée en Connectathon** (§13.4).
+- **Écarts DICOM connus**, recensés à l'annexe D du DICOM Conformance
+  Statement : en particulier, pas de TLS en sortie vers le PACS, des UID
+  régénérés à chaque conversion, et des attributs obligatoires absents des
+  objets créés.
 
 ---
 
