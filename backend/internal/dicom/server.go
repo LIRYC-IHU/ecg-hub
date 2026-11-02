@@ -26,6 +26,7 @@ import (
 	"github.com/apaladiychuk/go-netdicom/dimse"
 
 	"github.com/LIRYC-IHU/ecg-hub/internal/device"
+	"github.com/LIRYC-IHU/ecg-hub/internal/dicomsop"
 	"github.com/LIRYC-IHU/ecg-hub/internal/ingestion"
 	appmetrics "github.com/LIRYC-IHU/ecg-hub/internal/metrics"
 )
@@ -240,6 +241,43 @@ func (s *Server) onCStore(
 		}
 	}
 
+	// Negotiation guarantees nothing here. go-netdicom accepts every
+	// presentation context it is offered — any abstract syntax, and whichever
+	// transfer syntax the caller proposed first — and its own source carries a
+	// TODO saying as much (contextmanager.onAssociateRequest). So the
+	// association having been established says only that something connected,
+	// and this is where ECG Hub decides what it will actually take.
+	//
+	// Refusing here is late by one object compared with refusing the context,
+	// but it is what makes the answer true: the device is told its object was
+	// rejected, and why, instead of reading Success for something that will
+	// never be displayed or forwarded.
+	if !dicomsop.IsKnownECGSOPClass(sopClassUID) {
+		appmetrics.DICOMSCPErrors.WithLabelValues("sop_class_unsupported").Inc()
+		slog.Warn("dicom: C-STORE refused — SOP class outside the supported list",
+			"sop_class", sopClassUID,
+			"sop_instance_uid", sopInstanceUID,
+			"mac", id.MAC,
+		)
+		return dimse.Status{
+			Status:       dimse.StatusSOPClassNotSupported,
+			ErrorComment: "SOP class not supported: " + sopClassUID,
+		}
+	}
+	if !dicomsop.IsSupportedTransferSyntax(transferSyntaxUID) {
+		appmetrics.DICOMSCPErrors.WithLabelValues("transfer_syntax_unsupported").Inc()
+		slog.Warn("dicom: C-STORE refused — transfer syntax outside the supported list",
+			"transfer_syntax", transferSyntaxUID,
+			"sop_class", sopClassUID,
+			"sop_instance_uid", sopInstanceUID,
+			"mac", id.MAC,
+		)
+		return dimse.Status{
+			Status:       dimse.CStoreCannotUnderstand,
+			ErrorComment: "transfer syntax not supported: " + transferSyntaxUID,
+		}
+	}
+
 	if s.cfg.MaxFileBytes > 0 && int64(len(data)) > s.cfg.MaxFileBytes {
 		return s.rejectOversize(data, sopInstanceUID, id)
 	}
@@ -251,7 +289,11 @@ func (s *Server) onCStore(
 			"sop_instance_uid", sopInstanceUID,
 			"error", err,
 		)
-		return dimse.Status{Status: dimse.StatusNotAuthorized, ErrorComment: err.Error()}
+		// Not NotAuthorized (0124), which this used to answer: the device has
+		// every right to send, we could not make sense of what arrived. An
+		// engineer reading 0124 goes looking at the whitelist instead of at the
+		// object.
+		return dimse.Status{Status: dimse.CStoreCannotUnderstand, ErrorComment: err.Error()}
 	}
 
 	filename := buildDICOMFilename(data, sopInstanceUID)

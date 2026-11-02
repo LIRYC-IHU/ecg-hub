@@ -223,11 +223,12 @@ No A-ASSOCIATE-RJ is ever sent by the application.
 ###### 4.2.1.3.2 Real-world activity: receive ECG from modality
 
 **Presentation context acceptance.** The SCP **accepts every proposed
-presentation context**. In each one it selects **the first transfer syntax the
-requester lists**. It does not check either the abstract syntax or the transfer
-syntax against a supported list (Annex D, D-1).
+presentation context**, whatever its abstract syntax, and in each one selects
+**the first transfer syntax the requester lists**. Acceptance of a context
+therefore carries no promise about what will be stored (Annex D, D-1).
 
-The transfer syntaxes ECG Hub can actually parse are:
+The decision is made one level up, on the C-STORE itself. An object is refused
+unless **both** its SOP class is one of §1.1 and its transfer syntax is one of:
 
 | Transfer Syntax | UID |
 |---|---|
@@ -235,8 +236,12 @@ The transfer syntaxes ECG Hub can actually parse are:
 | Explicit VR Little Endian | 1.2.840.10008.1.2.1 |
 | Explicit VR Big Endian (retired) | 1.2.840.10008.1.2.2 |
 
-**Modalities should be configured to propose only these, and only the SOP
-classes of §1.1.**
+A refusal answers `0112` (SOP Class not supported) or `C000` (Cannot
+understand) with the offending UID in the Error Comment, and the object is not
+stored, queued or forwarded. A modality that proposes only the contexts above
+never meets this, so **configure modalities to propose only these transfer
+syntaxes and only the SOP classes of §1.1**; one that proposes more gets a
+context accepted and then a per-object refusal, rather than a rejected context.
 
 | Abstract Syntax | Transfer Syntax | Role | Extended Negotiation |
 |---|---|---|---|
@@ -606,7 +611,7 @@ with ecg-bridge v1.4.0.
 
 | # | Area | Deviation | Effect | Where |
 |---|---|---|---|---|
-| D-1 | SCP negotiation | Every presentation context is accepted, whatever its abstract syntax, using the first transfer syntax proposed | A modality may send an unsupported SOP class or transfer syntax and get Success. The object then fails parsing (quarantine) or is stored as an ECG that cannot be displayed | `go-netdicom` provider; `internal/dicom/server.go` |
+| D-1 | SCP negotiation | Every presentation context is still accepted, whatever its abstract syntax, using the first transfer syntax proposed: the library does so unconditionally and exposes no hook (`contextmanager.onAssociateRequest`, which carries a TODO to that effect). The refusal happens one level up, on the C-STORE (§4.2.1.3.2) | A modality is told its context was accepted and then that the object was refused, instead of being told at negotiation which contexts are usable. Nothing unsupported is stored, and the status names the reason, so the remaining cost is a wasted object and a misleading A-ASSOCIATE-AC. Rejecting the context itself needs a patched or replaced `go-netdicom` | `go-netdicom` `contextmanager.go`; `internal/dicom/server.go` |
 | D-2 | SCP status | Success is returned when the object is queued, before parsing and persistence | A later ingestion failure is not reported to the modality. The file is kept in quarantine | `internal/dicom/server.go` |
 | D-3 | Implementation identification | The SCP's A-ASSOCIATE-AC and the SCU's C-ECHO A-ASSOCIATE-RQ carry no Implementation Class UID (mandatory under PS3.7 D.3.3.2). Where one is sent (SCU C-STORE, File Meta of received objects), it is the go-dicom library's UID, not one belonging to ECG Hub | Strict peers may reject the association. Logs on the peer do not identify ECG Hub | `go-netdicom`; `internal/connector/dicom/scu_client.go` |
 | D-4 | SCP access | Called and Calling AE Titles are not checked | A modality configured with the wrong AE title still connects. Access control is the MAC whitelist only | `internal/dicom/server.go` |

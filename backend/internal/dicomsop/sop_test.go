@@ -1,4 +1,4 @@
-package dicom
+package dicomsop
 
 import (
 	"fmt"
@@ -45,4 +45,36 @@ func TestStandardTransferSyntaxes_StillUnsafeAsDefault(t *testing.T) {
 		seen[key] = uid
 	}
 	t.Error("go-dicom's StandardTransferSyntaxes no longer collide — the explicit list in sop.go may no longer be needed")
+}
+
+func TestIsKnownECGSOPClass(t *testing.T) {
+	if !IsKnownECGSOPClass(ECG12LeadUID) {
+		t.Error("12-Lead ECG should be known")
+	}
+	if IsKnownECGSOPClass("1.2.3.4.5.6.7.8.9") {
+		t.Error("random UID should not be known")
+	}
+	if IsKnownECGSOPClass(VerificationSOPClassUID) {
+		t.Error("Verification is not a waveform storage class and must not be in the list")
+	}
+}
+
+func TestIsSupportedTransferSyntax(t *testing.T) {
+	for _, uid := range SupportedTransferSyntaxes {
+		if !IsSupportedTransferSyntax(uid) {
+			t.Errorf("%s is proposed but not reported as supported", uid)
+		}
+	}
+	// Deflated: a real transfer syntax the library maps to Explicit VR Little
+	// Endian instead of refusing, which is exactly why it must not pass here.
+	if IsSupportedTransferSyntax("1.2.840.10008.1.2.1.99") {
+		t.Error("Deflated Explicit VR Little Endian must not be reported as supported")
+	}
+	// JPEG 2000: likewise resolved to Explicit VR Little Endian by the library.
+	if IsSupportedTransferSyntax("1.2.840.10008.1.2.4.90") {
+		t.Error("JPEG 2000 must not be reported as supported")
+	}
+	if IsSupportedTransferSyntax("") {
+		t.Error("an empty transfer syntax must not be reported as supported")
+	}
 }

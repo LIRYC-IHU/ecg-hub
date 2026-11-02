@@ -18,6 +18,7 @@ import (
 	netdicom "github.com/apaladiychuk/go-netdicom"
 
 	"github.com/LIRYC-IHU/ecg-hub/internal/connector"
+	"github.com/LIRYC-IHU/ecg-hub/internal/dicomsop"
 )
 
 // SCUClient is a DICOM Service Class User that sends C-ECHO and C-STORE
@@ -352,10 +353,10 @@ func (c *SCUClient) Store(ctx context.Context, filePath string) error {
 		return err
 	}
 
-	if c.strictSOP && !IsKnownECGSOPClass(sopClassUID) {
+	if c.strictSOP && !dicomsop.IsKnownECGSOPClass(sopClassUID) {
 		return fmt.Errorf("dicom: store: unknown SOP class %s (strict mode)", sopClassUID)
 	}
-	if !IsKnownECGSOPClass(sopClassUID) {
+	if !dicomsop.IsKnownECGSOPClass(sopClassUID) {
 		slog.Warn("dicom: unknown SOP class, attempting best-effort forward",
 			"sop_class", sopClassUID, "file", filePath)
 	}
@@ -368,7 +369,7 @@ func (c *SCUClient) Store(ctx context.Context, filePath string) error {
 		SOPClasses:     sopClasses,
 		// Cloned: go-netdicom canonicalizes this slice in place, and the
 		// package-level list must not be rewritten by an association.
-		TransferSyntaxes: slices.Clone(SupportedTransferSyntaxes),
+		TransferSyntaxes: slices.Clone(dicomsop.SupportedTransferSyntaxes),
 	})
 	if err != nil {
 		return fmt.Errorf("dicom: store: create SCU: %w", err)
@@ -444,9 +445,9 @@ func (c *SCUClient) buildSOPClasses(fileSOPClass string) []string {
 		}
 	}
 
-	add(VerificationSOPClassUID)
+	add(dicomsop.VerificationSOPClassUID)
 	add(fileSOPClass)
-	for _, uid := range KnownECGSOPClasses {
+	for _, uid := range dicomsop.KnownECGSOPClasses {
 		add(uid)
 	}
 	return classes

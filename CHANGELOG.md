@@ -7,6 +7,21 @@ All notable changes to this project are documented here. Versions follow
 
 ### Fixed
 
+- The C-STORE SCP refuses what it cannot handle instead of storing it. The
+  DICOM library accepts every presentation context it is offered — any abstract
+  syntax, and whichever transfer syntax the caller proposed first — so a
+  modality could send a CT image or a JPEG 2000 data set, read Success, and
+  have the object end in quarantine or sit stored as an ECG nothing can draw.
+  An object whose SOP class is outside the supported list is now answered
+  `0112`, one whose transfer syntax is outside the three declared ones `C000`,
+  each naming the offending UID. The contexts are still accepted: refusing them
+  at negotiation needs a patched or replaced library (Annex D, D-1).
+- A C-STORE that could not be reconstructed answered `0124` (Not authorized),
+  sending whoever investigated to look at the device whitelist for what was
+  really an unreadable object. It answers `C000` (Cannot understand) now.
+- The supported SOP classes and transfer syntaxes moved to `internal/dicomsop`,
+  shared by the SCP and the SCU. They were the connector's alone, and the
+  server had no list at all to check against.
 - The connector panel's **Test** button now talks DICOM. It opened a TCP socket
   and closed it, so it reported success for any port with something listening:
   an archive expecting TLS where the connector sent none, a certificate the host

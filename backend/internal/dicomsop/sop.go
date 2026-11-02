@@ -1,4 +1,8 @@
-package dicom
+// Package dicomsop holds the DICOM SOP classes and transfer syntaxes ECG Hub
+// supports. Both ends need them -- the SCP to decide what it will accept, the
+// SCU to decide what it will propose -- and a second copy of either list is how
+// the two quietly stop agreeing.
+package dicomsop
 
 import "slices"
 
@@ -61,7 +65,8 @@ func IsKnownECGSOPClass(uid string) bool {
 	return slices.Contains(KnownECGSOPClasses, uid)
 }
 
-// SupportedTransferSyntaxes are the syntaxes the SCU proposes on C-STORE.
+// SupportedTransferSyntaxes are the syntaxes ECG Hub can read and write:
+// what the SCU proposes on C-STORE, and what the SCP will act on.
 //
 // go-netdicom falls back to dicomio.StandardTransferSyntaxes when the list is
 // left empty, and that set also offers Deflated Explicit VR Little Endian —
@@ -73,4 +78,13 @@ var SupportedTransferSyntaxes = []string{
 	ImplicitVRLittleEndian,
 	ExplicitVRLittleEndian,
 	ExplicitVRBigEndian,
+}
+
+// IsSupportedTransferSyntax reports whether ECG Hub can read and write the
+// given transfer syntax. Anything else is refused rather than stored: the
+// library's decoder silently resolves an unknown or compressed syntax to
+// Explicit VR Little Endian, so accepting one means keeping bytes that do not
+// mean what their header says.
+func IsSupportedTransferSyntax(uid string) bool {
+	return slices.Contains(SupportedTransferSyntaxes, uid)
 }
