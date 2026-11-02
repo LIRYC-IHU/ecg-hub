@@ -41,6 +41,9 @@ type ConnectorSettings struct {
 	// WaitForHL7 holds the forward back until the ECG's HL7 enrichment has run.
 	// See connector.Config.
 	WaitForHL7 bool
+	// ManageIdentity holds unidentified quarantined files back. See
+	// connector.Config.
+	ManageIdentity bool
 }
 
 // HL7Settled reports whether an ECG's enrichment has finished, successfully or
@@ -99,7 +102,7 @@ func (d *Dispatcher) snapshot() []ConnectorSettings {
 // connector that accepts it and fires a goroutine to forward the file.
 // Must be called as: go dispatcher.Dispatch(ecg, filePath)
 func (d *Dispatcher) Dispatch(ecg *models.ECG, filePath string) {
-	d.dispatch(ecg, &ecg.ID, nil, filePath)
+	d.dispatch(ecg, &ecg.ID, nil, false, filePath)
 }
 
 // DispatchQuarantined forwards a file whose ingestion failed (parse error,
@@ -107,18 +110,31 @@ func (d *Dispatcher) Dispatch(ecg *models.ECG, filePath string) {
 // to the PACS; the job references the quarantine entry instead of an ECG.
 // vendor may be empty when no module recognised the file — connectors with a
 // vendor filter will then skip it (extension filters still apply).
-func (d *Dispatcher) DispatchQuarantined(quarantineID, vendor, filename, filePath string) {
+//
+// unidentified marks a file that parsed but carried no patient ID: connectors
+// that manage identity leave it for the operator's assignment instead.
+func (d *Dispatcher) DispatchQuarantined(quarantineID, vendor, filename, filePath string, unidentified bool) {
 	// Synthetic ECG carries just what Accepts/Forward need (filters + naming).
 	ecg := &models.ECG{
 		Vendor:           vendor,
 		OriginalFilename: filename,
 		FilePath:         filePath,
 	}
-	d.dispatch(ecg, nil, &quarantineID, filePath)
+	d.dispatch(ecg, nil, &quarantineID, unidentified, filePath)
 }
 
-func (d *Dispatcher) dispatch(ecg *models.ECG, ecgID, quarantineID *string, filePath string) {
+func (d *Dispatcher) dispatch(ecg *models.ECG, ecgID, quarantineID *string, unidentified bool, filePath string) {
 	for _, s := range d.snapshot() {
+		// Held, not dropped: assignment re-ingests the file as an ECG, and that
+		// dispatch sends it — once, under the identity the operator chose.
+		if unidentified && s.ManageIdentity {
+			slog.Info("connector: unidentified ECG held until assigned",
+				"connector", s.Connector.Name(),
+				"file", ecg.OriginalFilename,
+				"quarantine_id", *quarantineID,
+			)
+			continue
+		}
 		if !s.Connector.Accepts(ecg) {
 			slog.Debug("connector: skip (filter mismatch)",
 				"connector", s.Connector.Name(),

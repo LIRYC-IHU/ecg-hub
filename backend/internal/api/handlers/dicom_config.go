@@ -12,4 +12,7 @@ type DICOMStoredConfig struct {
 	AETitle     string `json:"ae_title"`
 	EchoEnabled bool   `json:"echo_enabled"`
 	TLS         bool   `json:"tls"`
+	// StrictCalledAE: absent in records saved before it existed, so false — opt-in.
+	StrictCalledAE bool `json:"strict_called_ae"`
+	MutualTLS      bool `json:"mutual_tls"`
 }

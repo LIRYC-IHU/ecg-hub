@@ -81,3 +81,22 @@ func Check(certFile, keyFile string) Status {
 	st.Available = true
 	return st
 }
+
+// LoadCAPool reads a PEM bundle of certificate authorities, for verifying the
+// client certificates a mutually authenticated listener requires. A file that
+// holds no certificate is an error: an empty pool would refuse every client,
+// and the reason would otherwise surface as handshake failures.
+func LoadCAPool(path string) (*x509.CertPool, error) {
+	if path == "" {
+		return nil, errors.New("no client CA bundle is configured")
+	}
+	pem, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read client CA bundle: %w", err)
+	}
+	pool := x509.NewCertPool()
+	if !pool.AppendCertsFromPEM(pem) {
+		return nil, fmt.Errorf("client CA bundle %s contains no certificate", path)
+	}
+	return pool, nil
+}

@@ -26,6 +26,7 @@ import (
 	"github.com/apaladiychuk/go-netdicom/dimse"
 
 	"github.com/LIRYC-IHU/ecg-hub/internal/device"
+	"github.com/LIRYC-IHU/ecg-hub/internal/dicomsop"
 	"github.com/LIRYC-IHU/ecg-hub/internal/ingestion"
 	appmetrics "github.com/LIRYC-IHU/ecg-hub/internal/metrics"
 )
@@ -37,9 +38,18 @@ type Settings struct {
 	Port        int
 	AETitle     string
 	EchoEnabled bool
-	TLS         bool
-	CertFile    string
-	KeyFile     string
+	// StrictCalledAE refuses an association whose Called AE Title is not
+	// AETitle (A-ASSOCIATE-RJ, reason 7). Off by default: access control is the
+	// device whitelist, this only catches a modality pointed at the wrong AE.
+	StrictCalledAE bool
+	TLS            bool
+	CertFile       string
+	KeyFile        string
+	// MutualTLS requires a client certificate signed by ClientCAFile on every
+	// TLS connection. Only meaningful with TLS on. ClientCAFile comes from
+	// config.yaml (certs.client_ca_file), like the server pair.
+	MutualTLS    bool
+	ClientCAFile string
 	// MaxFileBytes caps a single received object. 0 disables the check.
 	MaxFileBytes int64
 }
@@ -90,8 +100,19 @@ func (s *Server) Start() error {
 			return fmt.Errorf("dicom: load TLS cert: %w", err)
 		}
 		tlsCfg = &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12}
-		slog.Info("dicom: TLS enforcement active", "cert_file", s.cfg.CertFile)
+		if s.cfg.MutualTLS {
+			pool, err := certs.LoadCAPool(s.cfg.ClientCAFile)
+			if err != nil {
+				return fmt.Errorf("dicom: mutual TLS is enabled but %w", err)
+			}
+			tlsCfg.ClientAuth = tls.RequireAndVerifyClientCert
+			tlsCfg.ClientCAs = pool
+		}
+		slog.Info("dicom: TLS enforcement active", "cert_file", s.cfg.CertFile, "mutual", s.cfg.MutualTLS)
 	} else {
+		if s.cfg.MutualTLS {
+			return fmt.Errorf("dicom: mutual TLS is enabled but TLS is not")
+		}
 		slog.Warn("dicom: tls disabled — non-production mode")
 	}
 
@@ -134,6 +155,7 @@ func (s *Server) Start() error {
 			"ae_title", s.cfg.AETitle,
 			"tls", s.cfg.TLS,
 			"echo", s.cfg.EchoEnabled,
+			"strict_called_ae", s.cfg.StrictCalledAE,
 		)
 		for {
 			conn, err := ln.Accept()
@@ -158,7 +180,18 @@ func (s *Server) Start() error {
 			// connected. Closing over the identity here is what carries it in.
 			connParams := params
 			connParams.CStore = s.cStoreFor(id, decision)
-			go netdicom.RunProviderForConn(conn, connParams)
+			go func(conn net.Conn) {
+				if tc, ok := conn.(*tls.Conn); ok && !handshake(tc) {
+					return
+				}
+				if s.cfg.StrictCalledAE {
+					var ok bool
+					if conn, ok = checkCalledAE(conn, s.cfg.AETitle); !ok {
+						return
+					}
+				}
+				netdicom.RunProviderForConn(conn, connParams)
+			}(conn)
 		}
 	}()
 
@@ -240,6 +273,43 @@ func (s *Server) onCStore(
 		}
 	}
 
+	// Negotiation guarantees nothing here. go-netdicom accepts every
+	// presentation context it is offered — any abstract syntax, and whichever
+	// transfer syntax the caller proposed first — and its own source carries a
+	// TODO saying as much (contextmanager.onAssociateRequest). So the
+	// association having been established says only that something connected,
+	// and this is where ECG Hub decides what it will actually take.
+	//
+	// Refusing here is late by one object compared with refusing the context,
+	// but it is what makes the answer true: the device is told its object was
+	// rejected, and why, instead of reading Success for something that will
+	// never be displayed or forwarded.
+	if !dicomsop.IsKnownECGSOPClass(sopClassUID) {
+		appmetrics.DICOMSCPErrors.WithLabelValues("sop_class_unsupported").Inc()
+		slog.Warn("dicom: C-STORE refused — SOP class outside the supported list",
+			"sop_class", sopClassUID,
+			"sop_instance_uid", sopInstanceUID,
+			"mac", id.MAC,
+		)
+		return dimse.Status{
+			Status:       dimse.StatusSOPClassNotSupported,
+			ErrorComment: "SOP class not supported: " + sopClassUID,
+		}
+	}
+	if !dicomsop.IsSupportedTransferSyntax(transferSyntaxUID) {
+		appmetrics.DICOMSCPErrors.WithLabelValues("transfer_syntax_unsupported").Inc()
+		slog.Warn("dicom: C-STORE refused — transfer syntax outside the supported list",
+			"transfer_syntax", transferSyntaxUID,
+			"sop_class", sopClassUID,
+			"sop_instance_uid", sopInstanceUID,
+			"mac", id.MAC,
+		)
+		return dimse.Status{
+			Status:       dimse.CStoreCannotUnderstand,
+			ErrorComment: "transfer syntax not supported: " + transferSyntaxUID,
+		}
+	}
+
 	if s.cfg.MaxFileBytes > 0 && int64(len(data)) > s.cfg.MaxFileBytes {
 		return s.rejectOversize(data, sopInstanceUID, id)
 	}
@@ -251,10 +321,45 @@ func (s *Server) onCStore(
 			"sop_instance_uid", sopInstanceUID,
 			"error", err,
 		)
-		return dimse.Status{Status: dimse.StatusNotAuthorized, ErrorComment: err.Error()}
+		// Not NotAuthorized (0124), which this used to answer: the device has
+		// every right to send, we could not make sense of what arrived. An
+		// engineer reading 0124 goes looking at the whitelist instead of at the
+		// object.
+		return dimse.Status{Status: dimse.CStoreCannotUnderstand, ErrorComment: err.Error()}
 	}
 
-	filename := buildDICOMFilename(data, sopInstanceUID)
+	// Parse before answering, not after. A parse already happened on this path,
+	// inside buildDICOMFilename, and its failure was swallowed into an
+	// "unknown.dcm" fallback while the object went on the queue and the device
+	// was told Success. An object that will not parse cannot be displayed,
+	// converted or forwarded: it ends in quarantine with nobody waiting for it,
+	// and the modality has no way to learn that.
+	//
+	// It parses the reconstructed file, not the body the callback receives. The
+	// body carries no preamble, no DICM and no File Meta, so the parser cannot
+	// know its transfer syntax and fails on every object — which is why the old
+	// call was always taking its fallback, and why received files were never
+	// named after the patient as intended.
+	//
+	// A parsed object with no Patient ID is not an error: it goes to the
+	// unidentified review queue by design. The gate is readability, not identity.
+	ds, parseErr := legacydicom.ReadDataSetInBytes(raw, legacydicom.ReadOptions{})
+	if parseErr != nil {
+		appmetrics.DICOMSCPErrors.WithLabelValues("unparseable").Inc()
+		slog.Warn("dicom: C-STORE refused — the data set does not parse",
+			"sop_class", sopClassUID,
+			"transfer_syntax", transferSyntaxUID,
+			"sop_instance_uid", sopInstanceUID,
+			"mac", id.MAC,
+			"error", parseErr,
+		)
+		return dimse.Status{
+			Status:       dimse.CStoreCannotUnderstand,
+			ErrorComment: "data set could not be parsed: " + parseErr.Error(),
+		}
+	}
+
+	filename := buildDICOMFilenameFrom(ds, sopInstanceUID)
 
 	item := ingestion.IngestItem{
 		Filename:  filename,
@@ -345,10 +450,15 @@ func reconstructDICOM(
 
 	enc := dicomio.NewEncoderWithTransferSyntax(&buf, transferSyntaxUID)
 
+	// ECG Hub writes this file, so its File Meta names ECG Hub. go-dicom fills
+	// these two in with its own identity when they are absent, which would put
+	// the toolkit's name on every object the hub stored (PS3.10 7.1).
 	metaElems := []*legacydicom.Element{
 		legacydicom.MustNewElement(legacytag.TransferSyntaxUID, transferSyntaxUID),
 		legacydicom.MustNewElement(legacytag.MediaStorageSOPClassUID, sopClassUID),
 		legacydicom.MustNewElement(legacytag.MediaStorageSOPInstanceUID, sopInstanceUID),
+		legacydicom.MustNewElement(legacytag.ImplementationClassUID, dicomsop.ImplementationClassUID),
+		legacydicom.MustNewElement(legacytag.ImplementationVersionName, dicomsop.ImplementationVersionName),
 	}
 	legacydicom.WriteFileHeader(enc, metaElems)
 	enc.WriteBytes(data)
@@ -379,6 +489,19 @@ func buildDICOMFilename(data []byte, sopInstanceUID string) string {
 
 	ds, err := legacydicom.ReadDataSetInBytes(data, legacydicom.ReadOptions{})
 	if err != nil {
+		return fallback
+	}
+	return buildDICOMFilenameFrom(ds, sopInstanceUID)
+}
+
+// buildDICOMFilenameFrom is buildDICOMFilename for a data set already parsed,
+// so the C-STORE path does not parse the same object twice.
+func buildDICOMFilenameFrom(ds *legacydicom.DataSet, sopInstanceUID string) string {
+	fallback := "unknown.dcm"
+	if uid := ingestion.SafeComponent(sopInstanceUID); uid != "" {
+		fallback = uid + ".dcm"
+	}
+	if ds == nil {
 		return fallback
 	}
 
@@ -413,4 +536,21 @@ func extractTagString(ds *legacydicom.DataSet, t legacytag.Tag) string {
 		return ""
 	}
 	return s
+}
+
+// handshake completes the TLS handshake up front, bounded, so a refused client
+// certificate is logged here with its reason. Left to the library, it would
+// happen on the first read inside go-netdicom and surface only as a failed PDU
+// read in its own log. false means the connection is closed.
+func handshake(tc *tls.Conn) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), assocRQReadTimeout)
+	defer cancel()
+	if err := tc.HandshakeContext(ctx); err != nil {
+		appmetrics.DICOMSCPErrors.WithLabelValues("tls_handshake").Inc()
+		slog.Warn("dicom: TLS handshake failed — connection closed",
+			"remote_addr", remoteAddr(tc), "error", err)
+		_ = tc.Close()
+		return false
+	}
+	return true
 }

@@ -3,11 +3,13 @@ package dicom
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/binary"
 	"fmt"
 	"io"
 	"log/slog"
 	"net"
+	"slices"
 	"strconv"
 	"time"
 
@@ -16,17 +18,20 @@ import (
 	netdicom "github.com/apaladiychuk/go-netdicom"
 
 	"github.com/LIRYC-IHU/ecg-hub/internal/connector"
+	"github.com/LIRYC-IHU/ecg-hub/internal/dicomsop"
 )
 
 // SCUClient is a DICOM Service Class User that sends C-ECHO and C-STORE
 // requests to a remote PACS.
 type SCUClient struct {
-	host      string
-	port      int
-	callingAE string
-	calledAE  string
-	timeout   time.Duration
-	strictSOP bool
+	host         string
+	port         int
+	callingAE    string
+	calledAE     string
+	timeout      time.Duration
+	strictSOP    bool
+	tls          bool
+	tlsSkipVerif bool
 }
 
 // NewSCUClient creates a client from connector config. Returns an error if
@@ -50,18 +55,48 @@ func NewSCUClient(cfg connector.DICOMEndpoint) (*SCUClient, error) {
 		calledAE = "ANY-SCP"
 	}
 
+	if cfg.TLSInsecureSkipVer && !cfg.TLS {
+		slog.Warn("dicom: tls_insecure_skip_verify is set but TLS is off — the association stays in clear",
+			"host", cfg.Host, "port", cfg.Port)
+	}
+
 	return &SCUClient{
-		host:      cfg.Host,
-		port:      cfg.Port,
-		callingAE: callingAE,
-		calledAE:  calledAE,
-		timeout:   timeout,
-		strictSOP: cfg.StrictSOP,
+		host:         cfg.Host,
+		port:         cfg.Port,
+		callingAE:    callingAE,
+		calledAE:     calledAE,
+		timeout:      timeout,
+		strictSOP:    cfg.StrictSOP,
+		tls:          cfg.TLS,
+		tlsSkipVerif: cfg.TLSInsecureSkipVer,
 	}, nil
 }
 
 func (c *SCUClient) addr() string {
 	return net.JoinHostPort(c.host, strconv.Itoa(c.port))
+}
+
+// dial opens the transport both the C-ECHO and the C-STORE path run over. With
+// TLS off it is an ordinary TCP connection, exactly as before.
+//
+// DICOM has no in-band upgrade: an archive either expects TLS on its port or it
+// does not, which is why this is a per-endpoint setting rather than something
+// negotiated. The certificate is verified against the host's trust store unless
+// the endpoint opted out, so a private CA has to be installed there.
+func (c *SCUClient) dial(ctx context.Context) (net.Conn, error) {
+	d := net.Dialer{Timeout: c.timeout}
+	if !c.tls {
+		return d.DialContext(ctx, "tcp", c.addr())
+	}
+	td := tls.Dialer{
+		NetDialer: &d,
+		Config: &tls.Config{
+			ServerName:         c.host,
+			MinVersion:         tls.VersionTLS12,
+			InsecureSkipVerify: c.tlsSkipVerif, //nolint:gosec // per-endpoint opt-in for an archive with a private CA
+		},
+	}
+	return td.DialContext(ctx, "tcp", c.addr())
 }
 
 // Echo sends a standards-compliant C-ECHO to the remote PACS.
@@ -74,7 +109,7 @@ func (c *SCUClient) Echo(ctx context.Context) error {
 		deadline = time.Now().Add(c.timeout)
 	}
 
-	conn, err := net.DialTimeout("tcp", c.addr(), c.timeout)
+	conn, err := c.dial(ctx)
 	if err != nil {
 		return fmt.Errorf("dicom: echo: connect: %w", err)
 	}
@@ -119,6 +154,25 @@ func (c *SCUClient) Echo(ctx context.Context) error {
 
 const verificationUID = "1.2.840.10008.1.1"
 const implicitVRLEUID = "1.2.840.10008.1.2"
+
+// writePDUSubItem appends one variable-length sub-item: type, reserved byte,
+// big-endian length, payload.
+//
+// The payload is padded to an even length, as PS3.5 9.1 requires of a UID on
+// the wire. A receiver that trusts the declared length would otherwise read one
+// byte into the next item.
+func writePDUSubItem(w *bytes.Buffer, itemType byte, value string) {
+	payload := []byte(value)
+	if len(payload)%2 == 1 {
+		// NULL for a UID, which is what both of these are in practice; a string
+		// item pads with a space, and neither receiver distinguishes the two.
+		payload = append(payload, 0x00)
+	}
+	w.WriteByte(itemType)
+	w.WriteByte(0x00)
+	binary.Write(w, binary.BigEndian, uint16(len(payload)))
+	w.Write(payload)
+}
 
 func padAE(ae string) [16]byte {
 	var buf [16]byte
@@ -167,6 +221,12 @@ func dicomWriteAssocRQ(w io.Writer, callingAE, calledAE string) error {
 	uiInner.WriteByte(0x00)
 	binary.Write(&uiInner, binary.BigEndian, uint16(4))
 	binary.Write(&uiInner, binary.BigEndian, uint32(16384))
+	// Implementation Class UID (0x52) is mandatory in the User Information of
+	// an A-ASSOCIATE-RQ — PS3.7 D.3.3.2 — and this hand-built PDU carried none.
+	// The version name (0x55) is optional and sent because a receiver
+	// recognising a sender's quirks needs it to tell releases apart.
+	writePDUSubItem(&uiInner, 0x52, dicomsop.ImplementationClassUID)
+	writePDUSubItem(&uiInner, 0x55, dicomsop.ImplementationVersionName)
 	binary.Write(&ui, binary.BigEndian, uint16(uiInner.Len()))
 	ui.Write(uiInner.Bytes())
 
@@ -318,10 +378,10 @@ func (c *SCUClient) Store(ctx context.Context, filePath string) error {
 		return err
 	}
 
-	if c.strictSOP && !IsKnownECGSOPClass(sopClassUID) {
+	if c.strictSOP && !dicomsop.IsKnownECGSOPClass(sopClassUID) {
 		return fmt.Errorf("dicom: store: unknown SOP class %s (strict mode)", sopClassUID)
 	}
-	if !IsKnownECGSOPClass(sopClassUID) {
+	if !dicomsop.IsKnownECGSOPClass(sopClassUID) {
 		slog.Warn("dicom: unknown SOP class, attempting best-effort forward",
 			"sop_class", sopClassUID, "file", filePath)
 	}
@@ -332,12 +392,21 @@ func (c *SCUClient) Store(ctx context.Context, filePath string) error {
 		CalledAETitle:  c.calledAE,
 		CallingAETitle: c.callingAE,
 		SOPClasses:     sopClasses,
+		// Cloned: go-netdicom canonicalizes this slice in place, and the
+		// package-level list must not be rewritten by an association.
+		TransferSyntaxes: slices.Clone(dicomsop.SupportedTransferSyntaxes),
 	})
 	if err != nil {
 		return fmt.Errorf("dicom: store: create SCU: %w", err)
 	}
 
-	su.Connect(c.addr())
+	// SetConn rather than su.Connect: Connect dials plain TCP itself, with no
+	// timeout and no way to hand it a TLS connection.
+	conn, err := c.dial(ctx)
+	if err != nil {
+		return fmt.Errorf("dicom: store: connect: %w", err)
+	}
+	su.SetConn(conn)
 
 	type result struct {
 		err error
@@ -355,6 +424,19 @@ func (c *SCUClient) Store(ctx context.Context, filePath string) error {
 	case r := <-ch:
 		su.Release()
 		dur := time.Since(start)
+		// go-netdicom turns every non-zero status into an error, warnings
+		// included, so an archive that stored the object and merely coerced a
+		// value would have the same object pushed at it again on the next
+		// attempt. Separate the two before anyone retries.
+		if code, ok := cstoreStatusFromError(r.err); ok && IsCStoreWarningStatus(code) {
+			slog.Warn("dicom: c-store stored with a warning — not retried",
+				"status", fmt.Sprintf("0x%04X", code),
+				"sop_class", sopClassUID,
+				"file", filePath,
+				"duration_ms", dur.Milliseconds(),
+			)
+			return &CStoreWarning{Code: code, Detail: r.err.Error()}
+		}
 		if r.err != nil {
 			slog.Warn("dicom: c-store failed",
 				"sop_class", sopClassUID,
@@ -401,9 +483,9 @@ func (c *SCUClient) buildSOPClasses(fileSOPClass string) []string {
 		}
 	}
 
-	add(VerificationSOPClassUID)
+	add(dicomsop.VerificationSOPClassUID)
 	add(fileSOPClass)
-	for _, uid := range KnownECGSOPClasses {
+	for _, uid := range dicomsop.KnownECGSOPClasses {
 		add(uid)
 	}
 	return classes

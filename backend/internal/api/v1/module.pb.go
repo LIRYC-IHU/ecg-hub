@@ -685,12 +685,16 @@ func (x *SaveFTPConfigRequest) GetConfig() *FTPConfig {
 }
 
 type DICOMConfig struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Port          int32                  `protobuf:"varint,1,opt,name=port,proto3" json:"port,omitempty"`
-	AeTitle       string                 `protobuf:"bytes,2,opt,name=ae_title,json=aeTitle,proto3" json:"ae_title,omitempty"`
-	EchoEnabled   bool                   `protobuf:"varint,3,opt,name=echo_enabled,json=echoEnabled,proto3" json:"echo_enabled,omitempty"`
-	Tls           bool                   `protobuf:"varint,4,opt,name=tls,proto3" json:"tls,omitempty"`
-	Enabled       bool                   `protobuf:"varint,5,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Port        int32                  `protobuf:"varint,1,opt,name=port,proto3" json:"port,omitempty"`
+	AeTitle     string                 `protobuf:"bytes,2,opt,name=ae_title,json=aeTitle,proto3" json:"ae_title,omitempty"`
+	EchoEnabled bool                   `protobuf:"varint,3,opt,name=echo_enabled,json=echoEnabled,proto3" json:"echo_enabled,omitempty"`
+	Tls         bool                   `protobuf:"varint,4,opt,name=tls,proto3" json:"tls,omitempty"`
+	Enabled     bool                   `protobuf:"varint,5,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	// Refuse associations whose Called AE Title is not ae_title (A-ASSOCIATE-RJ reason 7).
+	StrictCalledAe bool `protobuf:"varint,6,opt,name=strict_called_ae,json=strictCalledAe,proto3" json:"strict_called_ae,omitempty"`
+	// Require a client certificate signed by certs.client_ca_file. Needs tls.
+	MutualTls     bool `protobuf:"varint,7,opt,name=mutual_tls,json=mutualTls,proto3" json:"mutual_tls,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -756,6 +760,20 @@ func (x *DICOMConfig) GetTls() bool {
 func (x *DICOMConfig) GetEnabled() bool {
 	if x != nil {
 		return x.Enabled
+	}
+	return false
+}
+
+func (x *DICOMConfig) GetStrictCalledAe() bool {
+	if x != nil {
+		return x.StrictCalledAe
+	}
+	return false
+}
+
+func (x *DICOMConfig) GetMutualTls() bool {
+	if x != nil {
+		return x.MutualTls
 	}
 	return false
 }
@@ -1091,9 +1109,24 @@ type ConnectorConfig struct {
 	// Hold a forward back until the ECG's HL7 enrichment has settled, so what
 	// reaches the PACS carries the establishment's demographics rather than
 	// whatever the acquisition device recorded.
-	WaitForHl7    bool `protobuf:"varint,18,opt,name=wait_for_hl7,json=waitForHl7,proto3" json:"wait_for_hl7,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	WaitForHl7 bool `protobuf:"varint,18,opt,name=wait_for_hl7,json=waitForHl7,proto3" json:"wait_for_hl7,omitempty"`
+	// Wrap outbound C-STORE and C-ECHO associations in TLS. Off by default,
+	// because an archive that does not expect TLS rejects the handshake.
+	DicomTls bool `protobuf:"varint,19,opt,name=dicom_tls,json=dicomTls,proto3" json:"dicom_tls,omitempty"`
+	// Accept the archive's certificate without verifying it. Only for an archive
+	// whose private CA is not in the host's trust store; it leaves the connection
+	// open to interception, so installing the CA is the better answer.
+	DicomTlsInsecureSkipVerify bool `protobuf:"varint,20,opt,name=dicom_tls_insecure_skip_verify,json=dicomTlsInsecureSkipVerify,proto3" json:"dicom_tls_insecure_skip_verify,omitempty"`
+	// Refuse to forward an object whose SOP class is outside the supported list,
+	// instead of sending it best-effort with a warning.
+	DicomStrictSop bool `protobuf:"varint,21,opt,name=dicom_strict_sop,json=dicomStrictSop,proto3" json:"dicom_strict_sop,omitempty"`
+	// ECG Hub owns the patient identity on this link. An unidentified ECG is not
+	// forwarded from quarantine, only once an operator has assigned it; and a
+	// DICOM object is sent with the hub's Patient ID, name, birth date and sex
+	// written over the device's. Off: the connector proxies files as received.
+	ManageIdentity bool `protobuf:"varint,22,opt,name=manage_identity,json=manageIdentity,proto3" json:"manage_identity,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *ConnectorConfig) Reset() {
@@ -1248,6 +1281,34 @@ func (x *ConnectorConfig) GetDicomTimeout() string {
 func (x *ConnectorConfig) GetWaitForHl7() bool {
 	if x != nil {
 		return x.WaitForHl7
+	}
+	return false
+}
+
+func (x *ConnectorConfig) GetDicomTls() bool {
+	if x != nil {
+		return x.DicomTls
+	}
+	return false
+}
+
+func (x *ConnectorConfig) GetDicomTlsInsecureSkipVerify() bool {
+	if x != nil {
+		return x.DicomTlsInsecureSkipVerify
+	}
+	return false
+}
+
+func (x *ConnectorConfig) GetDicomStrictSop() bool {
+	if x != nil {
+		return x.DicomStrictSop
+	}
+	return false
+}
+
+func (x *ConnectorConfig) GetManageIdentity() bool {
+	if x != nil {
+		return x.ManageIdentity
 	}
 	return false
 }
@@ -1979,13 +2040,16 @@ const file_v1_module_proto_rawDesc = "" +
 	"publicPort\"\x15\n" +
 	"\x13GetFTPConfigRequest\"F\n" +
 	"\x14SaveFTPConfigRequest\x12.\n" +
-	"\x06config\x18\x01 \x01(\v2\x16.grpc.api.v1.FTPConfigR\x06config\"\x8b\x01\n" +
+	"\x06config\x18\x01 \x01(\v2\x16.grpc.api.v1.FTPConfigR\x06config\"\xd4\x01\n" +
 	"\vDICOMConfig\x12\x12\n" +
 	"\x04port\x18\x01 \x01(\x05R\x04port\x12\x19\n" +
 	"\bae_title\x18\x02 \x01(\tR\aaeTitle\x12!\n" +
 	"\fecho_enabled\x18\x03 \x01(\bR\vechoEnabled\x12\x10\n" +
 	"\x03tls\x18\x04 \x01(\bR\x03tls\x12\x18\n" +
-	"\aenabled\x18\x05 \x01(\bR\aenabled\"\x17\n" +
+	"\aenabled\x18\x05 \x01(\bR\aenabled\x12(\n" +
+	"\x10strict_called_ae\x18\x06 \x01(\bR\x0estrictCalledAe\x12\x1d\n" +
+	"\n" +
+	"mutual_tls\x18\a \x01(\bR\tmutualTls\"\x17\n" +
 	"\x15GetDICOMConfigRequest\"J\n" +
 	"\x16SaveDICOMConfigRequest\x120\n" +
 	"\x06config\x18\x01 \x01(\v2\x18.grpc.api.v1.DICOMConfigR\x06config\"_\n" +
@@ -1999,7 +2063,7 @@ const file_v1_module_proto_rawDesc = "" +
 	"\x19SaveModuleSettingsRequest\x12\x16\n" +
 	"\x06active\x18\x01 \x03(\tR\x06active\"4\n" +
 	"\x1aSaveModuleSettingsResponse\x12\x16\n" +
-	"\x06active\x18\x01 \x03(\tR\x06active\"\xb1\x04\n" +
+	"\x06active\x18\x01 \x03(\tR\x06active\"\xe5\x05\n" +
 	"\x0fConnectorConfig\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1a\n" +
 	"\bprotocol\x18\x02 \x01(\tR\bprotocol\x12\x1e\n" +
@@ -2025,7 +2089,11 @@ const file_v1_module_proto_rawDesc = "" +
 	"\tcalled_ae\x18\x10 \x01(\tR\bcalledAe\x12#\n" +
 	"\rdicom_timeout\x18\x11 \x01(\tR\fdicomTimeout\x12 \n" +
 	"\fwait_for_hl7\x18\x12 \x01(\bR\n" +
-	"waitForHl7\"\x87\x01\n" +
+	"waitForHl7\x12\x1b\n" +
+	"\tdicom_tls\x18\x13 \x01(\bR\bdicomTls\x12B\n" +
+	"\x1edicom_tls_insecure_skip_verify\x18\x14 \x01(\bR\x1adicomTlsInsecureSkipVerify\x12(\n" +
+	"\x10dicom_strict_sop\x18\x15 \x01(\bR\x0edicomStrictSop\x12'\n" +
+	"\x0fmanage_identity\x18\x16 \x01(\bR\x0emanageIdentity\"\x87\x01\n" +
 	"\x14ConnectorConfigEntry\x12\x1f\n" +
 	"\vmodule_type\x18\x01 \x01(\tR\n" +
 	"moduleType\x12\x18\n" +

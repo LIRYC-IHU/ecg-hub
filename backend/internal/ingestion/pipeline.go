@@ -96,7 +96,7 @@ type Dispatcher struct {
 // Implemented by connector.Dispatcher — the proxy forwards every received file
 // to the configured PACS regardless of local ingestion outcome.
 type quarantineForwarder interface {
-	DispatchQuarantined(quarantineID, vendor, filename, filePath string)
+	DispatchQuarantined(quarantineID, vendor, filename, filePath string, unidentified bool)
 }
 
 // pairingRecorder holds the one file a device sent while asking to be enrolled,
@@ -211,7 +211,8 @@ func (d *Dispatcher) run() {
 						// local ingestion failed. Vendor is known only when a module
 						// parsed the file (unidentified) — vendor-filtered connectors
 						// skip files no module recognised.
-						go d.connectors.DispatchQuarantined(entry.ID, entry.Vendor, entry.Filename, entry.FilePath)
+						go d.connectors.DispatchQuarantined(entry.ID, entry.Vendor, entry.Filename, entry.FilePath,
+							entry.Category == models.QuarantineCategoryUnidentified)
 					}
 				}
 				continue

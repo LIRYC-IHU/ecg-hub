@@ -140,6 +140,9 @@ func applyEnvOverrides(cfg *Config) {
 	if raw, ok := os.LookupEnv("TLS_KEY_FILE"); ok {
 		cfg.Certs.KeyFile = strings.TrimSpace(raw)
 	}
+	if raw, ok := os.LookupEnv("TLS_CLIENT_CA_FILE"); ok {
+		cfg.Certs.ClientCAFile = strings.TrimSpace(raw)
+	}
 	if raw, ok := os.LookupEnv("STORAGE_BACKEND"); ok {
 		cfg.Storage.Backend = strings.TrimSpace(raw)
 	}
