@@ -3,6 +3,18 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- Outbound C-STORE proposed Deflated Explicit VR Little Endian, a syntax the
+  DICOM library announces but cannot write: it falls through to Explicit VR
+  Little Endian when encoding, so an archive selecting that context would have
+  received an uncompressed data set under a header claiming compression, and
+  every forward to it would have failed. The SCU now proposes only the three
+  syntaxes it can produce. Implicit VR Little Endian was proposed first, which
+  is why no deployment hit this (Conformance Statement Annex D, D-15).
+
 ## [1.1.0] — 2026-10-01
 
 Interoperability release. The hub now answers to a DPI over IHE, is pushed

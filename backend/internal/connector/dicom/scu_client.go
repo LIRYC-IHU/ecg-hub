@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net"
+	"slices"
 	"strconv"
 	"time"
 
@@ -332,6 +333,9 @@ func (c *SCUClient) Store(ctx context.Context, filePath string) error {
 		CalledAETitle:  c.calledAE,
 		CallingAETitle: c.callingAE,
 		SOPClasses:     sopClasses,
+		// Cloned: go-netdicom canonicalizes this slice in place, and the
+		// package-level list must not be rewritten by an association.
+		TransferSyntaxes: slices.Clone(SupportedTransferSyntaxes),
 	})
 	if err != nil {
 		return fmt.Errorf("dicom: store: create SCU: %w", err)

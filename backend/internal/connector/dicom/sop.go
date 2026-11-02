@@ -60,3 +60,17 @@ var KnownECGSOPClasses = []string{
 func IsKnownECGSOPClass(uid string) bool {
 	return slices.Contains(KnownECGSOPClasses, uid)
 }
+
+// SupportedTransferSyntaxes are the syntaxes the SCU proposes on C-STORE.
+//
+// go-netdicom falls back to dicomio.StandardTransferSyntaxes when the list is
+// left empty, and that set also offers Deflated Explicit VR Little Endian —
+// which go-dicom announces but cannot write: ParseTransferSyntaxUID falls
+// through Deflated to Explicit VR Little Endian, so an archive selecting that
+// context receives an uncompressed data set under a syntax claiming
+// compression. Propose only what the encoder can actually produce.
+var SupportedTransferSyntaxes = []string{
+	ImplicitVRLittleEndian,
+	ExplicitVRLittleEndian,
+	ExplicitVRBigEndian,
+}

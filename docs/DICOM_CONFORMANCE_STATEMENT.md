@@ -311,16 +311,16 @@ The SOP classes of §1.1 in the SCU role, plus Verification.
 
 The SCU proposes one presentation context per abstract syntax: Verification,
 the SOP class of the object being sent, and every SOP class of §1.1, with
-duplicates removed. Each context offers the same four transfer syntaxes:
+duplicates removed. Each context offers the same three transfer syntaxes:
 
 | Abstract Syntax | Transfer Syntaxes proposed | Role | Extended Negotiation |
 |---|---|---|---|
-| Verification, the object's SOP class, all SOP classes of §1.1 | Implicit VR Little Endian 1.2.840.10008.1.2; Explicit VR Little Endian 1.2.840.10008.1.2.1; Explicit VR Big Endian 1.2.840.10008.1.2.2; Deflated Explicit VR Little Endian 1.2.840.10008.1.2.1.99 | SCU | None |
+| Verification, the object's SOP class, all SOP classes of §1.1 | Implicit VR Little Endian 1.2.840.10008.1.2; Explicit VR Little Endian 1.2.840.10008.1.2.1; Explicit VR Big Endian 1.2.840.10008.1.2.2 | SCU | None |
 
-The data set is re-encoded in the transfer syntax the archive accepts, with
-one exception: Deflated Explicit VR Little Endian is proposed but cannot be
-produced (Annex D, D-15). **Configure the archive to accept one of the first
-three.**
+The data set is re-encoded in the transfer syntax the archive accepts. No
+compressed syntax is proposed: the three above are the only ones the
+implementation can write, so an accepted context is always one it can honour.
+**An archive that accepts none of them cannot be forwarded to.**
 
 **Objects of a SOP class outside §1.1** are still sent, on a context proposed
 for their own class, and a warning is logged. The connector model carries a
@@ -612,5 +612,4 @@ with ecg-bridge v1.4.0.
 | D-12 | Coercion | Patient identity resolved in ECG Hub (HL7, operator assignment, ADT) is not propagated into received DICOM instances, and not re-forwarded (Annex B.2, B.3) | The archive keeps the modality's demographics, and unidentified objects arrive twice | `internal/connector`, `internal/api/handlers` |
 | D-13 | SOP classes | Only 12-Lead ECG is parsed. The other waveform classes are stored and forwarded only | No display or conversion for General, Ambulatory, Hemodynamic and similar instances | `internal/ecgwaveform` |
 | D-14 | SCP TLS | Server authentication only. No client certificate requested | TLS does not authenticate the modality | `internal/dicom/server.go` |
-| D-15 | SCU negotiation | Deflated Explicit VR Little Endian (1.2.840.10008.1.2.1.99) is among the transfer syntaxes proposed, but the library cannot write it: `ParseTransferSyntaxUID` falls through Deflated to Explicit VR Little Endian, so the data set is encoded **uncompressed** under a syntax that announces compression | An archive that selects the Deflated context receives a data set it cannot decompress, and every forward to it fails. Implicit VR Little Endian is proposed first, so an archive that accepts it is unaffected | `go-dicom` `dicomio/transfersyntax.go`; `go-netdicom` `cstore.go` |
 | D-16 | SCU configuration | `connector.DICOMEndpoint` carries a `StrictSOP` field, meant to refuse a SOP class outside §1.1 rather than forward it best-effort, but nothing ever sets it. Same defect as D-5, on a different field | Strict mode cannot be turned on. The permissive behaviour of §4.2.2.3.1 is the only one reachable | `internal/connector/config.go`; `cmd/ecg-hub/main.go` |
