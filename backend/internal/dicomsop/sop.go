@@ -60,6 +60,27 @@ var KnownECGSOPClasses = []string{
 	GeneralAudioUID,
 }
 
+// sopClassNames are the PS3.6 names of the supported waveform classes.
+var sopClassNames = map[string]string{
+	ECG12LeadUID:     "12-Lead ECG",
+	GeneralECGUID:    "General ECG",
+	AmbulatoryECGUID: "Ambulatory ECG",
+	HemodynamicUID:   "Hemodynamic Waveform",
+	CardiacEPUID:     "Basic Cardiac Electrophysiology",
+	ArterialPulseUID: "Arterial Pulse Waveform",
+	RespiratoryUID:   "Respiratory Waveform",
+	GeneralAudioUID:  "General Audio Waveform",
+}
+
+// SOPClassName returns the readable name of a waveform SOP class, or the UID
+// itself when it is not one of the supported classes.
+func SOPClassName(uid string) string {
+	if n, ok := sopClassNames[uid]; ok {
+		return n
+	}
+	return uid
+}
+
 // IsKnownECGSOPClass reports whether the given UID is a recognized ECG waveform SOP class.
 func IsKnownECGSOPClass(uid string) bool {
 	return slices.Contains(KnownECGSOPClasses, uid)

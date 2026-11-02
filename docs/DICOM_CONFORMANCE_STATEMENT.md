@@ -48,8 +48,12 @@ service, and no media interchange.
 
 Only **12-Lead ECG Waveform Storage** is fully processed: parsed for display,
 converted, and the only class ECG Hub creates. Instances of the other waveform
-classes are received, stored and forwarded unchanged, but the viewer and the
-converters do not read them. See §4.2.1.3.3 for how the SCP handles SOP classes
+classes are received, stored and forwarded unchanged. The viewer draws any
+instance whose first waveform group carries the 12 standard leads (or I, II and
+V1–V6) in volts, whatever its class; for any other it says so explicitly —
+naming the class and the reason (standard leads absent, or a channel that is
+not a voltage) — instead of reporting a parse failure. The converters do not
+read the other classes. See §4.2.1.3.3 for how the SCP handles SOP classes
 outside this table.
 
 ### 1.2 Media services
@@ -674,4 +678,4 @@ with ecg-bridge v1.4.0.
 | D-10 | IOD | Mandatory attributes are missing: Acquisition Context Sequence (all), Referring Physician's Name (all), Accession Number (all but NK), Patient's Birth Date (all but FDA), Study ID, Content Date/Time and Acquisition DateTime (NK) | Created instances do not conform to the 12-Lead ECG IOD. Validators (e.g. dciodvfy) report them, and strict archives may refuse them | ecg-bridge builders |
 | D-11 | Character set | `ISO_IR 100` is declared but values are written in UTF-8 | Accented names are garbled at the receiver | `dicomconf/finalize.go` and builders |
 | D-12 | Coercion | By default, patient identity resolved in ECG Hub (HL7, operator assignment, ADT) is not propagated into received DICOM instances, and unidentified objects are forwarded twice (Annex B.2, B.3). A connector set to manage patient identity sends received DICOM with the establishment's identity and unidentified objects once, after assignment. On either setting, identity changes after the send (ADT A08/A40, Patient ID edit) are not re-forwarded | Off: the archive keeps the modality's demographics, and unidentified objects arrive twice. On: an archive is not told when the identity it received changes later | `internal/connector`, `internal/api/handlers` |
-| D-13 | SOP classes | Only 12-Lead ECG is parsed. The other waveform classes are stored and forwarded only | No display or conversion for General, Ambulatory, Hemodynamic and similar instances | `internal/ecgwaveform` |
+| D-13 | SOP classes | Only waveforms carrying the 12 standard leads in volts are displayed. Other instances (Ambulatory, partial General ECG, Hemodynamic, EP, Arterial Pulse, Respiratory, Audio) are stored and forwarded only; the viewer states why it cannot draw them | No display or conversion for those instances. N-lead electrical display is deferred (product decision, 2026-11-02) | `internal/ecgwaveform` |

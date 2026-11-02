@@ -917,7 +917,16 @@
     "nameInFile": "in file: {{name}}",
     "nameInFileHint": "Name embedded in the source file — the ECG is filed under the patient shown before it.",
     "disclaimerTitle": "Non-diagnostic use.",
-    "disclaimer": "ECG Hub is a data-management and visualisation tool. It is not a medical device and must not be used as the basis for diagnosis."
+    "disclaimer": "ECG Hub is a data-management and visualisation tool. It is not a medical device and must not be used as the basis for diagnosis.",
+    "notDisplayable": {
+      "title": "Waveform cannot be displayed ({{sopClass}})",
+      "storedAndForwarded": "The file is stored and forwarded as usual; only the display is unavailable.",
+      "reason": {
+        "leads_missing": "This waveform does not carry the 12 standard leads the viewer can display.",
+        "non_electrical_unit": "This waveform holds a signal that is not a voltage (pressure, respiration, audio…) and cannot be read on an mm/mV ECG grid.",
+        "other": "This kind of waveform cannot be displayed by the 12-lead viewer."
+      }
+    }
   },
   "empty": {
     "patients": "No patient found",
