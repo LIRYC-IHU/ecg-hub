@@ -1,8 +1,12 @@
 package dicom
 
 import (
+	"bytes"
 	"testing"
 
+	legacydicom "github.com/apaladiychuk/go-dicom"
+	dicomio "github.com/apaladiychuk/go-dicom/dicomio"
+	legacytag "github.com/apaladiychuk/go-dicom/dicomtag"
 	netdicom "github.com/apaladiychuk/go-netdicom"
 	"github.com/apaladiychuk/go-netdicom/dimse"
 
@@ -11,9 +15,38 @@ import (
 	"github.com/LIRYC-IHU/ecg-hub/internal/ingestion"
 )
 
+// encodeBody produces a data set body in the given transfer syntax, the shape
+// the C-STORE callback receives: elements only, no preamble and no file meta,
+// which the provider strips before handing the payload over.
+func encodeBody(t *testing.T, transferSyntax string) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	enc := dicomio.NewEncoderWithTransferSyntax(&buf, transferSyntax)
+	legacydicom.WriteElement(enc, legacydicom.MustNewElement(legacytag.PatientID, "0000000001"))
+	legacydicom.WriteElement(enc, legacydicom.MustNewElement(legacytag.StudyDate, "20260430"))
+	legacydicom.WriteElement(enc, legacydicom.MustNewElement(legacytag.StudyTime, "092816"))
+	if err := enc.Error(); err != nil {
+		t.Fatalf("encode body in %s: %v", transferSyntax, err)
+	}
+	return buf.Bytes()
+}
+
 // storeFor runs one C-STORE against a server with an empty queue and reports
 // the status plus whether anything was queued.
 func storeFor(t *testing.T, transferSyntax, sopClass string) (dimse.Status, bool) {
+	t.Helper()
+	// The body has to be encoded in the syntax that is declared, or the parse
+	// fails for a reason the test did not intend. For a syntax we refuse, the
+	// gate fires before any parse, so the encoding there is immaterial.
+	bodySyntax := transferSyntax
+	if !dicomsop.IsSupportedTransferSyntax(bodySyntax) {
+		bodySyntax = dicomsop.ExplicitVRLittleEndian
+	}
+	return storeBody(t, transferSyntax, sopClass, encodeBody(t, bodySyntax))
+}
+
+// storeBody is storeFor with the payload chosen by the caller.
+func storeBody(t *testing.T, transferSyntax, sopClass string, body []byte) (dimse.Status, bool) {
 	t.Helper()
 	s := &Server{
 		cfg:   Settings{AETitle: "ECG-HUB"},
@@ -24,7 +57,7 @@ func storeFor(t *testing.T, transferSyntax, sopClass string) (dimse.Status, bool
 		transferSyntax,
 		sopClass,
 		"1.2.826.0.1.3680043.2.1143.1",
-		[]byte("not a real data set, and it does not need to be"),
+		body,
 		device.Identity{},
 		device.Allow,
 	)
@@ -125,5 +158,88 @@ func TestOnCStore_RefusesVerificationSOPClass(t *testing.T) {
 	}
 	if status.Status != dimse.StatusSOPClassNotSupported {
 		t.Errorf("status 0x%04x, want 0x%04x", status.Status, dimse.StatusSOPClassNotSupported)
+	}
+}
+
+// storeItem runs one C-STORE and hands back the queued item, if any.
+func storeItem(t *testing.T, transferSyntax, sopClass string, body []byte) (dimse.Status, *ingestion.IngestItem) {
+	t.Helper()
+	s := &Server{
+		cfg:   Settings{AETitle: "ECG-HUB"},
+		queue: make(ingestion.IngestQueue, 1),
+	}
+	status := s.onCStore(
+		netdicom.ConnectionState{},
+		transferSyntax,
+		sopClass,
+		"1.2.826.0.1.3680043.2.1143.1",
+		body,
+		device.Identity{},
+		device.Allow,
+	)
+	select {
+	case item := <-s.queue:
+		return status, &item
+	default:
+		return status, nil
+	}
+}
+
+// D-2: an object that cannot be parsed is refused while the device is still
+// listening, instead of being answered Success and surfacing in quarantine
+// where nothing connects it back to the modality that sent it.
+func TestOnCStore_RefusesAnUnparseableDataSet(t *testing.T) {
+	status, item := storeItem(t, dicomsop.ExplicitVRLittleEndian, dicomsop.ECG12LeadUID,
+		[]byte("DICM-shaped on the outside, nonsense on the inside"))
+
+	if item != nil {
+		t.Errorf("an unparseable object was queued as %q", item.Filename)
+	}
+	if status.Status != dimse.CStoreCannotUnderstand {
+		t.Errorf("status 0x%04x, want 0x%04x (Cannot understand)",
+			status.Status, dimse.CStoreCannotUnderstand)
+	}
+	if status.ErrorComment == "" {
+		t.Error("refusal carries no comment, so the device is told nothing it can act on")
+	}
+}
+
+// The same parse feeds the filename. The old code parsed the body the callback
+// receives, which has no preamble, no DICM and no File Meta and so never
+// parsed: every received object fell back to its SOP Instance UID instead of
+// being named after the patient.
+func TestOnCStore_NamesTheFileAfterThePatient(t *testing.T) {
+	status, item := storeItem(t, dicomsop.ExplicitVRLittleEndian, dicomsop.ECG12LeadUID,
+		encodeBody(t, dicomsop.ExplicitVRLittleEndian))
+
+	if status.Status != dimse.StatusSuccess {
+		t.Fatalf("status 0x%04x, want success", status.Status)
+	}
+	if item == nil {
+		t.Fatal("accepted but never queued")
+	}
+	const want = "0000000001_20260430T092816_dicom.dcm"
+	if item.Filename != want {
+		t.Errorf("filename %q, want %q", item.Filename, want)
+	}
+}
+
+// An object with no Patient ID still goes through: that is the unidentified
+// review queue, not a reason to refuse the device.
+func TestOnCStore_AcceptsAnObjectWithNoPatientID(t *testing.T) {
+	var buf bytes.Buffer
+	enc := dicomio.NewEncoderWithTransferSyntax(&buf, dicomsop.ExplicitVRLittleEndian)
+	legacydicom.WriteElement(enc, legacydicom.MustNewElement(legacytag.StudyDate, "20260430"))
+	if err := enc.Error(); err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+
+	status, item := storeItem(t, dicomsop.ExplicitVRLittleEndian, dicomsop.ECG12LeadUID, buf.Bytes())
+
+	if status.Status != dimse.StatusSuccess || item == nil {
+		t.Fatalf("status 0x%04x item=%v, want an accepted and queued object", status.Status, item)
+	}
+	if item.Filename != "1.2.826.0.1.3680043.2.1143.1.dcm" {
+		t.Errorf("filename %q, want the SOP Instance UID fallback", item.Filename)
 	}
 }

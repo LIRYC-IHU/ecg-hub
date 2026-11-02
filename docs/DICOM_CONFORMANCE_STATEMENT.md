@@ -255,16 +255,21 @@ received, byte for byte, wrapped in a newly written File Meta Information
 header. Private and Type 3 attributes are retained. Exceptions are listed in
 Annex B.2.
 
-**Meaning of Success.** `0000` means the instance **has been placed in the
-ingestion queue**. Parsing, patient matching and persistence happen afterwards,
-outside the association. A failure at that stage sends the file to quarantine,
-where it is kept and visible to operators, but **the modality is not told**
-(Annex D, D-2).
+**Meaning of Success.** `0000` means the instance was **readable and has been
+placed in the ingestion queue**. Before answering, the SCP checks the SOP class
+and transfer syntax (§4.2.1.3.2) and parses the data set; anything that fails
+is refused within the association, with the reason in the Error Comment.
 
-**SOP classes outside §1.1.** Accepted at association level (see above). Any
-object with a valid DICM preamble is processed as an ECG, so a non-waveform
-instance is stored and shows up as an ECG that cannot be displayed. Do not
-route other modalities to this AE.
+Patient matching and persistence still happen afterwards, outside the
+association. A failure at that stage sends the file to quarantine, where it is
+kept and visible to operators, but **the modality is not told** (Annex D, D-2).
+An object with no Patient ID is not a failure: it is routed to the unidentified
+review queue by design.
+
+**SOP classes outside §1.1.** Refused on the C-STORE with `0112`, not stored.
+The presentation context is still accepted at association level, so a modality
+sees acceptance followed by a per-object refusal; do not route other modalities
+to this AE.
 
 **Duplicate SOP Instance UIDs.** Not detected at DICOM level. A resent instance
 is ingested again as a separate ECG record, subject to the application's own
@@ -613,7 +618,7 @@ with ecg-bridge v1.4.0.
 | # | Area | Deviation | Effect | Where |
 |---|---|---|---|---|
 | D-1 | SCP negotiation | Every presentation context is still accepted, whatever its abstract syntax, using the first transfer syntax proposed: the library does so unconditionally and exposes no hook (`contextmanager.onAssociateRequest`, which carries a TODO to that effect). The refusal happens one level up, on the C-STORE (§4.2.1.3.2) | A modality is told its context was accepted and then that the object was refused, instead of being told at negotiation which contexts are usable. Nothing unsupported is stored, and the status names the reason, so the remaining cost is a wasted object and a misleading A-ASSOCIATE-AC. Rejecting the context itself would need a patched or replaced `go-netdicom`, which this project has deliberately not done: the behaviour is corrected above the library instead | `go-netdicom` `contextmanager.go`; `internal/dicom/server.go` |
-| D-2 | SCP status | Success is returned when the object is queued, before parsing and persistence | A later ingestion failure is not reported to the modality. The file is kept in quarantine | `internal/dicom/server.go` |
+| D-2 | SCP status | Success is returned once the object is readable and queued. The SOP class, the transfer syntax and the data set itself are checked first, but patient matching and persistence still happen after the association has answered | A failure at that later stage — storage, database, module — sends the file to quarantine without the modality being told. What can no longer happen is Success for an object that was never readable | `internal/dicom/server.go` |
 | D-3 | Implementation identification | The SCP's A-ASSOCIATE-AC and the SCU's C-ECHO A-ASSOCIATE-RQ carry no Implementation Class UID (mandatory under PS3.7 D.3.3.2). Where one is sent (SCU C-STORE, File Meta of received objects), it is the go-dicom library's UID, not one belonging to ECG Hub | Strict peers may reject the association. Logs on the peer do not identify ECG Hub | `go-netdicom`; `internal/connector/dicom/scu_client.go` |
 | D-4 | SCP access | Called and Calling AE Titles are not checked | A modality configured with the wrong AE title still connects. Access control is the MAC whitelist only | `internal/dicom/server.go` |
 | D-7 | UIDs | Philips, NK and MUSE conversions generate new UIDs on every run. The Philips form `2.25.<ns>` is not derived from a UUID as PS3.5 B.2 requires | Duplicate studies in the archive when the same ECG is forwarded twice (retry after a lost response, resend, export then forward) | ecg-bridge builders |

@@ -296,7 +296,38 @@ func (s *Server) onCStore(
 		return dimse.Status{Status: dimse.CStoreCannotUnderstand, ErrorComment: err.Error()}
 	}
 
-	filename := buildDICOMFilename(data, sopInstanceUID)
+	// Parse before answering, not after. A parse already happened on this path,
+	// inside buildDICOMFilename, and its failure was swallowed into an
+	// "unknown.dcm" fallback while the object went on the queue and the device
+	// was told Success. An object that will not parse cannot be displayed,
+	// converted or forwarded: it ends in quarantine with nobody waiting for it,
+	// and the modality has no way to learn that.
+	//
+	// It parses the reconstructed file, not the body the callback receives. The
+	// body carries no preamble, no DICM and no File Meta, so the parser cannot
+	// know its transfer syntax and fails on every object — which is why the old
+	// call was always taking its fallback, and why received files were never
+	// named after the patient as intended.
+	//
+	// A parsed object with no Patient ID is not an error: it goes to the
+	// unidentified review queue by design. The gate is readability, not identity.
+	ds, parseErr := legacydicom.ReadDataSetInBytes(raw, legacydicom.ReadOptions{})
+	if parseErr != nil {
+		appmetrics.DICOMSCPErrors.WithLabelValues("unparseable").Inc()
+		slog.Warn("dicom: C-STORE refused — the data set does not parse",
+			"sop_class", sopClassUID,
+			"transfer_syntax", transferSyntaxUID,
+			"sop_instance_uid", sopInstanceUID,
+			"mac", id.MAC,
+			"error", parseErr,
+		)
+		return dimse.Status{
+			Status:       dimse.CStoreCannotUnderstand,
+			ErrorComment: "data set could not be parsed: " + parseErr.Error(),
+		}
+	}
+
+	filename := buildDICOMFilenameFrom(ds, sopInstanceUID)
 
 	item := ingestion.IngestItem{
 		Filename:  filename,
@@ -421,6 +452,19 @@ func buildDICOMFilename(data []byte, sopInstanceUID string) string {
 
 	ds, err := legacydicom.ReadDataSetInBytes(data, legacydicom.ReadOptions{})
 	if err != nil {
+		return fallback
+	}
+	return buildDICOMFilenameFrom(ds, sopInstanceUID)
+}
+
+// buildDICOMFilenameFrom is buildDICOMFilename for a data set already parsed,
+// so the C-STORE path does not parse the same object twice.
+func buildDICOMFilenameFrom(ds *legacydicom.DataSet, sopInstanceUID string) string {
+	fallback := "unknown.dcm"
+	if uid := ingestion.SafeComponent(sopInstanceUID); uid != "" {
+		fallback = uid + ".dcm"
+	}
+	if ds == nil {
 		return fallback
 	}
 

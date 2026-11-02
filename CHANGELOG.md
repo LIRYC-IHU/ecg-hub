@@ -15,6 +15,21 @@ All notable changes to this project are documented here. Versions follow
   back out of the library's error, the forward is recorded as delivered, and the
   status is logged and counted separately: a coercion is the archive rewriting
   what was sent, and for `B000` that can be the patient identity (Annex D, D-6).
+- The C-STORE SCP parses an object before answering Success. It answered as
+  soon as the instance was queued, so a data set that would not parse was
+  accepted, landed in quarantine, and the modality never learned that the
+  transfer it considered successful had produced nothing usable. The parse now
+  happens inside the association and a failure is refused with `C000` and the
+  reason. Patient matching and persistence still follow afterwards, so Annex D
+  D-2 is narrowed rather than removed. An object with no Patient ID is still
+  accepted and routed to the unidentified review queue, as designed.
+- Received DICOM files are named after the patient again. The name was built
+  from the body the C-STORE callback receives, which carries no preamble, no
+  DICM and no File Meta — so the parser could not know its transfer syntax and
+  failed on every object, silently falling back to the SOP Instance UID. Every
+  file received over DICOM since the SCP shipped has that fallback name. The
+  name is now built from the reconstructed file, in the same parse the check
+  above performs.
 - The C-STORE SCP refuses what it cannot handle instead of storing it. The
   DICOM library accepts every presentation context it is offered — any abstract
   syntax, and whichever transfer syntax the caller proposed first — so a
