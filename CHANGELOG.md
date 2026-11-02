@@ -43,6 +43,13 @@ All notable changes to this project are documented here. Versions follow
   send the modality's identity. Later ADT changes are still not re-forwarded
   (Annex D, D-12, narrowed).
 
+### Changed
+
+- ecg-bridge, the conversion toolkit, is pinned to v1.5.0 (was v1.4.0). That
+  release carries its DICOM conformance fixes: deterministic UIDs, missing
+  12-Lead ECG IOD attributes, and UTF-8 character set handling (the converter
+  items of Annex D of the conformance statement).
+
 ### Fixed
 
 - The wrong-patient check now works for DICOM files. Assigning an unidentified
