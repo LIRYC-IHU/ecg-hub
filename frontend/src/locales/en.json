@@ -739,6 +739,8 @@
       "dicomStrictSopHint": "An object outside the supported list is dropped with an error instead of being forwarded best-effort. The sending device is told its object was rejected.",
       "waitForHl7": "Wait for HL7 enrichment before forwarding",
       "waitForHl7Hint": "The PACS receives the establishment's demographics instead of what the device recorded. A file whose enrichment never succeeds is forwarded anyway, once the retries are over.",
+      "manageIdentity": "ECG Hub manages patient identity",
+      "manageIdentityHint": "Off: plain proxy, every file is sent as received, unidentified ECGs included (sent a second time after assignment, identity uncorrected). On: an unidentified ECG stays in quarantine and is sent once, after assignment; DICOM files are sent with the ID, name, birth date and sex ECG Hub holds instead of the device's.",
       "interval": "Retry interval",
       "ectpHost": "ECTP host",
       "ectpPort": "ECTP port",

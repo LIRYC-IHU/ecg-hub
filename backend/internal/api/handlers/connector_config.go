@@ -27,9 +27,11 @@ type ConnectorStoredConfig struct {
 	Vendors    []string `json:"vendors"`    // filter: empty = all
 	// WaitForHL7 delays forwarding until HL7 enrichment has run, so the PACS
 	// receives the establishment's demographics. See connector.Config.
-	WaitForHL7  bool   `json:"wait_for_hl7"`
-	MaxAttempts int    `json:"max_attempts"`
-	Interval    string `json:"interval"`
+	WaitForHL7 bool `json:"wait_for_hl7"`
+	// ManageIdentity: see connector.Config. Absent in older records, so false.
+	ManageIdentity bool   `json:"manage_identity"`
+	MaxAttempts    int    `json:"max_attempts"`
+	Interval       string `json:"interval"`
 	// ECTP
 	ECTPHost string `json:"ectp_host,omitempty"`
 	ECTPPort int    `json:"ectp_port,omitempty"`

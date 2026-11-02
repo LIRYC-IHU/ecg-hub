@@ -22,6 +22,17 @@ All notable changes to this project are documented here. Versions follow
   connection is closed before any association, with the reason in the log.
   TLS used to authenticate the server only (Annex D, D-14). The SCP refuses to
   start, and the setting refuses to save, without TLS or a readable bundle.
+- Connectors can let ECG Hub manage patient identity (Modules > Connectors >
+  "ECG Hub manages patient identity", off by default). Without it, a connector
+  stays a plain proxy: an unidentified ECG is forwarded from quarantine, then
+  forwarded again after an operator assigns it, with the same SOP Instance UID
+  and still no Patient ID, and received DICOM always carries the modality's
+  demographics. With it, an unidentified ECG waits in quarantine and goes out
+  once, after assignment, and received DICOM is sent with the Patient ID, name,
+  birth date and sex ECG Hub holds (a coercion of the outbound copy only; the
+  stored file is untouched). A coercion that fails fails the forward rather than
+  send the modality's identity. Later ADT changes are still not re-forwarded
+  (Annex D, D-12, narrowed).
 
 ### Fixed
 

@@ -148,7 +148,9 @@ PS3.2, PS3.4 and PS3.7 is assumed.
 - **Forward ECG to archive.** Once an ECG is stored, each enabled connector whose
   filters match it forwards it. If the connector is set to wait for HL7, the
   forward is held until enrichment from the HIS has finished. Files that land in
-  quarantine are forwarded too (Annex B.3).
+  quarantine are forwarded too (Annex B.3), except unidentified ECGs on a
+  connector set to manage patient identity, which wait for the operator's
+  assignment.
 - **Verify archive.** The STORE-SCU AE sends a C-ECHO each time connector health
   is checked: the status page, the health endpoint, or a connection test from the
   admin interface.
@@ -356,7 +358,8 @@ best-effort send.
 **Which file is sent.**
 
 - An ECG received as DICOM is sent **as stored**, which is essentially as the
-  modality sent it (Annex B.2).
+  modality sent it (Annex B.2). On a connector set to **manage patient
+  identity**, it is sent with the establishment's identity instead (B.2).
 - Any other ECG (Philips, GE MUSE, Nihon Kohden, Mindray, FDA aECG) is converted
   to a 12-Lead ECG Waveform instance first. If the patient is known locally, the
   establishment's demographics replace the device's in that instance (Annex A,
@@ -596,8 +599,23 @@ carry the birth date even when it is injected (A.2).
 
 #### B.2 Received instances
 
-Received instances are **not coerced** on reception or on forwarding. In
-particular:
+Received instances are never coerced on reception: the stored file is what the
+modality sent. On forwarding, it depends on the connector's **ECG Hub manages
+patient identity** option (Modules > Connectors, off by default).
+
+**With the option on**, the forwarded copy is coerced: Patient ID (0010,0020)
+is set to the identifier the ECG is attached to in ECG Hub, and Patient's Name
+(0010,0010), Birth Date (0010,0030) and Sex (0010,0040) to the patient record's
+values when ECG Hub holds them (otherwise the modality's value is kept). Its
+File Meta then names ECG Hub as the writing implementation. The SOP Instance
+UID and the waveform are unchanged. The stored original is not modified. If
+the coercion cannot be applied, the forward fails and is retried; the object is
+never sent with the modality's identity in its place. The values are those
+known **at the time of the send**: a later ADT A08/A40 or Patient ID edit is not
+propagated.
+
+**With the option off** (proxy as received), received instances are **not
+coerced** on forwarding either. In particular:
 
 - Demographics from HL7 enrichment are **not** written into received DICOM
   instances. Only converted instances get them (B.1).
@@ -622,6 +640,13 @@ A file that ECG Hub cannot attach to a patient goes to quarantine and is
 an operator later attaches it to a patient, it is ingested again and forwarded
 **a second time, still unchanged**. For received DICOM, the second send has the
 same SOP Instance UID and the same (possibly empty) Patient ID.
+
+On a connector that **manages patient identity**, an unidentified ECG (one
+that parsed but carried no Patient ID) is **not** forwarded from quarantine. It
+is sent once, after an operator has attached it to a patient, with that
+patient's identity (B.2). If it is never attached, it is never sent on that
+connector. Other quarantined files (unreadable, unknown format) are forwarded
+right away, unchanged, as above.
 
 ### Annex C — Coded Terminology
 
@@ -648,5 +673,5 @@ with ecg-bridge v1.4.0.
 | D-9 | UIDs | The Mindray UID root `1.2.840.113619` is GE Healthcare's registered root | UIDs under a root ECG Hub does not own, with a risk of collision with genuine GE instances | `mindray-to-dicom/builder.go` |
 | D-10 | IOD | Mandatory attributes are missing: Acquisition Context Sequence (all), Referring Physician's Name (all), Accession Number (all but NK), Patient's Birth Date (all but FDA), Study ID, Content Date/Time and Acquisition DateTime (NK) | Created instances do not conform to the 12-Lead ECG IOD. Validators (e.g. dciodvfy) report them, and strict archives may refuse them | ecg-bridge builders |
 | D-11 | Character set | `ISO_IR 100` is declared but values are written in UTF-8 | Accented names are garbled at the receiver | `dicomconf/finalize.go` and builders |
-| D-12 | Coercion | Patient identity resolved in ECG Hub (HL7, operator assignment, ADT) is not propagated into received DICOM instances, and not re-forwarded (Annex B.2, B.3) | The archive keeps the modality's demographics, and unidentified objects arrive twice | `internal/connector`, `internal/api/handlers` |
+| D-12 | Coercion | By default, patient identity resolved in ECG Hub (HL7, operator assignment, ADT) is not propagated into received DICOM instances, and unidentified objects are forwarded twice (Annex B.2, B.3). A connector set to manage patient identity sends received DICOM with the establishment's identity and unidentified objects once, after assignment. On either setting, identity changes after the send (ADT A08/A40, Patient ID edit) are not re-forwarded | Off: the archive keeps the modality's demographics, and unidentified objects arrive twice. On: an archive is not told when the identity it received changes later | `internal/connector`, `internal/api/handlers` |
 | D-13 | SOP classes | Only 12-Lead ECG is parsed. The other waveform classes are stored and forwarded only | No display or conversion for General, Ambulatory, Hemodynamic and similar instances | `internal/ecgwaveform` |

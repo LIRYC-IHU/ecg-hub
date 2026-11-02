@@ -153,6 +153,11 @@ message ConnectorConfig {
   // Refuse to forward an object whose SOP class is outside the supported list,
   // instead of sending it best-effort with a warning.
   bool dicom_strict_sop = 21;
+  // ECG Hub owns the patient identity on this link. An unidentified ECG is not
+  // forwarded from quarantine, only once an operator has assigned it; and a
+  // DICOM object is sent with the hub's Patient ID, name, birth date and sex
+  // written over the device's. Off: the connector proxies files as received.
+  bool manage_identity = 22;
 }
 
 message ConnectorConfigEntry {

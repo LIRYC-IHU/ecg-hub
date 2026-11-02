@@ -1790,6 +1790,8 @@ export interface ConnectorConfig {
   interval: string;
   // Hold the forward until HL7 enrichment has settled (DICOM connectors).
   wait_for_hl7?: boolean;
+  // ECG Hub owns the patient identity on this link (#130 D-12).
+  manage_identity?: boolean;
   ectp_host?: string;
   ectp_port?: number;
   ftp_host?: string;
@@ -1827,6 +1829,7 @@ function connectorConfigFromProto(
     max_attempts: c.maxAttempts,
     interval: c.interval,
     wait_for_hl7: c.waitForHl7,
+    manage_identity: c.manageIdentity,
     ectp_host: c.ectpHost || undefined,
     ectp_port: c.ectpPort || undefined,
     ftp_host: c.ftpHost || undefined,
@@ -1875,6 +1878,7 @@ export async function saveConnectorConfig(
       maxAttempts: config.max_attempts ?? 0,
       interval: config.interval ?? "",
       waitForHl7: config.wait_for_hl7 ?? false,
+      manageIdentity: config.manage_identity ?? false,
       ectpHost: config.ectp_host ?? "",
       ectpPort: config.ectp_port ?? 0,
       ftpHost: config.ftp_host ?? "",

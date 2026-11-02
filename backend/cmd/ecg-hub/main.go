@@ -1032,8 +1032,9 @@ func buildConnectorsFromDB(
 				Extensions: sc.Config.Extensions,
 				Vendors:    sc.Config.Vendors,
 			},
-			WaitForHL7: sc.Config.WaitForHL7,
-			ECTP:       connector.Endpoint{Host: sc.Config.ECTPHost, Port: sc.Config.ECTPPort},
+			WaitForHL7:     sc.Config.WaitForHL7,
+			ManageIdentity: sc.Config.ManageIdentity,
+			ECTP:           connector.Endpoint{Host: sc.Config.ECTPHost, Port: sc.Config.ECTPPort},
 			FTP: connector.FTPEndpoint{
 				Host:     sc.Config.FTPHost,
 				Port:     sc.Config.FTPPort,
@@ -1088,10 +1089,11 @@ func buildConnectorsFromDB(
 		}
 
 		settings = append(settings, connector.ConnectorSettings{
-			Connector:   c,
-			Interval:    interval,
-			MaxAttempts: maxAttempts,
-			WaitForHL7:  sc.Config.WaitForHL7,
+			Connector:      c,
+			Interval:       interval,
+			MaxAttempts:    maxAttempts,
+			WaitForHL7:     sc.Config.WaitForHL7,
+			ManageIdentity: sc.Config.ManageIdentity,
 		})
 		checkers = append(checkers, c)
 		slog.Info("connector: loaded", "name", cc.Name, "protocol", cc.Protocol, "enabled", true)

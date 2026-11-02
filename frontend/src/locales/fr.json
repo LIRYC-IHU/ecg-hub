@@ -740,6 +740,8 @@
       "dicomStrictSopHint": "Un objet hors de la liste prise en charge est rejeté avec une erreur au lieu d'être transmis au mieux. L'appareil émetteur apprend que son objet a été refusé.",
       "waitForHl7": "Attendre l'enrichissement HL7 avant d'envoyer",
       "waitForHl7Hint": "Le PACS reçoit les données du SIH plutôt que celles de l'appareil. Un fichier dont l'enrichissement n'aboutit jamais est envoyé quand même, une fois les tentatives épuisées.",
+      "manageIdentity": "ECG Hub gère l'identité patient",
+      "manageIdentityHint": "Désactivé : proxy tel quel, chaque fichier part comme reçu, y compris les ECG non identifiés (envoyés une 2ᵉ fois après assignation, sans identité corrigée). Activé : un ECG non identifié reste en quarantaine et n'est envoyé qu'une fois, après assignation ; les fichiers DICOM partent avec l'ID, le nom, la date de naissance et le sexe connus d'ECG Hub à la place de ceux de l'appareil.",
       "interval": "Intervalle de relance",
       "ectpHost": "Hôte ECTP",
       "ectpPort": "Port ECTP",

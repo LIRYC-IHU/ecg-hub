@@ -1120,6 +1120,11 @@ type ConnectorConfig struct {
 	// Refuse to forward an object whose SOP class is outside the supported list,
 	// instead of sending it best-effort with a warning.
 	DicomStrictSop bool `protobuf:"varint,21,opt,name=dicom_strict_sop,json=dicomStrictSop,proto3" json:"dicom_strict_sop,omitempty"`
+	// ECG Hub owns the patient identity on this link. An unidentified ECG is not
+	// forwarded from quarantine, only once an operator has assigned it; and a
+	// DICOM object is sent with the hub's Patient ID, name, birth date and sex
+	// written over the device's. Off: the connector proxies files as received.
+	ManageIdentity bool `protobuf:"varint,22,opt,name=manage_identity,json=manageIdentity,proto3" json:"manage_identity,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -1297,6 +1302,13 @@ func (x *ConnectorConfig) GetDicomTlsInsecureSkipVerify() bool {
 func (x *ConnectorConfig) GetDicomStrictSop() bool {
 	if x != nil {
 		return x.DicomStrictSop
+	}
+	return false
+}
+
+func (x *ConnectorConfig) GetManageIdentity() bool {
+	if x != nil {
+		return x.ManageIdentity
 	}
 	return false
 }
@@ -2051,7 +2063,7 @@ const file_v1_module_proto_rawDesc = "" +
 	"\x19SaveModuleSettingsRequest\x12\x16\n" +
 	"\x06active\x18\x01 \x03(\tR\x06active\"4\n" +
 	"\x1aSaveModuleSettingsResponse\x12\x16\n" +
-	"\x06active\x18\x01 \x03(\tR\x06active\"\xbc\x05\n" +
+	"\x06active\x18\x01 \x03(\tR\x06active\"\xe5\x05\n" +
 	"\x0fConnectorConfig\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1a\n" +
 	"\bprotocol\x18\x02 \x01(\tR\bprotocol\x12\x1e\n" +
@@ -2080,7 +2092,8 @@ const file_v1_module_proto_rawDesc = "" +
 	"waitForHl7\x12\x1b\n" +
 	"\tdicom_tls\x18\x13 \x01(\bR\bdicomTls\x12B\n" +
 	"\x1edicom_tls_insecure_skip_verify\x18\x14 \x01(\bR\x1adicomTlsInsecureSkipVerify\x12(\n" +
-	"\x10dicom_strict_sop\x18\x15 \x01(\bR\x0edicomStrictSop\"\x87\x01\n" +
+	"\x10dicom_strict_sop\x18\x15 \x01(\bR\x0edicomStrictSop\x12'\n" +
+	"\x0fmanage_identity\x18\x16 \x01(\bR\x0emanageIdentity\"\x87\x01\n" +
 	"\x14ConnectorConfigEntry\x12\x1f\n" +
 	"\vmodule_type\x18\x01 \x01(\tR\n" +
 	"moduleType\x12\x18\n" +

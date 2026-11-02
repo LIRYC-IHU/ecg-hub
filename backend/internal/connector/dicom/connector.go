@@ -104,7 +104,10 @@ func (c *DICOMConnector) materializeDICOM(ctx context.Context, ecg *models.ECG, 
 	noop := func() {}
 	if strings.EqualFold(filepath.Ext(filePath), dicomExt) ||
 		strings.EqualFold(filepath.Ext(ecg.OriginalFilename), dicomExt) {
-		return filePath, noop, nil
+		if !c.cfg.ManageIdentity {
+			return filePath, noop, nil
+		}
+		return c.withHubIdentity(ecg, filePath)
 	}
 
 	if c.converter == nil {

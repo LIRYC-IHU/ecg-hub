@@ -1400,6 +1400,21 @@ function PacsCard({
         </span>
       </label>
 
+      <label className="flex items-start gap-2 mb-4 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={cfg.manage_identity ?? false}
+          onChange={(e) => set("manage_identity", e.target.checked)}
+          className="mt-0.5"
+        />
+        <span className="text-xs">
+          {t("modules.connectors.manageIdentity")}
+          <span className="block text-[10px] text-muted-foreground">
+            {t("modules.connectors.manageIdentityHint")}
+          </span>
+        </span>
+      </label>
+
       <ConnectorCardActions logic={logic} canSave={!!cfg.name} />
     </div>
   );
