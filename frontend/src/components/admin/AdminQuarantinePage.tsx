@@ -142,6 +142,8 @@ export function AdminQuarantinePage({ canDelete, canAssign }: Props) {
     mutationFn: (id: string) => deleteQuarantineEntry(id),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["admin", "quarantine"] });
+      // The sidebar badge counts from the stats, not from this list.
+      void queryClient.invalidateQueries({ queryKey: ["admin", "stats"] });
       setConfirmDelete(null);
       notify("success", t("admin.quarantine.deleted"));
     },
@@ -160,6 +162,8 @@ export function AdminQuarantinePage({ canDelete, canAssign }: Props) {
     }) => assignQuarantineEntry(id, patientId, createNew),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["admin", "quarantine"] });
+      // The sidebar badge counts from the stats, not from this list.
+      void queryClient.invalidateQueries({ queryKey: ["admin", "stats"] });
       setAssigningId(null);
       notify("success", t("admin.quarantine.assigned"));
     },
@@ -189,6 +193,8 @@ export function AdminQuarantinePage({ canDelete, canAssign }: Props) {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["admin", "quarantine"] });
+      // The sidebar badge counts from the stats, not from this list.
+      void queryClient.invalidateQueries({ queryKey: ["admin", "stats"] });
       setSelected(new Set());
       notify("success", t("admin.quarantine.deletedMany"));
     },
