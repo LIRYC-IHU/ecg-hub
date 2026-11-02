@@ -351,7 +351,8 @@ released.
 | Status received | Behaviour |
 |---|---|
 | `0000` Success | Forward recorded as delivered |
-| Any other status, **warnings (`B000`, `B006`, `B007`) included** | Treated as a failure and retried (Annex D, D-6) |
+| **Warning** (`B000` coercion, `B006` elements discarded, `B007` data set does not match SOP class, and the rest of `B000`–`BFFF`) | Forward recorded as delivered and **not retried**: PS3.4 B.2.3 makes this class mean the archive stored the instance. The status is logged and counted apart from a clean send, because a coercion is the archive rewriting what was sent — for `B000`, possibly the patient identity |
+| Any other status | Treated as a failure and retried |
 | Association rejected, aborted, or timeout | Treated as a failure and retried |
 
 Retries follow the connector's retry policy (maximum attempts and interval,
@@ -611,11 +612,10 @@ with ecg-bridge v1.4.0.
 
 | # | Area | Deviation | Effect | Where |
 |---|---|---|---|---|
-| D-1 | SCP negotiation | Every presentation context is still accepted, whatever its abstract syntax, using the first transfer syntax proposed: the library does so unconditionally and exposes no hook (`contextmanager.onAssociateRequest`, which carries a TODO to that effect). The refusal happens one level up, on the C-STORE (§4.2.1.3.2) | A modality is told its context was accepted and then that the object was refused, instead of being told at negotiation which contexts are usable. Nothing unsupported is stored, and the status names the reason, so the remaining cost is a wasted object and a misleading A-ASSOCIATE-AC. Rejecting the context itself needs a patched or replaced `go-netdicom` | `go-netdicom` `contextmanager.go`; `internal/dicom/server.go` |
+| D-1 | SCP negotiation | Every presentation context is still accepted, whatever its abstract syntax, using the first transfer syntax proposed: the library does so unconditionally and exposes no hook (`contextmanager.onAssociateRequest`, which carries a TODO to that effect). The refusal happens one level up, on the C-STORE (§4.2.1.3.2) | A modality is told its context was accepted and then that the object was refused, instead of being told at negotiation which contexts are usable. Nothing unsupported is stored, and the status names the reason, so the remaining cost is a wasted object and a misleading A-ASSOCIATE-AC. Rejecting the context itself would need a patched or replaced `go-netdicom`, which this project has deliberately not done: the behaviour is corrected above the library instead | `go-netdicom` `contextmanager.go`; `internal/dicom/server.go` |
 | D-2 | SCP status | Success is returned when the object is queued, before parsing and persistence | A later ingestion failure is not reported to the modality. The file is kept in quarantine | `internal/dicom/server.go` |
 | D-3 | Implementation identification | The SCP's A-ASSOCIATE-AC and the SCU's C-ECHO A-ASSOCIATE-RQ carry no Implementation Class UID (mandatory under PS3.7 D.3.3.2). Where one is sent (SCU C-STORE, File Meta of received objects), it is the go-dicom library's UID, not one belonging to ECG Hub | Strict peers may reject the association. Logs on the peer do not identify ECG Hub | `go-netdicom`; `internal/connector/dicom/scu_client.go` |
 | D-4 | SCP access | Called and Calling AE Titles are not checked | A modality configured with the wrong AE title still connects. Access control is the MAC whitelist only | `internal/dicom/server.go` |
-| D-6 | SCU status | Warning statuses are treated as failures and retried | An archive answering with a warning (e.g. `B000` coercion) gets the same object again until attempts run out | `go-netdicom` `cstore.go` |
 | D-7 | UIDs | Philips, NK and MUSE conversions generate new UIDs on every run. The Philips form `2.25.<ns>` is not derived from a UUID as PS3.5 B.2 requires | Duplicate studies in the archive when the same ECG is forwarded twice (retry after a lost response, resend, export then forward) | ecg-bridge builders |
 | D-8 | UIDs | Philips, Mindray and FDA conversions use the same UID for Study and SOP Instance | One UID identifies two different entities. Some archives refuse this or mix up the levels | ecg-bridge builders |
 | D-9 | UIDs | The Mindray UID root `1.2.840.113619` is GE Healthcare's registered root | UIDs under a root ECG Hub does not own, with a risk of collision with genuine GE instances | `mindray-to-dicom/builder.go` |

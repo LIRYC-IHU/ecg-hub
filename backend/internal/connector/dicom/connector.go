@@ -2,6 +2,7 @@ package dicom
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -180,6 +181,25 @@ func (c *DICOMConnector) Forward(ctx context.Context, ecg *models.ECG, filePath 
 	dur := time.Since(start)
 
 	appmetrics.ConnectorDICOMCStoreDuration.WithLabelValues(c.Name()).Observe(dur.Seconds())
+
+	// A warning means the archive stored the object and changed or dropped
+	// something doing it, so the forward is done: returning the error would have
+	// the retry loop file a duplicate. It is counted apart from a clean send
+	// because coercion is the archive rewriting our data — including, for B000,
+	// the patient identity.
+	var warn *CStoreWarning
+	if errors.As(err, &warn) {
+		appmetrics.ConnectorDICOMCStoreTotal.WithLabelValues(c.Name(), "warning").Inc()
+		slog.Warn("connector: forward accepted with a warning",
+			"connector", c.Name(),
+			"ecg_id", ecg.ID,
+			"file", filePath,
+			"status", fmt.Sprintf("0x%04X", warn.Code),
+			"duration_ms", dur.Milliseconds(),
+			"detail", warn.Detail,
+		)
+		return nil
+	}
 
 	if err != nil {
 		appmetrics.ConnectorDICOMCStoreTotal.WithLabelValues(c.Name(), "failed").Inc()

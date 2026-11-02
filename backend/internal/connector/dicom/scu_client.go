@@ -399,6 +399,19 @@ func (c *SCUClient) Store(ctx context.Context, filePath string) error {
 	case r := <-ch:
 		su.Release()
 		dur := time.Since(start)
+		// go-netdicom turns every non-zero status into an error, warnings
+		// included, so an archive that stored the object and merely coerced a
+		// value would have the same object pushed at it again on the next
+		// attempt. Separate the two before anyone retries.
+		if code, ok := cstoreStatusFromError(r.err); ok && IsCStoreWarningStatus(code) {
+			slog.Warn("dicom: c-store stored with a warning — not retried",
+				"status", fmt.Sprintf("0x%04X", code),
+				"sop_class", sopClassUID,
+				"file", filePath,
+				"duration_ms", dur.Milliseconds(),
+			)
+			return &CStoreWarning{Code: code, Detail: r.err.Error()}
+		}
 		if r.err != nil {
 			slog.Warn("dicom: c-store failed",
 				"sop_class", sopClassUID,

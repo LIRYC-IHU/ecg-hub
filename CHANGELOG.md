@@ -7,6 +7,14 @@ All notable changes to this project are documented here. Versions follow
 
 ### Fixed
 
+- A C-STORE answered with a warning no longer counts as a failed forward. The
+  DICOM library turns every non-zero status into an error, so `B000` (coercion
+  of data elements), `B006` (elements discarded) and `B007` sent the same object
+  back to an archive that had already stored it, once per retry, until the
+  attempts ran out — filing a duplicate each time. A warning status is now read
+  back out of the library's error, the forward is recorded as delivered, and the
+  status is logged and counted separately: a coercion is the archive rewriting
+  what was sent, and for `B000` that can be the patient identity (Annex D, D-6).
 - The C-STORE SCP refuses what it cannot handle instead of storing it. The
   DICOM library accepts every presentation context it is offered — any abstract
   syntax, and whichever transfer syntax the caller proposed first — so a
