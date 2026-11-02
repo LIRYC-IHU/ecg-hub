@@ -347,3 +347,14 @@ func TestNew_Defaults(t *testing.T) {
 		t.Errorf("Name() = %q, want %q", conn.Name(), "test-defaults")
 	}
 }
+
+// ─── SOP Class Tests ─────────────────────────────────────────────────────────
+
+func TestIsKnownECGSOPClass(t *testing.T) {
+	if !dicomconn.IsKnownECGSOPClass("1.2.840.10008.5.1.4.1.1.9.1.1") {
+		t.Error("12-Lead ECG should be known")
+	}
+	if dicomconn.IsKnownECGSOPClass("1.2.3.4.5.6.7.8.9") {
+		t.Error("random UID should not be known")
+	}
+}

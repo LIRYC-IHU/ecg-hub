@@ -12,17 +12,18 @@ package ihe
 
 import (
 	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 
-	"github.com/LIRYC-IHU/ecg-hub/internal/certs"
 	"github.com/LIRYC-IHU/ecg-hub/internal/config"
 )
 
@@ -57,9 +58,13 @@ func NewServer(cfg config.IHEConfig, d Deps) (*http.Server, error) {
 		return nil, fmt.Errorf("ihe: load server certificate: %w", err)
 	}
 
-	pool, err := certs.LoadCAPool(cfg.ClientCAFile)
+	caPEM, err := os.ReadFile(cfg.ClientCAFile)
 	if err != nil {
-		return nil, fmt.Errorf("ihe: %w", err)
+		return nil, fmt.Errorf("ihe: read client CA bundle: %w", err)
+	}
+	pool := x509.NewCertPool()
+	if !pool.AppendCertsFromPEM(caPEM) {
+		return nil, fmt.Errorf("ihe: client CA bundle %s contains no certificate", cfg.ClientCAFile)
 	}
 
 	e := echo.New()

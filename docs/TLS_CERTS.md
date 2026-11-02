@@ -89,25 +89,6 @@ Check the uid your image actually uses before trusting the numbers above:
 docker compose exec backend id
 ```
 
-## Mutual TLS for DICOM modalities
-
-The DICOM SCP can also require each modality to present a client certificate
-(**Admin → Modules → DICOM → Mutual TLS**, which needs TLS on). Mount the PEM
-bundle of the CA that signs the modalities' certificates and point
-`certs.client_ca_file` at it, or set `TLS_CLIENT_CA_FILE`:
-
-```yaml
-backend:
-  environment:
-    TLS_CLIENT_CA_FILE: /certs/modality-ca.pem
-```
-
-This is a different CA from the one behind the server pair, and from
-`ihe.client_ca_file`: a modality and an IHE Display actor are separate trust
-domains. Saving the switch is refused while the bundle is unreadable or holds
-no certificate. A modality refused at the handshake is logged as
-`dicom: TLS handshake failed` with the reason.
-
 ## Verifying
 
 Certificate and chain, without needing an FTP account — `Verify return code: 0`

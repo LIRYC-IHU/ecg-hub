@@ -1737,8 +1737,6 @@ export interface DICOMModuleConfig {
   echo_enabled: boolean;
   tls: boolean;
   enabled: boolean;
-  strict_called_ae: boolean;
-  mutual_tls: boolean;
 }
 
 export async function fetchDICOMConfig(): Promise<DICOMModuleConfig> {
@@ -1749,8 +1747,6 @@ export async function fetchDICOMConfig(): Promise<DICOMModuleConfig> {
     echo_enabled: c.echoEnabled,
     tls: c.tls,
     enabled: c.enabled,
-    strict_called_ae: c.strictCalledAe,
-    mutual_tls: c.mutualTls,
   };
 }
 
@@ -1764,8 +1760,6 @@ export async function saveDICOMConfig(
       echoEnabled: config.echo_enabled ?? false,
       tls: config.tls ?? false,
       enabled: config.enabled ?? false,
-      strictCalledAe: config.strict_called_ae ?? false,
-      mutualTls: config.mutual_tls ?? false,
     },
   });
 }
@@ -1790,8 +1784,6 @@ export interface ConnectorConfig {
   interval: string;
   // Hold the forward until HL7 enrichment has settled (DICOM connectors).
   wait_for_hl7?: boolean;
-  // ECG Hub owns the patient identity on this link (#130 D-12).
-  manage_identity?: boolean;
   ectp_host?: string;
   ectp_port?: number;
   ftp_host?: string;
@@ -1802,11 +1794,6 @@ export interface ConnectorConfig {
   dicom_port?: number;
   calling_ae?: string;
   called_ae?: string;
-  // Outbound DICOM TLS (D-5). Off by default: an archive that does not expect
-  // TLS rejects the handshake.
-  dicom_tls?: boolean;
-  dicom_tls_insecure_skip_verify?: boolean;
-  dicom_strict_sop?: boolean;
   dicom_timeout?: string;
 }
 
@@ -1829,7 +1816,6 @@ function connectorConfigFromProto(
     max_attempts: c.maxAttempts,
     interval: c.interval,
     wait_for_hl7: c.waitForHl7,
-    manage_identity: c.manageIdentity,
     ectp_host: c.ectpHost || undefined,
     ectp_port: c.ectpPort || undefined,
     ftp_host: c.ftpHost || undefined,
@@ -1841,9 +1827,6 @@ function connectorConfigFromProto(
     calling_ae: c.callingAe || undefined,
     called_ae: c.calledAe || undefined,
     dicom_timeout: c.dicomTimeout || undefined,
-    dicom_tls: c.dicomTls,
-    dicom_tls_insecure_skip_verify: c.dicomTlsInsecureSkipVerify,
-    dicom_strict_sop: c.dicomStrictSop,
   };
 }
 
@@ -1878,7 +1861,6 @@ export async function saveConnectorConfig(
       maxAttempts: config.max_attempts ?? 0,
       interval: config.interval ?? "",
       waitForHl7: config.wait_for_hl7 ?? false,
-      manageIdentity: config.manage_identity ?? false,
       ectpHost: config.ectp_host ?? "",
       ectpPort: config.ectp_port ?? 0,
       ftpHost: config.ftp_host ?? "",
@@ -1890,10 +1872,6 @@ export async function saveConnectorConfig(
       callingAe: config.calling_ae ?? "",
       calledAe: config.called_ae ?? "",
       dicomTimeout: config.dicom_timeout ?? "",
-      dicomTls: config.dicom_tls ?? false,
-      dicomTlsInsecureSkipVerify:
-        config.dicom_tls_insecure_skip_verify ?? false,
-      dicomStrictSop: config.dicom_strict_sop ?? false,
     },
   });
 }

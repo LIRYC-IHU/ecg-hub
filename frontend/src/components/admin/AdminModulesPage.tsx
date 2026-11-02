@@ -517,8 +517,6 @@ function DICOMCard({ dicomStatus }: { dicomStatus: "running" | "stopped" | "erro
   const [port, setPort] = useState(11112);
   const [aeTitle, setAeTitle] = useState("ECG-HUB");
   const [echoEnabled, setEchoEnabled] = useState(true);
-  const [strictCalledAe, setStrictCalledAe] = useState(false);
-  const [mutualTls, setMutualTls] = useState(false);
   const [tls, setTls] = useState(false);
   const [enabled, setEnabled] = useState(false);
 
@@ -533,8 +531,6 @@ function DICOMCard({ dicomStatus }: { dicomStatus: "running" | "stopped" | "erro
     setPort(dicomConfig.port);
     setAeTitle(dicomConfig.ae_title);
     setEchoEnabled(dicomConfig.echo_enabled);
-    setStrictCalledAe(dicomConfig.strict_called_ae);
-    setMutualTls(dicomConfig.mutual_tls);
     setTls(dicomConfig.tls);
     setEnabled(dicomConfig.enabled);
   }, [dicomConfig]);
@@ -545,8 +541,6 @@ function DICOMCard({ dicomStatus }: { dicomStatus: "running" | "stopped" | "erro
         port,
         ae_title: aeTitle,
         echo_enabled: echoEnabled,
-        strict_called_ae: strictCalledAe,
-        mutual_tls: mutualTls && tls,
         tls,
         enabled: overrideEnabled !== undefined ? overrideEnabled : enabled,
       } as DICOMModuleConfig),
@@ -640,32 +634,10 @@ function DICOMCard({ dicomStatus }: { dicomStatus: "running" | "stopped" | "erro
               </div>
             </div>
             <div>
-              <label
-                className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground"
-                title={t("modules.dicom.strictCalledAeHint")}
-              >
-                {t("modules.dicom.strictCalledAe")}
-              </label>
-              <div className="mt-2">
-                <Toggle checked={strictCalledAe} onChange={setStrictCalledAe} />
-              </div>
-            </div>
-            <div>
               <label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                 {t("modules.dicom.tls")}
               </label>
               <TlsToggle checked={tls} onChange={setTls} />
-            </div>
-            <div>
-              <label
-                className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground"
-                title={t("modules.dicom.mutualTlsHint")}
-              >
-                {t("modules.dicom.mutualTls")}
-              </label>
-              <div className="mt-2">
-                <Toggle checked={mutualTls && tls} onChange={setMutualTls} disabled={!tls} />
-              </div>
             </div>
           </div>
 
@@ -1264,57 +1236,6 @@ function PacsCard({
         </div>
       </div>
 
-      <label className="flex items-start gap-2 mb-2 cursor-pointer">
-        <input
-          type="checkbox"
-          checked={cfg.dicom_tls ?? false}
-          onChange={(e) => set("dicom_tls", e.target.checked)}
-          className="mt-0.5"
-        />
-        <span className="text-xs">
-          {t("modules.connectors.dicomTls")}
-          <span className="block text-[10px] text-muted-foreground">
-            {t("modules.connectors.dicomTlsHint")}
-          </span>
-        </span>
-      </label>
-
-      {/* Only meaningful with TLS on, and dangerous enough not to leave visible
-          next to an unchecked box that makes it inert. */}
-      {cfg.dicom_tls && (
-        <label className="flex items-start gap-2 mb-2 ml-6 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={cfg.dicom_tls_insecure_skip_verify ?? false}
-            onChange={(e) =>
-              set("dicom_tls_insecure_skip_verify", e.target.checked)
-            }
-            className="mt-0.5"
-          />
-          <span className="text-xs">
-            {t("modules.connectors.dicomTlsInsecure")}
-            <span className="block text-[10px] text-amber-600 dark:text-amber-500">
-              {t("modules.connectors.dicomTlsInsecureHint")}
-            </span>
-          </span>
-        </label>
-      )}
-
-      <label className="flex items-start gap-2 mb-2 cursor-pointer">
-        <input
-          type="checkbox"
-          checked={cfg.dicom_strict_sop ?? false}
-          onChange={(e) => set("dicom_strict_sop", e.target.checked)}
-          className="mt-0.5"
-        />
-        <span className="text-xs">
-          {t("modules.connectors.dicomStrictSop")}
-          <span className="block text-[10px] text-muted-foreground">
-            {t("modules.connectors.dicomStrictSopHint")}
-          </span>
-        </span>
-      </label>
-
       {/* Filters + Retry */}
       <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">
         Filters &amp; Retry
@@ -1396,21 +1317,6 @@ function PacsCard({
           {t("modules.connectors.waitForHl7")}
           <span className="block text-[10px] text-muted-foreground">
             {t("modules.connectors.waitForHl7Hint")}
-          </span>
-        </span>
-      </label>
-
-      <label className="flex items-start gap-2 mb-4 cursor-pointer">
-        <input
-          type="checkbox"
-          checked={cfg.manage_identity ?? false}
-          onChange={(e) => set("manage_identity", e.target.checked)}
-          className="mt-0.5"
-        />
-        <span className="text-xs">
-          {t("modules.connectors.manageIdentity")}
-          <span className="block text-[10px] text-muted-foreground">
-            {t("modules.connectors.manageIdentityHint")}
           </span>
         </span>
       </label>

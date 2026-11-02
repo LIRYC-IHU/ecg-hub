@@ -1032,9 +1032,8 @@ func buildConnectorsFromDB(
 				Extensions: sc.Config.Extensions,
 				Vendors:    sc.Config.Vendors,
 			},
-			WaitForHL7:     sc.Config.WaitForHL7,
-			ManageIdentity: sc.Config.ManageIdentity,
-			ECTP:           connector.Endpoint{Host: sc.Config.ECTPHost, Port: sc.Config.ECTPPort},
+			WaitForHL7: sc.Config.WaitForHL7,
+			ECTP:       connector.Endpoint{Host: sc.Config.ECTPHost, Port: sc.Config.ECTPPort},
 			FTP: connector.FTPEndpoint{
 				Host:     sc.Config.FTPHost,
 				Port:     sc.Config.FTPPort,
@@ -1042,14 +1041,11 @@ func buildConnectorsFromDB(
 				Password: sc.Config.FTPPassword,
 			},
 			DICOM: connector.DICOMEndpoint{
-				Host:               sc.Config.DICOMHost,
-				Port:               sc.Config.DICOMPort,
-				CallingAE:          sc.Config.CallingAE,
-				CalledAE:           sc.Config.CalledAE,
-				Timeout:            sc.Config.DICOMTimeout,
-				TLS:                sc.Config.DICOMTLS,
-				TLSInsecureSkipVer: sc.Config.DICOMTLSInsecureSkipVerify,
-				StrictSOP:          sc.Config.DICOMStrictSOP,
+				Host:      sc.Config.DICOMHost,
+				Port:      sc.Config.DICOMPort,
+				CallingAE: sc.Config.CallingAE,
+				CalledAE:  sc.Config.CalledAE,
+				Timeout:   sc.Config.DICOMTimeout,
 			},
 		}
 		// Env vars remain the credential fallback (NFR-S2 convention).
@@ -1089,11 +1085,10 @@ func buildConnectorsFromDB(
 		}
 
 		settings = append(settings, connector.ConnectorSettings{
-			Connector:      c,
-			Interval:       interval,
-			MaxAttempts:    maxAttempts,
-			WaitForHL7:     sc.Config.WaitForHL7,
-			ManageIdentity: sc.Config.ManageIdentity,
+			Connector:   c,
+			Interval:    interval,
+			MaxAttempts: maxAttempts,
+			WaitForHL7:  sc.Config.WaitForHL7,
 		})
 		checkers = append(checkers, c)
 		slog.Info("connector: loaded", "name", cc.Name, "protocol", cc.Protocol, "enabled", true)

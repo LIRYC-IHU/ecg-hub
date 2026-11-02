@@ -86,7 +86,7 @@ func TestDispatchQuarantined_NeverWaitsForHL7(t *testing.T) {
 		{Connector: conn, Interval: time.Minute, MaxAttempts: 3, WaitForHL7: true},
 	}, repo)
 
-	d.DispatchQuarantined("q-1", "philips", "a.xml", "/tmp/a.xml", false)
+	d.DispatchQuarantined("q-1", "philips", "a.xml", "/tmp/a.xml")
 	time.Sleep(50 * time.Millisecond)
 
 	if got := repo.inserted[0].Status; got != connector.StatusPending {
