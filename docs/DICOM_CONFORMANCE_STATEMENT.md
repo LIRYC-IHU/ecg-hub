@@ -322,10 +322,11 @@ compressed syntax is proposed: the three above are the only ones the
 implementation can write, so an accepted context is always one it can honour.
 **An archive that accepts none of them cannot be forwarded to.**
 
-**Objects of a SOP class outside §1.1** are still sent, on a context proposed
-for their own class, and a warning is logged. The connector model carries a
-`StrictSOP` field that would refuse them instead, but it cannot be set
-(Annex D, D-16).
+**Objects of a SOP class outside §1.1** are sent by default anyway, on a
+context proposed for their own class, with a warning logged. Enabling **Refuse
+unsupported SOP classes** on the connector rejects them instead, which surfaces
+as a forward failure the sending device is told about rather than a silent
+best-effort send.
 
 **Which file is sent.**
 
@@ -368,7 +369,7 @@ STORE-SCU accepts no associations.
 |---|---|
 | Physical network | Any interface supported by the host. ECG Hub runs as a container |
 | Protocol | TCP/IP (PS3.8). IPv4 and IPv6, as configured on the host |
-| TLS | STORE-SCP: optional (§7). STORE-SCU: **not supported** (Annex D, D-5) |
+| TLS | STORE-SCP: optional (§7). STORE-SCU: optional, per connector (§7.2) |
 
 ### 4.4 Configuration
 
@@ -440,8 +441,15 @@ No PS3.15 security profile is claimed.
   enabled, the port accepts only TLS.
 - **Access control** relies on the MAC-address device whitelist (§4.2.1.3.1),
   not on AE titles or certificates.
-- **STORE-SCU** traffic is unencrypted (Annex D, D-5). Protect it at network
-  level.
+- **STORE-SCU** associations are in clear unless TLS is enabled on the
+  connector, which is off by default: DICOM has no in-band upgrade, so an
+  archive that does not expect TLS on its port rejects the handshake. With it
+  on, the minimum version is TLS 1.2 and the archive's certificate is verified
+  against the host's trust store — **a private CA must be installed there**. A
+  per-connector setting waives that verification for an archive whose CA cannot
+  be installed; the traffic stays encrypted but the archive is no longer
+  authenticated, so interception becomes possible. ECG Hub presents no client
+  certificate, so the archive cannot authenticate ECG Hub by TLS either.
 
 ### 7.3 Application-level security
 
@@ -602,7 +610,6 @@ with ecg-bridge v1.4.0.
 | D-2 | SCP status | Success is returned when the object is queued, before parsing and persistence | A later ingestion failure is not reported to the modality. The file is kept in quarantine | `internal/dicom/server.go` |
 | D-3 | Implementation identification | The SCP's A-ASSOCIATE-AC and the SCU's C-ECHO A-ASSOCIATE-RQ carry no Implementation Class UID (mandatory under PS3.7 D.3.3.2). Where one is sent (SCU C-STORE, File Meta of received objects), it is the go-dicom library's UID, not one belonging to ECG Hub | Strict peers may reject the association. Logs on the peer do not identify ECG Hub | `go-netdicom`; `internal/connector/dicom/scu_client.go` |
 | D-4 | SCP access | Called and Calling AE Titles are not checked | A modality configured with the wrong AE title still connects. Access control is the MAC whitelist only | `internal/dicom/server.go` |
-| D-5 | SCU security | No TLS on outbound associations. The connector model has a `TLS` field, but it is neither exposed nor used | Forwards to the archive travel in clear. `DAT.md` §6.2 and §7.2 currently state the opposite | `internal/connector/dicom/scu_client.go` |
 | D-6 | SCU status | Warning statuses are treated as failures and retried | An archive answering with a warning (e.g. `B000` coercion) gets the same object again until attempts run out | `go-netdicom` `cstore.go` |
 | D-7 | UIDs | Philips, NK and MUSE conversions generate new UIDs on every run. The Philips form `2.25.<ns>` is not derived from a UUID as PS3.5 B.2 requires | Duplicate studies in the archive when the same ECG is forwarded twice (retry after a lost response, resend, export then forward) | ecg-bridge builders |
 | D-8 | UIDs | Philips, Mindray and FDA conversions use the same UID for Study and SOP Instance | One UID identifies two different entities. Some archives refuse this or mix up the levels | ecg-bridge builders |
@@ -612,4 +619,3 @@ with ecg-bridge v1.4.0.
 | D-12 | Coercion | Patient identity resolved in ECG Hub (HL7, operator assignment, ADT) is not propagated into received DICOM instances, and not re-forwarded (Annex B.2, B.3) | The archive keeps the modality's demographics, and unidentified objects arrive twice | `internal/connector`, `internal/api/handlers` |
 | D-13 | SOP classes | Only 12-Lead ECG is parsed. The other waveform classes are stored and forwarded only | No display or conversion for General, Ambulatory, Hemodynamic and similar instances | `internal/ecgwaveform` |
 | D-14 | SCP TLS | Server authentication only. No client certificate requested | TLS does not authenticate the modality | `internal/dicom/server.go` |
-| D-16 | SCU configuration | `connector.DICOMEndpoint` carries a `StrictSOP` field, meant to refuse a SOP class outside §1.1 rather than forward it best-effort, but nothing ever sets it. Same defect as D-5, on a different field | Strict mode cannot be turned on. The permissive behaviour of §4.2.2.3.1 is the only one reachable | `internal/connector/config.go`; `cmd/ecg-hub/main.go` |

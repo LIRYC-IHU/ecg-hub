@@ -3,6 +3,7 @@ package dicom
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -22,12 +23,14 @@ import (
 // SCUClient is a DICOM Service Class User that sends C-ECHO and C-STORE
 // requests to a remote PACS.
 type SCUClient struct {
-	host      string
-	port      int
-	callingAE string
-	calledAE  string
-	timeout   time.Duration
-	strictSOP bool
+	host         string
+	port         int
+	callingAE    string
+	calledAE     string
+	timeout      time.Duration
+	strictSOP    bool
+	tls          bool
+	tlsSkipVerif bool
 }
 
 // NewSCUClient creates a client from connector config. Returns an error if
@@ -51,18 +54,48 @@ func NewSCUClient(cfg connector.DICOMEndpoint) (*SCUClient, error) {
 		calledAE = "ANY-SCP"
 	}
 
+	if cfg.TLSInsecureSkipVer && !cfg.TLS {
+		slog.Warn("dicom: tls_insecure_skip_verify is set but TLS is off — the association stays in clear",
+			"host", cfg.Host, "port", cfg.Port)
+	}
+
 	return &SCUClient{
-		host:      cfg.Host,
-		port:      cfg.Port,
-		callingAE: callingAE,
-		calledAE:  calledAE,
-		timeout:   timeout,
-		strictSOP: cfg.StrictSOP,
+		host:         cfg.Host,
+		port:         cfg.Port,
+		callingAE:    callingAE,
+		calledAE:     calledAE,
+		timeout:      timeout,
+		strictSOP:    cfg.StrictSOP,
+		tls:          cfg.TLS,
+		tlsSkipVerif: cfg.TLSInsecureSkipVer,
 	}, nil
 }
 
 func (c *SCUClient) addr() string {
 	return net.JoinHostPort(c.host, strconv.Itoa(c.port))
+}
+
+// dial opens the transport both the C-ECHO and the C-STORE path run over. With
+// TLS off it is an ordinary TCP connection, exactly as before.
+//
+// DICOM has no in-band upgrade: an archive either expects TLS on its port or it
+// does not, which is why this is a per-endpoint setting rather than something
+// negotiated. The certificate is verified against the host's trust store unless
+// the endpoint opted out, so a private CA has to be installed there.
+func (c *SCUClient) dial(ctx context.Context) (net.Conn, error) {
+	d := net.Dialer{Timeout: c.timeout}
+	if !c.tls {
+		return d.DialContext(ctx, "tcp", c.addr())
+	}
+	td := tls.Dialer{
+		NetDialer: &d,
+		Config: &tls.Config{
+			ServerName:         c.host,
+			MinVersion:         tls.VersionTLS12,
+			InsecureSkipVerify: c.tlsSkipVerif, //nolint:gosec // per-endpoint opt-in for an archive with a private CA
+		},
+	}
+	return td.DialContext(ctx, "tcp", c.addr())
 }
 
 // Echo sends a standards-compliant C-ECHO to the remote PACS.
@@ -75,7 +108,7 @@ func (c *SCUClient) Echo(ctx context.Context) error {
 		deadline = time.Now().Add(c.timeout)
 	}
 
-	conn, err := net.DialTimeout("tcp", c.addr(), c.timeout)
+	conn, err := c.dial(ctx)
 	if err != nil {
 		return fmt.Errorf("dicom: echo: connect: %w", err)
 	}
@@ -341,7 +374,13 @@ func (c *SCUClient) Store(ctx context.Context, filePath string) error {
 		return fmt.Errorf("dicom: store: create SCU: %w", err)
 	}
 
-	su.Connect(c.addr())
+	// SetConn rather than su.Connect: Connect dials plain TCP itself, with no
+	// timeout and no way to hand it a TLS connection.
+	conn, err := c.dial(ctx)
+	if err != nil {
+		return fmt.Errorf("dicom: store: connect: %w", err)
+	}
+	su.SetConn(conn)
 
 	type result struct {
 		err error

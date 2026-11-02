@@ -139,6 +139,16 @@ message ConnectorConfig {
   // reaches the PACS carries the establishment's demographics rather than
   // whatever the acquisition device recorded.
   bool wait_for_hl7 = 18;
+  // Wrap outbound C-STORE and C-ECHO associations in TLS. Off by default,
+  // because an archive that does not expect TLS rejects the handshake.
+  bool dicom_tls = 19;
+  // Accept the archive's certificate without verifying it. Only for an archive
+  // whose private CA is not in the host's trust store; it leaves the connection
+  // open to interception, so installing the CA is the better answer.
+  bool dicom_tls_insecure_skip_verify = 20;
+  // Refuse to forward an object whose SOP class is outside the supported list,
+  // instead of sending it best-effort with a warning.
+  bool dicom_strict_sop = 21;
 }
 
 message ConnectorConfigEntry {

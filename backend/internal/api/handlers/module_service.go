@@ -375,6 +375,10 @@ func connectorConfigToProto(cfg ConnectorStoredConfig) *apiv1.ConnectorConfig {
 		CalledAe:     cfg.CalledAE,
 		DicomTimeout: cfg.DICOMTimeout,
 		WaitForHl7:   cfg.WaitForHL7,
+
+		DicomTls:                   cfg.DICOMTLS,
+		DicomTlsInsecureSkipVerify: cfg.DICOMTLSInsecureSkipVerify,
+		DicomStrictSop:             cfg.DICOMStrictSOP,
 	}
 }
 
@@ -406,6 +410,10 @@ func connectorConfigFromProto(p *apiv1.ConnectorConfig) ConnectorStoredConfig {
 		CalledAE:     p.CalledAe,
 		DICOMTimeout: p.DicomTimeout,
 		WaitForHL7:   p.WaitForHl7,
+
+		DICOMTLS:                   p.DicomTls,
+		DICOMTLSInsecureSkipVerify: p.DicomTlsInsecureSkipVerify,
+		DICOMStrictSOP:             p.DicomStrictSop,
 	}
 }
 

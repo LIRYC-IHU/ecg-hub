@@ -7,6 +7,19 @@ All notable changes to this project are documented here. Versions follow
 
 ### Fixed
 
+- Outbound DICOM forwards can now be encrypted. `connector.DICOMEndpoint` had
+  carried a `TLS` field since the connectors shipped, but nothing stored it,
+  nothing showed it and the SCU never read it, so every C-STORE and C-ECHO to a
+  PACS went out in clear whatever the intent — and `DAT.md` §6.2 and §7.2
+  already described it as optional, which it was not. TLS is wired end to end
+  now, off by default because DICOM has no in-band upgrade and an archive that
+  does not expect it rejects the handshake. The archive's certificate is
+  verified against the host's trust store, with a per-connector opt-out for an
+  archive whose private CA cannot be installed there (Annex D, D-5).
+- `StrictSOP`, which refuses an object whose SOP class is outside the supported
+  list instead of forwarding it best-effort, was dead in the same way and is
+  wired through the same path. The sending device is now told its object was
+  rejected rather than having it quietly accepted (Annex D, D-16).
 - Outbound C-STORE proposed Deflated Explicit VR Little Endian, a syntax the
   DICOM library announces but cannot write: it falls through to Explicit VR
   Little Endian when encoding, so an archive selecting that context would have

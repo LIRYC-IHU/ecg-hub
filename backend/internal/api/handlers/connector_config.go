@@ -44,6 +44,15 @@ type ConnectorStoredConfig struct {
 	CallingAE    string `json:"calling_ae,omitempty"`
 	CalledAE     string `json:"called_ae,omitempty"`
 	DICOMTimeout string `json:"dicom_timeout,omitempty"`
+	// DICOMTLS wraps outbound associations in TLS. Absent from a config stored
+	// before this field existed, which unmarshals to false — the behaviour those
+	// deployments already have.
+	DICOMTLS bool `json:"dicom_tls,omitempty"`
+	// DICOMTLSInsecureSkipVerify forgoes certificate verification. See the
+	// proto field: it is for an archive whose private CA is not installed, and
+	// it gives up the authentication half of TLS.
+	DICOMTLSInsecureSkipVerify bool `json:"dicom_tls_insecure_skip_verify,omitempty"`
+	DICOMStrictSOP             bool `json:"dicom_strict_sop,omitempty"`
 }
 
 // StoredConnector pairs a decrypted connector config with its enabled flag.

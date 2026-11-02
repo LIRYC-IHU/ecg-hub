@@ -51,6 +51,11 @@ type DICOMEndpoint struct {
 	CallingAE string
 	CalledAE  string
 	TLS       bool
-	Timeout   string // Go duration, e.g. "30s"
-	StrictSOP bool
+	// TLSInsecureSkipVer drops certificate verification when TLS is on. It is
+	// an escape hatch for an archive whose private CA is not in the host's
+	// trust store, and it gives up TLS's authentication: the connection is
+	// still encrypted, but no longer proves which archive answered.
+	TLSInsecureSkipVer bool
+	Timeout            string // Go duration, e.g. "30s"
+	StrictSOP          bool
 }

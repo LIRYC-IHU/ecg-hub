@@ -1794,6 +1794,11 @@ export interface ConnectorConfig {
   dicom_port?: number;
   calling_ae?: string;
   called_ae?: string;
+  // Outbound DICOM TLS (D-5). Off by default: an archive that does not expect
+  // TLS rejects the handshake.
+  dicom_tls?: boolean;
+  dicom_tls_insecure_skip_verify?: boolean;
+  dicom_strict_sop?: boolean;
   dicom_timeout?: string;
 }
 
@@ -1827,6 +1832,9 @@ function connectorConfigFromProto(
     calling_ae: c.callingAe || undefined,
     called_ae: c.calledAe || undefined,
     dicom_timeout: c.dicomTimeout || undefined,
+    dicom_tls: c.dicomTls,
+    dicom_tls_insecure_skip_verify: c.dicomTlsInsecureSkipVerify,
+    dicom_strict_sop: c.dicomStrictSop,
   };
 }
 
@@ -1872,6 +1880,10 @@ export async function saveConnectorConfig(
       callingAe: config.calling_ae ?? "",
       calledAe: config.called_ae ?? "",
       dicomTimeout: config.dicom_timeout ?? "",
+      dicomTls: config.dicom_tls ?? false,
+      dicomTlsInsecureSkipVerify:
+        config.dicom_tls_insecure_skip_verify ?? false,
+      dicomStrictSop: config.dicom_strict_sop ?? false,
     },
   });
 }

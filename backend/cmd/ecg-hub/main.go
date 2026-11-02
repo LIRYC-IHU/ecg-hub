@@ -1041,11 +1041,14 @@ func buildConnectorsFromDB(
 				Password: sc.Config.FTPPassword,
 			},
 			DICOM: connector.DICOMEndpoint{
-				Host:      sc.Config.DICOMHost,
-				Port:      sc.Config.DICOMPort,
-				CallingAE: sc.Config.CallingAE,
-				CalledAE:  sc.Config.CalledAE,
-				Timeout:   sc.Config.DICOMTimeout,
+				Host:               sc.Config.DICOMHost,
+				Port:               sc.Config.DICOMPort,
+				CallingAE:          sc.Config.CallingAE,
+				CalledAE:           sc.Config.CalledAE,
+				Timeout:            sc.Config.DICOMTimeout,
+				TLS:                sc.Config.DICOMTLS,
+				TLSInsecureSkipVer: sc.Config.DICOMTLSInsecureSkipVerify,
+				StrictSOP:          sc.Config.DICOMStrictSOP,
 			},
 		}
 		// Env vars remain the credential fallback (NFR-S2 convention).
