@@ -17,6 +17,16 @@ import (
 // startSCP runs a real Server on a free port and returns its address.
 func startSCP(t *testing.T, strict bool) string {
 	t.Helper()
+	addr, err := startSCPWith(t, Settings{StrictCalledAE: strict})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return addr
+}
+
+// startSCPWith starts a Server from cfg, filling in what every test shares.
+func startSCPWith(t *testing.T, cfg Settings) (string, error) {
+	t.Helper()
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -24,21 +34,21 @@ func startSCP(t *testing.T, strict bool) string {
 	port := ln.Addr().(*net.TCPAddr).Port
 	_ = ln.Close()
 
-	s := New(Settings{
-		Enabled:        true,
-		Port:           port,
-		AETitle:        "ECG-HUB",
-		EchoEnabled:    true,
-		StrictCalledAE: strict,
-	}, make(ingestion.IngestQueue, 1))
+	cfg.Enabled, cfg.Port, cfg.AETitle, cfg.EchoEnabled = true, port, "ECG-HUB", true
+	s := New(cfg, make(ingestion.IngestQueue, 1))
 	if err := s.Start(); err != nil {
-		t.Fatal(err)
+		return "", err
 	}
 	t.Cleanup(s.Stop)
-	return fmt.Sprintf("127.0.0.1:%d", port)
+	return fmt.Sprintf("127.0.0.1:%d", port), nil
 }
 
 func echo(addr, calledAE string) error {
+	return echoOver(nil, addr, calledAE)
+}
+
+// echoOver runs a C-ECHO over conn when given, else over a new TCP connection.
+func echoOver(conn net.Conn, addr, calledAE string) error {
 	su, err := netdicom.NewServiceUser(netdicom.ServiceUserParams{
 		CalledAETitle:  calledAE,
 		CallingAETitle: "MODALITY",
@@ -48,7 +58,11 @@ func echo(addr, calledAE string) error {
 		return err
 	}
 	defer su.Release()
-	su.Connect(addr)
+	if conn != nil {
+		su.SetConn(conn)
+	} else {
+		su.Connect(addr)
+	}
 	return su.CEcho()
 }
 

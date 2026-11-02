@@ -45,6 +45,11 @@ type Settings struct {
 	TLS            bool
 	CertFile       string
 	KeyFile        string
+	// MutualTLS requires a client certificate signed by ClientCAFile on every
+	// TLS connection. Only meaningful with TLS on. ClientCAFile comes from
+	// config.yaml (certs.client_ca_file), like the server pair.
+	MutualTLS    bool
+	ClientCAFile string
 	// MaxFileBytes caps a single received object. 0 disables the check.
 	MaxFileBytes int64
 }
@@ -95,8 +100,19 @@ func (s *Server) Start() error {
 			return fmt.Errorf("dicom: load TLS cert: %w", err)
 		}
 		tlsCfg = &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12}
-		slog.Info("dicom: TLS enforcement active", "cert_file", s.cfg.CertFile)
+		if s.cfg.MutualTLS {
+			pool, err := certs.LoadCAPool(s.cfg.ClientCAFile)
+			if err != nil {
+				return fmt.Errorf("dicom: mutual TLS is enabled but %w", err)
+			}
+			tlsCfg.ClientAuth = tls.RequireAndVerifyClientCert
+			tlsCfg.ClientCAs = pool
+		}
+		slog.Info("dicom: TLS enforcement active", "cert_file", s.cfg.CertFile, "mutual", s.cfg.MutualTLS)
 	} else {
+		if s.cfg.MutualTLS {
+			return fmt.Errorf("dicom: mutual TLS is enabled but TLS is not")
+		}
 		slog.Warn("dicom: tls disabled — non-production mode")
 	}
 
@@ -165,6 +181,9 @@ func (s *Server) Start() error {
 			connParams := params
 			connParams.CStore = s.cStoreFor(id, decision)
 			go func(conn net.Conn) {
+				if tc, ok := conn.(*tls.Conn); ok && !handshake(tc) {
+					return
+				}
 				if s.cfg.StrictCalledAE {
 					var ok bool
 					if conn, ok = checkCalledAE(conn, s.cfg.AETitle); !ok {
@@ -517,4 +536,21 @@ func extractTagString(ds *legacydicom.DataSet, t legacytag.Tag) string {
 		return ""
 	}
 	return s
+}
+
+// handshake completes the TLS handshake up front, bounded, so a refused client
+// certificate is logged here with its reason. Left to the library, it would
+// happen on the first read inside go-netdicom and surface only as a failed PDU
+// read in its own log. false means the connection is closed.
+func handshake(tc *tls.Conn) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), assocRQReadTimeout)
+	defer cancel()
+	if err := tc.HandshakeContext(ctx); err != nil {
+		appmetrics.DICOMSCPErrors.WithLabelValues("tls_handshake").Inc()
+		slog.Warn("dicom: TLS handshake failed — connection closed",
+			"remote_addr", remoteAddr(tc), "error", err)
+		_ = tc.Close()
+		return false
+	}
+	return true
 }

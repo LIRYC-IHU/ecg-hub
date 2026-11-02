@@ -412,6 +412,7 @@ Everything except the TLS certificate is set from the admin interface
 | C-ECHO enabled | Yes |
 | Check Called AE | Off |
 | TLS | Off |
+| Mutual TLS | Off. CA bundle: `certs.client_ca_file` in `config.yaml` |
 | Maximum object size | 1 MiB (`ingest.max_file_bytes` in `config.yaml`) |
 | Device whitelist | See the admin interface (Devices) |
 
@@ -463,11 +464,17 @@ No PS3.15 security profile is claimed.
 
 - **STORE-SCP over TLS** (optional). The server presents one certificate per
   installation, mounted from the host (see [`TLS_CERTS.md`](TLS_CERTS.md)). The
-  minimum version is TLS 1.2. **The server does not request a client
-  certificate**, so the modality is not authenticated by TLS. When TLS is
-  enabled, the port accepts only TLS.
-- **Access control** relies on the MAC-address device whitelist (§4.2.1.3.1),
-  not on AE titles or certificates.
+  minimum version is TLS 1.2. When TLS is enabled, the port accepts only TLS.
+  By default the server does not request a client certificate, so the
+  modality is not authenticated by TLS.
+- **Mutual TLS** (optional, Modules > DICOM, off by default, requires TLS).
+  Every connection must present a client certificate signed by the CA bundle
+  in `certs.client_ca_file` (see [`TLS_CERTS.md`](TLS_CERTS.md)). A missing or
+  untrusted certificate fails the handshake and the connection is closed
+  before any association. ECG Hub refuses to start the SCP with mutual TLS on
+  and no usable bundle.
+- **Access control** relies on the MAC-address device whitelist (§4.2.1.3.1).
+  Mutual TLS adds certificate authentication on top of it, not instead of it.
 - **STORE-SCU** associations are in clear unless TLS is enabled on the
   connector, which is off by default: DICOM has no in-band upgrade, so an
   archive that does not expect TLS on its port rejects the handshake. With it
@@ -643,4 +650,3 @@ with ecg-bridge v1.4.0.
 | D-11 | Character set | `ISO_IR 100` is declared but values are written in UTF-8 | Accented names are garbled at the receiver | `dicomconf/finalize.go` and builders |
 | D-12 | Coercion | Patient identity resolved in ECG Hub (HL7, operator assignment, ADT) is not propagated into received DICOM instances, and not re-forwarded (Annex B.2, B.3) | The archive keeps the modality's demographics, and unidentified objects arrive twice | `internal/connector`, `internal/api/handlers` |
 | D-13 | SOP classes | Only 12-Lead ECG is parsed. The other waveform classes are stored and forwarded only | No display or conversion for General, Ambulatory, Hemodynamic and similar instances | `internal/ecgwaveform` |
-| D-14 | SCP TLS | Server authentication only. No client certificate requested | TLS does not authenticate the modality | `internal/dicom/server.go` |

@@ -693,8 +693,10 @@ type DICOMConfig struct {
 	Enabled     bool                   `protobuf:"varint,5,opt,name=enabled,proto3" json:"enabled,omitempty"`
 	// Refuse associations whose Called AE Title is not ae_title (A-ASSOCIATE-RJ reason 7).
 	StrictCalledAe bool `protobuf:"varint,6,opt,name=strict_called_ae,json=strictCalledAe,proto3" json:"strict_called_ae,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Require a client certificate signed by certs.client_ca_file. Needs tls.
+	MutualTls     bool `protobuf:"varint,7,opt,name=mutual_tls,json=mutualTls,proto3" json:"mutual_tls,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DICOMConfig) Reset() {
@@ -765,6 +767,13 @@ func (x *DICOMConfig) GetEnabled() bool {
 func (x *DICOMConfig) GetStrictCalledAe() bool {
 	if x != nil {
 		return x.StrictCalledAe
+	}
+	return false
+}
+
+func (x *DICOMConfig) GetMutualTls() bool {
+	if x != nil {
+		return x.MutualTls
 	}
 	return false
 }
@@ -2019,14 +2028,16 @@ const file_v1_module_proto_rawDesc = "" +
 	"publicPort\"\x15\n" +
 	"\x13GetFTPConfigRequest\"F\n" +
 	"\x14SaveFTPConfigRequest\x12.\n" +
-	"\x06config\x18\x01 \x01(\v2\x16.grpc.api.v1.FTPConfigR\x06config\"\xb5\x01\n" +
+	"\x06config\x18\x01 \x01(\v2\x16.grpc.api.v1.FTPConfigR\x06config\"\xd4\x01\n" +
 	"\vDICOMConfig\x12\x12\n" +
 	"\x04port\x18\x01 \x01(\x05R\x04port\x12\x19\n" +
 	"\bae_title\x18\x02 \x01(\tR\aaeTitle\x12!\n" +
 	"\fecho_enabled\x18\x03 \x01(\bR\vechoEnabled\x12\x10\n" +
 	"\x03tls\x18\x04 \x01(\bR\x03tls\x12\x18\n" +
 	"\aenabled\x18\x05 \x01(\bR\aenabled\x12(\n" +
-	"\x10strict_called_ae\x18\x06 \x01(\bR\x0estrictCalledAe\"\x17\n" +
+	"\x10strict_called_ae\x18\x06 \x01(\bR\x0estrictCalledAe\x12\x1d\n" +
+	"\n" +
+	"mutual_tls\x18\a \x01(\bR\tmutualTls\"\x17\n" +
 	"\x15GetDICOMConfigRequest\"J\n" +
 	"\x16SaveDICOMConfigRequest\x120\n" +
 	"\x06config\x18\x01 \x01(\v2\x18.grpc.api.v1.DICOMConfigR\x06config\"_\n" +

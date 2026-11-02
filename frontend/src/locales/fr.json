@@ -712,6 +712,8 @@
       "strictCalledAe": "Vérifier le Called AE",
       "strictCalledAeHint": "Refuse les associations adressées à un autre AE Title que celui-ci (A-ASSOCIATE-RJ). Le contrôle d'accès reste la liste blanche des appareils.",
       "tls": "TLS",
+      "mutualTls": "TLS mutuel",
+      "mutualTlsHint": "Exige des modalités un certificat client signé par le CA de certs.client_ca_file (config.yaml). Nécessite TLS.",
       "startOk": "Serveur DICOM démarré",
       "stopOk": "Serveur DICOM arrêté",
       "saveOk": "Configuration DICOM enregistrée",

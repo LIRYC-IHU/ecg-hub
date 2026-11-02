@@ -711,6 +711,8 @@
       "strictCalledAe": "Check Called AE",
       "strictCalledAeHint": "Refuse associations addressed to an AE Title other than this one (A-ASSOCIATE-RJ). Access control stays the device whitelist.",
       "tls": "TLS",
+      "mutualTls": "Mutual TLS",
+      "mutualTlsHint": "Requires modalities to present a client certificate signed by the CA in certs.client_ca_file (config.yaml). Needs TLS.",
       "startOk": "DICOM server started",
       "stopOk": "DICOM server stopped",
       "saveOk": "DICOM configuration saved",

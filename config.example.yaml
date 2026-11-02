@@ -73,9 +73,14 @@ storage:
 # The defaults are certbot's filenames, so mounting
 # /etc/letsencrypt/live/<host> at /certs needs no configuration at all.
 # Overridable with TLS_CERT_FILE / TLS_KEY_FILE.
+#
+# client_ca_file is the CA bundle that signs the modalities' client
+# certificates. Needed only when the DICOM module has mutual TLS enabled
+# (Modules > DICOM). Overridable with TLS_CLIENT_CA_FILE.
 certs:
   cert_file: /certs/fullchain.pem
   key_file: /certs/privkey.pem
+  # client_ca_file: /certs/modality-ca.pem
 
 export:
   # Number of background export workers (PDF / FDA aECG / DICOM generation).

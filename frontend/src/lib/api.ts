@@ -1738,6 +1738,7 @@ export interface DICOMModuleConfig {
   tls: boolean;
   enabled: boolean;
   strict_called_ae: boolean;
+  mutual_tls: boolean;
 }
 
 export async function fetchDICOMConfig(): Promise<DICOMModuleConfig> {
@@ -1749,6 +1750,7 @@ export async function fetchDICOMConfig(): Promise<DICOMModuleConfig> {
     tls: c.tls,
     enabled: c.enabled,
     strict_called_ae: c.strictCalledAe,
+    mutual_tls: c.mutualTls,
   };
 }
 
@@ -1763,6 +1765,7 @@ export async function saveDICOMConfig(
       tls: config.tls ?? false,
       enabled: config.enabled ?? false,
       strictCalledAe: config.strict_called_ae ?? false,
+      mutualTls: config.mutual_tls ?? false,
     },
   });
 }

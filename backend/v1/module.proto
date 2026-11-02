@@ -86,6 +86,8 @@ message DICOMConfig {
   bool enabled = 5;
   // Refuse associations whose Called AE Title is not ae_title (A-ASSOCIATE-RJ reason 7).
   bool strict_called_ae = 6;
+  // Require a client certificate signed by certs.client_ca_file. Needs tls.
+  bool mutual_tls = 7;
 }
 
 message GetDICOMConfigRequest {}

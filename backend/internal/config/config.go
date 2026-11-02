@@ -147,6 +147,11 @@ type CertsConfig struct {
 	CertFile string `mapstructure:"cert_file"`
 	// KeyFile is the matching private key in PEM.
 	KeyFile string `mapstructure:"key_file"`
+	// ClientCAFile is the PEM bundle of the authority that signs the modalities'
+	// client certificates. Read only when the DICOM module has mutual TLS on;
+	// empty otherwise. Separate from ihe.client_ca_file: a modality and a
+	// Display actor are different trust domains.
+	ClientCAFile string `mapstructure:"client_ca_file"`
 }
 
 // IHEConfig configures the IHE listener — the Information Source actor of the

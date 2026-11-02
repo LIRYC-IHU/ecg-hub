@@ -265,6 +265,8 @@ func StartDICOMFromDB(
 				settings.EchoEnabled = stored.EchoEnabled
 				settings.TLS = stored.TLS
 				settings.StrictCalledAE = stored.StrictCalledAE
+				settings.MutualTLS = stored.MutualTLS
+				settings.ClientCAFile = cfg.Certs.ClientCAFile
 				// Same installation-wide pair as FTPS (see StartFTPFromDB).
 				settings.CertFile = cfg.Certs.CertFile
 				settings.KeyFile = cfg.Certs.KeyFile

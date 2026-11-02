@@ -272,6 +272,7 @@ func (h *ModuleServiceHandler) GetDICOMConfig(_ context.Context, _ *apiv1.GetDIC
 		Tls:            cfg.TLS,
 		Enabled:        record.Enabled,
 		StrictCalledAe: cfg.StrictCalledAE,
+		MutualTls:      cfg.MutualTLS,
 	}, nil
 }
 
@@ -286,6 +287,9 @@ func (h *ModuleServiceHandler) SaveDICOMConfig(_ context.Context, req *apiv1.Sav
 	if c.Port < 1 || c.Port > 65535 {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("port must be between 1 and 65535"))
 	}
+	if err := h.checkMutualTLSAvailable(c.MutualTls, c.Tls); err != nil {
+		return nil, err
+	}
 	if c.StrictCalledAe && strings.TrimSpace(c.AeTitle) == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("an AE title is required to check the Called AE Title"))
 	}
@@ -295,6 +299,7 @@ func (h *ModuleServiceHandler) SaveDICOMConfig(_ context.Context, req *apiv1.Sav
 		EchoEnabled:    c.EchoEnabled,
 		TLS:            c.Tls,
 		StrictCalledAE: c.StrictCalledAe,
+		MutualTLS:      c.MutualTls,
 	}
 	if err := h.upsertModuleConfig(dicomModuleType, stored, c.Enabled); err != nil {
 		return nil, err
@@ -687,6 +692,26 @@ func (h *ModuleServiceHandler) checkTLSAvailable(enabled bool) error {
 	if st := h.tlsStatus(); !st.Available {
 		return connect.NewError(connect.CodeFailedPrecondition,
 			fmt.Errorf("TLS cannot be enabled: %s", st.Error))
+	}
+	return nil
+}
+
+// checkMutualTLSAvailable refuses to save mutual TLS that could not start:
+// without TLS there is no handshake to ask a certificate in, and without a
+// readable CA bundle the module would fail at its next start instead of here.
+func (h *ModuleServiceHandler) checkMutualTLSAvailable(mutual, tlsOn bool) error {
+	if !mutual {
+		return nil
+	}
+	if !tlsOn {
+		return connect.NewError(connect.CodeInvalidArgument, errors.New("mutual TLS requires TLS"))
+	}
+	if h.Cfg == nil {
+		return connect.NewError(connect.CodeFailedPrecondition, errors.New("mutual TLS cannot be enabled: no configuration is loaded"))
+	}
+	if _, err := certs.LoadCAPool(h.Cfg.Certs.ClientCAFile); err != nil {
+		return connect.NewError(connect.CodeFailedPrecondition,
+			fmt.Errorf("mutual TLS cannot be enabled: %w (certs.client_ca_file)", err))
 	}
 	return nil
 }

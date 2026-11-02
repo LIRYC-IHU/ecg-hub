@@ -518,6 +518,7 @@ function DICOMCard({ dicomStatus }: { dicomStatus: "running" | "stopped" | "erro
   const [aeTitle, setAeTitle] = useState("ECG-HUB");
   const [echoEnabled, setEchoEnabled] = useState(true);
   const [strictCalledAe, setStrictCalledAe] = useState(false);
+  const [mutualTls, setMutualTls] = useState(false);
   const [tls, setTls] = useState(false);
   const [enabled, setEnabled] = useState(false);
 
@@ -533,6 +534,7 @@ function DICOMCard({ dicomStatus }: { dicomStatus: "running" | "stopped" | "erro
     setAeTitle(dicomConfig.ae_title);
     setEchoEnabled(dicomConfig.echo_enabled);
     setStrictCalledAe(dicomConfig.strict_called_ae);
+    setMutualTls(dicomConfig.mutual_tls);
     setTls(dicomConfig.tls);
     setEnabled(dicomConfig.enabled);
   }, [dicomConfig]);
@@ -544,6 +546,7 @@ function DICOMCard({ dicomStatus }: { dicomStatus: "running" | "stopped" | "erro
         ae_title: aeTitle,
         echo_enabled: echoEnabled,
         strict_called_ae: strictCalledAe,
+        mutual_tls: mutualTls && tls,
         tls,
         enabled: overrideEnabled !== undefined ? overrideEnabled : enabled,
       } as DICOMModuleConfig),
@@ -652,6 +655,17 @@ function DICOMCard({ dicomStatus }: { dicomStatus: "running" | "stopped" | "erro
                 {t("modules.dicom.tls")}
               </label>
               <TlsToggle checked={tls} onChange={setTls} />
+            </div>
+            <div>
+              <label
+                className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground"
+                title={t("modules.dicom.mutualTlsHint")}
+              >
+                {t("modules.dicom.mutualTls")}
+              </label>
+              <div className="mt-2">
+                <Toggle checked={mutualTls && tls} onChange={setMutualTls} disabled={!tls} />
+              </div>
             </div>
           </div>
 

@@ -15,6 +15,13 @@ All notable changes to this project are documented here. Versions follow
   refuses a foreign title with A-ASSOCIATE-RJ reason 7, which the modality logs
   as "called AE title not recognized". The Calling AE Title stays unchecked:
   the device whitelist is the access control (Annex D, D-4).
+- The DICOM SCP can require mutual TLS (Modules > DICOM > Mutual TLS, off by
+  default, needs TLS). Modalities must then present a client certificate
+  signed by the CA bundle in `certs.client_ca_file` (`TLS_CLIENT_CA_FILE`);
+  without one, or with one from another CA, the handshake fails and the
+  connection is closed before any association, with the reason in the log.
+  TLS used to authenticate the server only (Annex D, D-14). The SCP refuses to
+  start, and the setting refuses to save, without TLS or a readable bundle.
 
 ### Fixed
 
