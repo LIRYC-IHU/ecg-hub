@@ -7,6 +7,13 @@ All notable changes to this project are documented here. Versions follow
 
 ### Fixed
 
+- The connector panel's **Test** button now talks DICOM. It opened a TCP socket
+  and closed it, so it reported success for any port with something listening:
+  an archive expecting TLS where the connector sent none, a certificate the host
+  does not trust, a wrong Called AE title, or a port with no SCP behind it at
+  all. A DICOM connector is now tested with a real association and C-ECHO, using
+  that connector's own settings, so what the button reports is what a forward
+  would do. ECTP and FTP connectors keep the reachability check.
 - Outbound DICOM forwards can now be encrypted. `connector.DICOMEndpoint` had
   carried a `TLS` field since the connectors shipped, but nothing stored it,
   nothing showed it and the SCU never read it, so every C-STORE and C-ECHO to a
