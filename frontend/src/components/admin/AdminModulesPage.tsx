@@ -517,6 +517,7 @@ function DICOMCard({ dicomStatus }: { dicomStatus: "running" | "stopped" | "erro
   const [port, setPort] = useState(11112);
   const [aeTitle, setAeTitle] = useState("ECG-HUB");
   const [echoEnabled, setEchoEnabled] = useState(true);
+  const [strictCalledAe, setStrictCalledAe] = useState(false);
   const [tls, setTls] = useState(false);
   const [enabled, setEnabled] = useState(false);
 
@@ -531,6 +532,7 @@ function DICOMCard({ dicomStatus }: { dicomStatus: "running" | "stopped" | "erro
     setPort(dicomConfig.port);
     setAeTitle(dicomConfig.ae_title);
     setEchoEnabled(dicomConfig.echo_enabled);
+    setStrictCalledAe(dicomConfig.strict_called_ae);
     setTls(dicomConfig.tls);
     setEnabled(dicomConfig.enabled);
   }, [dicomConfig]);
@@ -541,6 +543,7 @@ function DICOMCard({ dicomStatus }: { dicomStatus: "running" | "stopped" | "erro
         port,
         ae_title: aeTitle,
         echo_enabled: echoEnabled,
+        strict_called_ae: strictCalledAe,
         tls,
         enabled: overrideEnabled !== undefined ? overrideEnabled : enabled,
       } as DICOMModuleConfig),
@@ -631,6 +634,17 @@ function DICOMCard({ dicomStatus }: { dicomStatus: "running" | "stopped" | "erro
               </label>
               <div className="mt-2">
                 <Toggle checked={echoEnabled} onChange={setEchoEnabled} />
+              </div>
+            </div>
+            <div>
+              <label
+                className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground"
+                title={t("modules.dicom.strictCalledAeHint")}
+              >
+                {t("modules.dicom.strictCalledAe")}
+              </label>
+              <div className="mt-2">
+                <Toggle checked={strictCalledAe} onChange={setStrictCalledAe} />
               </div>
             </div>
             <div>

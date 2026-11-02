@@ -5,6 +5,17 @@ All notable changes to this project are documented here. Versions follow
 
 ## [Unreleased]
 
+### Added
+
+- The DICOM SCP can check the Called AE Title (Modules > DICOM > Check Called
+  AE, off by default). The DICOM library never looks at it — it echoes whatever
+  title was asked for in its acceptance — so a modality configured for another
+  archive was accepted and stored silently. With the option on, ECG Hub reads
+  the association request before handing the connection to the library and
+  refuses a foreign title with A-ASSOCIATE-RJ reason 7, which the modality logs
+  as "called AE title not recognized". The Calling AE Title stays unchecked:
+  the device whitelist is the access control (Annex D, D-4).
+
 ### Fixed
 
 - A C-STORE answered with a warning no longer counts as a failed forward. The

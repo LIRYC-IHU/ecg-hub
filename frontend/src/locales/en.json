@@ -708,6 +708,8 @@
       "port": "Port",
       "aeTitle": "AE Title",
       "echoEnabled": "Echo enabled",
+      "strictCalledAe": "Check Called AE",
+      "strictCalledAeHint": "Refuse associations addressed to an AE Title other than this one (A-ASSOCIATE-RJ). Access control stays the device whitelist.",
       "tls": "TLS",
       "startOk": "DICOM server started",
       "stopOk": "DICOM server stopped",

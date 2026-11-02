@@ -709,6 +709,8 @@
       "port": "Port",
       "aeTitle": "AE Title",
       "echoEnabled": "Echo activé",
+      "strictCalledAe": "Vérifier le Called AE",
+      "strictCalledAeHint": "Refuse les associations adressées à un autre AE Title que celui-ci (A-ASSOCIATE-RJ). Le contrôle d'accès reste la liste blanche des appareils.",
       "tls": "TLS",
       "startOk": "Serveur DICOM démarré",
       "stopOk": "Serveur DICOM arrêté",

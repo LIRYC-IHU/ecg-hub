@@ -84,6 +84,8 @@ message DICOMConfig {
   bool echo_enabled = 3;
   bool tls = 4;
   bool enabled = 5;
+  // Refuse associations whose Called AE Title is not ae_title (A-ASSOCIATE-RJ reason 7).
+  bool strict_called_ae = 6;
 }
 
 message GetDICOMConfigRequest {}

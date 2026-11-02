@@ -685,14 +685,16 @@ func (x *SaveFTPConfigRequest) GetConfig() *FTPConfig {
 }
 
 type DICOMConfig struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Port          int32                  `protobuf:"varint,1,opt,name=port,proto3" json:"port,omitempty"`
-	AeTitle       string                 `protobuf:"bytes,2,opt,name=ae_title,json=aeTitle,proto3" json:"ae_title,omitempty"`
-	EchoEnabled   bool                   `protobuf:"varint,3,opt,name=echo_enabled,json=echoEnabled,proto3" json:"echo_enabled,omitempty"`
-	Tls           bool                   `protobuf:"varint,4,opt,name=tls,proto3" json:"tls,omitempty"`
-	Enabled       bool                   `protobuf:"varint,5,opt,name=enabled,proto3" json:"enabled,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Port        int32                  `protobuf:"varint,1,opt,name=port,proto3" json:"port,omitempty"`
+	AeTitle     string                 `protobuf:"bytes,2,opt,name=ae_title,json=aeTitle,proto3" json:"ae_title,omitempty"`
+	EchoEnabled bool                   `protobuf:"varint,3,opt,name=echo_enabled,json=echoEnabled,proto3" json:"echo_enabled,omitempty"`
+	Tls         bool                   `protobuf:"varint,4,opt,name=tls,proto3" json:"tls,omitempty"`
+	Enabled     bool                   `protobuf:"varint,5,opt,name=enabled,proto3" json:"enabled,omitempty"`
+	// Refuse associations whose Called AE Title is not ae_title (A-ASSOCIATE-RJ reason 7).
+	StrictCalledAe bool `protobuf:"varint,6,opt,name=strict_called_ae,json=strictCalledAe,proto3" json:"strict_called_ae,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *DICOMConfig) Reset() {
@@ -756,6 +758,13 @@ func (x *DICOMConfig) GetTls() bool {
 func (x *DICOMConfig) GetEnabled() bool {
 	if x != nil {
 		return x.Enabled
+	}
+	return false
+}
+
+func (x *DICOMConfig) GetStrictCalledAe() bool {
+	if x != nil {
+		return x.StrictCalledAe
 	}
 	return false
 }
@@ -2010,13 +2019,14 @@ const file_v1_module_proto_rawDesc = "" +
 	"publicPort\"\x15\n" +
 	"\x13GetFTPConfigRequest\"F\n" +
 	"\x14SaveFTPConfigRequest\x12.\n" +
-	"\x06config\x18\x01 \x01(\v2\x16.grpc.api.v1.FTPConfigR\x06config\"\x8b\x01\n" +
+	"\x06config\x18\x01 \x01(\v2\x16.grpc.api.v1.FTPConfigR\x06config\"\xb5\x01\n" +
 	"\vDICOMConfig\x12\x12\n" +
 	"\x04port\x18\x01 \x01(\x05R\x04port\x12\x19\n" +
 	"\bae_title\x18\x02 \x01(\tR\aaeTitle\x12!\n" +
 	"\fecho_enabled\x18\x03 \x01(\bR\vechoEnabled\x12\x10\n" +
 	"\x03tls\x18\x04 \x01(\bR\x03tls\x12\x18\n" +
-	"\aenabled\x18\x05 \x01(\bR\aenabled\"\x17\n" +
+	"\aenabled\x18\x05 \x01(\bR\aenabled\x12(\n" +
+	"\x10strict_called_ae\x18\x06 \x01(\bR\x0estrictCalledAe\"\x17\n" +
 	"\x15GetDICOMConfigRequest\"J\n" +
 	"\x16SaveDICOMConfigRequest\x120\n" +
 	"\x06config\x18\x01 \x01(\v2\x18.grpc.api.v1.DICOMConfigR\x06config\"_\n" +

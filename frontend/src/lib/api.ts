@@ -1737,6 +1737,7 @@ export interface DICOMModuleConfig {
   echo_enabled: boolean;
   tls: boolean;
   enabled: boolean;
+  strict_called_ae: boolean;
 }
 
 export async function fetchDICOMConfig(): Promise<DICOMModuleConfig> {
@@ -1747,6 +1748,7 @@ export async function fetchDICOMConfig(): Promise<DICOMModuleConfig> {
     echo_enabled: c.echoEnabled,
     tls: c.tls,
     enabled: c.enabled,
+    strict_called_ae: c.strictCalledAe,
   };
 }
 
@@ -1760,6 +1762,7 @@ export async function saveDICOMConfig(
       echoEnabled: config.echo_enabled ?? false,
       tls: config.tls ?? false,
       enabled: config.enabled ?? false,
+      strictCalledAe: config.strict_called_ae ?? false,
     },
   });
 }

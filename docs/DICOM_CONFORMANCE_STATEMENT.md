@@ -214,11 +214,19 @@ Acceptance is decided by the **device whitelist**, not by AE titles:
   A-ASSOCIATE-RJ.
 - The whitelist is checked again before each C-STORE in the association, so a
   device revoked mid-association gets status `0124` from then on.
-- Calling and Called AE Titles are **not checked** (Annex D, D-4).
+- The Called AE Title is checked only when **Check Called AE** is enabled
+  (Modules > DICOM, off by default). An association addressed to another title
+  is then refused with A-ASSOCIATE-RJ: result 1 (rejected-permanent), source 1
+  (service-user), reason 7 (called-AE-title-not-recognized). Comparison ignores
+  the space padding. This catches a modality pointed at the wrong AE; it is not
+  access control.
+- The Calling AE Title is never checked: the device whitelist identifies the
+  sender.
 - MAC resolution requires the device to be on the same network segment as the
   server. Behind NAT or routing the whitelist cannot work (see `DAT.md` §3.2).
 
-No A-ASSOCIATE-RJ is ever sent by the application.
+Apart from the Called AE check above, the application sends no
+A-ASSOCIATE-RJ.
 
 ###### 4.2.1.3.2 Real-world activity: receive ECG from modality
 
@@ -402,6 +410,7 @@ Everything except the TLS certificate is set from the admin interface
 | AE Title | `ECG-HUB` |
 | Listening port (in the container) | `4242`. Published on the host as `DICOM_PORT`, default `4242` |
 | C-ECHO enabled | Yes |
+| Check Called AE | Off |
 | TLS | Off |
 | Maximum object size | 1 MiB (`ingest.max_file_bytes` in `config.yaml`) |
 | Device whitelist | See the admin interface (Devices) |
@@ -627,7 +636,6 @@ with ecg-bridge v1.4.0.
 | D-1 | SCP negotiation | Every presentation context is still accepted, whatever its abstract syntax, using the first transfer syntax proposed: the library does so unconditionally and exposes no hook (`contextmanager.onAssociateRequest`, which carries a TODO to that effect). The refusal happens one level up, on the C-STORE (§4.2.1.3.2) | A modality is told its context was accepted and then that the object was refused, instead of being told at negotiation which contexts are usable. Nothing unsupported is stored, and the status names the reason, so the remaining cost is a wasted object and a misleading A-ASSOCIATE-AC. Rejecting the context itself would need a patched or replaced `go-netdicom`, which this project has deliberately not done: the behaviour is corrected above the library instead | `go-netdicom` `contextmanager.go`; `internal/dicom/server.go` |
 | D-2 | SCP status | Success is returned once the object is readable and queued. The SOP class, the transfer syntax and the data set itself are checked first, but patient matching and persistence still happen after the association has answered | A failure at that later stage — storage, database, module — sends the file to quarantine without the modality being told. What can no longer happen is Success for an object that was never readable | `internal/dicom/server.go` |
 | D-3 | Implementation identification | The SCP's A-ASSOCIATE-AC carries no Implementation Class UID, and the SCU's C-STORE A-ASSOCIATE-RQ carries the DICOM library's rather than ECG Hub's. Both PDUs are built inside `go-netdicom`, which neither sends the item on acceptance nor lets the caller set it. The C-ECHO A-ASSOCIATE-RQ and the File Meta of every stored object, which ECG Hub builds itself, now carry its own pair | A receiver cannot identify the acceptor at all, and identifies the C-STORE initiator as the toolkit rather than the product, so it cannot key behaviour on a known sender. PS3.7 D.3.3.2 makes the item mandatory. Correcting the remaining two would need a patched or replaced `go-netdicom` | `go-netdicom` `contextmanager.go`; `internal/dicomsop/sop.go` |
-| D-4 | SCP access | Called and Calling AE Titles are not checked | A modality configured with the wrong AE title still connects. Access control is the MAC whitelist only | `internal/dicom/server.go` |
 | D-7 | UIDs | Philips, NK and MUSE conversions generate new UIDs on every run. The Philips form `2.25.<ns>` is not derived from a UUID as PS3.5 B.2 requires | Duplicate studies in the archive when the same ECG is forwarded twice (retry after a lost response, resend, export then forward) | ecg-bridge builders |
 | D-8 | UIDs | Philips, Mindray and FDA conversions use the same UID for Study and SOP Instance | One UID identifies two different entities. Some archives refuse this or mix up the levels | ecg-bridge builders |
 | D-9 | UIDs | The Mindray UID root `1.2.840.113619` is GE Healthcare's registered root | UIDs under a root ECG Hub does not own, with a risk of collision with genuine GE instances | `mindray-to-dicom/builder.go` |

@@ -38,9 +38,13 @@ type Settings struct {
 	Port        int
 	AETitle     string
 	EchoEnabled bool
-	TLS         bool
-	CertFile    string
-	KeyFile     string
+	// StrictCalledAE refuses an association whose Called AE Title is not
+	// AETitle (A-ASSOCIATE-RJ, reason 7). Off by default: access control is the
+	// device whitelist, this only catches a modality pointed at the wrong AE.
+	StrictCalledAE bool
+	TLS            bool
+	CertFile       string
+	KeyFile        string
 	// MaxFileBytes caps a single received object. 0 disables the check.
 	MaxFileBytes int64
 }
@@ -135,6 +139,7 @@ func (s *Server) Start() error {
 			"ae_title", s.cfg.AETitle,
 			"tls", s.cfg.TLS,
 			"echo", s.cfg.EchoEnabled,
+			"strict_called_ae", s.cfg.StrictCalledAE,
 		)
 		for {
 			conn, err := ln.Accept()
@@ -159,7 +164,15 @@ func (s *Server) Start() error {
 			// connected. Closing over the identity here is what carries it in.
 			connParams := params
 			connParams.CStore = s.cStoreFor(id, decision)
-			go netdicom.RunProviderForConn(conn, connParams)
+			go func(conn net.Conn) {
+				if s.cfg.StrictCalledAE {
+					var ok bool
+					if conn, ok = checkCalledAE(conn, s.cfg.AETitle); !ok {
+						return
+					}
+				}
+				netdicom.RunProviderForConn(conn, connParams)
+			}(conn)
 		}
 	}()
 

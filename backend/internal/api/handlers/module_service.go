@@ -266,11 +266,12 @@ func (h *ModuleServiceHandler) GetDICOMConfig(_ context.Context, _ *apiv1.GetDIC
 		return nil, connect.NewError(connect.CodeInternal, errors.New("failed to parse DICOM config"))
 	}
 	return &apiv1.DICOMConfig{
-		Port:        int32(cfg.Port),
-		AeTitle:     cfg.AETitle,
-		EchoEnabled: cfg.EchoEnabled,
-		Tls:         cfg.TLS,
-		Enabled:     record.Enabled,
+		Port:           int32(cfg.Port),
+		AeTitle:        cfg.AETitle,
+		EchoEnabled:    cfg.EchoEnabled,
+		Tls:            cfg.TLS,
+		Enabled:        record.Enabled,
+		StrictCalledAe: cfg.StrictCalledAE,
 	}, nil
 }
 
@@ -285,11 +286,15 @@ func (h *ModuleServiceHandler) SaveDICOMConfig(_ context.Context, req *apiv1.Sav
 	if c.Port < 1 || c.Port > 65535 {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("port must be between 1 and 65535"))
 	}
+	if c.StrictCalledAe && strings.TrimSpace(c.AeTitle) == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("an AE title is required to check the Called AE Title"))
+	}
 	stored := DICOMStoredConfig{
-		Port:        int(c.Port),
-		AETitle:     c.AeTitle,
-		EchoEnabled: c.EchoEnabled,
-		TLS:         c.Tls,
+		Port:           int(c.Port),
+		AETitle:        c.AeTitle,
+		EchoEnabled:    c.EchoEnabled,
+		TLS:            c.Tls,
+		StrictCalledAE: c.StrictCalledAe,
 	}
 	if err := h.upsertModuleConfig(dicomModuleType, stored, c.Enabled); err != nil {
 		return nil, err
