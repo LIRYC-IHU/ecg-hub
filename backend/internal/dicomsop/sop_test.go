@@ -2,6 +2,7 @@ package dicomsop
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/apaladiychuk/go-dicom/dicomio"
@@ -76,5 +77,28 @@ func TestIsSupportedTransferSyntax(t *testing.T) {
 	}
 	if IsSupportedTransferSyntax("") {
 		t.Error("an empty transfer syntax must not be reported as supported")
+	}
+}
+
+// The identity goes out on every association and into every file written, so
+// its shape is checked rather than assumed.
+func TestImplementationIdentity_IsWellFormed(t *testing.T) {
+	if len(ImplementationClassUID) > 64 {
+		t.Errorf("Implementation Class UID is %d characters, over the 64 a DICOM UI allows", len(ImplementationClassUID))
+	}
+	if !strings.HasPrefix(ImplementationClassUID, "2.25.") {
+		t.Errorf("%q is not under the 2.25 UUID-derived root PS3.5 B.2 requires", ImplementationClassUID)
+	}
+	for _, r := range strings.TrimPrefix(ImplementationClassUID, "2.25.") {
+		if r < '0' || r > '9' {
+			t.Fatalf("%q: a UID component may only hold digits, found %q", ImplementationClassUID, r)
+		}
+	}
+	if n := len(ImplementationVersionName); n == 0 || n > 16 {
+		t.Errorf("Implementation Version Name is %d characters, outside the 1..16 of PS3.7 D.3.3.2.3", n)
+	}
+	// It must not be go-dicom's, which is the defect this exists to fix.
+	if strings.Contains(ImplementationClassUID, "1.2.826.0.1.3680043.9.7133") {
+		t.Error("the DICOM library's own Implementation Class UID is being presented as ECG Hub's")
 	}
 }

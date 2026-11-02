@@ -243,3 +243,49 @@ func TestOnCStore_AcceptsAnObjectWithNoPatientID(t *testing.T) {
 		t.Errorf("filename %q, want the SOP Instance UID fallback", item.Filename)
 	}
 }
+
+// metaString reads one File Meta element out of a written DICOM file.
+func metaString(t *testing.T, raw []byte, tag legacytag.Tag) string {
+	t.Helper()
+	ds, err := legacydicom.ReadDataSetInBytes(raw, legacydicom.ReadOptions{})
+	if err != nil {
+		t.Fatalf("parse written file: %v", err)
+	}
+	elem, err := ds.FindElementByTag(tag)
+	if err != nil {
+		return ""
+	}
+	s, err := elem.GetString()
+	if err != nil {
+		return ""
+	}
+	return s
+}
+
+// D-3: ECG Hub writes this file, so its File Meta has to say ECG Hub. go-dicom
+// fills both elements in with its own identity when they are absent, which put
+// the toolkit's name on every object the hub stored (PS3.10 7.1).
+func TestReconstructDICOM_WritesOurImplementationIdentity(t *testing.T) {
+	raw, err := reconstructDICOM(
+		dicomsop.ExplicitVRLittleEndian,
+		dicomsop.ECG12LeadUID,
+		"1.2.826.0.1.3680043.2.1143.1",
+		encodeBody(t, dicomsop.ExplicitVRLittleEndian),
+	)
+	if err != nil {
+		t.Fatalf("reconstructDICOM: %v", err)
+	}
+
+	gotUID := metaString(t, raw, legacytag.ImplementationClassUID)
+	if gotUID != dicomsop.ImplementationClassUID {
+		t.Errorf("Implementation Class UID %q, want %q", gotUID, dicomsop.ImplementationClassUID)
+	}
+	if gotUID == "1.2.826.0.1.3680043.9.7133.1.1" {
+		t.Error("the DICOM library's identity is being written as ECG Hub's")
+	}
+
+	gotName := metaString(t, raw, legacytag.ImplementationVersionName)
+	if gotName != dicomsop.ImplementationVersionName {
+		t.Errorf("Implementation Version Name %q, want %q", gotName, dicomsop.ImplementationVersionName)
+	}
+}

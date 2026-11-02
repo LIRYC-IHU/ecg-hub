@@ -418,10 +418,15 @@ func reconstructDICOM(
 
 	enc := dicomio.NewEncoderWithTransferSyntax(&buf, transferSyntaxUID)
 
+	// ECG Hub writes this file, so its File Meta names ECG Hub. go-dicom fills
+	// these two in with its own identity when they are absent, which would put
+	// the toolkit's name on every object the hub stored (PS3.10 7.1).
 	metaElems := []*legacydicom.Element{
 		legacydicom.MustNewElement(legacytag.TransferSyntaxUID, transferSyntaxUID),
 		legacydicom.MustNewElement(legacytag.MediaStorageSOPClassUID, sopClassUID),
 		legacydicom.MustNewElement(legacytag.MediaStorageSOPInstanceUID, sopInstanceUID),
+		legacydicom.MustNewElement(legacytag.ImplementationClassUID, dicomsop.ImplementationClassUID),
+		legacydicom.MustNewElement(legacytag.ImplementationVersionName, dicomsop.ImplementationVersionName),
 	}
 	legacydicom.WriteFileHeader(enc, metaElems)
 	enc.WriteBytes(data)

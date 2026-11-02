@@ -255,6 +255,12 @@ received, byte for byte, wrapped in a newly written File Meta Information
 header. Private and Type 3 attributes are retained. Exceptions are listed in
 Annex B.2.
 
+ECG Hub writes that header, so it names ECG Hub: Implementation Class UID
+(0002,0012) `2.25.64792898169045814434475395748197887603` and Implementation
+Version Name (0002,0013) `ECGHUB-1`. Files converted by ecg-bridge carry that
+tool's own pair instead (Annex A.1): it is a separate implementation and a
+receiver has to be able to tell them apart.
+
 **Meaning of Success.** `0000` means the instance was **readable and has been
 placed in the ingestion queue**. Before answering, the SCP checks the SOP class
 and transfer syntax (§4.2.1.3.2) and parses the data set; anything that fails
@@ -311,9 +317,10 @@ The SOP classes of §1.1 in the SCU role, plus Verification.
 | Maximum PDU size offered | 4,194,304 bytes (C-STORE); 16,384 bytes (C-ECHO) |
 | Number of associations | One per object being forwarded. Forwards to several connectors, and of several ECGs, run concurrently |
 | Asynchronous nature | Not supported |
-| Implementation Class UID (C-STORE associations) | `1.2.826.0.1.3680043.9.7133.1.1` (Annex D, D-3) |
-| Implementation Version Name (C-STORE associations) | `GODICOM_1_1` |
-| Implementation identifying information (C-ECHO associations) | None sent (Annex D, D-3) |
+| Implementation Class UID (C-ECHO associations) | `2.25.64792898169045814434475395748197887603` |
+| Implementation Version Name (C-ECHO associations) | `ECGHUB-1` |
+| Implementation Class UID (C-STORE associations) | `1.2.826.0.1.3680043.9.7133.1.1` — the DICOM library's own, which it builds into the A-ASSOCIATE-RQ itself (Annex D, D-3) |
+| Implementation Version Name (C-STORE associations) | `GODICOM_1_1` (Annex D, D-3) |
 
 ##### 4.2.2.3 Association initiation policy
 
@@ -619,7 +626,7 @@ with ecg-bridge v1.4.0.
 |---|---|---|---|---|
 | D-1 | SCP negotiation | Every presentation context is still accepted, whatever its abstract syntax, using the first transfer syntax proposed: the library does so unconditionally and exposes no hook (`contextmanager.onAssociateRequest`, which carries a TODO to that effect). The refusal happens one level up, on the C-STORE (§4.2.1.3.2) | A modality is told its context was accepted and then that the object was refused, instead of being told at negotiation which contexts are usable. Nothing unsupported is stored, and the status names the reason, so the remaining cost is a wasted object and a misleading A-ASSOCIATE-AC. Rejecting the context itself would need a patched or replaced `go-netdicom`, which this project has deliberately not done: the behaviour is corrected above the library instead | `go-netdicom` `contextmanager.go`; `internal/dicom/server.go` |
 | D-2 | SCP status | Success is returned once the object is readable and queued. The SOP class, the transfer syntax and the data set itself are checked first, but patient matching and persistence still happen after the association has answered | A failure at that later stage — storage, database, module — sends the file to quarantine without the modality being told. What can no longer happen is Success for an object that was never readable | `internal/dicom/server.go` |
-| D-3 | Implementation identification | The SCP's A-ASSOCIATE-AC and the SCU's C-ECHO A-ASSOCIATE-RQ carry no Implementation Class UID (mandatory under PS3.7 D.3.3.2). Where one is sent (SCU C-STORE, File Meta of received objects), it is the go-dicom library's UID, not one belonging to ECG Hub | Strict peers may reject the association. Logs on the peer do not identify ECG Hub | `go-netdicom`; `internal/connector/dicom/scu_client.go` |
+| D-3 | Implementation identification | The SCP's A-ASSOCIATE-AC carries no Implementation Class UID, and the SCU's C-STORE A-ASSOCIATE-RQ carries the DICOM library's rather than ECG Hub's. Both PDUs are built inside `go-netdicom`, which neither sends the item on acceptance nor lets the caller set it. The C-ECHO A-ASSOCIATE-RQ and the File Meta of every stored object, which ECG Hub builds itself, now carry its own pair | A receiver cannot identify the acceptor at all, and identifies the C-STORE initiator as the toolkit rather than the product, so it cannot key behaviour on a known sender. PS3.7 D.3.3.2 makes the item mandatory. Correcting the remaining two would need a patched or replaced `go-netdicom` | `go-netdicom` `contextmanager.go`; `internal/dicomsop/sop.go` |
 | D-4 | SCP access | Called and Calling AE Titles are not checked | A modality configured with the wrong AE title still connects. Access control is the MAC whitelist only | `internal/dicom/server.go` |
 | D-7 | UIDs | Philips, NK and MUSE conversions generate new UIDs on every run. The Philips form `2.25.<ns>` is not derived from a UUID as PS3.5 B.2 requires | Duplicate studies in the archive when the same ECG is forwarded twice (retry after a lost response, resend, export then forward) | ecg-bridge builders |
 | D-8 | UIDs | Philips, Mindray and FDA conversions use the same UID for Study and SOP Instance | One UID identifies two different entities. Some archives refuse this or mix up the levels | ecg-bridge builders |

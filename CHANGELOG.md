@@ -15,6 +15,18 @@ All notable changes to this project are documented here. Versions follow
   back out of the library's error, the forward is recorded as delivered, and the
   status is logged and counted separately: a coercion is the archive rewriting
   what was sent, and for `B000` that can be the patient identity (Annex D, D-6).
+- ECG Hub identifies itself on the wire and in the files it writes. It had no
+  Implementation Class UID of its own, so where one went out at all it was the
+  DICOM library's `1.2.826.0.1.3680043.9.7133.1.1` / `GODICOM_1_1`: every object
+  the hub stored named the toolkit as its producer, and a receiver could not key
+  behaviour on a known sender. ECG Hub now has its own pair,
+  `2.25.64792898169045814434475395748197887603` / `ECGHUB-1`, derived from a
+  UUID as PS3.5 B.2 requires and fixed for good. It goes into the File Meta of
+  every stored object and into the C-ECHO association request, which carried no
+  implementation item at all although PS3.7 D.3.3.2 makes it mandatory. The
+  C-STORE request and the SCP's association acceptance are built inside the
+  library and still carry its identity (Annex D, D-3). ecg-bridge keeps its own
+  pair: it is a separate implementation.
 - The C-STORE SCP parses an object before answering Success. It answered as
   soon as the instance was queued, so a data set that would not parse was
   accepted, landed in quarantine, and the modality never learned that the

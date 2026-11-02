@@ -155,6 +155,25 @@ func (c *SCUClient) Echo(ctx context.Context) error {
 const verificationUID = "1.2.840.10008.1.1"
 const implicitVRLEUID = "1.2.840.10008.1.2"
 
+// writePDUSubItem appends one variable-length sub-item: type, reserved byte,
+// big-endian length, payload.
+//
+// The payload is padded to an even length, as PS3.5 9.1 requires of a UID on
+// the wire. A receiver that trusts the declared length would otherwise read one
+// byte into the next item.
+func writePDUSubItem(w *bytes.Buffer, itemType byte, value string) {
+	payload := []byte(value)
+	if len(payload)%2 == 1 {
+		// NULL for a UID, which is what both of these are in practice; a string
+		// item pads with a space, and neither receiver distinguishes the two.
+		payload = append(payload, 0x00)
+	}
+	w.WriteByte(itemType)
+	w.WriteByte(0x00)
+	binary.Write(w, binary.BigEndian, uint16(len(payload)))
+	w.Write(payload)
+}
+
 func padAE(ae string) [16]byte {
 	var buf [16]byte
 	copy(buf[:], ae)
@@ -202,6 +221,12 @@ func dicomWriteAssocRQ(w io.Writer, callingAE, calledAE string) error {
 	uiInner.WriteByte(0x00)
 	binary.Write(&uiInner, binary.BigEndian, uint16(4))
 	binary.Write(&uiInner, binary.BigEndian, uint32(16384))
+	// Implementation Class UID (0x52) is mandatory in the User Information of
+	// an A-ASSOCIATE-RQ — PS3.7 D.3.3.2 — and this hand-built PDU carried none.
+	// The version name (0x55) is optional and sent because a receiver
+	// recognising a sender's quirks needs it to tell releases apart.
+	writePDUSubItem(&uiInner, 0x52, dicomsop.ImplementationClassUID)
+	writePDUSubItem(&uiInner, 0x55, dicomsop.ImplementationVersionName)
 	binary.Write(&ui, binary.BigEndian, uint16(uiInner.Len()))
 	ui.Write(uiInner.Bytes())
 

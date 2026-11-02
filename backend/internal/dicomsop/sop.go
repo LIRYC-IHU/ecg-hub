@@ -88,3 +88,25 @@ var SupportedTransferSyntaxes = []string{
 func IsSupportedTransferSyntax(uid string) bool {
 	return slices.Contains(SupportedTransferSyntaxes, uid)
 }
+
+// Implementation identity — PS3.7 D.3.3.2, PS3.10 7.1.
+//
+// Every association and every file ECG Hub writes has to say which
+// implementation produced it; a receiver uses it to recognise a sender's
+// quirks. Without these the DICOM library's own identity goes out instead, so
+// ECG Hub appears on the wire as the toolkit it happens to be built on.
+//
+// ecg-bridge, which converts vendor formats, has its own pair
+// (2.25.83057759282917960894454627989 / ECGHUB-CONV-1): it is a different
+// implementation and a receiver must be able to tell the two apart.
+const (
+	// ImplementationClassUID identifies ECG Hub itself. Derived from a UUID
+	// under the 2.25 root as PS3.5 B.2 requires, generated once and permanent:
+	// changing it would make already-stored objects look like another product's.
+	ImplementationClassUID = "2.25.64792898169045814434475395748197887603"
+
+	// ImplementationVersionName is free text of at most 16 characters (PS3.7
+	// D.3.3.2.3). It tracks the major version, not the release, so a receiver
+	// that keys behaviour on it is not disturbed by every patch.
+	ImplementationVersionName = "ECGHUB-1"
+)
