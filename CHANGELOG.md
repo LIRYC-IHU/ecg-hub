@@ -36,6 +36,15 @@ All notable changes to this project are documented here. Versions follow
 
 ### Fixed
 
+- The wrong-patient check now works for DICOM files. Assigning an unidentified
+  ECG compares the file's name, birth date and sex with the chosen patient,
+  warns the operator and records the disagreement in the audit log — but the
+  DICOM module extracted none of the three, so for files received over DICOM
+  the check never fired and the preview showed "—". It now reads Patient's
+  Name, Birth Date and Sex under the same keys as the other modules (#133).
+- The Quarantine badge in the sidebar updates as soon as a file is assigned or
+  deleted. It counts from the admin statistics, which those actions did not
+  refresh, so it kept showing files that were already gone (#133).
 - A C-STORE answered with a warning no longer counts as a failed forward. The
   DICOM library turns every non-zero status into an error, so `B000` (coercion
   of data elements), `B006` (elements discarded) and `B007` sent the same object

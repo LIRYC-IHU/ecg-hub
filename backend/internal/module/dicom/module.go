@@ -90,6 +90,32 @@ func (m *Module) Parse(_ context.Context, data []byte) (*module.ECGMetadata, err
 		extra["modality"] = modality
 	}
 
+	// Demographics, under the keys every vendor module uses. They are what the
+	// quarantine assignment compares against the chosen patient (the
+	// anti wrong-patient check), and what it shows the operator; without them a
+	// DICOM file could be attached to anyone without a single warning (#133).
+	if pn, err := extractString(dataset, tag.PatientName); err == nil {
+		// PN is Family^Given^Middle^Prefix^Suffix (PS3.5 6.2.1).
+		parts := strings.Split(strings.TrimSpace(pn), "^")
+		if last := strings.TrimSpace(parts[0]); last != "" {
+			extra["last_name"] = last
+		}
+		if len(parts) > 1 {
+			if first := strings.TrimSpace(parts[1]); first != "" {
+				extra["first_name"] = first
+			}
+		}
+		if s := strings.TrimSpace(strings.ReplaceAll(pn, "^", " ")); s != "" {
+			extra["patient_name"] = s
+		}
+	}
+	if dob, err := extractString(dataset, tag.PatientBirthDate); err == nil && strings.TrimSpace(dob) != "" {
+		extra["birth_date"] = strings.TrimSpace(dob)
+	}
+	if sex, err := extractString(dataset, tag.PatientSex); err == nil && strings.TrimSpace(sex) != "" {
+		extra["sex"] = strings.TrimSpace(sex)
+	}
+
 	modality, _ := extra["modality"].(string)
 	recordModality(modality)
 
