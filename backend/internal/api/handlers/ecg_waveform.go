@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"os"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
+	"github.com/LIRYC-IHU/ecg-hub/internal/dicomsop"
 	"github.com/LIRYC-IHU/ecg-hub/internal/ecgwaveform"
 	"github.com/LIRYC-IHU/ecg-hub/internal/export"
 	"github.com/LIRYC-IHU/ecg-hub/internal/storage"
@@ -122,6 +124,22 @@ func ECGWaveformHandler(db *gorm.DB, volumePath string, bridge export.Converter)
 		}
 
 		record, err := ecgwaveform.Parse(dicomData)
+		// Not an error in the file: a waveform the 12-lead viewer cannot draw.
+		// Answered with its own code so the UI can say so, rather than report
+		// a parse failure for an object that is stored and forwarded fine.
+		var nd *ecgwaveform.NotDisplayableError
+		if errors.As(err, &nd) {
+			slog.Info("ecg waveform: not displayable", "ecg_id", id, "sop_class", nd.SOPClassUID,
+				"reason", nd.Reason, "detail", nd.Detail)
+			return c.JSON(http.StatusUnprocessableEntity, map[string]string{
+				"code":          "NOT_DISPLAYABLE",
+				"message":       "This waveform is stored and forwarded but cannot be displayed: " + nd.Detail,
+				"reason":        nd.Reason,
+				"detail":        nd.Detail,
+				"sop_class":     dicomsop.SOPClassName(nd.SOPClassUID),
+				"sop_class_uid": nd.SOPClassUID,
+			})
+		}
 		if err != nil {
 			slog.Error("ecg waveform: parse failed", "ecg_id", id, "vendor", ecg.Vendor, "error", err)
 			return c.JSON(http.StatusUnprocessableEntity, map[string]string{

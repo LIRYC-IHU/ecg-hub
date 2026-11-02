@@ -71,6 +71,9 @@ export function ECGViewerModal({ ecgId, filename, patient, onClose }: Props) {
   const viewerRef = useRef<ECGViewerHandle>(null);
   const [record, setRecord] = useState<EcgRecord | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // A waveform the 12-lead viewer cannot draw (#130 D-13): not a failure, the
+  // file is stored and forwarded — so it gets its own, non-alarming message.
+  const [notDisplayable, setNotDisplayable] = useState<{ sopClass: string; reason: string; detail: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [showOptions, setShowOptions] = useState(false);
   const [prefs, setPrefs] = useState<ViewerPrefs>(loadPrefs);
@@ -98,14 +101,21 @@ export function ECGViewerModal({ ecgId, filename, patient, onClose }: Props) {
   useEffect(() => {
     setLoading(true);
     setError(null);
+    setNotDisplayable(null);
     fetch(`${BASE_URL}/api/v1/ecgs/${ecgId}/waveform`)
       .then((res) => {
         if (!res.ok) {
-          return res.json().then((e) => { throw new Error(e.message ?? "Failed to load waveform"); });
+          return res.json().then((e) => {
+            if (e.code === "NOT_DISPLAYABLE") {
+              setNotDisplayable({ sopClass: e.sop_class ?? "", reason: e.reason ?? "", detail: e.detail ?? "" });
+              return null;
+            }
+            throw new Error(e.message ?? "Failed to load waveform");
+          });
         }
         return res.arrayBuffer();
       })
-      .then((buf) => setRecord(decodeWireFormat(buf)))
+      .then((buf) => { if (buf) setRecord(decodeWireFormat(buf)); })
       .catch((e) => setError(e.message ?? "Failed to load ECG"))
       .finally(() => setLoading(false));
   }, [ecgId]);
@@ -249,6 +259,24 @@ export function ECGViewerModal({ ecgId, filename, patient, onClose }: Props) {
         {loading && (
           <div className="flex-1 flex items-center justify-center">
             <div className="text-sm text-muted-foreground">{t("viewer.loading")}</div>
+          </div>
+        )}
+        {notDisplayable && (
+          <div className="flex-1 flex items-center justify-center p-8">
+            <div className="text-sm text-muted-foreground text-center max-w-md space-y-2">
+              <p className="font-medium text-foreground">
+                {t("viewer.notDisplayable.title", { sopClass: notDisplayable.sopClass })}
+              </p>
+              <p>
+                {t(`viewer.notDisplayable.reason.${notDisplayable.reason}`, {
+                  defaultValue: t("viewer.notDisplayable.reason.other"),
+                })}
+              </p>
+              <p>{t("viewer.notDisplayable.storedAndForwarded")}</p>
+              {notDisplayable.detail && (
+                <p className="text-xs font-mono opacity-70">{notDisplayable.detail}</p>
+              )}
+            </div>
           </div>
         )}
         {error && (

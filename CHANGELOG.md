@@ -7,6 +7,15 @@ All notable changes to this project are documented here. Versions follow
 
 ### Added
 
+- The ECG viewer says why it cannot draw a waveform. An Ambulatory recording,
+  a partial General ECG or a hemodynamic, respiratory or audio object is stored
+  and forwarded like any other, but the viewer is built for the 12 standard
+  leads in millivolts, and such files used to end in a generic "Failed to parse
+  ECG waveform". The viewer now names the SOP class and the reason — the
+  standard leads are absent, or a channel is not a voltage — and states that
+  the file was stored and forwarded. A malformed file still reports a parse
+  error (Annex D, D-13, narrowed).
+
 - The DICOM SCP can check the Called AE Title (Modules > DICOM > Check Called
   AE, off by default). The DICOM library never looks at it — it echoes whatever
   title was asked for in its acceptance — so a modality configured for another

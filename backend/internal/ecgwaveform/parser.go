@@ -1,5 +1,9 @@
 // Package ecgwaveform parses DICOM Resting 12-Lead ECG files (SOP 1.2.840.10008.5.1.4.1.1.9.1.1)
 // and encodes the result in the binary wire format expected by the ECG viewer component.
+//
+// Any waveform object that carries the 12 standard leads (or I, II and V1-V6)
+// in volts is drawn, whatever its SOP class. Anything else is refused with a
+// *NotDisplayableError naming the reason, not a generic parse failure.
 package ecgwaveform
 
 import (
@@ -42,7 +46,36 @@ var (
 	// ErrTruncatedWaveform is returned when Waveform Data is shorter than the
 	// header announces.
 	ErrTruncatedWaveform = errors.New("ecgwaveform: truncated waveform data")
+	// ErrNotDisplayable is returned, wrapped in a *NotDisplayableError, for a
+	// well-formed waveform the 12-lead viewer cannot draw: it is stored and
+	// forwarded, just not displayed (#130 D-13).
+	ErrNotDisplayable = errors.New("ecgwaveform: not displayable")
 )
+
+// Reasons a waveform cannot be displayed. Codes, not prose: the UI words them.
+const (
+	// ReasonLeadsMissing: the 12 standard leads are neither present nor
+	// derivable — an Ambulatory recording, a partial General ECG, the ECG
+	// group of a hemodynamic study.
+	ReasonLeadsMissing = "leads_missing"
+	// ReasonNonElectricalUnit: a channel is not a voltage (mmHg, a respiratory
+	// or audio signal). The viewer's grid and caliper are in mV.
+	ReasonNonElectricalUnit = "non_electrical_unit"
+)
+
+// NotDisplayableError says why a waveform cannot be drawn by the 12-lead
+// viewer. It matches ErrNotDisplayable with errors.Is.
+type NotDisplayableError struct {
+	SOPClassUID string // (0008,0016) of the object, empty if absent
+	Reason      string // one of the Reason* codes
+	Detail      string // what was found: the channel labels, the unit
+}
+
+func (e *NotDisplayableError) Error() string {
+	return fmt.Sprintf("ecgwaveform: not displayable (%s): %s", e.Reason, e.Detail)
+}
+
+func (e *NotDisplayableError) Unwrap() error { return ErrNotDisplayable }
 
 // sensitivityUnitToMv returns the factor converting one unit of Channel
 // Sensitivity into millivolts. The unit is read, never assumed: an absent or
@@ -70,6 +103,13 @@ func Parse(data []byte) (*EcgRecord, error) {
 	ds, err := dicom.ParseUntilEOF(bytes.NewReader(data), nil)
 	if err != nil {
 		return nil, fmt.Errorf("ecgwaveform: parse dicom: %w", err)
+	}
+
+	sopClassUID := ""
+	if elem, err := ds.FindElementByTag(tag.SOPClassUID); err == nil {
+		if vals, ok := elem.Value.GetValue().([]string); ok && len(vals) > 0 {
+			sopClassUID = strings.TrimSpace(vals[0])
+		}
 	}
 
 	// Patient name
@@ -184,6 +224,15 @@ func Parse(data []byte) (*EcgRecord, error) {
 			}
 		}
 		if _, err := sensitivityUnitToMv(sensitivityUnit); err != nil {
+			// An absent unit is a malformed file; a unit that is present but
+			// not a voltage is a well-formed signal of another kind.
+			if sensitivityUnit != "" {
+				return nil, &NotDisplayableError{
+					SOPClassUID: sopClassUID,
+					Reason:      ReasonNonElectricalUnit,
+					Detail:      fmt.Sprintf("channel %d (%s) is in %s", i+1, label, sensitivityUnit),
+				}
+			}
 			return nil, fmt.Errorf("%w: channel %d (%s): %v", ErrMissingAcquisitionParameter, i+1, label, err)
 		}
 
@@ -285,7 +334,11 @@ func Parse(data []byte) (*EcgRecord, error) {
 		} else {
 			derived, err := deriveLead(leadName, byLabel, n)
 			if err != nil {
-				return nil, err
+				return nil, &NotDisplayableError{
+					SOPClassUID: sopClassUID,
+					Reason:      ReasonLeadsMissing,
+					Detail:      fmt.Sprintf("lead %s absent; channels: %s", leadName, strings.Join(rawLeadOrder, ", ")),
+				}
 			}
 			finalChannels[i] = EcgChannel{Label: leadName, Samples: derived}
 		}
