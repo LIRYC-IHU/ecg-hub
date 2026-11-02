@@ -19,6 +19,8 @@ import (
 	"github.com/LIRYC-IHU/ecg-hub/internal/auth"
 	"github.com/LIRYC-IHU/ecg-hub/internal/certs"
 	"github.com/LIRYC-IHU/ecg-hub/internal/config"
+	"github.com/LIRYC-IHU/ecg-hub/internal/connector"
+	dicomscu "github.com/LIRYC-IHU/ecg-hub/internal/connector/dicom"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
 	"github.com/LIRYC-IHU/ecg-hub/internal/ingestion"
@@ -264,11 +266,13 @@ func (h *ModuleServiceHandler) GetDICOMConfig(_ context.Context, _ *apiv1.GetDIC
 		return nil, connect.NewError(connect.CodeInternal, errors.New("failed to parse DICOM config"))
 	}
 	return &apiv1.DICOMConfig{
-		Port:        int32(cfg.Port),
-		AeTitle:     cfg.AETitle,
-		EchoEnabled: cfg.EchoEnabled,
-		Tls:         cfg.TLS,
-		Enabled:     record.Enabled,
+		Port:           int32(cfg.Port),
+		AeTitle:        cfg.AETitle,
+		EchoEnabled:    cfg.EchoEnabled,
+		Tls:            cfg.TLS,
+		Enabled:        record.Enabled,
+		StrictCalledAe: cfg.StrictCalledAE,
+		MutualTls:      cfg.MutualTLS,
 	}, nil
 }
 
@@ -283,11 +287,19 @@ func (h *ModuleServiceHandler) SaveDICOMConfig(_ context.Context, req *apiv1.Sav
 	if c.Port < 1 || c.Port > 65535 {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("port must be between 1 and 65535"))
 	}
+	if err := h.checkMutualTLSAvailable(c.MutualTls, c.Tls); err != nil {
+		return nil, err
+	}
+	if c.StrictCalledAe && strings.TrimSpace(c.AeTitle) == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("an AE title is required to check the Called AE Title"))
+	}
 	stored := DICOMStoredConfig{
-		Port:        int(c.Port),
-		AETitle:     c.AeTitle,
-		EchoEnabled: c.EchoEnabled,
-		TLS:         c.Tls,
+		Port:           int(c.Port),
+		AETitle:        c.AeTitle,
+		EchoEnabled:    c.EchoEnabled,
+		TLS:            c.Tls,
+		StrictCalledAE: c.StrictCalledAe,
+		MutualTLS:      c.MutualTls,
 	}
 	if err := h.upsertModuleConfig(dicomModuleType, stored, c.Enabled); err != nil {
 		return nil, err
@@ -357,24 +369,29 @@ func (h *ModuleServiceHandler) SaveModuleSettings(ctx context.Context, req *apiv
 
 func connectorConfigToProto(cfg ConnectorStoredConfig) *apiv1.ConnectorConfig {
 	return &apiv1.ConnectorConfig{
-		Name:         cfg.Name,
-		Protocol:     cfg.Protocol,
-		Extensions:   cfg.Extensions,
-		Vendors:      cfg.Vendors,
-		MaxAttempts:  int32(cfg.MaxAttempts),
-		Interval:     cfg.Interval,
-		EctpHost:     cfg.ECTPHost,
-		EctpPort:     int32(cfg.ECTPPort),
-		FtpHost:      cfg.FTPHost,
-		FtpPort:      int32(cfg.FTPPort),
-		FtpUsername:  cfg.FTPUsername,
-		FtpPassword:  cfg.FTPPassword,
-		DicomHost:    cfg.DICOMHost,
-		DicomPort:    int32(cfg.DICOMPort),
-		CallingAe:    cfg.CallingAE,
-		CalledAe:     cfg.CalledAE,
-		DicomTimeout: cfg.DICOMTimeout,
-		WaitForHl7:   cfg.WaitForHL7,
+		Name:           cfg.Name,
+		Protocol:       cfg.Protocol,
+		Extensions:     cfg.Extensions,
+		Vendors:        cfg.Vendors,
+		MaxAttempts:    int32(cfg.MaxAttempts),
+		Interval:       cfg.Interval,
+		EctpHost:       cfg.ECTPHost,
+		EctpPort:       int32(cfg.ECTPPort),
+		FtpHost:        cfg.FTPHost,
+		FtpPort:        int32(cfg.FTPPort),
+		FtpUsername:    cfg.FTPUsername,
+		FtpPassword:    cfg.FTPPassword,
+		DicomHost:      cfg.DICOMHost,
+		DicomPort:      int32(cfg.DICOMPort),
+		CallingAe:      cfg.CallingAE,
+		CalledAe:       cfg.CalledAE,
+		DicomTimeout:   cfg.DICOMTimeout,
+		WaitForHl7:     cfg.WaitForHL7,
+		ManageIdentity: cfg.ManageIdentity,
+
+		DicomTls:                   cfg.DICOMTLS,
+		DicomTlsInsecureSkipVerify: cfg.DICOMTLSInsecureSkipVerify,
+		DicomStrictSop:             cfg.DICOMStrictSOP,
 	}
 }
 
@@ -388,24 +405,29 @@ func connectorConfigFromProto(p *apiv1.ConnectorConfig) ConnectorStoredConfig {
 		vendors = []string{}
 	}
 	return ConnectorStoredConfig{
-		Name:         p.Name,
-		Protocol:     p.Protocol,
-		Extensions:   ext,
-		Vendors:      vendors,
-		MaxAttempts:  int(p.MaxAttempts),
-		Interval:     p.Interval,
-		ECTPHost:     p.EctpHost,
-		ECTPPort:     int(p.EctpPort),
-		FTPHost:      p.FtpHost,
-		FTPPort:      int(p.FtpPort),
-		FTPUsername:  p.FtpUsername,
-		FTPPassword:  p.FtpPassword,
-		DICOMHost:    p.DicomHost,
-		DICOMPort:    int(p.DicomPort),
-		CallingAE:    p.CallingAe,
-		CalledAE:     p.CalledAe,
-		DICOMTimeout: p.DicomTimeout,
-		WaitForHL7:   p.WaitForHl7,
+		Name:           p.Name,
+		Protocol:       p.Protocol,
+		Extensions:     ext,
+		Vendors:        vendors,
+		MaxAttempts:    int(p.MaxAttempts),
+		Interval:       p.Interval,
+		ECTPHost:       p.EctpHost,
+		ECTPPort:       int(p.EctpPort),
+		FTPHost:        p.FtpHost,
+		FTPPort:        int(p.FtpPort),
+		FTPUsername:    p.FtpUsername,
+		FTPPassword:    p.FtpPassword,
+		DICOMHost:      p.DicomHost,
+		DICOMPort:      int(p.DicomPort),
+		CallingAE:      p.CallingAe,
+		CalledAE:       p.CalledAe,
+		DICOMTimeout:   p.DicomTimeout,
+		WaitForHL7:     p.WaitForHl7,
+		ManageIdentity: p.ManageIdentity,
+
+		DICOMTLS:                   p.DicomTls,
+		DICOMTLSInsecureSkipVerify: p.DicomTlsInsecureSkipVerify,
+		DICOMStrictSOP:             p.DicomStrictSop,
 	}
 }
 
@@ -521,7 +543,7 @@ func (h *ModuleServiceHandler) DeleteConnector(ctx context.Context, req *apiv1.D
 	return &apiv1.DeleteConnectorResponse{Message: "Connector deleted"}, nil
 }
 
-func (h *ModuleServiceHandler) TestConnector(_ context.Context, req *apiv1.TestConnectorRequest) (*apiv1.TestConnectorResponse, error) {
+func (h *ModuleServiceHandler) TestConnector(ctx context.Context, req *apiv1.TestConnectorRequest) (*apiv1.TestConnectorResponse, error) {
 	if req.Name == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("connector name is required"))
 	}
@@ -552,7 +574,12 @@ func (h *ModuleServiceHandler) TestConnector(_ context.Context, req *apiv1.TestC
 			host, port = cfg.FTPHost, cfg.FTPPort
 		}
 	case "dicom_cstore":
-		host, port = cfg.DICOMHost, cfg.DICOMPort
+		// A DICOM endpoint is tested by talking DICOM to it, not by opening a
+		// socket. A TCP dial succeeds against a TLS-only port the SCU cannot
+		// negotiate with, and against anything listening that is not an SCP at
+		// all, so it reports success for a connector that cannot forward a
+		// single object.
+		return h.testDICOM(ctx, req.Name, cfg)
 	default:
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("unknown protocol %q", cfg.Protocol))
 	}
@@ -570,6 +597,53 @@ func (h *ModuleServiceHandler) TestConnector(_ context.Context, req *apiv1.TestC
 	}
 	conn.Close()
 	slog.Info("module_service: test connectivity ok", "name", req.Name, "addr", addr, "latency", latency)
+	return &apiv1.TestConnectorResponse{Success: true, Latency: latency.String()}, nil
+}
+
+// connectorTestTimeout bounds a test from the admin screen. The endpoint's own
+// timeout governs a real forward and may be much longer; a button must answer.
+const connectorTestTimeout = 10 * time.Second
+
+// testDICOM establishes a real association and sends a C-ECHO, with the
+// connector's own settings — TLS included. What it reports is therefore what a
+// forward would do: a certificate the host does not trust, an archive that
+// expects TLS where the connector sends none, or a wrong Called AE title all
+// surface here instead of at the first ECG.
+func (h *ModuleServiceHandler) testDICOM(ctx context.Context, name string, cfg ConnectorStoredConfig) (*apiv1.TestConnectorResponse, error) {
+	if cfg.DICOMHost == "" || cfg.DICOMPort == 0 {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("host or port not configured for this connector"))
+	}
+
+	client, err := dicomscu.NewSCUClient(connector.DICOMEndpoint{
+		Host:               cfg.DICOMHost,
+		Port:               cfg.DICOMPort,
+		CallingAE:          cfg.CallingAE,
+		CalledAE:           cfg.CalledAE,
+		Timeout:            cfg.DICOMTimeout,
+		TLS:                cfg.DICOMTLS,
+		TLSInsecureSkipVer: cfg.DICOMTLSInsecureSkipVerify,
+		StrictSOP:          cfg.DICOMStrictSOP,
+	})
+	if err != nil {
+		// Only a malformed timeout reaches here, which is a configuration
+		// problem the operator can read and fix.
+		return &apiv1.TestConnectorResponse{Success: false, Latency: "0s", Error: err.Error()}, nil
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, connectorTestTimeout)
+	defer cancel()
+
+	addr := net.JoinHostPort(cfg.DICOMHost, strconv.Itoa(cfg.DICOMPort))
+	start := time.Now()
+	echoErr := client.Echo(ctx)
+	latency := time.Since(start)
+	if echoErr != nil {
+		slog.Warn("module_service: dicom c-echo failed",
+			"name", name, "addr", addr, "tls", cfg.DICOMTLS, "error", echoErr)
+		return &apiv1.TestConnectorResponse{Success: false, Latency: latency.String(), Error: echoErr.Error()}, nil
+	}
+	slog.Info("module_service: dicom c-echo ok",
+		"name", name, "addr", addr, "tls", cfg.DICOMTLS, "latency", latency)
 	return &apiv1.TestConnectorResponse{Success: true, Latency: latency.String()}, nil
 }
 
@@ -620,6 +694,26 @@ func (h *ModuleServiceHandler) checkTLSAvailable(enabled bool) error {
 	if st := h.tlsStatus(); !st.Available {
 		return connect.NewError(connect.CodeFailedPrecondition,
 			fmt.Errorf("TLS cannot be enabled: %s", st.Error))
+	}
+	return nil
+}
+
+// checkMutualTLSAvailable refuses to save mutual TLS that could not start:
+// without TLS there is no handshake to ask a certificate in, and without a
+// readable CA bundle the module would fail at its next start instead of here.
+func (h *ModuleServiceHandler) checkMutualTLSAvailable(mutual, tlsOn bool) error {
+	if !mutual {
+		return nil
+	}
+	if !tlsOn {
+		return connect.NewError(connect.CodeInvalidArgument, errors.New("mutual TLS requires TLS"))
+	}
+	if h.Cfg == nil {
+		return connect.NewError(connect.CodeFailedPrecondition, errors.New("mutual TLS cannot be enabled: no configuration is loaded"))
+	}
+	if _, err := certs.LoadCAPool(h.Cfg.Certs.ClientCAFile); err != nil {
+		return connect.NewError(connect.CodeFailedPrecondition,
+			fmt.Errorf("mutual TLS cannot be enabled: %w (certs.client_ca_file)", err))
 	}
 	return nil
 }

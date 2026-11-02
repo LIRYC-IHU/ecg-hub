@@ -3,6 +3,117 @@
 All notable changes to this project are documented here. Versions follow
 [semantic versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- The DICOM SCP can check the Called AE Title (Modules > DICOM > Check Called
+  AE, off by default). The DICOM library never looks at it — it echoes whatever
+  title was asked for in its acceptance — so a modality configured for another
+  archive was accepted and stored silently. With the option on, ECG Hub reads
+  the association request before handing the connection to the library and
+  refuses a foreign title with A-ASSOCIATE-RJ reason 7, which the modality logs
+  as "called AE title not recognized". The Calling AE Title stays unchecked:
+  the device whitelist is the access control (Annex D, D-4).
+- The DICOM SCP can require mutual TLS (Modules > DICOM > Mutual TLS, off by
+  default, needs TLS). Modalities must then present a client certificate
+  signed by the CA bundle in `certs.client_ca_file` (`TLS_CLIENT_CA_FILE`);
+  without one, or with one from another CA, the handshake fails and the
+  connection is closed before any association, with the reason in the log.
+  TLS used to authenticate the server only (Annex D, D-14). The SCP refuses to
+  start, and the setting refuses to save, without TLS or a readable bundle.
+- Connectors can let ECG Hub manage patient identity (Modules > Connectors >
+  "ECG Hub manages patient identity", off by default). Without it, a connector
+  stays a plain proxy: an unidentified ECG is forwarded from quarantine, then
+  forwarded again after an operator assigns it, with the same SOP Instance UID
+  and still no Patient ID, and received DICOM always carries the modality's
+  demographics. With it, an unidentified ECG waits in quarantine and goes out
+  once, after assignment, and received DICOM is sent with the Patient ID, name,
+  birth date and sex ECG Hub holds (a coercion of the outbound copy only; the
+  stored file is untouched). A coercion that fails fails the forward rather than
+  send the modality's identity. Later ADT changes are still not re-forwarded
+  (Annex D, D-12, narrowed).
+
+### Fixed
+
+- A C-STORE answered with a warning no longer counts as a failed forward. The
+  DICOM library turns every non-zero status into an error, so `B000` (coercion
+  of data elements), `B006` (elements discarded) and `B007` sent the same object
+  back to an archive that had already stored it, once per retry, until the
+  attempts ran out — filing a duplicate each time. A warning status is now read
+  back out of the library's error, the forward is recorded as delivered, and the
+  status is logged and counted separately: a coercion is the archive rewriting
+  what was sent, and for `B000` that can be the patient identity (Annex D, D-6).
+- ECG Hub identifies itself on the wire and in the files it writes. It had no
+  Implementation Class UID of its own, so where one went out at all it was the
+  DICOM library's `1.2.826.0.1.3680043.9.7133.1.1` / `GODICOM_1_1`: every object
+  the hub stored named the toolkit as its producer, and a receiver could not key
+  behaviour on a known sender. ECG Hub now has its own pair,
+  `2.25.64792898169045814434475395748197887603` / `ECGHUB-1`, derived from a
+  UUID as PS3.5 B.2 requires and fixed for good. It goes into the File Meta of
+  every stored object and into the C-ECHO association request, which carried no
+  implementation item at all although PS3.7 D.3.3.2 makes it mandatory. The
+  C-STORE request and the SCP's association acceptance are built inside the
+  library and still carry its identity (Annex D, D-3). ecg-bridge keeps its own
+  pair: it is a separate implementation.
+- The C-STORE SCP parses an object before answering Success. It answered as
+  soon as the instance was queued, so a data set that would not parse was
+  accepted, landed in quarantine, and the modality never learned that the
+  transfer it considered successful had produced nothing usable. The parse now
+  happens inside the association and a failure is refused with `C000` and the
+  reason. Patient matching and persistence still follow afterwards, so Annex D
+  D-2 is narrowed rather than removed. An object with no Patient ID is still
+  accepted and routed to the unidentified review queue, as designed.
+- Received DICOM files are named after the patient again. The name was built
+  from the body the C-STORE callback receives, which carries no preamble, no
+  DICM and no File Meta — so the parser could not know its transfer syntax and
+  failed on every object, silently falling back to the SOP Instance UID. Every
+  file received over DICOM since the SCP shipped has that fallback name. The
+  name is now built from the reconstructed file, in the same parse the check
+  above performs.
+- The C-STORE SCP refuses what it cannot handle instead of storing it. The
+  DICOM library accepts every presentation context it is offered — any abstract
+  syntax, and whichever transfer syntax the caller proposed first — so a
+  modality could send a CT image or a JPEG 2000 data set, read Success, and
+  have the object end in quarantine or sit stored as an ECG nothing can draw.
+  An object whose SOP class is outside the supported list is now answered
+  `0112`, one whose transfer syntax is outside the three declared ones `C000`,
+  each naming the offending UID. The contexts are still accepted: refusing them
+  at negotiation needs a patched or replaced library (Annex D, D-1).
+- A C-STORE that could not be reconstructed answered `0124` (Not authorized),
+  sending whoever investigated to look at the device whitelist for what was
+  really an unreadable object. It answers `C000` (Cannot understand) now.
+- The supported SOP classes and transfer syntaxes moved to `internal/dicomsop`,
+  shared by the SCP and the SCU. They were the connector's alone, and the
+  server had no list at all to check against.
+- The connector panel's **Test** button now talks DICOM. It opened a TCP socket
+  and closed it, so it reported success for any port with something listening:
+  an archive expecting TLS where the connector sent none, a certificate the host
+  does not trust, a wrong Called AE title, or a port with no SCP behind it at
+  all. A DICOM connector is now tested with a real association and C-ECHO, using
+  that connector's own settings, so what the button reports is what a forward
+  would do. ECTP and FTP connectors keep the reachability check.
+- Outbound DICOM forwards can now be encrypted. `connector.DICOMEndpoint` had
+  carried a `TLS` field since the connectors shipped, but nothing stored it,
+  nothing showed it and the SCU never read it, so every C-STORE and C-ECHO to a
+  PACS went out in clear whatever the intent — and `DAT.md` §6.2 and §7.2
+  already described it as optional, which it was not. TLS is wired end to end
+  now, off by default because DICOM has no in-band upgrade and an archive that
+  does not expect it rejects the handshake. The archive's certificate is
+  verified against the host's trust store, with a per-connector opt-out for an
+  archive whose private CA cannot be installed there (Annex D, D-5).
+- `StrictSOP`, which refuses an object whose SOP class is outside the supported
+  list instead of forwarding it best-effort, was dead in the same way and is
+  wired through the same path. The sending device is now told its object was
+  rejected rather than having it quietly accepted (Annex D, D-16).
+- Outbound C-STORE proposed Deflated Explicit VR Little Endian, a syntax the
+  DICOM library announces but cannot write: it falls through to Explicit VR
+  Little Endian when encoding, so an archive selecting that context would have
+  received an uncompressed data set under a header claiming compression, and
+  every forward to it would have failed. The SCU now proposes only the three
+  syntaxes it can produce. Implicit VR Little Endian was proposed first, which
+  is why no deployment hit this (Conformance Statement Annex D, D-15).
+
 ## [1.1.0] — 2026-10-01
 
 Interoperability release. The hub now answers to a DPI over IHE, is pushed

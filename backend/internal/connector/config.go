@@ -16,9 +16,24 @@ type Config struct {
 	// Off by default, which is the behaviour every existing connector already
 	// has.
 	WaitForHL7 bool
-	ECTP       Endpoint
-	FTP        FTPEndpoint
-	DICOM      DICOMEndpoint
+	// ManageIdentity makes ECG Hub, not the acquisition device, the source of
+	// the patient identity on this link (#130 D-12):
+	//
+	//   - an unidentified ECG is held in quarantine instead of being proxied,
+	//     and goes out once, after an operator has assigned it — so the
+	//     archive never stores an orphan object and then the same SOP
+	//     Instance UID a second time;
+	//   - a DICOM object is sent with the hub's Patient ID, name, birth date
+	//     and sex written over what the device recorded (a coercion, declared
+	//     in the conformance statement). Vendor files converted by ecg-bridge
+	//     already carry the hub's identity.
+	//
+	// Off by default: the connector proxies every file as received, which is
+	// the behaviour every existing connector already has.
+	ManageIdentity bool
+	ECTP           Endpoint
+	FTP            FTPEndpoint
+	DICOM          DICOMEndpoint
 }
 
 // Filters restricts which files a connector forwards.
@@ -51,6 +66,11 @@ type DICOMEndpoint struct {
 	CallingAE string
 	CalledAE  string
 	TLS       bool
-	Timeout   string // Go duration, e.g. "30s"
-	StrictSOP bool
+	// TLSInsecureSkipVer drops certificate verification when TLS is on. It is
+	// an escape hatch for an archive whose private CA is not in the host's
+	// trust store, and it gives up TLS's authentication: the connection is
+	// still encrypted, but no longer proves which archive answered.
+	TLSInsecureSkipVer bool
+	Timeout            string // Go duration, e.g. "30s"
+	StrictSOP          bool
 }

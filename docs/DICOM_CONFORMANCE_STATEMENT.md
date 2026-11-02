@@ -148,7 +148,9 @@ PS3.2, PS3.4 and PS3.7 is assumed.
 - **Forward ECG to archive.** Once an ECG is stored, each enabled connector whose
   filters match it forwards it. If the connector is set to wait for HL7, the
   forward is held until enrichment from the HIS has finished. Files that land in
-  quarantine are forwarded too (Annex B.3).
+  quarantine are forwarded too (Annex B.3), except unidentified ECGs on a
+  connector set to manage patient identity, which wait for the operator's
+  assignment.
 - **Verify archive.** The STORE-SCU AE sends a C-ECHO each time connector health
   is checked: the status page, the health endpoint, or a connection test from the
   admin interface.
@@ -214,20 +216,29 @@ Acceptance is decided by the **device whitelist**, not by AE titles:
   A-ASSOCIATE-RJ.
 - The whitelist is checked again before each C-STORE in the association, so a
   device revoked mid-association gets status `0124` from then on.
-- Calling and Called AE Titles are **not checked** (Annex D, D-4).
+- The Called AE Title is checked only when **Check Called AE** is enabled
+  (Modules > DICOM, off by default). An association addressed to another title
+  is then refused with A-ASSOCIATE-RJ: result 1 (rejected-permanent), source 1
+  (service-user), reason 7 (called-AE-title-not-recognized). Comparison ignores
+  the space padding. This catches a modality pointed at the wrong AE; it is not
+  access control.
+- The Calling AE Title is never checked: the device whitelist identifies the
+  sender.
 - MAC resolution requires the device to be on the same network segment as the
   server. Behind NAT or routing the whitelist cannot work (see `DAT.md` §3.2).
 
-No A-ASSOCIATE-RJ is ever sent by the application.
+Apart from the Called AE check above, the application sends no
+A-ASSOCIATE-RJ.
 
 ###### 4.2.1.3.2 Real-world activity: receive ECG from modality
 
 **Presentation context acceptance.** The SCP **accepts every proposed
-presentation context**. In each one it selects **the first transfer syntax the
-requester lists**. It does not check either the abstract syntax or the transfer
-syntax against a supported list (Annex D, D-1).
+presentation context**, whatever its abstract syntax, and in each one selects
+**the first transfer syntax the requester lists**. Acceptance of a context
+therefore carries no promise about what will be stored (Annex D, D-1).
 
-The transfer syntaxes ECG Hub can actually parse are:
+The decision is made one level up, on the C-STORE itself. An object is refused
+unless **both** its SOP class is one of §1.1 and its transfer syntax is one of:
 
 | Transfer Syntax | UID |
 |---|---|
@@ -235,8 +246,12 @@ The transfer syntaxes ECG Hub can actually parse are:
 | Explicit VR Little Endian | 1.2.840.10008.1.2.1 |
 | Explicit VR Big Endian (retired) | 1.2.840.10008.1.2.2 |
 
-**Modalities should be configured to propose only these, and only the SOP
-classes of §1.1.**
+A refusal answers `0112` (SOP Class not supported) or `C000` (Cannot
+understand) with the offending UID in the Error Comment, and the object is not
+stored, queued or forwarded. A modality that proposes only the contexts above
+never meets this, so **configure modalities to propose only these transfer
+syntaxes and only the SOP classes of §1.1**; one that proposes more gets a
+context accepted and then a per-object refusal, rather than a rejected context.
 
 | Abstract Syntax | Transfer Syntax | Role | Extended Negotiation |
 |---|---|---|---|
@@ -250,16 +265,27 @@ received, byte for byte, wrapped in a newly written File Meta Information
 header. Private and Type 3 attributes are retained. Exceptions are listed in
 Annex B.2.
 
-**Meaning of Success.** `0000` means the instance **has been placed in the
-ingestion queue**. Parsing, patient matching and persistence happen afterwards,
-outside the association. A failure at that stage sends the file to quarantine,
-where it is kept and visible to operators, but **the modality is not told**
-(Annex D, D-2).
+ECG Hub writes that header, so it names ECG Hub: Implementation Class UID
+(0002,0012) `2.25.64792898169045814434475395748197887603` and Implementation
+Version Name (0002,0013) `ECGHUB-1`. Files converted by ecg-bridge carry that
+tool's own pair instead (Annex A.1): it is a separate implementation and a
+receiver has to be able to tell them apart.
 
-**SOP classes outside §1.1.** Accepted at association level (see above). Any
-object with a valid DICM preamble is processed as an ECG, so a non-waveform
-instance is stored and shows up as an ECG that cannot be displayed. Do not
-route other modalities to this AE.
+**Meaning of Success.** `0000` means the instance was **readable and has been
+placed in the ingestion queue**. Before answering, the SCP checks the SOP class
+and transfer syntax (§4.2.1.3.2) and parses the data set; anything that fails
+is refused within the association, with the reason in the Error Comment.
+
+Patient matching and persistence still happen afterwards, outside the
+association. A failure at that stage sends the file to quarantine, where it is
+kept and visible to operators, but **the modality is not told** (Annex D, D-2).
+An object with no Patient ID is not a failure: it is routed to the unidentified
+review queue by design.
+
+**SOP classes outside §1.1.** Refused on the C-STORE with `0112`, not stored.
+The presentation context is still accepted at association level, so a modality
+sees acceptance followed by a per-object refusal; do not route other modalities
+to this AE.
 
 **Duplicate SOP Instance UIDs.** Not detected at DICOM level. A resent instance
 is ingested again as a separate ECG record, subject to the application's own
@@ -301,9 +327,10 @@ The SOP classes of §1.1 in the SCU role, plus Verification.
 | Maximum PDU size offered | 4,194,304 bytes (C-STORE); 16,384 bytes (C-ECHO) |
 | Number of associations | One per object being forwarded. Forwards to several connectors, and of several ECGs, run concurrently |
 | Asynchronous nature | Not supported |
-| Implementation Class UID (C-STORE associations) | `1.2.826.0.1.3680043.9.7133.1.1` (Annex D, D-3) |
-| Implementation Version Name (C-STORE associations) | `GODICOM_1_1` |
-| Implementation identifying information (C-ECHO associations) | None sent (Annex D, D-3) |
+| Implementation Class UID (C-ECHO associations) | `2.25.64792898169045814434475395748197887603` |
+| Implementation Version Name (C-ECHO associations) | `ECGHUB-1` |
+| Implementation Class UID (C-STORE associations) | `1.2.826.0.1.3680043.9.7133.1.1` — the DICOM library's own, which it builds into the A-ASSOCIATE-RQ itself (Annex D, D-3) |
+| Implementation Version Name (C-STORE associations) | `GODICOM_1_1` (Annex D, D-3) |
 
 ##### 4.2.2.3 Association initiation policy
 
@@ -311,26 +338,28 @@ The SOP classes of §1.1 in the SCU role, plus Verification.
 
 The SCU proposes one presentation context per abstract syntax: Verification,
 the SOP class of the object being sent, and every SOP class of §1.1, with
-duplicates removed. Each context offers the same four transfer syntaxes:
+duplicates removed. Each context offers the same three transfer syntaxes:
 
 | Abstract Syntax | Transfer Syntaxes proposed | Role | Extended Negotiation |
 |---|---|---|---|
-| Verification, the object's SOP class, all SOP classes of §1.1 | Implicit VR Little Endian 1.2.840.10008.1.2; Explicit VR Little Endian 1.2.840.10008.1.2.1; Explicit VR Big Endian 1.2.840.10008.1.2.2; Deflated Explicit VR Little Endian 1.2.840.10008.1.2.1.99 | SCU | None |
+| Verification, the object's SOP class, all SOP classes of §1.1 | Implicit VR Little Endian 1.2.840.10008.1.2; Explicit VR Little Endian 1.2.840.10008.1.2.1; Explicit VR Big Endian 1.2.840.10008.1.2.2 | SCU | None |
 
-The data set is re-encoded in the transfer syntax the archive accepts, with
-one exception: Deflated Explicit VR Little Endian is proposed but cannot be
-produced (Annex D, D-15). **Configure the archive to accept one of the first
-three.**
+The data set is re-encoded in the transfer syntax the archive accepts. No
+compressed syntax is proposed: the three above are the only ones the
+implementation can write, so an accepted context is always one it can honour.
+**An archive that accepts none of them cannot be forwarded to.**
 
-**Objects of a SOP class outside §1.1** are still sent, on a context proposed
-for their own class, and a warning is logged. The connector model carries a
-`StrictSOP` field that would refuse them instead, but it cannot be set
-(Annex D, D-16).
+**Objects of a SOP class outside §1.1** are sent by default anyway, on a
+context proposed for their own class, with a warning logged. Enabling **Refuse
+unsupported SOP classes** on the connector rejects them instead, which surfaces
+as a forward failure the sending device is told about rather than a silent
+best-effort send.
 
 **Which file is sent.**
 
 - An ECG received as DICOM is sent **as stored**, which is essentially as the
-  modality sent it (Annex B.2).
+  modality sent it (Annex B.2). On a connector set to **manage patient
+  identity**, it is sent with the establishment's identity instead (B.2).
 - Any other ECG (Philips, GE MUSE, Nihon Kohden, Mindray, FDA aECG) is converted
   to a 12-Lead ECG Waveform instance first. If the patient is known locally, the
   establishment's demographics replace the device's in that instance (Annex A,
@@ -345,7 +374,8 @@ released.
 | Status received | Behaviour |
 |---|---|
 | `0000` Success | Forward recorded as delivered |
-| Any other status, **warnings (`B000`, `B006`, `B007`) included** | Treated as a failure and retried (Annex D, D-6) |
+| **Warning** (`B000` coercion, `B006` elements discarded, `B007` data set does not match SOP class, and the rest of `B000`–`BFFF`) | Forward recorded as delivered and **not retried**: PS3.4 B.2.3 makes this class mean the archive stored the instance. The status is logged and counted apart from a clean send, because a coercion is the archive rewriting what was sent — for `B000`, possibly the patient identity |
+| Any other status | Treated as a failure and retried |
 | Association rejected, aborted, or timeout | Treated as a failure and retried |
 
 Retries follow the connector's retry policy (maximum attempts and interval,
@@ -368,7 +398,7 @@ STORE-SCU accepts no associations.
 |---|---|
 | Physical network | Any interface supported by the host. ECG Hub runs as a container |
 | Protocol | TCP/IP (PS3.8). IPv4 and IPv6, as configured on the host |
-| TLS | STORE-SCP: optional (§7). STORE-SCU: **not supported** (Annex D, D-5) |
+| TLS | STORE-SCP: optional (§7). STORE-SCU: optional, per connector (§7.2) |
 
 ### 4.4 Configuration
 
@@ -383,7 +413,9 @@ Everything except the TLS certificate is set from the admin interface
 | AE Title | `ECG-HUB` |
 | Listening port (in the container) | `4242`. Published on the host as `DICOM_PORT`, default `4242` |
 | C-ECHO enabled | Yes |
+| Check Called AE | Off |
 | TLS | Off |
+| Mutual TLS | Off. CA bundle: `certs.client_ca_file` in `config.yaml` |
 | Maximum object size | 1 MiB (`ingest.max_file_bytes` in `config.yaml`) |
 | Device whitelist | See the admin interface (Devices) |
 
@@ -435,13 +467,26 @@ No PS3.15 security profile is claimed.
 
 - **STORE-SCP over TLS** (optional). The server presents one certificate per
   installation, mounted from the host (see [`TLS_CERTS.md`](TLS_CERTS.md)). The
-  minimum version is TLS 1.2. **The server does not request a client
-  certificate**, so the modality is not authenticated by TLS. When TLS is
-  enabled, the port accepts only TLS.
-- **Access control** relies on the MAC-address device whitelist (§4.2.1.3.1),
-  not on AE titles or certificates.
-- **STORE-SCU** traffic is unencrypted (Annex D, D-5). Protect it at network
-  level.
+  minimum version is TLS 1.2. When TLS is enabled, the port accepts only TLS.
+  By default the server does not request a client certificate, so the
+  modality is not authenticated by TLS.
+- **Mutual TLS** (optional, Modules > DICOM, off by default, requires TLS).
+  Every connection must present a client certificate signed by the CA bundle
+  in `certs.client_ca_file` (see [`TLS_CERTS.md`](TLS_CERTS.md)). A missing or
+  untrusted certificate fails the handshake and the connection is closed
+  before any association. ECG Hub refuses to start the SCP with mutual TLS on
+  and no usable bundle.
+- **Access control** relies on the MAC-address device whitelist (§4.2.1.3.1).
+  Mutual TLS adds certificate authentication on top of it, not instead of it.
+- **STORE-SCU** associations are in clear unless TLS is enabled on the
+  connector, which is off by default: DICOM has no in-band upgrade, so an
+  archive that does not expect TLS on its port rejects the handshake. With it
+  on, the minimum version is TLS 1.2 and the archive's certificate is verified
+  against the host's trust store — **a private CA must be installed there**. A
+  per-connector setting waives that verification for an archive whose CA cannot
+  be installed; the traffic stays encrypted but the archive is no longer
+  authenticated, so interception becomes possible. ECG Hub presents no client
+  certificate, so the archive cannot authenticate ECG Hub by TLS either.
 
 ### 7.3 Application-level security
 
@@ -554,8 +599,23 @@ carry the birth date even when it is injected (A.2).
 
 #### B.2 Received instances
 
-Received instances are **not coerced** on reception or on forwarding. In
-particular:
+Received instances are never coerced on reception: the stored file is what the
+modality sent. On forwarding, it depends on the connector's **ECG Hub manages
+patient identity** option (Modules > Connectors, off by default).
+
+**With the option on**, the forwarded copy is coerced: Patient ID (0010,0020)
+is set to the identifier the ECG is attached to in ECG Hub, and Patient's Name
+(0010,0010), Birth Date (0010,0030) and Sex (0010,0040) to the patient record's
+values when ECG Hub holds them (otherwise the modality's value is kept). Its
+File Meta then names ECG Hub as the writing implementation. The SOP Instance
+UID and the waveform are unchanged. The stored original is not modified. If
+the coercion cannot be applied, the forward fails and is retried; the object is
+never sent with the modality's identity in its place. The values are those
+known **at the time of the send**: a later ADT A08/A40 or Patient ID edit is not
+propagated.
+
+**With the option off** (proxy as received), received instances are **not
+coerced** on forwarding either. In particular:
 
 - Demographics from HL7 enrichment are **not** written into received DICOM
   instances. Only converted instances get them (B.1).
@@ -581,6 +641,13 @@ an operator later attaches it to a patient, it is ingested again and forwarded
 **a second time, still unchanged**. For received DICOM, the second send has the
 same SOP Instance UID and the same (possibly empty) Patient ID.
 
+On a connector that **manages patient identity**, an unidentified ECG (one
+that parsed but carried no Patient ID) is **not** forwarded from quarantine. It
+is sent once, after an operator has attached it to a patient, with that
+patient's identity (B.2). If it is never attached, it is never sent on that
+connector. Other quarantined files (unreadable, unknown format) are forwarded
+right away, unchanged, as above.
+
 ### Annex C — Coded Terminology
 
 | Use | Coding scheme | Values |
@@ -598,19 +665,13 @@ with ecg-bridge v1.4.0.
 
 | # | Area | Deviation | Effect | Where |
 |---|---|---|---|---|
-| D-1 | SCP negotiation | Every presentation context is accepted, whatever its abstract syntax, using the first transfer syntax proposed | A modality may send an unsupported SOP class or transfer syntax and get Success. The object then fails parsing (quarantine) or is stored as an ECG that cannot be displayed | `go-netdicom` provider; `internal/dicom/server.go` |
-| D-2 | SCP status | Success is returned when the object is queued, before parsing and persistence | A later ingestion failure is not reported to the modality. The file is kept in quarantine | `internal/dicom/server.go` |
-| D-3 | Implementation identification | The SCP's A-ASSOCIATE-AC and the SCU's C-ECHO A-ASSOCIATE-RQ carry no Implementation Class UID (mandatory under PS3.7 D.3.3.2). Where one is sent (SCU C-STORE, File Meta of received objects), it is the go-dicom library's UID, not one belonging to ECG Hub | Strict peers may reject the association. Logs on the peer do not identify ECG Hub | `go-netdicom`; `internal/connector/dicom/scu_client.go` |
-| D-4 | SCP access | Called and Calling AE Titles are not checked | A modality configured with the wrong AE title still connects. Access control is the MAC whitelist only | `internal/dicom/server.go` |
-| D-5 | SCU security | No TLS on outbound associations. The connector model has a `TLS` field, but it is neither exposed nor used | Forwards to the archive travel in clear. `DAT.md` §6.2 and §7.2 currently state the opposite | `internal/connector/dicom/scu_client.go` |
-| D-6 | SCU status | Warning statuses are treated as failures and retried | An archive answering with a warning (e.g. `B000` coercion) gets the same object again until attempts run out | `go-netdicom` `cstore.go` |
+| D-1 | SCP negotiation | Every presentation context is still accepted, whatever its abstract syntax, using the first transfer syntax proposed: the library does so unconditionally and exposes no hook (`contextmanager.onAssociateRequest`, which carries a TODO to that effect). The refusal happens one level up, on the C-STORE (§4.2.1.3.2) | A modality is told its context was accepted and then that the object was refused, instead of being told at negotiation which contexts are usable. Nothing unsupported is stored, and the status names the reason, so the remaining cost is a wasted object and a misleading A-ASSOCIATE-AC. Rejecting the context itself would need a patched or replaced `go-netdicom`, which this project has deliberately not done: the behaviour is corrected above the library instead | `go-netdicom` `contextmanager.go`; `internal/dicom/server.go` |
+| D-2 | SCP status | Success is returned once the object is readable and queued. The SOP class, the transfer syntax and the data set itself are checked first, but patient matching and persistence still happen after the association has answered | A failure at that later stage — storage, database, module — sends the file to quarantine without the modality being told. What can no longer happen is Success for an object that was never readable | `internal/dicom/server.go` |
+| D-3 | Implementation identification | The SCP's A-ASSOCIATE-AC carries no Implementation Class UID, and the SCU's C-STORE A-ASSOCIATE-RQ carries the DICOM library's rather than ECG Hub's. Both PDUs are built inside `go-netdicom`, which neither sends the item on acceptance nor lets the caller set it. The C-ECHO A-ASSOCIATE-RQ and the File Meta of every stored object, which ECG Hub builds itself, now carry its own pair | A receiver cannot identify the acceptor at all, and identifies the C-STORE initiator as the toolkit rather than the product, so it cannot key behaviour on a known sender. PS3.7 D.3.3.2 makes the item mandatory. Correcting the remaining two would need a patched or replaced `go-netdicom` | `go-netdicom` `contextmanager.go`; `internal/dicomsop/sop.go` |
 | D-7 | UIDs | Philips, NK and MUSE conversions generate new UIDs on every run. The Philips form `2.25.<ns>` is not derived from a UUID as PS3.5 B.2 requires | Duplicate studies in the archive when the same ECG is forwarded twice (retry after a lost response, resend, export then forward) | ecg-bridge builders |
 | D-8 | UIDs | Philips, Mindray and FDA conversions use the same UID for Study and SOP Instance | One UID identifies two different entities. Some archives refuse this or mix up the levels | ecg-bridge builders |
 | D-9 | UIDs | The Mindray UID root `1.2.840.113619` is GE Healthcare's registered root | UIDs under a root ECG Hub does not own, with a risk of collision with genuine GE instances | `mindray-to-dicom/builder.go` |
 | D-10 | IOD | Mandatory attributes are missing: Acquisition Context Sequence (all), Referring Physician's Name (all), Accession Number (all but NK), Patient's Birth Date (all but FDA), Study ID, Content Date/Time and Acquisition DateTime (NK) | Created instances do not conform to the 12-Lead ECG IOD. Validators (e.g. dciodvfy) report them, and strict archives may refuse them | ecg-bridge builders |
 | D-11 | Character set | `ISO_IR 100` is declared but values are written in UTF-8 | Accented names are garbled at the receiver | `dicomconf/finalize.go` and builders |
-| D-12 | Coercion | Patient identity resolved in ECG Hub (HL7, operator assignment, ADT) is not propagated into received DICOM instances, and not re-forwarded (Annex B.2, B.3) | The archive keeps the modality's demographics, and unidentified objects arrive twice | `internal/connector`, `internal/api/handlers` |
+| D-12 | Coercion | By default, patient identity resolved in ECG Hub (HL7, operator assignment, ADT) is not propagated into received DICOM instances, and unidentified objects are forwarded twice (Annex B.2, B.3). A connector set to manage patient identity sends received DICOM with the establishment's identity and unidentified objects once, after assignment. On either setting, identity changes after the send (ADT A08/A40, Patient ID edit) are not re-forwarded | Off: the archive keeps the modality's demographics, and unidentified objects arrive twice. On: an archive is not told when the identity it received changes later | `internal/connector`, `internal/api/handlers` |
 | D-13 | SOP classes | Only 12-Lead ECG is parsed. The other waveform classes are stored and forwarded only | No display or conversion for General, Ambulatory, Hemodynamic and similar instances | `internal/ecgwaveform` |
-| D-14 | SCP TLS | Server authentication only. No client certificate requested | TLS does not authenticate the modality | `internal/dicom/server.go` |
-| D-15 | SCU negotiation | Deflated Explicit VR Little Endian (1.2.840.10008.1.2.1.99) is among the transfer syntaxes proposed, but the library cannot write it: `ParseTransferSyntaxUID` falls through Deflated to Explicit VR Little Endian, so the data set is encoded **uncompressed** under a syntax that announces compression | An archive that selects the Deflated context receives a data set it cannot decompress, and every forward to it fails. Implicit VR Little Endian is proposed first, so an archive that accepts it is unaffected | `go-dicom` `dicomio/transfersyntax.go`; `go-netdicom` `cstore.go` |
-| D-16 | SCU configuration | `connector.DICOMEndpoint` carries a `StrictSOP` field, meant to refuse a SOP class outside §1.1 rather than forward it best-effort, but nothing ever sets it. Same defect as D-5, on a different field | Strict mode cannot be turned on. The permissive behaviour of §4.2.2.3.1 is the only one reachable | `internal/connector/config.go`; `cmd/ecg-hub/main.go` |

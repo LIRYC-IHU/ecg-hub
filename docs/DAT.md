@@ -430,7 +430,7 @@ permissions, révocables.
 |---|---|
 | Interface web | HTTPS, terminé sur le proxy de l'établissement |
 | FTP | FTPS explicite (`AUTH TLS`). Quand TLS est actif, **le chiffrement est obligatoire** : une session en clair est refusée |
-| DICOM | DICOM TLS, optionnel |
+| DICOM | DICOM TLS, optionnel des deux côtés. En réception, authentification serveur seule : aucun certificat client n'est demandé. En émission, activable par connecteur ; le certificat de l'archive est vérifié contre le magasin de confiance de l'hôte, **une AC privée doit donc y être installée** |
 | IHE (CARD-5/6, ITI-11) | HTTPS avec authentification mutuelle obligatoire |
 | HL7 MLLP | Pas de TLS dans le protocole — à encadrer par le cloisonnement réseau |
 | Base de données, S3, LDAP, OIDC | TLS selon configuration ; LDAPS et `sslmode` recommandés |
