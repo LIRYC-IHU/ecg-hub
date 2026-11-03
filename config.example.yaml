@@ -139,9 +139,9 @@ ihe:
 # Inbound ADT listener — the receiving half of IHE RAD-12 Patient Update, where
 # the HIS pushes patient changes instead of being asked for them.
 #
-# Observing only at this stage: every message is acknowledged and logged, none
-# is applied. Point the HIS at it to see what the feed actually sends before the
-# rules that interpret it are fixed.
+# Two events are applied, read through the active HL7 field mapping preset:
+# A08 updates a patient's demographics, A40 merges two patient records. Every
+# other event (A02, A03, ...) is acknowledged and logged, and applies nothing.
 adt:
   enabled: false
   port: 2576
