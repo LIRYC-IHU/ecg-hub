@@ -126,11 +126,15 @@ func (*ListRolesRequest) Descriptor() ([]byte, []int) {
 }
 
 type ListRolesResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Roles         []*Role                `protobuf:"bytes,1,rep,name=roles,proto3" json:"roles,omitempty"`
-	Total         int32                  `protobuf:"varint,2,opt,name=total,proto3" json:"total,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Roles []*Role                `protobuf:"bytes,1,rep,name=roles,proto3" json:"roles,omitempty"`
+	Total int32                  `protobuf:"varint,2,opt,name=total,proto3" json:"total,omitempty"`
+	// Permissions of a feature this deployment does not run (device.* without
+	// DEVICE_WHITELIST=true). Left out of every role above and granted to no one;
+	// the roles keep them, so they return when the feature is turned back on.
+	HiddenPermissions []string `protobuf:"bytes,3,rep,name=hidden_permissions,json=hiddenPermissions,proto3" json:"hidden_permissions,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *ListRolesResponse) Reset() {
@@ -175,6 +179,13 @@ func (x *ListRolesResponse) GetTotal() int32 {
 		return x.Total
 	}
 	return 0
+}
+
+func (x *ListRolesResponse) GetHiddenPermissions() []string {
+	if x != nil {
+		return x.HiddenPermissions
+	}
+	return nil
 }
 
 type CreateRoleRequest struct {
@@ -2339,10 +2350,11 @@ const file_v1_admin_proto_rawDesc = "" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x03 \x01(\tR\vdescription\x12 \n" +
 	"\vpermissions\x18\x04 \x03(\tR\vpermissions\"\x12\n" +
-	"\x10ListRolesRequest\"R\n" +
+	"\x10ListRolesRequest\"\x81\x01\n" +
 	"\x11ListRolesResponse\x12'\n" +
 	"\x05roles\x18\x01 \x03(\v2\x11.grpc.api.v1.RoleR\x05roles\x12\x14\n" +
-	"\x05total\x18\x02 \x01(\x05R\x05total\"k\n" +
+	"\x05total\x18\x02 \x01(\x05R\x05total\x12-\n" +
+	"\x12hidden_permissions\x18\x03 \x03(\tR\x11hiddenPermissions\"k\n" +
 	"\x11CreateRoleRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12 \n" +

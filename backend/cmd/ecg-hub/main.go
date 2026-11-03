@@ -579,6 +579,9 @@ func main() {
 		} else {
 			slog.Info("device whitelist: not available — DEVICE_WHITELIST is not set")
 		}
+		// Hide device.* so no role grants them and the Roles screen does not
+		// offer them. The roles keep them: DEVICE_WHITELIST=true brings them back.
+		permChecker.Hide(auth.DevicePermissions...)
 	}
 	module.SetAuditWriter(repository.NewAuditRepository(gormDB))
 

@@ -21,6 +21,10 @@ message ListRolesRequest {}
 message ListRolesResponse {
   repeated Role roles = 1;
   int32 total = 2;
+  // Permissions of a feature this deployment does not run (device.* without
+  // DEVICE_WHITELIST=true). Left out of every role above and granted to no one;
+  // the roles keep them, so they return when the feature is turned back on.
+  repeated string hidden_permissions = 3;
 }
 
 message CreateRoleRequest {

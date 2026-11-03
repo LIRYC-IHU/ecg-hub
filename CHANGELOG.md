@@ -5,6 +5,14 @@ All notable changes to this project are documented here. Versions follow
 
 ## [Unreleased]
 
+### Changed
+
+- Without `DEVICE_WHITELIST=true` the `device.read` and `device.manage`
+  permissions are hidden. No role grants them, so the Devices menu and its API
+  are gone, and Admin > Roles no longer offers them. They stay stored on the
+  roles, and saving a role keeps them: setting `DEVICE_WHITELIST=true` again
+  brings them back as they were.
+
 ### Added
 
 - The ECG viewer says why it cannot draw a waveform. An Ambulatory recording,

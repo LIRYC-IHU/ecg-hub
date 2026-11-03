@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import { Plus, Trash2, Shield, Download, Upload } from 'lucide-react'
-import { fetchRoles, createRole, updateRole, deleteRole } from '../../lib/api'
+import { fetchRoles, fetchHiddenPermissions, createRole, updateRole, deleteRole } from '../../lib/api'
 import type { AppRole } from '../../lib/api'
 import { Spinner } from '../ui/Spinner'
 import { useNotification } from '../../context/NotificationContext'
@@ -47,6 +47,15 @@ export function AdminRolesPage() {
     queryFn: fetchRoles,
     staleTime: 30_000,
   })
+
+  const { data: hiddenPerms = [] } = useQuery({
+    queryKey: ['admin', 'roles', 'hidden'],
+    queryFn: fetchHiddenPermissions,
+    staleTime: 5 * 60_000,
+  })
+  const permissionGroups = PERMISSION_GROUPS
+    .map((g) => ({ ...g, permissions: g.permissions.filter((p) => !hiddenPerms.includes(p)) }))
+    .filter((g) => g.permissions.length > 0)
 
   const selectedRole = roles.find((r) => r.id === selectedId) ?? null
 
@@ -334,7 +343,7 @@ export function AdminRolesPage() {
             </div>
 
             <div className="space-y-6">
-              {PERMISSION_GROUPS.map((group) => (
+              {permissionGroups.map((group) => (
                 <div key={group.key}>
                   <h3 className="text-[11px] font-semibold uppercase tracking-widest text-muted-foreground mb-3">
                     {t(group.labelKey)}
