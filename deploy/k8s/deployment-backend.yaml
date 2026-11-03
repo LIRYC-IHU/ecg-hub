@@ -4,7 +4,7 @@ metadata:
   name: backend
   namespace: ecg-hub
 spec:
-  replicas: 1
+  replicas: 2
   # Instance unique, et pas par prudence excessive :
   #   - les appareils sont configurés à la main avec une adresse, sans découverte
   #     de service côté appareil ;
