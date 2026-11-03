@@ -740,6 +740,13 @@ export async function fetchRoles(): Promise<AppRole[]> {
   return res.roles.map(roleFromProto);
 }
 
+/** Permissions of a feature this deployment does not run (device.* without
+ * DEVICE_WHITELIST=true). The Roles screen does not offer them. */
+export async function fetchHiddenPermissions(): Promise<string[]> {
+  const res = await adminClient.listRoles({});
+  return res.hiddenPermissions;
+}
+
 export async function createRole(
   name: string,
   description: string,

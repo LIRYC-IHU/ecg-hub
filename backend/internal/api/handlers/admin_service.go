@@ -250,9 +250,44 @@ func (h *AdminServiceHandler) ListRoles(ctx context.Context, _ *apiv1.ListRolesR
 	}
 	out := make([]*apiv1.Role, len(roles))
 	for i := range roles {
+		roles[i].Permissions = h.visible(roles[i].Permissions)
 		out[i] = roleToProto(&roles[i])
 	}
-	return &apiv1.ListRolesResponse{Roles: out, Total: int32(len(out))}, nil
+	return &apiv1.ListRolesResponse{Roles: out, Total: int32(len(out)),
+		HiddenPermissions: h.Checker.Hidden()}, nil
+}
+
+// visible drops the hidden permissions (see auth.PermissionChecker.Hide).
+func (h *AdminServiceHandler) visible(perms []string) []string {
+	out := make([]string, 0, len(perms))
+	for _, p := range perms {
+		if !h.Checker.IsHidden(p) {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// keepHidden returns perms plus the hidden permissions role id already holds.
+// The Roles screen never sees those, so saving a role must not drop them —
+// otherwise turning the feature back on would find them gone.
+func (h *AdminServiceHandler) keepHidden(ctx context.Context, id string, perms []string) ([]string, error) {
+	roles, err := h.RoleRepo.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := h.visible(perms)
+	for _, r := range roles {
+		if r.ID != id {
+			continue
+		}
+		for _, p := range r.Permissions {
+			if h.Checker.IsHidden(p) {
+				out = append(out, p)
+			}
+		}
+	}
+	return out, nil
 }
 
 func (h *AdminServiceHandler) CreateRole(ctx context.Context, req *apiv1.CreateRoleRequest) (*apiv1.CreateRoleResponse, error) {
@@ -262,6 +297,7 @@ func (h *AdminServiceHandler) CreateRole(ctx context.Context, req *apiv1.CreateR
 	if err := validatePermissions(req.Permissions); err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
+	req.Permissions = h.visible(req.Permissions)
 	role, err := h.RoleRepo.Create(ctx, req.Name, req.Description, req.Permissions)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeAlreadyExists, err)
@@ -297,7 +333,11 @@ func (h *AdminServiceHandler) UpdateRole(ctx context.Context, req *apiv1.UpdateR
 				errors.New("at least one role must keep the admin.roles permission"))
 		}
 	}
-	if err := h.RoleRepo.Update(ctx, req.Id, req.Description, req.Permissions); err != nil {
+	perms, err := h.keepHidden(ctx, req.Id, req.Permissions)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	if err := h.RoleRepo.Update(ctx, req.Id, req.Description, perms); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	h.Checker.Invalidate(req.Name)

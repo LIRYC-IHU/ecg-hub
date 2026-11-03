@@ -69,6 +69,11 @@ var AllPermissions = []string{
 	PermDeviceManage,
 }
 
+// DevicePermissions gate the device whitelist. They only mean something when
+// the deployment runs it (DEVICE_WHITELIST=true); otherwise they are hidden —
+// see PermissionChecker.Hide.
+var DevicePermissions = []string{PermDeviceRead, PermDeviceManage}
+
 // PermissionChecker resolves a role name → set of permissions from the database.
 // Results are cached (see permCacheTTL) to avoid a DB round-trip on every request.
 type PermissionChecker struct {
@@ -76,6 +81,7 @@ type PermissionChecker struct {
 	adminRole string
 	mu        sync.RWMutex
 	cache     map[string]permEntry
+	hidden    map[string]bool
 }
 
 type permEntry struct {
@@ -96,6 +102,40 @@ func NewPermissionChecker(db *gorm.DB, adminRole string) *PermissionChecker {
 		adminRole: adminRole,
 		cache:     make(map[string]permEntry),
 	}
+}
+
+// Hide makes perms behave as if no role held them, for a feature this
+// deployment does not run. Nothing is removed from the database: the roles
+// keep them, and they come back as soon as the process starts without Hide.
+// Call at startup, before serving requests.
+func (p *PermissionChecker) Hide(perms ...string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.hidden == nil {
+		p.hidden = make(map[string]bool, len(perms))
+	}
+	for _, perm := range perms {
+		p.hidden[perm] = true
+	}
+	p.cache = make(map[string]permEntry)
+}
+
+// IsHidden reports whether perm was hidden with Hide.
+func (p *PermissionChecker) IsHidden(perm string) bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.hidden[perm]
+}
+
+// Hidden returns the hidden permissions, in AllPermissions order.
+func (p *PermissionChecker) Hidden() []string {
+	out := []string{}
+	for _, perm := range AllPermissions {
+		if p.IsHidden(perm) {
+			out = append(out, perm)
+		}
+	}
+	return out
 }
 
 // AdminRole returns the configured admin role name.
@@ -154,11 +194,12 @@ func (p *PermissionChecker) load(ctx context.Context, role string) map[string]bo
 	}
 
 	perms := make(map[string]bool, len(rows))
-	for _, r := range rows {
-		perms[r.Permission] = true
-	}
-
 	p.mu.Lock()
+	for _, r := range rows {
+		if !p.hidden[r.Permission] {
+			perms[r.Permission] = true
+		}
+	}
 	p.cache[role] = permEntry{perms: perms, expiresAt: time.Now().Add(permCacheTTL)}
 	p.mu.Unlock()
 	return perms
