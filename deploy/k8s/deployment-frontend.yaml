@@ -6,7 +6,7 @@ metadata:
 spec:
   # Sans état : la SPA et le proxy inverse. Deux réplicas tolèrent la perte d'un
   # nœud sans couper l'interface, alors que le backend ne le permet pas.
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: frontend
