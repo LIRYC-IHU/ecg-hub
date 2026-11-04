@@ -1,0 +1,29 @@
+# Nom imposé : nginx proxifie vers « backend:4444 », en dur dans sa
+# configuration. Renommer ce Service casse l'interface — d'où des noms fixes,
+# et une seule release par namespace.
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  labels:
+    {{- include "ecg-hub.labels" . | nindent 4 }}
+spec:
+  selector:
+    app: backend
+  ports:
+    - { name: http, port: 4444, targetPort: 4444 }
+    {{- if .Values.backend.metrics.enabled }}
+    - { name: metrics, port: {{ .Values.backend.metrics.port }}, targetPort: {{ .Values.backend.metrics.port }} }
+    {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  labels:
+    {{- include "ecg-hub.labels" . | nindent 4 }}
+spec:
+  selector:
+    app: frontend
+  ports:
+    - { name: http, port: 80, targetPort: 80 }

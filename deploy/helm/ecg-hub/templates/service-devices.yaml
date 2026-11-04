@@ -1,0 +1,40 @@
+{{- $d := .Values.devices }}
+{{- $p := $d.ftp.passive }}
+{{- if gt (int $p.start) (int $p.end) }}{{ fail "devices.ftp.passive.start must be <= end" }}{{ end }}
+{{- $published := list (int $d.ftp.port) (int $d.dicom.port) (int $d.ectp.port) }}
+{{- if $d.adt.enabled }}{{ $published = append $published (int $d.adt.port) }}{{ end }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: devices
+  labels:
+    {{- include "ecg-hub.labels" . | nindent 4 }}
+  annotations:
+    # spec.loadBalancerIP est déprécié depuis Kubernetes 1.24 : l'annotation est
+    # la forme à utiliser avec MetalLB.
+    {{- with $d.loadBalancerIP }}
+    metallb.io/loadBalancerIPs: {{ . }}
+    {{- end }}
+    {{- with $d.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  type: LoadBalancer
+  # MetalLB route l'IP directement vers les pods : des NodePort ne serviraient
+  # à rien, et la plage passive en consommerait une centaine.
+  allocateLoadBalancerNodePorts: false
+  externalTrafficPolicy: {{ $d.externalTrafficPolicy }}
+  selector:
+    app: backend
+  ports:
+    - { name: ftp-ctl, port: {{ $d.ftp.port }}, targetPort: 2121 }
+    - { name: dicom, port: {{ $d.dicom.port }}, targetPort: 4242 }
+    - { name: ectp, port: {{ $d.ectp.port }}, targetPort: 30003 }
+    {{- if $d.adt.enabled }}
+    - { name: adt, port: {{ $d.adt.port }}, targetPort: 2576 }
+    {{- end }}
+    {{- range $port := untilStep (int $p.start) (add1 (int $p.end) | int) 1 }}
+    {{- if not (has $port $published) }}
+    - { name: pasv-{{ $port }}, port: {{ $port }}, targetPort: {{ $port }} }
+    {{- end }}
+    {{- end }}

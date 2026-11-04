@@ -1,0 +1,5 @@
+# Valeurs propres à un site : jamais dans le paquet du chart.
+values.local.yaml
+*.local.yaml
+.claude-flow/
+*.tmp.*

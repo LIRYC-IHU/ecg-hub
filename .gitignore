@@ -190,3 +190,7 @@ docker-compose.dev.override.yml
 # `go install` depuis ce depot public (voir backend/Dockerfile), jamais depuis
 # cet arbre local : il n'a pas a etre suivi ici.
 backend/converter-fda/
+
+# Kubernetes : secrets réels et valeurs Helm locales, jamais suivis.
+deploy/k8s/secret.yaml
+deploy/helm/**/values.local.yaml

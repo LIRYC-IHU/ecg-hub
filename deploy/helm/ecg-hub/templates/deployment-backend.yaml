@@ -1,0 +1,126 @@
+{{- $b := .Values.backend }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  labels:
+    {{- include "ecg-hub.labels" . | nindent 4 }}
+spec:
+  # Voir backend.replicas dans values.yaml : au-delà de 1, le FTP passif casse.
+  replicas: {{ $b.replicas }}
+  # Recreate : deux pods simultanés se disputeraient le volume ReadWriteOnce et
+  # casseraient les transferts FTP en cours.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+      annotations:
+        # Le backend ne lit config.yaml qu'au démarrage : un contenu modifié
+        # doit produire un nouveau pod.
+        checksum/config: {{ include "ecg-hub.config" . | sha256sum }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      terminationGracePeriodSeconds: {{ $b.terminationGracePeriodSeconds }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        # Les volumes NFS arrivent avec les droits du serveur : fsGroup aligne le
+        # groupe propriétaire sur celui du processus.
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: backend
+          image: "{{ $b.image.repository }}:{{ $b.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ $b.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: [ALL]
+          ports:
+            # Informatif : le routage passe par les Services. La plage passive
+            # n'est énumérée que dans service-devices.yaml, où elle compte.
+            - { name: http, containerPort: 4444 }
+            - { name: ftp-ctl, containerPort: 2121 }
+            - { name: dicom, containerPort: 4242 }
+            - { name: ectp, containerPort: 30003 }
+            {{- if $b.metrics.enabled }}
+            - { name: metrics, containerPort: {{ $b.metrics.port }} }
+            {{- end }}
+          env:
+            - name: DATABASE_URL
+              valueFrom: { secretKeyRef: { name: {{ .Values.secret.name }}, key: DATABASE_URL } }
+            - name: JWT_SECRET
+              valueFrom: { secretKeyRef: { name: {{ .Values.secret.name }}, key: JWT_SECRET } }
+            - name: AUTH_ENCRYPTION_KEY
+              valueFrom: { secretKeyRef: { name: {{ .Values.secret.name }}, key: AUTH_ENCRYPTION_KEY } }
+            # APP_ENV n'est PAS défini : toute valeur autre que development/dev/
+            # test/local vaut production, où s'appliquent les contrôles de
+            # robustesse des secrets.
+            - { name: HOST_URL, value: {{ $b.hostUrl | quote }} }
+            - { name: LOG_LEVEL, value: {{ $b.logLevel | quote }} }
+            - { name: CONFIG_PATH, value: "/app/config.yaml" }
+            - { name: METRICS_ENABLED, value: {{ $b.metrics.enabled | quote }} }
+            - { name: METRICS_PORT, value: {{ $b.metrics.port | quote }} }
+            # Toujours false en Kubernetes, pas une valeur du chart : voir
+            # README.md, « Identification des appareils par adresse MAC ».
+            - { name: DEVICE_WHITELIST, value: "false" }
+            # Identifiants S3 seulement : le code refuse de les lire depuis
+            # config.yaml, qui est un ConfigMap en clair.
+            - name: S3_ACCESS_KEY
+              valueFrom: { secretKeyRef: { name: {{ .Values.secret.name }}, key: S3_ACCESS_KEY, optional: true } }
+            - name: S3_SECRET_KEY
+              valueFrom: { secretKeyRef: { name: {{ .Values.secret.name }}, key: S3_SECRET_KEY, optional: true } }
+            {{- with $b.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          volumeMounts:
+            - { name: config, mountPath: /app/config.yaml, subPath: config.yaml, readOnly: true }
+            - { name: ecg, mountPath: /data/ecg }
+            - { name: quarantine, mountPath: /data/ecg-quarantine }
+          # TCP et non HTTP : /healthz est un handler Connect qui répond sur
+          # POST. Un httpGet recevrait 405 et ferait boucler un pod sain.
+          readinessProbe:
+            tcpSocket: { port: 4444 }
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket: { port: 4444 }
+            # Migrations de schéma au démarrage : laisser le temps.
+            initialDelaySeconds: 60
+            periodSeconds: 20
+            failureThreshold: 3
+          resources:
+            {{- toYaml $b.resources | nindent 12 }}
+      {{- with $b.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $b.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with $b.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+        - name: config
+          configMap: { name: ecg-hub-config }
+        {{- range $name := list "ecg" "quarantine" }}
+        - name: {{ $name }}
+          {{- if eq $.Values.persistence.mode "emptyDir" }}
+          emptyDir: { sizeLimit: {{ (index $.Values.persistence $name).size }} }
+          {{- else }}
+          persistentVolumeClaim: { claimName: {{ include "ecg-hub.claim" (dict "root" $ "name" $name) }} }
+          {{- end }}
+        {{- end }}

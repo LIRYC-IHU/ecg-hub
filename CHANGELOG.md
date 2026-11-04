@@ -7,6 +7,17 @@ All notable changes to this project are documented here. Versions follow
 
 ### Added
 
+- Helm chart for Kubernetes, `deploy/helm/ecg-hub`, validated on a live
+  cluster (fresh install, reinstall over existing NFS volumes). Storage is
+  dynamic PVCs, static NFS volumes, existing claims, or `emptyDir` when files
+  go to S3 (the volumes are then only the upload spool; refused in local
+  mode). The FTP passive range is generated from `devices.ftp.passive`,
+  skipping ports already published. The application Secret and the namespace
+  are created outside the chart. The backend runs one replica, since a
+  passive FTP data connection must reach the pod that holds its control
+  connection, and `DEVICE_WHITELIST` is always off: MAC identification needs
+  layer-2 adjacency that a cluster does not give.
+
 - The ECG viewer says why it cannot draw a waveform. An Ambulatory recording,
   a partial General ECG or a hemodynamic, respiratory or audio object is stored
   and forwarded like any other, but the viewer is built for the 12 standard
@@ -51,6 +62,12 @@ All notable changes to this project are documented here. Versions follow
   items of Annex D of the conformance statement).
 
 ### Fixed
+
+- **An FTP client could stop the whole server with one command.** `AUTH TLS`
+  sent to a server started without a certificate panicked the TLS handshake on
+  the client's own goroutine, which killed the process, and the container
+  restarted under it. `AUTH` is answered before login, so no credentials were
+  needed. The command is now refused when `ftp.tls` is off.
 
 - The wrong-patient check now works for DICOM files. Assigning an unidentified
   ECG compares the file's name, birth date and sex with the chosen patient,

@@ -1,0 +1,59 @@
+{{- $mode := .Values.persistence.mode }}
+{{- if not (has $mode (list "nfs" "storageClass" "existingClaim" "emptyDir")) }}
+{{- fail "persistence.mode must be nfs, storageClass, existingClaim or emptyDir" }}
+{{- end }}
+{{- if and (eq $mode "emptyDir") (not (regexMatch "(?m)^\\s*backend:\\s*\"?s3" (include "ecg-hub.config" .))) }}
+{{- fail "persistence.mode emptyDir requires storage.backend: s3 in config — in local mode the ECG files would be lost at every pod restart" }}
+{{- end }}
+{{- if not (has $mode (list "existingClaim" "emptyDir")) }}
+{{- range $name := list "ecg" "quarantine" }}
+{{- $v := index $.Values.persistence $name }}
+{{- if eq $mode "nfs" }}
+# PV statique : ce cluster n'a aucune StorageClass, un PVC sans PV reste
+# Pending. PodSecurity baseline interdit hostPath. Le processus tourne en
+# uid/gid 10001 ; le fsGroup du pod aligne le groupe propriétaire.
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: ecg-hub-{{ $name }}
+  labels:
+    {{- include "ecg-hub.labels" $ | nindent 4 }}
+  annotations:
+    # Un PV de données cliniques survit à la désinstallation du chart.
+    helm.sh/resource-policy: keep
+spec:
+  capacity:
+    storage: {{ $v.size }}
+  # RWO et non RWX : l'application tourne en instance unique, et RWO rend une
+  # erreur de configuration visible plutôt que silencieuse.
+  accessModes: [ReadWriteOnce]
+  persistentVolumeReclaimPolicy: {{ $.Values.persistence.reclaimPolicy }}
+  # Chaîne vide : empêche l'attribution d'une StorageClass par défaut.
+  storageClassName: ""
+  nfs:
+    server: {{ required (printf "persistence.%s.nfs.server is required" $name) $v.nfs.server }}
+    path: {{ required (printf "persistence.%s.nfs.path is required" $name) $v.nfs.path }}
+---
+{{- end }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ecg-hub-{{ $name }}
+  labels:
+    {{- include "ecg-hub.labels" $ | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes: [ReadWriteOnce]
+  {{- if eq $mode "nfs" }}
+  storageClassName: ""
+  volumeName: ecg-hub-{{ $name }}
+  {{- else if $v.storageClass }}
+  storageClassName: {{ $v.storageClass }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ $v.size }}
+---
+{{- end }}
+{{- end }}
