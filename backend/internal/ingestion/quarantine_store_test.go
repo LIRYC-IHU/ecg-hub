@@ -125,7 +125,7 @@ func TestQuarantineStore_WriteFileStaysInDirectory(t *testing.T) {
 		"a/b/escaped.xml",
 		"..",
 	} {
-		dst := s.writeFile(name, []byte("x"))
+		dst := s.writeFile(context.Background(), name, []byte("x"))
 		if dst == "" {
 			continue // refusing outright is an acceptable outcome
 		}

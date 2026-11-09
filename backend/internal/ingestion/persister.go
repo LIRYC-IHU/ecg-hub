@@ -18,6 +18,7 @@ import (
 	"github.com/LIRYC-IHU/ecg-hub/internal/events"
 	appmetrics "github.com/LIRYC-IHU/ecg-hub/internal/metrics"
 	"github.com/LIRYC-IHU/ecg-hub/internal/module"
+	"github.com/LIRYC-IHU/ecg-hub/internal/storage"
 )
 
 func marshalJSON(v any) (datatypes.JSON, error) {
@@ -29,8 +30,8 @@ func marshalJSON(v any) (datatypes.JSON, error) {
 type fileWriter interface {
 	Write(filename string, data []byte) (string, error)
 	Exists(filename string) bool
-	WriteForPatient(patientID, filename string, data []byte) (string, error)
-	ExistsForPatient(patientID, filename string) bool
+	WriteForPatient(dir, patientID, filename string, data []byte) (string, error)
+	ExistsForPatient(dir, patientID, filename string) bool
 	GetPath(filename string) string
 }
 
@@ -321,14 +322,15 @@ func (p *Persister) persist(ri RoutedItem) error {
 		patientID = stem
 	}
 	base := BuildBaseName(patientID, ri.Meta.RecordedAt, ri.Meta.VendorName)
+	tenantDir := storage.TenantDir(ctx)
 	existsFn := func(filename string) bool {
-		return p.volume.ExistsForPatient(patientID, filename)
+		return p.volume.ExistsForPatient(tenantDir, patientID, filename)
 	}
 	filename := UniqueFilename(base, ext, existsFn)
 
-	// Store under <patientID>/<filename> for organised on-disk layout.
+	// Store under [<tenant>/]<patientID>/<filename> for organised on-disk layout.
 	// relPath is stored in DB (relative to volume root); it is portable across volume remounts.
-	fullPath, err := p.volume.WriteForPatient(patientID, filename, ri.IngestItem.Data)
+	fullPath, err := p.volume.WriteForPatient(tenantDir, patientID, filename, ri.IngestItem.Data)
 	if err != nil {
 		return fmt.Errorf("persister: write file: %w", err)
 	}

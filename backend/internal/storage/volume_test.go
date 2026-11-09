@@ -82,7 +82,7 @@ func TestWriteForPatientContainsBothComponents(t *testing.T) {
 		{"dot dot patient id", "..", "f.xml"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			rel, err := v.WriteForPatient(tc.patientID, tc.filename, []byte("x"))
+			rel, err := v.WriteForPatient("", tc.patientID, tc.filename, []byte("x"))
 			if err != nil {
 				return // refusing outright is an acceptable outcome
 			}
@@ -111,13 +111,34 @@ func TestWriteForPatientContainsBothComponents(t *testing.T) {
 func TestExistsForPatientMatchesWritePath(t *testing.T) {
 	v := NewVolume(t.TempDir())
 	const pid, name = "a/b", "../f.xml"
-	if v.ExistsForPatient(pid, name) {
+	if v.ExistsForPatient("", pid, name) {
 		t.Fatal("reported existing before the write")
 	}
-	if _, err := v.WriteForPatient(pid, name, []byte("x")); err != nil {
+	if _, err := v.WriteForPatient("", pid, name, []byte("x")); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	if !v.ExistsForPatient(pid, name) {
+	if !v.ExistsForPatient("", pid, name) {
 		t.Error("write succeeded but ExistsForPatient resolves elsewhere")
+	}
+}
+
+// In multi-tenant mode files go under the tenant's directory, and a tenant id
+// cannot climb out of the volume any more than a patient id can.
+func TestWriteForPatientUnderTenantDir(t *testing.T) {
+	root := t.TempDir()
+	v := NewVolume(root)
+	rel, err := v.WriteForPatient("tenant-b", "P1", "a.xml", []byte("x"))
+	if err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	if want := filepath.Join("tenant-b", "P1", "a.xml"); rel != want {
+		t.Errorf("relative path %q, want %q", rel, want)
+	}
+	if !v.ExistsForPatient("tenant-b", "P1", "a.xml") || v.ExistsForPatient("", "P1", "a.xml") {
+		t.Error("ExistsForPatient does not follow the tenant directory")
+	}
+	rel, err = v.WriteForPatient("../../escape", "P1", "b.xml", []byte("x"))
+	if err == nil && !filepath.IsLocal(rel) {
+		t.Errorf("tenant directory climbed out: %q", rel)
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"time"
 
 	"gorm.io/datatypes"
@@ -69,7 +70,7 @@ func (s *QuarantineStore) Record(ctx context.Context, filename string, data []by
 		return existing, nil
 	}
 
-	filePath := s.writeFile(filename, data)
+	filePath := s.writeFile(ctx, filename, data)
 
 	entry := &models.QuarantineEntry{
 		Filename:    filename,
@@ -103,7 +104,7 @@ func (s *QuarantineStore) RecordUnidentified(ctx context.Context, item IngestIte
 		return existing, nil
 	}
 
-	filePath := s.writeFile(item.Filename, item.Data)
+	filePath := s.writeFile(ctx, item.Filename, item.Data)
 
 	entry := &models.QuarantineEntry{
 		Filename:    item.Filename,
@@ -177,12 +178,16 @@ func hashBytes(data []byte) string {
 
 // writeFile writes data to the quarantine directory and returns the destination
 // path, or "" when the directory is not configured or the write fails.
-func (s *QuarantineStore) writeFile(filename string, data []byte) string {
+func (s *QuarantineStore) writeFile(ctx context.Context, filename string, data []byte) string {
 	if s.dir == "" {
 		return ""
 	}
-	if err := os.MkdirAll(s.dir, 0o755); err != nil {
-		slog.Warn("quarantine: cannot create directory", "dir", s.dir, "error", err)
+	dir := s.dir
+	if t := storage.TenantDir(ctx); t != "" {
+		dir = filepath.Join(s.dir, storage.SafeName(t)) // one prefix per tenant
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		slog.Warn("quarantine: cannot create directory", "dir", dir, "error", err)
 		return ""
 	}
 	// The name comes from the upload, and this path handles files that already
@@ -190,7 +195,7 @@ func (s *QuarantineStore) writeFile(filename string, data []byte) string {
 	// timestamp prefix does not contain it: filepath.Join normalises the result,
 	// so separators inside the name would still climb out of s.dir.
 	stamp := time.Now().UTC().Format("20060102_150405.000")
-	dst, err := storage.EnsureWithin(s.dir, storage.SafeName(fmt.Sprintf("%s_%s", stamp, filename)))
+	dst, err := storage.EnsureWithin(dir, storage.SafeName(fmt.Sprintf("%s_%s", stamp, filename)))
 	if err != nil {
 		slog.Warn("quarantine: refusing unsafe destination", "filename", filename, "error", err)
 		return ""

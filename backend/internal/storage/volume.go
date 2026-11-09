@@ -41,18 +41,19 @@ func (v *Volume) GetPath(filename string) string {
 	return filepath.Join(v.basePath, filename)
 }
 
-// WriteForPatient stores the file under basePath/<patientID>/filename.
-// Creates the patient subdirectory if it does not exist.
+// WriteForPatient stores the file under basePath/[<dir>/]<patientID>/filename.
+// dir is the tenant directory in multi-tenant mode (see TenantDir), "" otherwise.
+// Creates the subdirectories if they do not exist.
 // Returns the path relative to basePath (e.g. "P001/ecg_2026-01-01.xml") stored in DB.
-func (v *Volume) WriteForPatient(patientID, filename string, data []byte) (string, error) {
+func (v *Volume) WriteForPatient(dir, patientID, filename string, data []byte) (string, error) {
 	start := time.Now()
-	// Both components are attacker-reachable: patientID comes from parsed file
+	// Every component is sanitised on its own: patientID comes from parsed file
 	// metadata, and filename is built from that same identifier by the ingestion
 	// naming code -- so sanitising only the directory left the identifier free to
 	// climb out through the name joined to it.
-	safeDir, safeName := SafeName(patientID), SafeName(filename)
+	parts := patientParts(dir, patientID, filename)
 
-	fullPath, err := EnsureWithin(v.basePath, safeDir, safeName)
+	fullPath, err := EnsureWithin(v.basePath, parts...)
 	if err != nil {
 		return "", err
 	}
@@ -64,19 +65,27 @@ func (v *Volume) WriteForPatient(patientID, filename string, data []byte) (strin
 	}
 	appmetrics.StorageOpDuration.WithLabelValues("write").Observe(time.Since(start).Seconds())
 	// Return path relative to volume root so it is portable (volume mount can change).
-	return filepath.Join(safeDir, safeName), nil
+	return filepath.Join(parts...), nil
 }
 
-// ExistsForPatient reports whether basePath/<patientID>/filename exists.
-func (v *Volume) ExistsForPatient(patientID, filename string) bool {
+// ExistsForPatient reports whether basePath/[<dir>/]<patientID>/filename exists.
+func (v *Volume) ExistsForPatient(dir, patientID, filename string) bool {
 	// Must mirror WriteForPatient exactly: this decides whether a name is free,
 	// and a mismatch would silently overwrite an existing ECG.
-	path, err := EnsureWithin(v.basePath, SafeName(patientID), SafeName(filename))
+	path, err := EnsureWithin(v.basePath, patientParts(dir, patientID, filename)...)
 	if err != nil {
 		return false
 	}
 	_, err = os.Stat(path)
 	return err == nil
+}
+
+func patientParts(dir, patientID, filename string) []string {
+	parts := []string{SafeName(patientID), SafeName(filename)}
+	if dir != "" {
+		parts = append([]string{SafeName(dir)}, parts...)
+	}
+	return parts
 }
 
 // Exists reports whether basePath/filename exists on disk (supports relative sub-paths).

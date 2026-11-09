@@ -38,7 +38,7 @@ func (m *mockVolume) Exists(filename string) bool {
 	return m.existing[filename]
 }
 
-func (m *mockVolume) WriteForPatient(patientID, filename string, data []byte) (string, error) {
+func (m *mockVolume) WriteForPatient(_, patientID, filename string, data []byte) (string, error) {
 	if m.writeErr != nil {
 		return "", m.writeErr
 	}
@@ -50,7 +50,7 @@ func (m *mockVolume) WriteForPatient(patientID, filename string, data []byte) (s
 	return key, nil
 }
 
-func (m *mockVolume) ExistsForPatient(patientID, filename string) bool {
+func (m *mockVolume) ExistsForPatient(_, patientID, filename string) bool {
 	return m.existing[patientID+"/"+filename]
 }
 
