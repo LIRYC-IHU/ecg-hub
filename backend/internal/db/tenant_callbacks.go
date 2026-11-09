@@ -3,9 +3,11 @@ package db
 import (
 	"log/slog"
 	"reflect"
+	"runtime"
+	"strconv"
+	"strings"
 
 	"gorm.io/gorm"
-	"gorm.io/gorm/utils"
 
 	"github.com/LIRYC-IHU/ecg-hub/internal/tenancy"
 )
@@ -89,5 +91,21 @@ func checkScope(tx *gorm.DB) {
 		return
 	}
 	slog.Error("tenancy: database call without a tenant — it matches no row",
-		"table", tx.Statement.Table, "caller", utils.FileWithLineNum())
+		"table", tx.Statement.Table, "caller", callerOutsideDB())
+}
+
+// callerOutsideDB returns the first stack frame outside GORM and this
+// package's database layer: the code that forgot to pass its context.
+func callerOutsideDB() string {
+	pcs := make([]uintptr, 32)
+	frames := runtime.CallersFrames(pcs[:runtime.Callers(2, pcs)])
+	for {
+		f, more := frames.Next()
+		if !strings.Contains(f.File, "gorm.io/") && !strings.Contains(f.File, "/internal/db/") {
+			return f.File + ":" + strconv.Itoa(f.Line)
+		}
+		if !more {
+			return "unknown"
+		}
+	}
 }

@@ -10,6 +10,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
+	"github.com/LIRYC-IHU/ecg-hub/internal/tenancy"
 )
 
 // WriteAuditLog inserts an entry into the audit_logs table.
@@ -43,6 +44,12 @@ func WriteAuditLog(ctx context.Context, db *gorm.DB, userID, action, resourceID 
 		Action:     action,
 		ResourceID: resourceID,
 		Details:    datatypes.JSON(raw),
+	}
+	// An event recorded before the caller has a tenant (login success or
+	// failure, setup) belongs to the platform trail: the default tenant, in
+	// system scope. Otherwise Row Level Security would refuse the row.
+	if _, ok := tenancy.ID(ctx); !ok && !tenancy.IsSystem(ctx) {
+		ctx = tenancy.System(ctx)
 	}
 	if err := db.WithContext(ctx).Create(&entry).Error; err != nil {
 		slog.Error("audit: write log failed", "action", action, "user_id", userID, "resource_id", resourceID, "error", err)
