@@ -65,7 +65,7 @@ func (h *TenantServiceHandler) ListTenants(ctx context.Context, _ *apiv1.ListTen
 	for i, r := range rows {
 		out[i] = r.proto()
 	}
-	return &apiv1.ListTenantsResponse{Tenants: out}, nil
+	return &apiv1.ListTenantsResponse{Tenants: out, MultiTenantEnabled: tenancy.Enabled()}, nil
 }
 
 func (h *TenantServiceHandler) CreateTenant(ctx context.Context, req *apiv1.CreateTenantRequest) (*apiv1.CreateTenantResponse, error) {

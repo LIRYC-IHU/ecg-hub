@@ -588,6 +588,27 @@
       "added": "Appareil ajouté et approuvé.",
       "mac": "Adresse MAC",
       "unavailable": "La whitelist d'appareils ne tourne pas sur ce déploiement. Elle identifie le matériel par l'adresse MAC derrière chaque connexion, lue dans le cache ARP, qui ne se résout que pour un appareil sur le segment réseau du serveur — un conteneur sur un réseau bridge voit les autres conteneurs et jamais un appareil. Elle nécessite le réseau host (docker-compose.host.yml) avec DEVICE_WHITELIST=true. D'ici là ces réglages sont en lecture seule, car le serveur ne les appliquerait pas."
+    },
+    "tenants": {
+      "title": "Tenants",
+      "subtitle": "Cabinets qui partagent ce déploiement. Le slug doit être l'alias de l'organisation Keycloak du cabinet.",
+      "create": "Nouveau tenant",
+      "created": "Tenant {{slug}} créé",
+      "createError": "Impossible de créer le tenant",
+      "slug": "Slug",
+      "slugHelp": "Minuscules, chiffres et tirets. Même valeur que l'alias de l'organisation Keycloak.",
+      "name": "Nom",
+      "users": "Utilisateurs",
+      "ecgs": "ECG",
+      "createdAt": "Créé le",
+      "platform": "Plateforme",
+      "delete": "Supprimer le tenant {{slug}}",
+      "deleteWarning": "Supprime {{ecgs}} ECG, {{users}} utilisateurs et tous les fichiers, tags, webhooks et clés API de ce tenant. Le journal d'audit est conservé. Irréversible : exportez d'abord les données du cabinet.",
+      "typeSlug": "Tapez {{slug}} pour confirmer",
+      "deleteConfirm": "Supprimer définitivement",
+      "deleted": "Tenant {{slug}} supprimé : {{ecgs}} ECG, {{files}} fichiers supprimés, {{failed}} restants (voir les logs du serveur)",
+      "deleteError": "Impossible de supprimer le tenant",
+      "modeOff": "Le mode multi-tenant est coupé (tenancy.enabled dans config.yaml). Les tenants peuvent être préparés ici, mais toute connexion reste dans le tenant plateforme tant qu'il n'est pas activé."
     }
   },
   "quarantine": {
@@ -661,7 +682,8 @@
     "quarantine": "Quarantaine",
     "apiKeys": "Clés API",
     "webhooks": "Webhooks",
-    "devices": "Appareils"
+    "devices": "Appareils",
+    "tenants": "Tenants"
   },
   "apiKeys": {
     "title": "Clés API",

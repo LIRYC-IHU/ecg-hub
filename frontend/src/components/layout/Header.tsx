@@ -30,6 +30,7 @@ const BREADCRUMBS: Record<string, string> = {
   "/": "nav.patients",
   "/app-users": "nav.appUsers",
   "/roles": "nav.roles",
+  "/tenants": "nav.tenants",
   "/audit": "nav.audit",
   "/system": "nav.system",
   "/modules-config": "nav.modulesConfig",

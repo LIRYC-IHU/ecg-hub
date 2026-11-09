@@ -22,6 +22,7 @@ import {
   sessionClient,
   setupClient,
   tagClient,
+  tenantClient,
   webhookClient,
 } from "./grpc";
 import type { Ecg as EcgProto } from "../gen/v1/ecg_pb";
@@ -2211,5 +2212,59 @@ export async function fetchTLSStatus(): Promise<TLSStatusDTO> {
     subject: s.subject,
     notAfter: s.notAfter,
     error: s.error,
+  };
+}
+
+// ── Tenants (multi-tenant mode) ──────────────────────────────────────────────
+
+export interface Tenant {
+  id: string;
+  slug: string;
+  name: string;
+  createdAt: string;
+  userCount: number;
+  ecgCount: number;
+  isDefault: boolean;
+}
+
+export interface TenantList {
+  tenants: Tenant[];
+  multiTenantEnabled: boolean;
+}
+
+function tenantFromProto(t: import("../gen/v1/tenant_pb").Tenant): Tenant {
+  return {
+    id: t.id,
+    slug: t.slug,
+    name: t.name,
+    createdAt: t.createdAt,
+    userCount: Number(t.userCount),
+    ecgCount: Number(t.ecgCount),
+    isDefault: t.isDefault,
+  };
+}
+
+export async function fetchTenants(): Promise<TenantList> {
+  const res = await tenantClient.listTenants({});
+  return { tenants: res.tenants.map(tenantFromProto), multiTenantEnabled: res.multiTenantEnabled };
+}
+
+export async function createTenant(slug: string, name: string): Promise<Tenant> {
+  const res = await tenantClient.createTenant({ slug, name });
+  return tenantFromProto(res.tenant!);
+}
+
+export interface TenantDeletion {
+  ecgsDeleted: number;
+  filesRemoved: number;
+  filesFailed: number;
+}
+
+export async function deleteTenant(id: string, confirmSlug: string): Promise<TenantDeletion> {
+  const res = await tenantClient.deleteTenant({ id, confirmSlug });
+  return {
+    ecgsDeleted: Number(res.ecgsDeleted),
+    filesRemoved: Number(res.filesRemoved),
+    filesFailed: Number(res.filesFailed),
   };
 }

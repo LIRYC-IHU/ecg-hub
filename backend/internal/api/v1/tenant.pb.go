@@ -152,10 +152,13 @@ func (*ListTenantsRequest) Descriptor() ([]byte, []int) {
 }
 
 type ListTenantsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Tenants       []*Tenant              `protobuf:"bytes,1,rep,name=tenants,proto3" json:"tenants,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Tenants []*Tenant              `protobuf:"bytes,1,rep,name=tenants,proto3" json:"tenants,omitempty"`
+	// Whether the deployment runs in multi-tenant mode (tenancy.enabled).
+	// Off, tenants can still be listed, but logins never leave the default one.
+	MultiTenantEnabled bool `protobuf:"varint,2,opt,name=multi_tenant_enabled,json=multiTenantEnabled,proto3" json:"multi_tenant_enabled,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *ListTenantsResponse) Reset() {
@@ -193,6 +196,13 @@ func (x *ListTenantsResponse) GetTenants() []*Tenant {
 		return x.Tenants
 	}
 	return nil
+}
+
+func (x *ListTenantsResponse) GetMultiTenantEnabled() bool {
+	if x != nil {
+		return x.MultiTenantEnabled
+	}
+	return false
 }
 
 type CreateTenantRequest struct {
@@ -423,9 +433,10 @@ const file_v1_tenant_proto_rawDesc = "" +
 	"\tecg_count\x18\x06 \x01(\x03R\becgCount\x12\x1d\n" +
 	"\n" +
 	"is_default\x18\a \x01(\bR\tisDefault\"\x14\n" +
-	"\x12ListTenantsRequest\"D\n" +
+	"\x12ListTenantsRequest\"v\n" +
 	"\x13ListTenantsResponse\x12-\n" +
-	"\atenants\x18\x01 \x03(\v2\x13.grpc.api.v1.TenantR\atenants\"=\n" +
+	"\atenants\x18\x01 \x03(\v2\x13.grpc.api.v1.TenantR\atenants\x120\n" +
+	"\x14multi_tenant_enabled\x18\x02 \x01(\bR\x12multiTenantEnabled\"=\n" +
 	"\x13CreateTenantRequest\x12\x12\n" +
 	"\x04slug\x18\x01 \x01(\tR\x04slug\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\"C\n" +

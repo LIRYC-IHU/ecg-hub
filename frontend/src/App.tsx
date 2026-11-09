@@ -15,6 +15,7 @@ import {
   Palette,
   UploadCloud,
   HardDrive,
+  Building2,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Spinner } from "./components/ui/Spinner";
@@ -38,6 +39,7 @@ import { AdminDevicesPage } from "./components/admin/AdminDevicesPage";
 import { AdminModulesPage } from "./components/admin/AdminModulesPage";
 import { AdminHL7Page } from "./components/admin/AdminHL7Page";
 import { AdminBrandingPage } from "./components/admin/AdminBrandingPage";
+import { AdminTenantsPage } from "./components/admin/AdminTenantsPage";
 import { ApiKeysPage } from "./components/settings/ApiKeysPage";
 import { ApiDocsPage } from "./components/docs/ApiDocsPage";
 import { WebhooksPage } from "./components/settings/WebhooksPage";
@@ -111,6 +113,8 @@ function App() {
     status === "authenticated" && hasPermission("admin.roles");
   const canViewBranding =
     status === "authenticated" && hasPermission("admin.branding");
+  const canManageTenants =
+    status === "authenticated" && hasPermission("tenant.manage");
   const canViewQuarantine =
     status === "authenticated" && hasPermission("quarantine.read");
   const canDeleteQuarantine =
@@ -185,6 +189,7 @@ function App() {
     canUpload && { to: "/uploads", icon: UploadCloud, labelKey: "nav.uploads" },
     canViewUsers && { to: "/app-users", icon: Users, labelKey: "nav.appUsers" },
     canViewRoles && { to: "/roles", icon: Shield, labelKey: "nav.roles" },
+    canManageTenants && { to: "/tenants", icon: Building2, labelKey: "nav.tenants" },
     canViewBranding && { to: "/branding", icon: Palette, labelKey: "nav.branding" },
     canViewAudit && { to: "/audit", icon: FileText, labelKey: "nav.audit" },
     canViewSystem && { to: "/system", icon: Server, labelKey: "nav.system" },
@@ -443,6 +448,16 @@ function App() {
                 element={
                   <div className="overflow-auto">
                     <AdminRolesPage />
+                  </div>
+                }
+              />
+            )}
+            {canManageTenants && (
+              <Route
+                path="/tenants"
+                element={
+                  <div className="overflow-auto">
+                    <AdminTenantsPage />
                   </div>
                 }
               />

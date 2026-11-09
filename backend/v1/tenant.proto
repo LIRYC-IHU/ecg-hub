@@ -21,6 +21,9 @@ message ListTenantsRequest {}
 
 message ListTenantsResponse {
   repeated Tenant tenants = 1;
+  // Whether the deployment runs in multi-tenant mode (tenancy.enabled).
+  // Off, tenants can still be listed, but logins never leave the default one.
+  bool multi_tenant_enabled = 2;
 }
 
 message CreateTenantRequest {

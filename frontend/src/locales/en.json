@@ -588,6 +588,27 @@
       "added": "Device added and approved.",
       "mac": "MAC address",
       "unavailable": "The device whitelist is not running on this deployment. It identifies hardware by the MAC address behind each connection, read from the ARP cache, which only resolves for a device on the server's own network segment — a container on a bridge network sees the other containers and never a device. It needs host networking (docker-compose.host.yml) with DEVICE_WHITELIST=true. Until then these settings are read-only, because the server would not apply them."
+    },
+    "tenants": {
+      "title": "Tenants",
+      "subtitle": "Practices sharing this deployment. The slug must equal the practice's Keycloak organization alias.",
+      "create": "New tenant",
+      "created": "Tenant {{slug}} created",
+      "createError": "Could not create the tenant",
+      "slug": "Slug",
+      "slugHelp": "Lowercase letters, digits and hyphens. Same value as the Keycloak organization alias.",
+      "name": "Name",
+      "users": "Users",
+      "ecgs": "ECGs",
+      "createdAt": "Created",
+      "platform": "Platform",
+      "delete": "Delete tenant {{slug}}",
+      "deleteWarning": "Deletes {{ecgs}} ECGs, {{users}} users and every file, tag, webhook and API key of this tenant. Audit entries are kept. This cannot be undone: export the practice's data first.",
+      "typeSlug": "Type {{slug}} to confirm",
+      "deleteConfirm": "Delete permanently",
+      "deleted": "Tenant {{slug}} deleted: {{ecgs}} ECGs, {{files}} files removed, {{failed}} left behind (see server logs)",
+      "deleteError": "Could not delete the tenant",
+      "modeOff": "Multi-tenant mode is off (tenancy.enabled in config.yaml). Tenants can be prepared here, but every login stays in the platform tenant until it is turned on."
     }
   },
   "quarantine": {
@@ -660,7 +681,8 @@
     "quarantine": "Quarantine",
     "apiKeys": "API Keys",
     "webhooks": "Webhooks",
-    "devices": "Devices"
+    "devices": "Devices",
+    "tenants": "Tenants"
   },
   "apiKeys": {
     "title": "API Keys",

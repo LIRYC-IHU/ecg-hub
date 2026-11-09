@@ -20,6 +20,7 @@ import { PinService } from "../gen/v1/pin_pb";
 import { SessionService } from "../gen/v1/session_pb";
 import { SetupService } from "../gen/v1/setup_pb";
 import { TagService } from "../gen/v1/tag_pb";
+import { TenantService } from "../gen/v1/tenant_pb";
 import { WebhookService } from "../gen/v1/webhook_pb";
 
 const BASE_URL = (import.meta.env as Record<string, string>).VITE_API_URL ?? "";
@@ -80,3 +81,4 @@ export const eventClient = createClient(EventService, connectTransport);
 export const exportClient = createClient(ExportService, connectTransport);
 export const hl7Client = createClient(HL7Service, connectTransport);
 export const deviceClient = createClient(DeviceService, connectTransport);
+export const tenantClient = createClient(TenantService, connectTransport);
