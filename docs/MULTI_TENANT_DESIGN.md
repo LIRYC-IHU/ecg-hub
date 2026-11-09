@@ -87,7 +87,8 @@ without a join.
 
 The composite foreign keys go in the `fkFix` list of `db/migrate.go`, next to
 the ones AutoMigrate already cannot generate. `ExistsByContentHash` and
-`FindByContentHash` take the tenant.
+`FindByContentHash` become tenant-scoped with the ingestion path (§7), once
+the pipeline carries a tenant.
 
 ## 5. Isolation: Row Level Security
 
@@ -101,44 +102,44 @@ table in the first list of §4:
 ALTER TABLE ecgs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ecgs FORCE ROW LEVEL SECURITY;   -- the app role owns the tables: without FORCE it bypasses RLS
 CREATE POLICY tenant_isolation ON ecgs
-  USING      (tenant_id = current_setting('app.tenant_id', true)::uuid
+  USING      (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
               OR current_setting('app.system', true) = 'on')
-  WITH CHECK (tenant_id = current_setting('app.tenant_id', true)::uuid
+  WITH CHECK (tenant_id = NULLIF(current_setting('app.tenant_id', true), '')::uuid
               OR current_setting('app.system', true) = 'on');
 ```
 
-`current_setting(..., true)` returns NULL when the setting is absent, so an
-unscoped query matches no row and an unscoped insert is rejected.
+An absent or empty setting compares as NULL, so an unscoped query matches no
+row and an unscoped insert is rejected. `NULLIF` matters: the session hook
+writes `''` for "no tenant", and `''::uuid` would raise an error instead of
+matching nothing.
 
 ### Setting the tenant on a pooled connection
 
-`SET LOCAL` only lives inside a transaction, and the pool hands out a
-different connection per statement. Every scoped database access therefore
-runs in a short transaction:
+The pool hands out a different connection per statement, so the tenant is
+written to the session each time a connection leaves the pool
+(`internal/db/tenant_session.go`). The pool opens through pgx stdlib with two
+hooks, `AfterConnect` for a new connection and `ResetSession` for a reused
+one. database/sql calls both with the context of the query or transaction
+taking the connection, and the hook copies that context's tenant:
 
-```go
-// internal/tenancy/tx.go
-func Tx(ctx context.Context, db *gorm.DB, fn func(tx *gorm.DB) error) error {
-    t, ok := FromContext(ctx)
-    if !ok {
-        return ErrNoTenant
-    }
-    return db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-        if err := tx.Exec(`SELECT set_config('app.tenant_id', ?, true)`, t.ID).Error; err != nil {
-            return err
-        }
-        return fn(tx)
-    })
-}
+```sql
+SELECT set_config('app.tenant_id', $tenant, false), set_config('app.system', $system, false)
 ```
 
-Repository methods wrap their body in `tenancy.Tx`; handler signatures do not
-change. The 21 direct `h.DB` uses in six handler files move into repositories
-or wrap themselves. When tenancy is off, `Tx` still sets the default tenant,
-so there is one code path.
+Every checkout overwrites both settings, so a value left by the previous user
+of the connection never survives. A failure returns `driver.ErrBadConn`, which
+makes database/sql discard the connection: any other error from
+`ResetSession` is ignored and would hand the connection out with the previous
+tenant still set.
 
-Cost: a `BEGIN`, a `set_config` and a `COMMIT` per repository call. Measurable
-only at a request rate far above a practice platform.
+Call sites only pass their context, through `db.WithContext(ctx)`. A context
+with no tenant falls back to `db.FallbackTenant`: the default tenant while
+multi-tenant mode is off, `""` (no row) when it is on. Code not yet passing a
+context therefore keeps working with the mode off, and fails closed with it
+on, which the isolation tests expose.
+
+Cost: one `set_config` round trip per checkout. A per-connection cache of the
+last value removes it if it ever shows.
 
 ### System context
 
@@ -253,10 +254,10 @@ pseudonymised is an open question (§13).
 
 Each step is one pull request, mergeable with the mode off.
 
-1. `tenants` table, default tenant, `tenant_id` columns, composite keys,
-   per-tenant dedup. No behaviour change.
-2. `internal/tenancy` (context, `Tx`, `System`), repositories wrapped, direct
-   handler DB uses removed.
+1. `tenants` table, default tenant, `tenant_id` columns, composite keys.
+   No behaviour change.
+2. `internal/tenancy` (context, `System`) and the session hook on the pool.
+   Call sites adopt `db.WithContext(ctx)` as their surface is scoped (3, 5).
 3. RLS policies behind `tenancy.enabled`, the RLS tests.
 4. OIDC `tenant_claim`, tenant on the user record, middleware.
 5. Ingestion, storage layout, events and webhooks scoped.
