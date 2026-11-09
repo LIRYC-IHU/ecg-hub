@@ -13,10 +13,10 @@ var (
 	claim   string
 )
 
-// Enable turns on multi-tenant mode. claim is the ID-token claim holding the
+// Configure sets multi-tenant mode. orgClaim is the ID-token claim holding the
 // user's organization alias.
-func Enable(orgClaim string) {
-	enabled, claim = true, orgClaim
+func Configure(on bool, orgClaim string) {
+	enabled, claim = on, orgClaim
 }
 
 // Enabled reports whether the deployment runs in multi-tenant mode.

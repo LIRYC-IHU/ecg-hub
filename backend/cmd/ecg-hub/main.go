@@ -128,9 +128,7 @@ func main() {
 		slog.Error("FATAL: " + err.Error())
 		os.Exit(1)
 	}
-	if cfg.Tenancy.Enabled {
-		tenancy.Enable(cfg.Tenancy.Claim)
-	}
+	tenancy.Configure(cfg.Tenancy.Enabled, cfg.Tenancy.Claim)
 
 	// Step 2c: Create user repository — used by auth providers to register logins in DB.
 	userRepo := repository.NewUserRepo(gormDB)

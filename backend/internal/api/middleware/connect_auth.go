@@ -75,7 +75,11 @@ func ConnectOptionalAuth(provider auth.Provider, roleResolver RoleResolver) conn
 				return next(ctx, req)
 			}
 			userID, role := resolveIdentity(ctx, roleResolver, claims)
-			return next(ContextWithIdentity(ctx, userID, claims.Sub, role), req)
+			idCtx, err := identityContext(ctx, roleResolver, userID, claims.Sub, role)
+			if err != nil {
+				return next(ctx, req) // anonymous: no tenant to scope the identity with
+			}
+			return next(idCtx, req)
 		}
 	}
 }
@@ -108,7 +112,11 @@ func ConnectRequireAuth(provider auth.Provider, roleResolver RoleResolver, apiKe
 					if err != nil {
 						return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("invalid API key"))
 					}
-					return next(ContextWithIdentity(ctx, userID, username, role), req)
+					idCtx, err := identityContext(ctx, roleResolver, userID, username, role)
+					if err != nil {
+						return nil, err
+					}
+					return next(idCtx, req)
 				}
 			}
 
@@ -125,7 +133,11 @@ func ConnectRequireAuth(provider auth.Provider, roleResolver RoleResolver, apiKe
 				return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("session invalidated — please login again"))
 			}
 			userID, role := resolveIdentity(ctx, roleResolver, claims)
-			return next(ContextWithIdentity(ctx, userID, claims.Sub, role), req)
+			idCtx, err := identityContext(ctx, roleResolver, userID, claims.Sub, role)
+			if err != nil {
+				return nil, err
+			}
+			return next(idCtx, req)
 		}
 	}
 }
@@ -234,7 +246,7 @@ func (i *streamAuthInterceptor) authenticate(ctx context.Context, header http.He
 			if err != nil {
 				return ctx, connect.NewError(connect.CodeUnauthenticated, errors.New("invalid API key"))
 			}
-			return ContextWithIdentity(ctx, userID, username, role), nil
+			return identityContext(ctx, i.roleResolver, userID, username, role)
 		}
 	}
 	raw := tokenFromHeader(header)
@@ -249,7 +261,22 @@ func (i *streamAuthInterceptor) authenticate(ctx context.Context, header http.He
 		return ctx, connect.NewError(connect.CodeUnauthenticated, errors.New("session invalidated — please login again"))
 	}
 	userID, role := resolveIdentity(ctx, i.roleResolver, claims)
-	return ContextWithIdentity(ctx, userID, claims.Sub, role), nil
+	return identityContext(ctx, i.roleResolver, userID, claims.Sub, role)
+}
+
+// errNoTenant rejects a caller whose tenant cannot be resolved in multi-tenant
+// mode: without one every query would come back empty, which looks like a
+// working account with no data.
+var errNoTenant = connect.NewError(connect.CodeUnauthenticated, errors.New("no tenant for this account"))
+
+// identityContext is ContextWithIdentity plus, in multi-tenant mode, the
+// user's tenant (see WithUserTenant).
+func identityContext(ctx context.Context, resolver RoleResolver, userID, username, role string) (context.Context, error) {
+	ctx, ok := WithUserTenant(ctx, resolver, userID)
+	if !ok {
+		return ctx, errNoTenant
+	}
+	return ContextWithIdentity(ctx, userID, username, role), nil
 }
 
 // resolveIdentity applies the DB role resolution (live admin changes take effect

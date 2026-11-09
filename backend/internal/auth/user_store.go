@@ -18,3 +18,9 @@ type UserStore interface {
 	// default role is assigned. Returns the effective role name to embed in the JWT.
 	UpsertLogin(ctx context.Context, providerUID, externalID, provider string, roleCandidates []string) (string, error)
 }
+
+// TenantBinder attaches a user to the tenant matching their organization, at
+// login in multi-tenant mode. Implemented by *repository.UserRepo.
+type TenantBinder interface {
+	BindTenant(ctx context.Context, externalID, orgAlias string) error
+}

@@ -10,6 +10,7 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
+	"github.com/LIRYC-IHU/ecg-hub/internal/tenancy"
 )
 
 // APIKeyRepository persists per-user API keys. Keys are always scoped to their
@@ -67,12 +68,14 @@ func (r *APIKeyRepository) ResolveAPIKey(ctx context.Context, plaintext string) 
 	sum := sha256.Sum256([]byte(plaintext))
 	hash := hex.EncodeToString(sum[:])
 
+	// System scope: the key is what identifies the caller, and so its tenant.
+	db := r.db.WithContext(tenancy.System(ctx))
 	var key models.APIKey
-	if err := r.db.WithContext(ctx).Where("key_hash = ?", hash).First(&key).Error; err != nil {
+	if err := db.Where("key_hash = ?", hash).First(&key).Error; err != nil {
 		return "", fmt.Errorf("api_key_repo: resolve: %w", err)
 	}
 	// Best-effort — a failed timestamp update must never block authentication.
-	_ = r.TouchLastUsed(key.ID)
+	_ = db.Model(&models.APIKey{}).Where("id = ?", key.ID).Update("last_used_at", time.Now()).Error
 	return key.UserID, nil
 }
 

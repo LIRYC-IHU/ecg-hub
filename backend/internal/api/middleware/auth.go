@@ -61,6 +61,11 @@ func authenticateAPIKey(c echo.Context, apiKeys APIKeyAuthenticator, roleResolve
 	if err != nil {
 		return false
 	}
+	ctx, ok := WithUserTenant(c.Request().Context(), roleResolver, userID)
+	if !ok {
+		return false
+	}
+	c.SetRequest(c.Request().WithContext(ctx))
 	c.Set(CtxKeyUserID, userID)
 	c.Set(CtxKeyUsername, username)
 	c.Set(CtxKeyRole, role)
@@ -150,6 +155,11 @@ func AuthMiddleware(provider auth.Provider, roleResolver RoleResolver, apiKeys A
 				}
 			}
 
+			ctx, ok := WithUserTenant(c.Request().Context(), roleResolver, userID)
+			if !ok {
+				return c.JSON(http.StatusUnauthorized, APIError("UNAUTHENTICATED", "no tenant for this account"))
+			}
+			c.SetRequest(c.Request().WithContext(ctx))
 			c.Set(CtxKeyUserID, userID)
 			c.Set(CtxKeyUsername, claims.Sub)
 			c.Set(CtxKeyRole, role)

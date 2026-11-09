@@ -18,6 +18,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/oauth2"
 
+	"github.com/LIRYC-IHU/ecg-hub/internal/tenancy"
 )
 
 // OIDCProvider implements the OIDC Authorization Code Flow against Keycloak.
@@ -270,7 +271,47 @@ func (p *OIDCProvider) ExchangeAndIssue(ctx context.Context, code, codeVerifier 
 		return "", fmt.Errorf("auth: oidc: no role could be determined for user %q", sub)
 	}
 
+	if tenancy.Enabled() {
+		if err := p.bindTenant(ctx, sub, claims); err != nil {
+			return "", err
+		}
+	}
+
 	return p.IssueToken(sub, role)
+}
+
+// bindTenant attaches the user to the tenant named by the organization claim.
+// Exactly one organization is required: none leaves the account without data
+// to see, and several would make the choice of practice arbitrary.
+func (p *OIDCProvider) bindTenant(ctx context.Context, sub string, claims map[string]any) error {
+	orgs := orgAliases(claims[tenancy.Claim()])
+	if len(orgs) != 1 {
+		return fmt.Errorf("auth: oidc: user %q must belong to exactly one organization, claim %q lists %d", sub, tenancy.Claim(), len(orgs))
+	}
+	binder, ok := p.userStore.(TenantBinder)
+	if !ok {
+		return fmt.Errorf("auth: oidc: user store cannot bind tenants")
+	}
+	if err := binder.BindTenant(ctx, sub, orgs[0]); err != nil {
+		return fmt.Errorf("auth: oidc: %w", err)
+	}
+	return nil
+}
+
+// orgAliases reads a Keycloak organization claim. Keycloak sends a list of
+// aliases, or, when the mapper adds organization attributes, an object keyed
+// by alias.
+func orgAliases(v any) []string {
+	switch c := v.(type) {
+	case map[string]any:
+		out := make([]string, 0, len(c))
+		for alias := range c {
+			out = append(out, alias)
+		}
+		return out
+	default:
+		return stringSliceFromClaim(v)
+	}
 }
 
 // ValidateToken verifies an ECG Hub JWT (HMAC-SHA256 signed with JWTSecret).
@@ -381,4 +422,3 @@ func rolesFromAccessToken(accessToken string) ([]string, error) {
 	}
 	return claims.RealmAccess.Roles, nil
 }
-

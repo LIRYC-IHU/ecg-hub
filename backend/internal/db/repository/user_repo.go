@@ -9,6 +9,9 @@ import (
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+
+	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
+	"github.com/LIRYC-IHU/ecg-hub/internal/tenancy"
 )
 
 // UserRecord is the GORM model for ecg_hub_users.
@@ -66,6 +69,7 @@ func NewUserRepo(db *gorm.DB) *UserRepo {
 // back to external_id — which also back-fills provider_uid for users created before
 // the UID was configured. external_id is kept in sync with the current username.
 func (r *UserRepo) UpsertLogin(ctx context.Context, providerUID, externalID, provider string, roleCandidates []string) (string, error) {
+	ctx = tenancy.System(ctx) // identity lookup: runs before the request has a tenant
 	now := time.Now()
 
 	var rec UserRecord
@@ -249,6 +253,7 @@ func (r *UserRepo) UsernamesByIDs(ctx context.Context, ids []string) map[string]
 // The internal uuid is what per-user tables (webhooks, API keys, pins, exports)
 // reference with ON DELETE CASCADE — never the reusable username.
 func (r *UserRepo) ResolveIdentity(ctx context.Context, externalID string) (string, string, error) {
+	ctx = tenancy.System(ctx) // identity lookup: runs before the request has a tenant
 	type row struct {
 		ID       string
 		RoleName *string
@@ -276,6 +281,7 @@ func (r *UserRepo) ResolveIdentity(ctx context.Context, externalID string) (stri
 // GetCurrentRole returns the current role name for externalID from the DB.
 // Returns ("", nil) if the user is not found or has no role assigned.
 func (r *UserRepo) GetCurrentRole(ctx context.Context, externalID string) (string, error) {
+	ctx = tenancy.System(ctx) // identity lookup: runs before the request has a tenant
 	var rec UserRecord
 	if err := r.db.WithContext(ctx).Where("external_id = ?", externalID).First(&rec).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
@@ -374,6 +380,7 @@ func (r *UserRepo) roleNameByID(ctx context.Context, roleID string) (string, err
 // name for the given internal user ID — the reverse of ResolveIdentity, used
 // by the API-key authentication path (keys store the internal uuid).
 func (r *UserRepo) IdentityByID(ctx context.Context, id string) (string, string, error) {
+	ctx = tenancy.System(ctx) // identity lookup: runs before the request has a tenant
 	type row struct {
 		ExternalID string
 		RoleName   *string
@@ -428,6 +435,7 @@ func (r *UserRepo) SetUpdateJWT(ctx context.Context, id string, update bool) err
 // (role change, forced logout, etc.) and they must re-authenticate.
 // If true, the flag is cleared automatically so re-login succeeds.
 func (r *UserRepo) ShouldRefreshToken(ctx context.Context, externalID string) bool {
+	ctx = tenancy.System(ctx) // identity lookup: runs before the request has a tenant
 	var rec UserRecord
 	if err := r.db.WithContext(ctx).Where("external_id = ?", externalID).First(&rec).Error; err != nil {
 		return false
@@ -438,4 +446,68 @@ func (r *UserRepo) ShouldRefreshToken(ctx context.Context, externalID string) bo
 	// Clear the flag so the next login succeeds.
 	r.db.WithContext(ctx).Model(&UserRecord{}).Where("id = ?", rec.ID).Update("update_jwt", false)
 	return true
+}
+
+// TenantOf returns the tenant of the user with internal id userID. System
+// scope: it is what gives the request its tenant.
+func (r *UserRepo) TenantOf(ctx context.Context, userID string) (string, error) {
+	var tenant string
+	err := r.db.WithContext(tenancy.System(ctx)).
+		Raw(`SELECT tenant_id FROM ecg_hub_users WHERE id = ?`, userID).Scan(&tenant).Error
+	if err != nil {
+		return "", fmt.Errorf("user_repo: tenant of user: %w", err)
+	}
+	if tenant == "" {
+		return "", fmt.Errorf("user_repo: tenant of user: user %s not found", userID)
+	}
+	return tenant, nil
+}
+
+// ErrUnknownTenant is returned when an organization alias matches no tenant.
+var ErrUnknownTenant = errors.New("no tenant has this organization alias")
+
+// ErrTenantMismatch is returned when a user's organization differs from the
+// tenant the account already belongs to.
+var ErrTenantMismatch = errors.New("the account already belongs to another tenant")
+
+// BindTenant attaches the user to the tenant whose slug is orgAlias, at login
+// in multi-tenant mode. An account still in the default tenant (just created,
+// or created before the mode was on) moves to it. An account already in that
+// tenant is left alone. An account in another tenant is refused, never moved:
+// a changed organization claim must not carry a user, and the data they see,
+// from one practice to another.
+//
+// Rows the user created while in the default tenant stay there.
+func (r *UserRepo) BindTenant(ctx context.Context, externalID, orgAlias string) error {
+	db := r.db.WithContext(tenancy.System(ctx))
+	var tenantID string
+	if err := db.Raw(`SELECT id FROM tenants WHERE slug = ?`, orgAlias).Scan(&tenantID).Error; err != nil {
+		return fmt.Errorf("user_repo: bind tenant: %w", err)
+	}
+	if tenantID == "" {
+		return fmt.Errorf("user_repo: bind tenant %q: %w", orgAlias, ErrUnknownTenant)
+	}
+	var current string
+	if err := db.Raw(`SELECT tenant_id FROM ecg_hub_users WHERE external_id = ?`, externalID).Scan(&current).Error; err != nil {
+		return fmt.Errorf("user_repo: bind tenant: %w", err)
+	}
+	switch current {
+	case tenantID:
+		return nil
+	case models.DefaultTenantID:
+		res := db.Exec(`UPDATE ecg_hub_users SET tenant_id = ? WHERE external_id = ? AND tenant_id = ?`,
+			tenantID, externalID, models.DefaultTenantID)
+		if res.Error != nil {
+			return fmt.Errorf("user_repo: bind tenant: %w", res.Error)
+		}
+		if res.RowsAffected != 1 {
+			return fmt.Errorf("user_repo: bind tenant: user %q not found", externalID)
+		}
+		slog.Info("tenancy: user bound to tenant", "user", externalID, "tenant", orgAlias)
+		return nil
+	case "":
+		return fmt.Errorf("user_repo: bind tenant: user %q not found", externalID)
+	default:
+		return fmt.Errorf("user_repo: bind tenant %q for %q: %w", orgAlias, externalID, ErrTenantMismatch)
+	}
 }
