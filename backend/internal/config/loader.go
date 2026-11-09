@@ -50,6 +50,8 @@ func Load(cfgPath string) (*Config, error) {
 	// The inbound ADT listener is off unless a deployment asks for it, on the
 	// port next to the conventional outbound HL7 one.
 	v.SetDefault("adt.enabled", false)
+	v.SetDefault("tenancy.enabled", false)
+	v.SetDefault("tenancy.claim", "organization")
 	v.SetDefault("adt.port", 2576)
 	v.SetDefault("adt.read_timeout", "30s")
 	v.SetDefault("adt.history_retention_days", 30)

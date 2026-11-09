@@ -44,6 +44,7 @@ type Config struct {
 	Devices  DevicesConfig  `mapstructure:"devices"`
 	IHE      IHEConfig      `mapstructure:"ihe"`
 	ADT      ADTConfig      `mapstructure:"adt"`
+	Tenancy  TenancyConfig  `mapstructure:"tenancy"`
 	// Secrets — populated via os.Getenv after Viper unmarshal. Never from config.yaml.
 
 	// DatabaseURL is the PostgreSQL connection string. Set via DATABASE_URL env var.
@@ -205,6 +206,16 @@ type IHEConfig struct {
 	// it. Empty falls back to the process timezone, which in a container with no
 	// TZ means UTC, and a zone-less bound is then off by the site's offset.
 	Timezone string `mapstructure:"timezone"`
+}
+
+// TenancyConfig turns on multi-tenant mode. See docs/MULTI_TENANT_DESIGN.md.
+type TenancyConfig struct {
+	// Enabled isolates tenants with Row Level Security. Off by default: every
+	// row belongs to the default tenant and nothing changes.
+	Enabled bool `mapstructure:"enabled"`
+	// Claim is the ID-token claim naming the user's organization, whose alias
+	// must equal a tenant's slug. Defaults to "organization" (Keycloak 26).
+	Claim string `mapstructure:"claim"`
 }
 
 // ADTConfig configures the inbound ADT listener — the receiving half of IHE

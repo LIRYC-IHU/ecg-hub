@@ -7,6 +7,24 @@ package tenancy
 
 import "context"
 
+// Set once at startup, before any request is served; read-only afterwards.
+var (
+	enabled bool
+	claim   string
+)
+
+// Enable turns on multi-tenant mode. claim is the ID-token claim holding the
+// user's organization alias.
+func Enable(orgClaim string) {
+	enabled, claim = true, orgClaim
+}
+
+// Enabled reports whether the deployment runs in multi-tenant mode.
+func Enabled() bool { return enabled }
+
+// Claim returns the ID-token claim holding the organization alias.
+func Claim() string { return claim }
+
 type ctxKey struct{}
 
 type scope struct {

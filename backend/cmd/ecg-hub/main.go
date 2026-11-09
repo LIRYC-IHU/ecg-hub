@@ -62,6 +62,7 @@ import (
 	_ "github.com/LIRYC-IHU/ecg-hub/internal/module/nihon-kohden"
 	_ "github.com/LIRYC-IHU/ecg-hub/internal/module/philips"
 	"github.com/LIRYC-IHU/ecg-hub/internal/storage"
+	"github.com/LIRYC-IHU/ecg-hub/internal/tenancy"
 	"github.com/LIRYC-IHU/ecg-hub/internal/webhook"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -120,6 +121,15 @@ func main() {
 	if err := dbpkg.RunMigrations(gormDB); err != nil {
 		slog.Error("FATAL: " + err.Error())
 		os.Exit(1)
+	}
+	// Multi-tenant mode: Row Level Security on, and the tenant read from the
+	// login's organization claim. Off by default (docs/MULTI_TENANT_DESIGN.md).
+	if err := dbpkg.ApplyTenancy(gormDB, cfg.Tenancy.Enabled); err != nil {
+		slog.Error("FATAL: " + err.Error())
+		os.Exit(1)
+	}
+	if cfg.Tenancy.Enabled {
+		tenancy.Enable(cfg.Tenancy.Claim)
 	}
 
 	// Step 2c: Create user repository — used by auth providers to register logins in DB.
