@@ -65,7 +65,7 @@ type mockECGRepo struct {
 	hashes   map[string]bool
 }
 
-func (m *mockECGRepo) Insert(ecg *models.ECG) error {
+func (m *mockECGRepo) Insert(_ context.Context, ecg *models.ECG) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.inserted = append(m.inserted, ecg)
@@ -85,7 +85,7 @@ func (m *mockECGRepo) insertedECGs() []*models.ECG {
 	return append([]*models.ECG(nil), m.inserted...)
 }
 
-func (m *mockECGRepo) ExistsByContentHash(hash string) (bool, error) {
+func (m *mockECGRepo) ExistsByContentHash(_ context.Context, hash string) (bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.hashes == nil {
@@ -107,7 +107,7 @@ type mockPatRepo struct {
 	err   error
 }
 
-func (m *mockPatRepo) UpsertWithDemographics(patientID, firstName, lastName, gender string) error {
+func (m *mockPatRepo) UpsertWithDemographics(_ context.Context, patientID, firstName, lastName, gender string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.calls = append(m.calls, upsertCall{patientID, firstName, lastName, gender})
@@ -135,7 +135,7 @@ type mockAuditWriter struct {
 	entries []*models.AuditLog
 }
 
-func (m *mockAuditWriter) Insert(e *models.AuditLog) error {
+func (m *mockAuditWriter) Insert(_ context.Context, e *models.AuditLog) error {
 	m.entries = append(m.entries, e)
 	return nil
 }

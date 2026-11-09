@@ -45,7 +45,7 @@ type fakePatients struct {
 	err     error
 }
 
-func (f *fakePatients) FindByPatientID(string) (*models.Patient, error) {
+func (f *fakePatients) FindByPatientID(context.Context, string) (*models.Patient, error) {
 	return f.patient, f.err
 }
 

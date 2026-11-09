@@ -48,8 +48,8 @@ func tagsToProto(tags []models.Tag) []*apiv1.Tag {
 
 // ── Tag CRUD ─────────────────────────────────────────────────────────────────
 
-func (h *TagServiceHandler) ListTags(_ context.Context, _ *apiv1.ListTagsRequest) (*apiv1.ListTagsResponse, error) {
-	tags, err := h.Repo.ListTags()
+func (h *TagServiceHandler) ListTags(ctx context.Context, _ *apiv1.ListTagsRequest) (*apiv1.ListTagsResponse, error) {
+	tags, err := h.Repo.ListTags(ctx)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -69,26 +69,26 @@ func (h *TagServiceHandler) CreateTag(ctx context.Context, req *apiv1.CreateTagR
 	if color == "" {
 		color = "#6b7280"
 	}
-	tag, err := h.Repo.CreateTag(req.Name, color, createdBy)
+	tag, err := h.Repo.CreateTag(ctx, req.Name, color, createdBy)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	return &apiv1.CreateTagResponse{Tag: tagToProto(tag)}, nil
 }
 
-func (h *TagServiceHandler) UpdateTag(_ context.Context, req *apiv1.UpdateTagRequest) (*apiv1.UpdateTagResponse, error) {
+func (h *TagServiceHandler) UpdateTag(ctx context.Context, req *apiv1.UpdateTagRequest) (*apiv1.UpdateTagResponse, error) {
 	if req.Name == "" || req.Color == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errTagNameColorRequired)
 	}
-	tag, err := h.Repo.UpdateTag(req.Id, req.Name, req.Color)
+	tag, err := h.Repo.UpdateTag(ctx, req.Id, req.Name, req.Color)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, errTagNotFound)
 	}
 	return &apiv1.UpdateTagResponse{Tag: tagToProto(tag)}, nil
 }
 
-func (h *TagServiceHandler) DeleteTag(_ context.Context, req *apiv1.DeleteTagRequest) (*apiv1.DeleteTagResponse, error) {
-	if err := h.Repo.DeleteTag(req.Id); err != nil {
+func (h *TagServiceHandler) DeleteTag(ctx context.Context, req *apiv1.DeleteTagRequest) (*apiv1.DeleteTagResponse, error) {
+	if err := h.Repo.DeleteTag(ctx, req.Id); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	return &apiv1.DeleteTagResponse{}, nil
@@ -96,25 +96,25 @@ func (h *TagServiceHandler) DeleteTag(_ context.Context, req *apiv1.DeleteTagReq
 
 // ── Patient apply / remove / list ────────────────────────────────────────────
 
-func (h *TagServiceHandler) TagPatient(_ context.Context, req *apiv1.TagPatientRequest) (*apiv1.TagPatientResponse, error) {
+func (h *TagServiceHandler) TagPatient(ctx context.Context, req *apiv1.TagPatientRequest) (*apiv1.TagPatientResponse, error) {
 	if req.TagId == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errTagIDRequired)
 	}
-	if err := h.Repo.TagPatient(req.PatientId, req.TagId); err != nil {
+	if err := h.Repo.TagPatient(ctx, req.PatientId, req.TagId); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	return &apiv1.TagPatientResponse{}, nil
 }
 
-func (h *TagServiceHandler) UntagPatient(_ context.Context, req *apiv1.UntagPatientRequest) (*apiv1.UntagPatientResponse, error) {
-	if err := h.Repo.UntagPatient(req.PatientId, req.TagId); err != nil {
+func (h *TagServiceHandler) UntagPatient(ctx context.Context, req *apiv1.UntagPatientRequest) (*apiv1.UntagPatientResponse, error) {
+	if err := h.Repo.UntagPatient(ctx, req.PatientId, req.TagId); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	return &apiv1.UntagPatientResponse{}, nil
 }
 
-func (h *TagServiceHandler) ListPatientTags(_ context.Context, req *apiv1.ListPatientTagsRequest) (*apiv1.ListPatientTagsResponse, error) {
-	tags, err := h.Repo.ListPatientTags(req.PatientId)
+func (h *TagServiceHandler) ListPatientTags(ctx context.Context, req *apiv1.ListPatientTagsRequest) (*apiv1.ListPatientTagsResponse, error) {
+	tags, err := h.Repo.ListPatientTags(ctx, req.PatientId)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -123,25 +123,25 @@ func (h *TagServiceHandler) ListPatientTags(_ context.Context, req *apiv1.ListPa
 
 // ── ECG apply / remove / list ────────────────────────────────────────────────
 
-func (h *TagServiceHandler) TagEcg(_ context.Context, req *apiv1.TagEcgRequest) (*apiv1.TagEcgResponse, error) {
+func (h *TagServiceHandler) TagEcg(ctx context.Context, req *apiv1.TagEcgRequest) (*apiv1.TagEcgResponse, error) {
 	if req.TagId == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errTagIDRequired)
 	}
-	if err := h.Repo.TagECG(req.EcgId, req.TagId); err != nil {
+	if err := h.Repo.TagECG(ctx, req.EcgId, req.TagId); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	return &apiv1.TagEcgResponse{}, nil
 }
 
-func (h *TagServiceHandler) UntagEcg(_ context.Context, req *apiv1.UntagEcgRequest) (*apiv1.UntagEcgResponse, error) {
-	if err := h.Repo.UntagECG(req.EcgId, req.TagId); err != nil {
+func (h *TagServiceHandler) UntagEcg(ctx context.Context, req *apiv1.UntagEcgRequest) (*apiv1.UntagEcgResponse, error) {
+	if err := h.Repo.UntagECG(ctx, req.EcgId, req.TagId); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	return &apiv1.UntagEcgResponse{}, nil
 }
 
-func (h *TagServiceHandler) ListEcgTags(_ context.Context, req *apiv1.ListEcgTagsRequest) (*apiv1.ListEcgTagsResponse, error) {
-	tags, err := h.Repo.ListECGTags(req.EcgId)
+func (h *TagServiceHandler) ListEcgTags(ctx context.Context, req *apiv1.ListEcgTagsRequest) (*apiv1.ListEcgTagsResponse, error) {
+	tags, err := h.Repo.ListECGTags(ctx, req.EcgId)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -150,8 +150,8 @@ func (h *TagServiceHandler) ListEcgTags(_ context.Context, req *apiv1.ListEcgTag
 
 // ── Batch reads (one request per list page) ──────────────────────────────────
 
-func (h *TagServiceHandler) BatchGetPatientTags(_ context.Context, req *apiv1.BatchGetPatientTagsRequest) (*apiv1.BatchGetPatientTagsResponse, error) {
-	grouped, err := h.Repo.ListPatientTagsBatch(req.PatientIds)
+func (h *TagServiceHandler) BatchGetPatientTags(ctx context.Context, req *apiv1.BatchGetPatientTagsRequest) (*apiv1.BatchGetPatientTagsResponse, error) {
+	grouped, err := h.Repo.ListPatientTagsBatch(ctx, req.PatientIds)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -162,8 +162,8 @@ func (h *TagServiceHandler) BatchGetPatientTags(_ context.Context, req *apiv1.Ba
 	return &apiv1.BatchGetPatientTagsResponse{Tags: tags}, nil
 }
 
-func (h *TagServiceHandler) BatchGetEcgTags(_ context.Context, req *apiv1.BatchGetEcgTagsRequest) (*apiv1.BatchGetEcgTagsResponse, error) {
-	grouped, err := h.Repo.ListECGTagsBatch(req.EcgIds)
+func (h *TagServiceHandler) BatchGetEcgTags(ctx context.Context, req *apiv1.BatchGetEcgTagsRequest) (*apiv1.BatchGetEcgTagsResponse, error) {
+	grouped, err := h.Repo.ListECGTagsBatch(ctx, req.EcgIds)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}

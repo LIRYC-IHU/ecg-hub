@@ -84,7 +84,7 @@ func inputToRequest(in *apiv1.WebhookInput) *webhookRequest {
 }
 
 // GetOptions returns the selectable event types and known vendors for the editor.
-func (h *WebhookServiceHandler) GetOptions(_ context.Context, _ *apiv1.GetWebhookOptionsRequest) (*apiv1.GetWebhookOptionsResponse, error) {
+func (h *WebhookServiceHandler) GetOptions(ctx context.Context, _ *apiv1.GetWebhookOptionsRequest) (*apiv1.GetWebhookOptionsResponse, error) {
 	vendors := []*apiv1.VendorOption{}
 	if h.Modules != nil {
 		for _, m := range h.Modules.GetModules() {
@@ -97,7 +97,7 @@ func (h *WebhookServiceHandler) GetOptions(_ context.Context, _ *apiv1.GetWebhoo
 	devices := []*apiv1.DeviceOption{}
 	if h.DB != nil {
 		var rows []struct{ MAC, Label string }
-		h.DB.Model(&models.Device{}).
+		h.DB.WithContext(ctx).Model(&models.Device{}).
 			Select("mac", "label").
 			Order("label, mac").
 			Scan(&rows)
@@ -114,7 +114,7 @@ func (h *WebhookServiceHandler) GetOptions(_ context.Context, _ *apiv1.GetWebhoo
 
 // ListWebhooks returns the caller's webhooks.
 func (h *WebhookServiceHandler) ListWebhooks(ctx context.Context, _ *apiv1.ListWebhooksRequest) (*apiv1.ListWebhooksResponse, error) {
-	hooks, err := h.Repo.ListByUser(mw.UserIDFromContext(ctx))
+	hooks, err := h.Repo.ListByUser(ctx, mw.UserIDFromContext(ctx))
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, errors.New("failed to list webhooks"))
 	}
@@ -158,7 +158,7 @@ func (h *WebhookServiceHandler) CreateWebhook(ctx context.Context, req *apiv1.Cr
 		hook.AuthHeaderEncrypted = enc
 	}
 
-	if err := h.Repo.Create(hook); err != nil {
+	if err := h.Repo.Create(ctx, hook); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, errors.New("failed to create webhook"))
 	}
 	_ = mw.WriteAuditLog(ctx, h.DB, userID, "webhook_created", hook.ID,
@@ -170,7 +170,7 @@ func (h *WebhookServiceHandler) CreateWebhook(ctx context.Context, req *apiv1.Cr
 // unset = leave, "" = clear, value = re-encrypt.
 func (h *WebhookServiceHandler) UpdateWebhook(ctx context.Context, req *apiv1.UpdateWebhookRequest) (*apiv1.UpdateWebhookResponse, error) {
 	userID := mw.UserIDFromContext(ctx)
-	hook, err := h.Repo.GetByUser(userID, req.Id)
+	hook, err := h.Repo.GetByUser(ctx, userID, req.Id)
 	if err != nil {
 		if errors.Is(err, repository.ErrWebhookNotFound) {
 			return nil, connect.NewError(connect.CodeNotFound, errors.New("webhook not found"))
@@ -215,7 +215,7 @@ func (h *WebhookServiceHandler) UpdateWebhook(ctx context.Context, req *apiv1.Up
 		}
 	}
 
-	if err := h.Repo.Update(hook); err != nil {
+	if err := h.Repo.Update(ctx, hook); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, errors.New("failed to update webhook"))
 	}
 	_ = mw.WriteAuditLog(ctx, h.DB, userID, "webhook_updated", hook.ID, map[string]any{"url": hook.URL})
@@ -225,7 +225,7 @@ func (h *WebhookServiceHandler) UpdateWebhook(ctx context.Context, req *apiv1.Up
 // DeleteWebhook removes one of the caller's endpoints.
 func (h *WebhookServiceHandler) DeleteWebhook(ctx context.Context, req *apiv1.DeleteWebhookRequest) (*apiv1.DeleteWebhookResponse, error) {
 	userID := mw.UserIDFromContext(ctx)
-	if err := h.Repo.DeleteByUser(userID, req.Id); err != nil {
+	if err := h.Repo.DeleteByUser(ctx, userID, req.Id); err != nil {
 		if errors.Is(err, repository.ErrWebhookNotFound) {
 			return nil, connect.NewError(connect.CodeNotFound, errors.New("webhook not found"))
 		}
@@ -238,7 +238,7 @@ func (h *WebhookServiceHandler) DeleteWebhook(ctx context.Context, req *apiv1.De
 // TestWebhook delivers a synthetic "test" event and reports the outcome.
 func (h *WebhookServiceHandler) TestWebhook(ctx context.Context, req *apiv1.TestWebhookRequest) (*apiv1.TestWebhookResponse, error) {
 	userID := mw.UserIDFromContext(ctx)
-	hook, err := h.Repo.GetByUser(userID, req.Id)
+	hook, err := h.Repo.GetByUser(ctx, userID, req.Id)
 	if err != nil {
 		if errors.Is(err, repository.ErrWebhookNotFound) {
 			return nil, connect.NewError(connect.CodeNotFound, errors.New("webhook not found"))

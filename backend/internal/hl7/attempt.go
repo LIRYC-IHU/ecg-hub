@@ -1,6 +1,7 @@
 package hl7
 
 import (
+	"context"
 	"errors"
 	"regexp"
 
@@ -9,7 +10,7 @@ import (
 
 // AttemptRecorder abstracts persisting HL7 attempt history records.
 type AttemptRecorder interface {
-	Insert(a *models.HL7Attempt) error
+	Insert(ctx context.Context, a *models.HL7Attempt) error
 }
 
 // msaRegex parses MSA code and message from the error format:

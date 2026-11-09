@@ -171,5 +171,5 @@ func (s *ECTPServer) checkReceived(filename string) bool {
 		slog.Warn("[ECTP] transfer repo not configured, skipping file check", "filename", filename)
 		return true
 	}
-	return s.transferRepo.Received(filename)
+	return s.transferRepo.Received(transferCtx, filename)
 }

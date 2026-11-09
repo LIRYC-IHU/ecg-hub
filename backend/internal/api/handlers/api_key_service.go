@@ -38,7 +38,7 @@ func apiKeyToProto(k *models.APIKey) *apiv1.ApiKey {
 
 // ListApiKeys returns the caller's API keys (no hash, no plaintext).
 func (h *APIKeyServiceHandler) ListApiKeys(ctx context.Context, _ *apiv1.ListApiKeysRequest) (*apiv1.ListApiKeysResponse, error) {
-	keys, err := h.Repo.ListByUser(mw.UserIDFromContext(ctx))
+	keys, err := h.Repo.ListByUser(ctx, mw.UserIDFromContext(ctx))
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, errors.New("failed to list API keys"))
 	}
@@ -65,7 +65,7 @@ func (h *APIKeyServiceHandler) CreateApiKey(ctx context.Context, req *apiv1.Crea
 		return nil, connect.NewError(connect.CodeInternal, errors.New("failed to generate key"))
 	}
 	key := models.APIKey{UserID: userID, Name: name, Prefix: prefix, KeyHash: hash}
-	if err := h.Repo.Create(&key); err != nil {
+	if err := h.Repo.Create(ctx, &key); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, errors.New("failed to store API key"))
 	}
 
@@ -81,7 +81,7 @@ func (h *APIKeyServiceHandler) DeleteApiKey(ctx context.Context, req *apiv1.Dele
 	if req.Id == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("id is required"))
 	}
-	deleted, err := h.Repo.DeleteByUserAndID(userID, req.Id)
+	deleted, err := h.Repo.DeleteByUserAndID(ctx, userID, req.Id)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, errors.New("failed to delete API key"))
 	}

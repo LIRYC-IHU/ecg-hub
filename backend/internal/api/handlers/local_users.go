@@ -51,7 +51,7 @@ func (h *AdminServiceHandler) CreateLocalUser(ctx context.Context, req *apiv1.Cr
 	}
 
 	var identityID string
-	txErr := h.DB.Transaction(func(tx *gorm.DB) error {
+	txErr := h.DB.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var existing int64
 		if err := tx.Model(&models.LocalUser{}).Where("username = ?", username).Count(&existing).Error; err != nil {
 			return err

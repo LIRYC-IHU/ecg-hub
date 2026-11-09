@@ -14,8 +14,8 @@ import (
 	netdicom "github.com/apaladiychuk/go-netdicom"
 	"github.com/apaladiychuk/go-netdicom/dimse"
 
-	dicomconn "github.com/LIRYC-IHU/ecg-hub/internal/connector/dicom"
 	"github.com/LIRYC-IHU/ecg-hub/internal/connector"
+	dicomconn "github.com/LIRYC-IHU/ecg-hub/internal/connector/dicom"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 )
 
@@ -112,9 +112,9 @@ func TestDICOMConnector_Accepts(t *testing.T) {
 	}
 
 	tests := []struct {
-		name   string
-		ecg    *models.ECG
-		want   bool
+		name string
+		ecg  *models.ECG
+		want bool
 	}{
 		{
 			name: "matching extension and vendor",

@@ -42,7 +42,7 @@ type stubExportJobRepo struct {
 	found   *models.ExportJob
 }
 
-func (s *stubExportJobRepo) Create(job *models.ExportJob) error {
+func (s *stubExportJobRepo) Create(_ context.Context, job *models.ExportJob) error {
 	s.created = job
 	if s.found == nil {
 		s.found = job // let the handler's re-read return the just-created job
@@ -50,16 +50,16 @@ func (s *stubExportJobRepo) Create(job *models.ExportJob) error {
 	return nil
 }
 
-func (s *stubExportJobRepo) FindByID(_ string) (*models.ExportJob, error) {
+func (s *stubExportJobRepo) FindByID(_ context.Context, _ string) (*models.ExportJob, error) {
 	if s.findErr != nil {
 		return nil, s.findErr
 	}
 	return s.found, nil
 }
 
-func (s *stubExportJobRepo) Update(_ string, _ map[string]any) error { return nil }
+func (s *stubExportJobRepo) Update(_ context.Context, _ string, _ map[string]any) error { return nil }
 
-func (s *stubExportJobRepo) SaveECGList(_ string, _ []string) error { return nil }
+func (s *stubExportJobRepo) SaveECGList(_ context.Context, _ string, _ []string) error { return nil }
 
 // stubECGByIDsFinder stubs the ECG repository for FindByIDs.
 type stubECGByIDsFinder struct {
@@ -67,7 +67,7 @@ type stubECGByIDsFinder struct {
 	err  error
 }
 
-func (s *stubECGByIDsFinder) FindByIDs(_ []string) ([]models.ECG, error) {
+func (s *stubECGByIDsFinder) FindByIDs(_ context.Context, _ []string) ([]models.ECG, error) {
 	return s.ecgs, s.err
 }
 

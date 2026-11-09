@@ -1,6 +1,8 @@
 package repository
 
 import (
+	"context"
+
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
@@ -15,20 +17,20 @@ func NewPinRepository(db *gorm.DB) *PinRepository {
 	return &PinRepository{db: db}
 }
 
-func (r *PinRepository) ListPins(userID string) ([]string, error) {
+func (r *PinRepository) ListPins(ctx context.Context, userID string) ([]string, error) {
 	var patientIDs []string
-	err := r.db.Model(&models.UserPin{}).
+	err := r.db.WithContext(ctx).Model(&models.UserPin{}).
 		Where("user_id = ?", userID).
 		Pluck("patient_id", &patientIDs).Error
 	return patientIDs, err
 }
 
-func (r *PinRepository) Pin(userID, patientID string) error {
+func (r *PinRepository) Pin(ctx context.Context, userID, patientID string) error {
 	pin := models.UserPin{UserID: userID, PatientID: patientID}
-	return r.db.Clauses(clause.OnConflict{DoNothing: true}).Create(&pin).Error
+	return r.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&pin).Error
 }
 
-func (r *PinRepository) Unpin(userID, patientID string) error {
-	return r.db.Where("user_id = ? AND patient_id = ?", userID, patientID).
+func (r *PinRepository) Unpin(ctx context.Context, userID, patientID string) error {
+	return r.db.WithContext(ctx).Where("user_id = ? AND patient_id = ?", userID, patientID).
 		Delete(&models.UserPin{}).Error
 }

@@ -2,6 +2,7 @@ package webhook
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"crypto/tls"
@@ -23,10 +24,16 @@ import (
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
 	"github.com/LIRYC-IHU/ecg-hub/internal/events"
+	"github.com/LIRYC-IHU/ecg-hub/internal/tenancy"
 )
 
 // retryBackoff is the wait time before each delivery attempt (attempt 1 has no wait).
 var retryBackoff = []time.Duration{0, 5 * time.Second, 25 * time.Second}
+
+// systemCtx scopes the dispatcher's own bookkeeping (webhook list, delivery
+// history, pruning) across every tenant. Which webhooks an event reaches is
+// decided by tenant in dispatch.
+var systemCtx = tenancy.System(context.Background())
 
 // Dispatcher fans out ingestion and HL7 events to user-configured webhooks
 // (user_webhooks table). It complements the legacy static Notifier
@@ -170,7 +177,7 @@ func (d *Dispatcher) Run(hub *events.Hub) {
 				Reason:       e.Reason,
 			}
 			data.DeviceLabel = d.deviceLabel(data.DeviceMAC)
-			d.dispatch(Payload{Event: e.Type, Data: data})
+			d.dispatch(Payload{Event: e.Type, Data: data, TenantID: e.TenantID})
 		case <-d.stop:
 			return
 		}
@@ -190,7 +197,7 @@ func (d *Dispatcher) pruneDeliveries() {
 		return
 	}
 	cutoff := time.Now().Add(-d.retention)
-	n, err := d.deliveryRepo.DeleteOlderThan(cutoff)
+	n, err := d.deliveryRepo.DeleteOlderThan(systemCtx, cutoff)
 	if err != nil {
 		slog.Warn("webhook dispatcher: prune delivery history", "error", err)
 		return
@@ -226,13 +233,15 @@ func (d *Dispatcher) Notify(event string, ecgID string) error {
 	// Enrich with patient/vendor/device so the receiver can filter without a
 	// callback.
 	var ecg models.ECG
-	if err := d.db.Select("patient_id", "vendor", "device_mac").Where("id = ?", ecgID).First(&ecg).Error; err == nil {
+	if err := d.db.WithContext(systemCtx).Select("tenant_id", "patient_id", "vendor", "device_mac").Where("id = ?", ecgID).First(&ecg).Error; err == nil {
 		data.PatientID = ecg.PatientID
 		data.Vendor = ecg.Vendor
 		data.DeviceMAC = ecg.DeviceMAC
 		data.DeviceLabel = d.deviceLabel(ecg.DeviceMAC)
 	}
-	d.dispatch(Payload{Event: mapped, Data: data})
+	// An ECG that cannot be read leaves TenantID empty: the default tenant's
+	// webhooks, the only ones that exist with HL7 on.
+	d.dispatch(Payload{Event: mapped, Data: data, TenantID: ecg.TenantID})
 	return nil
 }
 
@@ -245,6 +254,9 @@ type Payload struct {
 	Timestamp string            `json:"timestamp"`
 	Data      PayloadData       `json:"data"`
 	Links     map[string]string `json:"links,omitempty"`
+	// TenantID is the tenant the event belongs to (empty: default). Only that
+	// tenant's webhooks receive it. Not part of the delivered body.
+	TenantID string `json:"-"`
 }
 
 // PayloadData identifies the resource the event refers to.
@@ -301,7 +313,7 @@ func (d *Dispatcher) buildLinks(data PayloadData) map[string]string {
 // dispatch fans the event out to every enabled webhook whose event, vendor and
 // device filters match. Each delivery runs in its own goroutine.
 func (d *Dispatcher) dispatch(p Payload) {
-	hooks, err := d.repo.ListEnabled()
+	hooks, err := d.repo.ListEnabled(systemCtx)
 	if err != nil {
 		slog.Error("webhook dispatcher: list enabled", "error", err)
 		return
@@ -311,6 +323,10 @@ func (d *Dispatcher) dispatch(p Payload) {
 
 	for i := range hooks {
 		hook := hooks[i]
+		// Never across tenants: the payload names patients and ECGs.
+		if !(events.Event{TenantID: p.TenantID}).For(hook.TenantID) {
+			continue
+		}
 		if !matches(jsonList(hook.Events), p.Event) {
 			continue
 		}
@@ -365,24 +381,26 @@ func (d *Dispatcher) deliverWithRetry(hook models.UserWebhook, p Payload) {
 		slog.Info("webhook dispatcher: delivered",
 			"webhook", hook.Name, "event", p.Event, "status", status)
 	}
-	if err := d.repo.RecordDelivery(hook.ID, status, errMsg); err != nil {
+	if err := d.repo.RecordDelivery(systemCtx, hook.ID, status, errMsg); err != nil {
 		slog.Warn("webhook dispatcher: record delivery", "webhook", hook.ID, "error", err)
 	}
-	d.logDelivery(hook.ID, p, status, errMsg, attempts)
+	d.logDelivery(hook, p, status, errMsg, attempts)
 }
 
 // logDelivery persists one delivery-history row (best-effort — a logging
 // failure never affects delivery itself). No-op when history is disabled.
-func (d *Dispatcher) logDelivery(webhookID string, p Payload, status int, errMsg string, attempts int) {
+func (d *Dispatcher) logDelivery(hook models.UserWebhook, p Payload, status int, errMsg string, attempts int) {
 	if d.deliveryRepo == nil {
 		return
 	}
+	webhookID := hook.ID
 	body, err := json.Marshal(p)
 	if err != nil {
 		slog.Warn("webhook dispatcher: marshal delivery log payload", "webhook", webhookID, "error", err)
 		return
 	}
 	entry := &models.WebhookDelivery{
+		TenantID:    hook.TenantID, // system scope writes it as given, not the column default
 		WebhookID:   webhookID,
 		Event:       p.Event,
 		Payload:     datatypes.JSON(body),
@@ -391,7 +409,7 @@ func (d *Dispatcher) logDelivery(webhookID string, p Payload, status int, errMsg
 		Attempts:    attempts,
 		DeliveredAt: time.Now(),
 	}
-	if err := d.deliveryRepo.Create(entry); err != nil {
+	if err := d.deliveryRepo.Create(systemCtx, entry); err != nil {
 		slog.Warn("webhook dispatcher: log delivery", "webhook", webhookID, "error", err)
 	}
 }
@@ -462,10 +480,10 @@ func (d *Dispatcher) DeliverAndLog(hook models.UserWebhook, p Payload) (int, err
 	if err != nil {
 		errMsg = err.Error()
 	}
-	if recErr := d.repo.RecordDelivery(hook.ID, status, errMsg); recErr != nil {
+	if recErr := d.repo.RecordDelivery(systemCtx, hook.ID, status, errMsg); recErr != nil {
 		slog.Warn("webhook dispatcher: record delivery", "webhook", hook.ID, "error", recErr)
 	}
-	d.logDelivery(hook.ID, p, status, errMsg, 1)
+	d.logDelivery(hook, p, status, errMsg, 1)
 	return status, err
 }
 

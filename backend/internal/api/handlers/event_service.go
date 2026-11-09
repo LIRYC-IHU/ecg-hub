@@ -8,6 +8,7 @@ import (
 
 	apiv1 "github.com/LIRYC-IHU/ecg-hub/internal/api/v1"
 	"github.com/LIRYC-IHU/ecg-hub/internal/events"
+	"github.com/LIRYC-IHU/ecg-hub/internal/tenancy"
 )
 
 // eventSubscriber is the narrow hub interface the event stream needs.
@@ -81,6 +82,9 @@ func (h *EventServiceHandler) Subscribe(ctx context.Context, _ *apiv1.SubscribeR
 			// the device list is device.read. DeviceService carries them.
 			if events.IsDevice(ev.Type) {
 				continue
+			}
+			if tenant, _ := tenancy.ID(ctx); !ev.For(tenant) {
+				continue // another tenant's ingestion
 			}
 			if err := stream.Send(eventToProto(ev)); err != nil {
 				return nil // client disconnected

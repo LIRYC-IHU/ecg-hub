@@ -27,15 +27,15 @@ type oruSettingsProvider interface {
 }
 
 type ecgLoader interface {
-	FindByID(id string) (*models.ECG, error)
+	FindByID(ctx context.Context, id string) (*models.ECG, error)
 }
 
 type patientLoader interface {
-	FindByPatientID(patientID string) (*models.Patient, error)
+	FindByPatientID(ctx context.Context, patientID string) (*models.Patient, error)
 }
 
 type oruAttemptRecorder interface {
-	Insert(a *models.HL7ORUAttempt) error
+	Insert(ctx context.Context, a *models.HL7ORUAttempt) error
 }
 
 // PDFRenderer renders an ECG to a printable PDF report. It is implemented by a thin
@@ -92,7 +92,7 @@ func (s *ORUService) SendForECG(ctx context.Context, ecgID, triggeredBy string) 
 		return nil, ErrORUNoDestination
 	}
 
-	ecg, err := s.ecgs.FindByID(ecgID)
+	ecg, err := s.ecgs.FindByID(ctx, ecgID)
 	if err != nil {
 		return nil, fmt.Errorf("hl7: load ecg: %w", err)
 	}
@@ -105,7 +105,7 @@ func (s *ORUService) SendForECG(ctx context.Context, ecgID, triggeredBy string) 
 
 	// Patient is best-effort: if absent we still send a minimal PID built from the ECG's
 	// patient identifier so the HIS can correlate the result.
-	patient, _ := s.patients.FindByPatientID(ecg.PatientID)
+	patient, _ := s.patients.FindByPatientID(ctx, ecg.PatientID)
 
 	// Render + encode the PDF when configured. A render failure aborts the send so we
 	// never transmit a result that silently omits the report the operator expects.
@@ -200,7 +200,7 @@ func (s *ORUService) record(ecg *models.ECG, status, code, msg, errStr string, i
 		ResponseMs:  elapsedMs,
 	}
 	if s.attempts != nil {
-		if err := s.attempts.Insert(rec); err != nil {
+		if err := s.attempts.Insert(systemCtx, rec); err != nil {
 			slog.Warn("hl7: failed to record oru attempt", "ecg_id", ecg.ID, "error", err)
 		}
 	}

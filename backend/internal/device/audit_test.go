@@ -1,6 +1,7 @@
 package device
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"sync"
@@ -16,7 +17,7 @@ type fakeAudit struct {
 	err     error
 }
 
-func (f *fakeAudit) Insert(e *models.AuditLog) error {
+func (f *fakeAudit) Insert(_ context.Context, e *models.AuditLog) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.err != nil {

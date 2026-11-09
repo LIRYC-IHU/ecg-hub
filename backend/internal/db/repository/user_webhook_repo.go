@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"errors"
 	"time"
 
@@ -26,9 +27,9 @@ func NewUserWebhookRepository(db *gorm.DB) *UserWebhookRepository {
 }
 
 // ListByUser returns all webhooks owned by userID, newest first.
-func (r *UserWebhookRepository) ListByUser(userID string) ([]models.UserWebhook, error) {
+func (r *UserWebhookRepository) ListByUser(ctx context.Context, userID string) ([]models.UserWebhook, error) {
 	var hooks []models.UserWebhook
-	err := r.db.Where("user_id = ?", userID).Order("created_at DESC").Find(&hooks).Error
+	err := r.db.WithContext(ctx).Where("user_id = ?", userID).Order("created_at DESC").Find(&hooks).Error
 	return hooks, err
 }
 
@@ -38,12 +39,12 @@ func (r *UserWebhookRepository) ListByUser(userID string) ([]models.UserWebhook,
 // straight from a URL path segment, and user_webhooks.id is a uuid column, so
 // Postgres rejects the statement ("invalid input syntax for type uuid") before
 // any row is looked at. Without this guard a client typo surfaces as a 500.
-func (r *UserWebhookRepository) GetByUser(userID, id string) (*models.UserWebhook, error) {
+func (r *UserWebhookRepository) GetByUser(ctx context.Context, userID, id string) (*models.UserWebhook, error) {
 	if uuid.Validate(id) != nil {
 		return nil, ErrWebhookNotFound
 	}
 	var hook models.UserWebhook
-	err := r.db.Where("id = ? AND user_id = ?", id, userID).First(&hook).Error
+	err := r.db.WithContext(ctx).Where("id = ? AND user_id = ?", id, userID).First(&hook).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, ErrWebhookNotFound
 	}
@@ -55,30 +56,30 @@ func (r *UserWebhookRepository) GetByUser(userID, id string) (*models.UserWebhoo
 
 // ListEnabled returns every enabled webhook across all users — used by the
 // dispatcher to fan out events.
-func (r *UserWebhookRepository) ListEnabled() ([]models.UserWebhook, error) {
+func (r *UserWebhookRepository) ListEnabled(ctx context.Context) ([]models.UserWebhook, error) {
 	var hooks []models.UserWebhook
-	err := r.db.Where("enabled = ?", true).Find(&hooks).Error
+	err := r.db.WithContext(ctx).Where("enabled = ?", true).Find(&hooks).Error
 	return hooks, err
 }
 
 // Create inserts a new webhook.
-func (r *UserWebhookRepository) Create(hook *models.UserWebhook) error {
-	return r.db.Create(hook).Error
+func (r *UserWebhookRepository) Create(ctx context.Context, hook *models.UserWebhook) error {
+	return r.db.WithContext(ctx).Create(hook).Error
 }
 
 // Update persists hook. The caller must have loaded it via GetByUser
 // (ownership already checked).
-func (r *UserWebhookRepository) Update(hook *models.UserWebhook) error {
-	return r.db.Save(hook).Error
+func (r *UserWebhookRepository) Update(ctx context.Context, hook *models.UserWebhook) error {
+	return r.db.WithContext(ctx).Save(hook).Error
 }
 
 // DeleteByUser removes one webhook owned by userID. A malformed id is "not
 // found" for the same reason as in GetByUser.
-func (r *UserWebhookRepository) DeleteByUser(userID, id string) error {
+func (r *UserWebhookRepository) DeleteByUser(ctx context.Context, userID, id string) error {
 	if uuid.Validate(id) != nil {
 		return ErrWebhookNotFound
 	}
-	res := r.db.Where("id = ? AND user_id = ?", id, userID).Delete(&models.UserWebhook{})
+	res := r.db.WithContext(ctx).Where("id = ? AND user_id = ?", id, userID).Delete(&models.UserWebhook{})
 	if res.Error != nil {
 		return res.Error
 	}
@@ -90,9 +91,9 @@ func (r *UserWebhookRepository) DeleteByUser(userID, id string) error {
 
 // RecordDelivery updates the delivery feedback columns (best-effort — errors
 // are returned for logging but deliveries are never retried because of them).
-func (r *UserWebhookRepository) RecordDelivery(id string, statusCode int, deliveryErr string) error {
+func (r *UserWebhookRepository) RecordDelivery(ctx context.Context, id string, statusCode int, deliveryErr string) error {
 	now := time.Now()
-	return r.db.Model(&models.UserWebhook{}).Where("id = ?", id).Updates(map[string]any{
+	return r.db.WithContext(ctx).Model(&models.UserWebhook{}).Where("id = ?", id).Updates(map[string]any{
 		"last_status_code":  statusCode,
 		"last_error":        deliveryErr,
 		"last_delivered_at": &now,

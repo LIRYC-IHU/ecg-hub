@@ -197,7 +197,7 @@ func (w *restartableFTPWrapper) AcceptedExtensions() []string            { retur
 func (w *restartableFTPWrapper) Health() error                           { return nil }
 func (w *restartableFTPWrapper) SupportedFormats() []module.ExportFormat { return nil }
 func (w *restartableFTPWrapper) Validate(_ []byte) error                 { return nil }
-func (w *restartableFTPWrapper) Parse(_ context.Context, _ []byte) (*module.ECGMetadata, error) {
+func (w *restartableFTPWrapper) Parse(ctx context.Context, _ []byte) (*module.ECGMetadata, error) {
 	return nil, nil
 }
 func (w *restartableFTPWrapper) UpdateFile(_ string, _ module.MetadataPatch) error { return nil }
@@ -307,7 +307,7 @@ func (w *restartableDICOMWrapper) AcceptedExtensions() []string            { ret
 func (w *restartableDICOMWrapper) Health() error                           { return nil }
 func (w *restartableDICOMWrapper) SupportedFormats() []module.ExportFormat { return nil }
 func (w *restartableDICOMWrapper) Validate(_ []byte) error                 { return nil }
-func (w *restartableDICOMWrapper) Parse(_ context.Context, _ []byte) (*module.ECGMetadata, error) {
+func (w *restartableDICOMWrapper) Parse(ctx context.Context, _ []byte) (*module.ECGMetadata, error) {
 	return nil, nil
 }
 func (w *restartableDICOMWrapper) UpdateFile(_ string, _ module.MetadataPatch) error { return nil }

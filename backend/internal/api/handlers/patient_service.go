@@ -24,17 +24,17 @@ type PatientServiceHandler struct {
 // MarkECGsViewed marks all of a patient's ECGs as viewed (the former REST
 // POST /api/v1/patients/:id/ecgs/view). The empty-id case is already rejected by
 // protovalidate before this runs.
-func (h *PatientServiceHandler) MarkECGsViewed(_ context.Context, req *apiv1.MarkECGsViewedRequest) (*apiv1.MarkECGsViewedResponse, error) {
+func (h *PatientServiceHandler) MarkECGsViewed(ctx context.Context, req *apiv1.MarkECGsViewedRequest) (*apiv1.MarkECGsViewedResponse, error) {
 	// ecgs.patient_id holds the device string, not the UUID. Callers send
 	// whichever id they have, so resolve before querying -- passing a UUID
 	// straight through matches no rows and reports zero marked.
-	patientID, err := h.resolvePatientID(req.PatientId)
+	patientID, err := h.resolvePatientID(ctx, req.PatientId)
 	if err != nil {
 		return &apiv1.MarkECGsViewedResponse{PatientId: req.PatientId, Marked: 0}, nil
 	}
 
 	repo := repository.NewECGRepository(h.DB)
-	n, err := repo.MarkViewedByPatient(patientID)
+	n, err := repo.MarkViewedByPatient(ctx, patientID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -47,12 +47,12 @@ func (h *PatientServiceHandler) MarkECGsViewed(_ context.Context, req *apiv1.Mar
 // resolvePatientID turns either form of patient identifier -- the UUID
 // (patients.id) or the device string (patients.patient_id) -- into the device
 // string, which is what ecgs.patient_id stores.
-func (h *PatientServiceHandler) resolvePatientID(id string) (string, error) {
+func (h *PatientServiceHandler) resolvePatientID(ctx context.Context, id string) (string, error) {
 	var patient models.Patient
-	if err := h.DB.First(&patient, "patient_id = ?", id).Error; err == nil {
+	if err := h.DB.WithContext(ctx).First(&patient, "patient_id = ?", id).Error; err == nil {
 		return patient.PatientID, nil
 	}
-	if err := h.DB.First(&patient, "id = ?", id).Error; err != nil {
+	if err := h.DB.WithContext(ctx).First(&patient, "id = ?", id).Error; err != nil {
 		return "", err
 	}
 	return patient.PatientID, nil
@@ -71,12 +71,12 @@ func (h *PatientServiceHandler) ListECGs(ctx context.Context, req *apiv1.ListECG
 		perPage = 20
 	}
 
-	patientID, err := h.resolvePatientID(req.PatientId)
+	patientID, err := h.resolvePatientID(ctx, req.PatientId)
 	if err != nil {
 		return &apiv1.ListECGsResponse{Data: []*apiv1.Ecg{}, Total: 0, Page: page, PerPage: perPage}, nil
 	}
 
-	q := h.DB.Model(&models.ECG{}).Where("patient_id = ?", patientID)
+	q := h.DB.WithContext(ctx).Model(&models.ECG{}).Where("patient_id = ?", patientID)
 
 	// Apply optional AND filters.
 	if req.From != "" {
@@ -177,7 +177,7 @@ func patientToProto(p *dto.PatientWithStats) *apiv1.Patient {
 // Search returns the paginated patient list with ECG aggregates, optionally
 // filtered by query, tags and ECG-level criteria (the former REST
 // GET /api/v1/patients). Not audited — it fires on every browse.
-func (h *PatientServiceHandler) Search(_ context.Context, req *apiv1.SearchRequest) (*apiv1.SearchResponse, error) {
+func (h *PatientServiceHandler) Search(ctx context.Context, req *apiv1.SearchRequest) (*apiv1.SearchResponse, error) {
 	page := req.Page
 	if page <= 0 {
 		page = 1
@@ -198,7 +198,7 @@ func (h *PatientServiceHandler) Search(_ context.Context, req *apiv1.SearchReque
 	}
 	orderClause := col + " " + order
 
-	query := h.DB.Model(&models.Patient{})
+	query := h.DB.WithContext(ctx).Model(&models.Patient{})
 	if req.Q != "" {
 		like := "%" + req.Q + "%"
 		// The device is part of what people type here: "which patients came off
@@ -208,7 +208,7 @@ func (h *PatientServiceHandler) Search(_ context.Context, req *apiv1.SearchReque
 		query = query.Where(
 			"patients.last_name ILIKE ? OR patients.first_name ILIKE ? OR patients.patient_id ILIKE ? OR patients.nda ILIKE ? OR patients.patient_id IN (?)",
 			like, like, like, like,
-			h.DB.Table("ecgs").Select("DISTINCT ecgs.patient_id").
+			h.DB.WithContext(ctx).Table("ecgs").Select("DISTINCT ecgs.patient_id").
 				Joins("JOIN devices ON devices.mac = ecgs.device_mac").
 				Where("devices.label ILIKE ? OR ecgs.device_mac ILIKE ?", like, like),
 		)
@@ -217,8 +217,8 @@ func (h *PatientServiceHandler) Search(_ context.Context, req *apiv1.SearchReque
 		tagIDs := strings.Split(req.Tags, ",")
 		query = query.Where(
 			"patients.patient_id IN (?) OR patients.patient_id IN (?)",
-			h.DB.Table("patient_tags").Select("patient_id").Where("tag_id IN ?", tagIDs),
-			h.DB.Table("ecgs").Select("DISTINCT ecgs.patient_id").
+			h.DB.WithContext(ctx).Table("patient_tags").Select("patient_id").Where("tag_id IN ?", tagIDs),
+			h.DB.WithContext(ctx).Table("ecgs").Select("DISTINCT ecgs.patient_id").
 				Joins("JOIN ecg_tags ON ecg_tags.ecg_id = ecgs.id").
 				Where("ecg_tags.tag_id IN ?", tagIDs),
 		)
@@ -228,7 +228,7 @@ func (h *PatientServiceHandler) Search(_ context.Context, req *apiv1.SearchReque
 	hasECGFilters := req.Vendor != "" || req.DeviceModel != "" || req.DeviceMac != "" ||
 		req.FileFormat != "" || req.Hl7Status != "" || req.From != "" || req.To != ""
 	if hasECGFilters {
-		sub := h.DB.Table("ecgs").Select("1").
+		sub := h.DB.WithContext(ctx).Table("ecgs").Select("1").
 			Where("ecgs.patient_id = patients.patient_id")
 		if req.Vendor != "" {
 			sub = sub.Where("ecgs.vendor = ?", req.Vendor)

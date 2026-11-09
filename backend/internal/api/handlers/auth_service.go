@@ -16,7 +16,7 @@ type AuthServiceHandler struct {
 	AuthConfigRepo *repository.AuthConfigRepository
 }
 
-func (h *AuthServiceHandler) GetProviders(_ context.Context, _ *apiv1.GetProvidersRequest) (*apiv1.GetProvidersResponse, error) {
+func (h *AuthServiceHandler) GetProviders(ctx context.Context, _ *apiv1.GetProvidersRequest) (*apiv1.GetProvidersResponse, error) {
 	names := auth.GetProviderNames(h.Provider)
 
 	// Also include providers configured in the DB (even if not loaded at startup).

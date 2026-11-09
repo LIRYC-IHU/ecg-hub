@@ -13,9 +13,10 @@ import (
 
 	ftpserver "github.com/fclairamb/ftpserverlib"
 
+	"github.com/spf13/afero"
+
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 	"github.com/LIRYC-IHU/ecg-hub/internal/device"
-	"github.com/spf13/afero"
 )
 
 // ---- helpers ----------------------------------------------------------------
@@ -627,7 +628,7 @@ type recordingAudit struct {
 	entries []models.AuditLog
 }
 
-func (a *recordingAudit) Insert(e *models.AuditLog) error {
+func (a *recordingAudit) Insert(_ context.Context, e *models.AuditLog) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.entries = append(a.entries, *e)

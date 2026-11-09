@@ -1,6 +1,7 @@
 package hl7
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"testing"
@@ -22,11 +23,11 @@ type stubRetryECGRepo struct {
 	lifecycleErr error
 }
 
-func (s *stubRetryECGRepo) FindPendingHL7(_ int) ([]models.ECG, error) {
+func (s *stubRetryECGRepo) FindPendingHL7(_ context.Context, _ int) ([]models.ECG, error) {
 	return s.ecgs, s.findErr
 }
 
-func (s *stubRetryECGRepo) UpdateHL7Lifecycle(ecgID string, status string, retryCount int) error {
+func (s *stubRetryECGRepo) UpdateHL7Lifecycle(_ context.Context, ecgID string, status string, retryCount int) error {
 	s.lifecycleCalls = append(s.lifecycleCalls, struct {
 		ecgID      string
 		status     string
@@ -40,7 +41,7 @@ type stubRetryPatRepo struct {
 	err   error
 }
 
-func (s *stubRetryPatRepo) UpdateDemographics(patientID string, _ *PatientDemographics) error {
+func (s *stubRetryPatRepo) UpdateDemographics(_ context.Context, patientID string, _ *PatientDemographics) error {
 	s.calls = append(s.calls, patientID)
 	return s.err
 }
@@ -50,7 +51,7 @@ type stubRetryAuditWriter struct {
 	err   error
 }
 
-func (s *stubRetryAuditWriter) Insert(entry *models.AuditLog) error {
+func (s *stubRetryAuditWriter) Insert(_ context.Context, entry *models.AuditLog) error {
 	s.calls = append(s.calls, entry)
 	return s.err
 }

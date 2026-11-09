@@ -33,7 +33,7 @@ type AuthAdminServiceHandler struct {
 	DB     *gorm.DB
 }
 
-func (h *AuthAdminServiceHandler) ListProviders(_ context.Context, _ *apiv1.ListAuthProvidersRequest) (*apiv1.ListAuthProvidersResponse, error) {
+func (h *AuthAdminServiceHandler) ListProviders(ctx context.Context, _ *apiv1.ListAuthProvidersRequest) (*apiv1.ListAuthProvidersResponse, error) {
 	configs, err := h.Repo.ListAll()
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, errors.New("failed to list auth providers"))
@@ -201,7 +201,7 @@ func (h *AuthAdminServiceHandler) DeleteProvider(ctx context.Context, req *apiv1
 	return &apiv1.DeleteAuthProviderResponse{Message: "auth provider config deleted", RestartRequired: true}, nil
 }
 
-func (h *AuthAdminServiceHandler) TestOIDC(_ context.Context, req *apiv1.TestOIDCRequest) (*apiv1.TestAuthResponse, error) {
+func (h *AuthAdminServiceHandler) TestOIDC(ctx context.Context, req *apiv1.TestOIDCRequest) (*apiv1.TestAuthResponse, error) {
 	var body SaveOIDCRequest
 	if err := json.Unmarshal([]byte(req.ConfigJson), &body); err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("invalid config payload"))
@@ -223,7 +223,7 @@ func (h *AuthAdminServiceHandler) TestOIDC(_ context.Context, req *apiv1.TestOID
 	return &apiv1.TestAuthResponse{Success: true}, nil
 }
 
-func (h *AuthAdminServiceHandler) TestLDAP(_ context.Context, req *apiv1.TestLDAPRequest) (*apiv1.TestAuthResponse, error) {
+func (h *AuthAdminServiceHandler) TestLDAP(ctx context.Context, req *apiv1.TestLDAPRequest) (*apiv1.TestAuthResponse, error) {
 	var body SaveLDAPRequest
 	if err := json.Unmarshal([]byte(req.ConfigJson), &body); err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("invalid config payload"))

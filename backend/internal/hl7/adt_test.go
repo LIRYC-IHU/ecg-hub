@@ -1,6 +1,7 @@
 package hl7
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -108,7 +109,7 @@ type applierStub struct {
 	err   error
 }
 
-func (a *applierStub) ApplyPatientUpdate(u *PatientUpdate) (bool, error) {
+func (a *applierStub) ApplyPatientUpdate(_ context.Context, u *PatientUpdate) (bool, error) {
 	a.got = u
 	return a.found, a.err
 }

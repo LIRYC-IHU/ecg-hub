@@ -3,32 +3,33 @@ package connector
 import (
 	"context"
 	"errors"
-	"github.com/LIRYC-IHU/ecg-hub/internal/storage"
 	"log/slog"
 	"sync"
 	"time"
+
+	"github.com/LIRYC-IHU/ecg-hub/internal/storage"
 
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 )
 
 // retryJobRepo is the job repository interface used by RetryJob.
 type retryJobRepo interface {
-	FindPendingRetry(limit int) ([]models.ConnectorJob, error)
-	FindHeldForHL7(limit int) ([]models.ConnectorJob, error)
-	MarkSent(id string) error
-	MarkFailed(id string, errMsg string, nextRetryAt time.Time) error
-	Exhaust(id string, errMsg string) error
+	FindPendingRetry(ctx context.Context, limit int) ([]models.ConnectorJob, error)
+	FindHeldForHL7(ctx context.Context, limit int) ([]models.ConnectorJob, error)
+	MarkSent(ctx context.Context, id string) error
+	MarkFailed(ctx context.Context, id string, errMsg string, nextRetryAt time.Time) error
+	Exhaust(ctx context.Context, id string, errMsg string) error
 }
 
 // retryECGRepo is the ECG repository interface used by RetryJob.
 type retryECGRepo interface {
-	FindByID(id string) (*models.ECG, error)
+	FindByID(ctx context.Context, id string) (*models.ECG, error)
 }
 
 // retryQuarantineRepo loads quarantine entries for jobs whose source file
 // failed ingestion (job.QuarantineID set). Implemented by repository.QuarantineRepository.
 type retryQuarantineRepo interface {
-	FindByID(id string) (*models.QuarantineEntry, error)
+	FindByID(ctx context.Context, id string) (*models.QuarantineEntry, error)
 }
 
 // RetryJob polls the DB at a configured interval and retries failed connector jobs.
@@ -139,7 +140,7 @@ func (j *RetryJob) run() {
 // processPending fetches up to 50 retriable jobs and retries each one.
 // limit=50 prevents unbounded memory use when a large backlog accumulates.
 func (j *RetryJob) processPending() {
-	jobs, err := j.jobRepo.FindPendingRetry(50)
+	jobs, err := j.jobRepo.FindPendingRetry(systemCtx, 50)
 	if err != nil {
 		slog.Warn("connector: retry job find pending failed", "error", err)
 		return
@@ -158,7 +159,7 @@ func (j *RetryJob) processPending() {
 // up. A notification from the enricher would have been lost with the process
 // that was going to send it.
 func (j *RetryJob) releaseHeld() {
-	jobs, err := j.jobRepo.FindHeldForHL7(50)
+	jobs, err := j.jobRepo.FindHeldForHL7(systemCtx, 50)
 	if err != nil {
 		slog.Warn("connector: retry job find held failed", "error", err)
 		return
@@ -176,7 +177,7 @@ func (j *RetryJob) releaseHeld() {
 func (j *RetryJob) loadSource(job models.ConnectorJob) (*models.ECG, string, string) {
 	switch {
 	case job.ECGID != nil:
-		ecg, err := j.ecgRepo.FindByID(*job.ECGID)
+		ecg, err := j.ecgRepo.FindByID(systemCtx, *job.ECGID)
 		if err != nil {
 			return nil, "", "ECG not found: " + err.Error()
 		}
@@ -185,7 +186,7 @@ func (j *RetryJob) loadSource(job models.ConnectorJob) (*models.ECG, string, str
 		if j.quarantineRepo == nil {
 			return nil, "", "quarantine lookup not configured"
 		}
-		entry, err := j.quarantineRepo.FindByID(*job.QuarantineID)
+		entry, err := j.quarantineRepo.FindByID(systemCtx, *job.QuarantineID)
 		if err != nil {
 			return nil, "", "quarantine entry not found: " + err.Error()
 		}
@@ -236,7 +237,7 @@ func (j *RetryJob) processOne(job models.ConnectorJob) {
 		cleanup()
 	}
 	if fwdErr == nil {
-		if markErr := j.jobRepo.MarkSent(job.ID); markErr != nil {
+		if markErr := j.jobRepo.MarkSent(systemCtx, job.ID); markErr != nil {
 			slog.Warn("connector: retry mark_sent failed",
 				"connector", job.ConnectorName, "job_id", job.ID, "error", markErr)
 		}
@@ -263,7 +264,7 @@ func (j *RetryJob) processOne(job models.ConnectorJob) {
 	}
 
 	nextRetryAt := time.Now().Add(s.Interval)
-	if markErr := j.jobRepo.MarkFailed(job.ID, fwdErr.Error(), nextRetryAt); markErr != nil {
+	if markErr := j.jobRepo.MarkFailed(systemCtx, job.ID, fwdErr.Error(), nextRetryAt); markErr != nil {
 		slog.Warn("connector: retry mark_failed update failed",
 			"connector", job.ConnectorName, "job_id", job.ID, "error", markErr)
 	}
@@ -275,7 +276,7 @@ func (j *RetryJob) processOne(job models.ConnectorJob) {
 // exhaustJob sets the job to exhausted status and logs the event.
 // ecg may be nil when the source could not be loaded.
 func (j *RetryJob) exhaustJob(job models.ConnectorJob, ecg *models.ECG, reason string) {
-	if err := j.jobRepo.Exhaust(job.ID, reason); err != nil {
+	if err := j.jobRepo.Exhaust(systemCtx, job.ID, reason); err != nil {
 		slog.Warn("connector: exhaustion update failed",
 			"connector", job.ConnectorName,
 			"job_id", job.ID,

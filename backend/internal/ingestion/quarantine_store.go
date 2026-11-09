@@ -33,9 +33,9 @@ type QuarantineRecorder interface {
 // failing file sent twice refreshes the existing entry instead of stacking
 // duplicates in the review queue.
 type quarantineInserter interface {
-	Insert(entry *models.QuarantineEntry) error
-	FindByContentHash(hash string) (*models.QuarantineEntry, error)
-	TouchReceived(id, reason string) error
+	Insert(ctx context.Context, entry *models.QuarantineEntry) error
+	FindByContentHash(ctx context.Context, hash string) (*models.QuarantineEntry, error)
+	TouchReceived(ctx context.Context, id, reason string) error
 }
 
 // QuarantineStore implements QuarantineRecorder: writes the raw file to disk
@@ -65,7 +65,7 @@ func (s *QuarantineStore) WithPublisher(pub events.Publisher) *QuarantineStore {
 // inserts a QuarantineEntry into the database with category "error".
 func (s *QuarantineStore) Record(ctx context.Context, filename string, data []byte, reason string) (*models.QuarantineEntry, error) {
 	contentHash := hashBytes(data)
-	if existing := s.dedup(contentHash, reason, filename); existing != nil {
+	if existing := s.dedup(ctx, contentHash, reason, filename); existing != nil {
 		return existing, nil
 	}
 
@@ -79,12 +79,13 @@ func (s *QuarantineStore) Record(ctx context.Context, filename string, data []by
 		Category:    models.QuarantineCategoryError,
 		ContentHash: contentHash,
 	}
-	if err := s.repo.Insert(entry); err != nil {
+	if err := s.repo.Insert(ctx, entry); err != nil {
 		return nil, fmt.Errorf("quarantine_store: db insert: %w", err)
 	}
 	if s.publisher != nil {
 		s.publisher.Publish(events.Event{
 			Type:         events.TypeECGQuarantined,
+			TenantID:     entry.TenantID,
 			QuarantineID: entry.ID,
 			Filename:     entry.Filename,
 			Reason:       reason,
@@ -98,7 +99,7 @@ func (s *QuarantineStore) Record(ctx context.Context, filename string, data []by
 // assignment) and the extracted metadata is serialized into the entry for review.
 func (s *QuarantineStore) RecordUnidentified(ctx context.Context, item IngestItem, meta *module.ECGMetadata, reason string) (*models.QuarantineEntry, error) {
 	contentHash := hashBytes(item.Data)
-	if existing := s.dedup(contentHash, reason, item.Filename); existing != nil {
+	if existing := s.dedup(ctx, contentHash, reason, item.Filename); existing != nil {
 		return existing, nil
 	}
 
@@ -124,12 +125,13 @@ func (s *QuarantineStore) RecordUnidentified(ctx context.Context, item IngestIte
 			entry.Metadata = datatypes.JSON(b)
 		}
 	}
-	if err := s.repo.Insert(entry); err != nil {
+	if err := s.repo.Insert(ctx, entry); err != nil {
 		return nil, fmt.Errorf("quarantine_store: db insert: %w", err)
 	}
 	if s.publisher != nil {
 		s.publisher.Publish(events.Event{
 			Type:         events.TypeECGUnidentified,
+			TenantID:     entry.TenantID,
 			QuarantineID: entry.ID,
 			Vendor:       entry.Vendor,
 			Filename:     entry.Filename,
@@ -141,14 +143,14 @@ func (s *QuarantineStore) RecordUnidentified(ctx context.Context, item IngestIte
 
 // dedup returns the existing entry holding contentHash after refreshing its
 // ReceivedAt/ErrorReason, or nil when the file is new to the quarantine.
-func (s *QuarantineStore) dedup(contentHash, reason, filename string) *models.QuarantineEntry {
-	existing, err := s.repo.FindByContentHash(contentHash)
+func (s *QuarantineStore) dedup(ctx context.Context, contentHash, reason, filename string) *models.QuarantineEntry {
+	existing, err := s.repo.FindByContentHash(ctx, contentHash)
 	if err != nil || existing == nil {
 		return nil
 	}
 	slog.Info("quarantine: duplicate file re-sent — refreshing existing entry",
 		"filename", filename, "entry_id", existing.ID)
-	if err := s.repo.TouchReceived(existing.ID, reason); err != nil {
+	if err := s.repo.TouchReceived(ctx, existing.ID, reason); err != nil {
 		slog.Warn("quarantine: touch failed", "entry_id", existing.ID, "error", err)
 	}
 	// Notify connected clients — a silently skipped re-send (e.g. re-uploading an
@@ -157,6 +159,7 @@ func (s *QuarantineStore) dedup(contentHash, reason, filename string) *models.Qu
 	if s.publisher != nil {
 		s.publisher.Publish(events.Event{
 			Type:         events.TypeECGDuplicate,
+			TenantID:     existing.TenantID,
 			QuarantineID: existing.ID,
 			Vendor:       existing.Vendor,
 			Filename:     filename,

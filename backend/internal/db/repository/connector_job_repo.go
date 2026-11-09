@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -30,17 +31,17 @@ func NewConnectorJobRepository(db *gorm.DB) *ConnectorJobRepository {
 }
 
 // Insert creates a new connector_job row.
-func (r *ConnectorJobRepository) Insert(job *models.ConnectorJob) error {
-	if err := r.db.Create(job).Error; err != nil {
+func (r *ConnectorJobRepository) Insert(ctx context.Context, job *models.ConnectorJob) error {
+	if err := r.db.WithContext(ctx).Create(job).Error; err != nil {
 		return fmt.Errorf("connector_job_repo: insert: %w", err)
 	}
 	return nil
 }
 
 // MarkSent sets status=sent and records sent_at=now for the given job.
-func (r *ConnectorJobRepository) MarkSent(id string) error {
+func (r *ConnectorJobRepository) MarkSent(ctx context.Context, id string) error {
 	now := time.Now()
-	result := r.db.Model(&models.ConnectorJob{}).Where("id = ?", id).
+	result := r.db.WithContext(ctx).Model(&models.ConnectorJob{}).Where("id = ?", id).
 		Updates(map[string]any{
 			"status":  "sent",
 			"sent_at": now,
@@ -53,8 +54,8 @@ func (r *ConnectorJobRepository) MarkSent(id string) error {
 
 // MarkFailed increments attempts, records the error, and schedules the next retry.
 // The job remains retriable until attempts reaches max_attempts.
-func (r *ConnectorJobRepository) MarkFailed(id string, errMsg string, nextRetryAt time.Time) error {
-	result := r.db.Model(&models.ConnectorJob{}).Where("id = ?", id).
+func (r *ConnectorJobRepository) MarkFailed(ctx context.Context, id string, errMsg string, nextRetryAt time.Time) error {
+	result := r.db.WithContext(ctx).Model(&models.ConnectorJob{}).Where("id = ?", id).
 		Updates(map[string]any{
 			"status":        "failed",
 			"last_error":    errMsg,
@@ -69,8 +70,8 @@ func (r *ConnectorJobRepository) MarkFailed(id string, errMsg string, nextRetryA
 
 // Exhaust sets status=exhausted and records the final error.
 // Called when attempts has reached max_attempts — no further retries will occur.
-func (r *ConnectorJobRepository) Exhaust(id string, errMsg string) error {
-	result := r.db.Model(&models.ConnectorJob{}).Where("id = ?", id).
+func (r *ConnectorJobRepository) Exhaust(ctx context.Context, id string, errMsg string) error {
+	result := r.db.WithContext(ctx).Model(&models.ConnectorJob{}).Where("id = ?", id).
 		Updates(map[string]any{
 			"status":     "exhausted",
 			"last_error": errMsg,
@@ -84,9 +85,9 @@ func (r *ConnectorJobRepository) Exhaust(id string, errMsg string) error {
 
 // FindPendingRetry returns failed jobs whose next_retry_at is in the past, ordered oldest-first.
 // limit caps the batch size to prevent unbounded memory use on large backlogs.
-func (r *ConnectorJobRepository) FindPendingRetry(limit int) ([]models.ConnectorJob, error) {
+func (r *ConnectorJobRepository) FindPendingRetry(ctx context.Context, limit int) ([]models.ConnectorJob, error) {
 	var jobs []models.ConnectorJob
-	if err := r.db.
+	if err := r.db.WithContext(ctx).
 		Where("status = ? AND next_retry_at <= ?", "failed", time.Now()).
 		Order("next_retry_at ASC").
 		Limit(limit).
@@ -102,9 +103,9 @@ func (r *ConnectorJobRepository) FindPendingRetry(limit int) ([]models.Connector
 // Only "held" jobs are returned. A "pending" job is one the dispatcher is
 // already forwarding in its own goroutine; picking those up here would deliver
 // them a second time.
-func (r *ConnectorJobRepository) FindHeldForHL7(limit int) ([]models.ConnectorJob, error) {
+func (r *ConnectorJobRepository) FindHeldForHL7(ctx context.Context, limit int) ([]models.ConnectorJob, error) {
 	var jobs []models.ConnectorJob
-	if err := r.db.
+	if err := r.db.WithContext(ctx).
 		Joins("JOIN ecgs ON ecgs.id = connector_jobs.ecg_id").
 		Where("connector_jobs.status = ? AND ecgs.hl7_status <> ?", "held", "pending").
 		Order("connector_jobs.created_at ASC").

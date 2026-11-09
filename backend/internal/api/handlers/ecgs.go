@@ -3,6 +3,7 @@ package handlers
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -28,20 +29,20 @@ import (
 
 // ecgMetaRepo is the ECG repository interface required by the metadata handlers.
 type ecgMetaRepo interface {
-	FindByID(id string) (*models.ECG, error)
+	FindByID(ctx context.Context, id string) (*models.ECG, error)
 	UpdateMetadata(ecgID string, extra map[string]any, recordedAt *time.Time) error
 }
 
 // ecgByIDFinder is the minimal ECG repository interface needed by DownloadECGHandler.
 // Implemented by *repository.ECGRepository; can be stubbed in tests.
 type ecgByIDFinder interface {
-	FindByID(id string) (*models.ECG, error)
+	FindByID(ctx context.Context, id string) (*models.ECG, error)
 }
 
 // patientByIDFinder is the minimal patient repository interface needed by DownloadECGHandler.
 // Implemented by *repository.PatientRepository; can be stubbed in tests.
 type patientByIDFinder interface {
-	FindByPatientID(patientID string) (*models.Patient, error)
+	FindByPatientID(ctx context.Context, patientID string) (*models.Patient, error)
 }
 
 // DownloadECGHandler streams an ECG file in its original format or converted to XMLFDA.
@@ -79,7 +80,7 @@ func DownloadECGHandler(db *gorm.DB, bridge export.Converter) echo.HandlerFunc {
 func downloadECGHandler(repo ecgByIDFinder, patRepo patientByIDFinder, bridge export.Converter, db *gorm.DB) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		id := c.Param("id")
-		ecg, err := repo.FindByID(id)
+		ecg, err := repo.FindByID(c.Request().Context(), id)
 		if err != nil {
 			if errors.Is(err, repository.ErrECGNotFound) {
 				return c.JSON(http.StatusNotFound, mw.APIError("ECG_NOT_FOUND", "ECG not found"))
@@ -232,7 +233,7 @@ func ListAllECGsHandler(db *gorm.DB) echo.HandlerFunc {
 		}
 
 		buildQ := func() *gorm.DB {
-			q := db.Model(&models.ECG{}).
+			q := db.WithContext(c.Request().Context()).Model(&models.ECG{}).
 				Joins("LEFT JOIN patients ON patients.patient_id = ecgs.patient_id").
 				// LEFT: an ECG keeps its row when its device was deleted from
 				// the inventory, or when none was ever identified.
@@ -323,10 +324,10 @@ func ListAllECGsHandler(db *gorm.DB) echo.HandlerFunc {
 func ECGFiltersHandler(db *gorm.DB) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		var vendors []string
-		db.Model(&models.ECG{}).Distinct("vendor").Where("vendor != ''").Order("vendor").Pluck("vendor", &vendors)
+		db.WithContext(c.Request().Context()).Model(&models.ECG{}).Distinct("vendor").Where("vendor != ''").Order("vendor").Pluck("vendor", &vendors)
 
 		var deviceModels []string
-		db.Model(&models.ECG{}).
+		db.WithContext(c.Request().Context()).Model(&models.ECG{}).
 			Where("extra->>'device_model' IS NOT NULL AND extra->>'device_model' != ''").
 			Distinct("extra->>'device_model'").
 			Order("extra->>'device_model'").
@@ -339,7 +340,7 @@ func ECGFiltersHandler(db *gorm.DB) echo.HandlerFunc {
 		// The devices that actually sent something, not the whole inventory: a
 		// filter offering a device with no ECGs behind it is a dead end.
 		var devices []deviceOption
-		db.Model(&models.ECG{}).
+		db.WithContext(c.Request().Context()).Model(&models.ECG{}).
 			Joins("JOIN devices ON devices.mac = ecgs.device_mac").
 			Where("ecgs.device_mac != ''").
 			Distinct("devices.mac", "devices.label").
@@ -348,7 +349,7 @@ func ECGFiltersHandler(db *gorm.DB) echo.HandlerFunc {
 			Scan(&devices)
 
 		var fileFormats []string
-		db.Model(&models.ECG{}).
+		db.WithContext(c.Request().Context()).Model(&models.ECG{}).
 			Where("original_filename LIKE '%.%'").
 			Distinct("LOWER(substring(original_filename from '\\.([^.]+)$'))").
 			Order("LOWER(substring(original_filename from '\\.([^.]+)$'))").
@@ -382,7 +383,7 @@ func DeleteECGHandler(db *gorm.DB) echo.HandlerFunc {
 			return c.JSON(http.StatusBadRequest, mw.APIError("INVALID_ID", "id is required"))
 		}
 
-		filePath, err := ecgRepo.DeleteByID(id)
+		filePath, err := ecgRepo.DeleteByID(c.Request().Context(), id)
 		if err != nil {
 			if errors.Is(err, repository.ErrECGNotFound) {
 				return c.JSON(http.StatusNotFound, mw.APIError("ECG_NOT_FOUND", "ECG not found"))
@@ -428,7 +429,7 @@ func ECGMetadataHandler(db *gorm.DB) echo.HandlerFunc {
 		if err != nil {
 			return c.JSON(http.StatusBadRequest, mw.APIError("INVALID_ID", "id must be a positive integer"))
 		}
-		ecg, err := repo.FindByID(id)
+		ecg, err := repo.FindByID(c.Request().Context(), id)
 		if err != nil {
 			if errors.Is(err, repository.ErrECGNotFound) {
 				return c.JSON(http.StatusNotFound, mw.APIError("ECG_NOT_FOUND", "ECG not found"))
@@ -475,7 +476,7 @@ func handleConvertDownload(
 	db *gorm.DB,
 ) error {
 	// Load patient demographics (nil is acceptable — conversion continues without enrichment, NFR-R2).
-	patient, patErr := patRepo.FindByPatientID(ecg.PatientID)
+	patient, patErr := patRepo.FindByPatientID(c.Request().Context(), ecg.PatientID)
 	if patErr != nil {
 		slog.Warn("ecg-download: patient lookup failed, proceeding without demographics",
 			"patient_id", ecg.PatientID, "error", patErr)
@@ -617,7 +618,7 @@ func handleZipDownload(
 	var patient *models.Patient
 	for _, f := range formats {
 		if f == "xmlfda" || f == "dicom" {
-			if p, perr := patRepo.FindByPatientID(ecg.PatientID); perr != nil {
+			if p, perr := patRepo.FindByPatientID(c.Request().Context(), ecg.PatientID); perr != nil {
 				slog.Warn("ecg-download: patient lookup failed, proceeding without demographics",
 					"patient_id", ecg.PatientID, "error", perr)
 			} else {

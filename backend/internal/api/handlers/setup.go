@@ -1,13 +1,16 @@
 package handlers
 
 import (
+	"context"
 	"errors"
 	"regexp"
+
+	"gorm.io/gorm"
 
 	"github.com/LIRYC-IHU/ecg-hub/internal/auth"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
-	"gorm.io/gorm"
+	"github.com/LIRYC-IHU/ecg-hub/internal/tenancy"
 )
 
 // digitRegex checks for at least one digit in the password.
@@ -47,6 +50,9 @@ func validateLocalPassword(password string) error {
 // pass the "no identity yet" check). Returns errSetup* sentinels for the caller
 // to translate to a transport-specific status. Shared by the gRPC handler.
 func createFirstAdmin(db *gorm.DB, username, password string) (*models.LocalUser, error) {
+	// Platform-level: the setup lock and the identity count must see every
+	// tenant, or a multi-tenant deployment would look empty and reopen setup.
+	db = db.WithContext(tenancy.System(context.Background()))
 	if err := validateLocalUsername(username); err != nil {
 		return nil, err
 	}
@@ -90,7 +96,7 @@ func createFirstAdmin(db *gorm.DB, username, password string) (*models.LocalUser
 
 	// Write audit log entry for system initialization.
 	auditRepo := repository.NewAuditRepository(db)
-	_ = auditRepo.Insert(&models.AuditLog{
+	_ = auditRepo.Insert(tenancy.System(context.Background()), &models.AuditLog{
 		UserID:     user.ID,
 		Action:     "system_initialized",
 		ResourceID: user.ID,
@@ -105,6 +111,7 @@ func createFirstAdmin(db *gorm.DB, username, password string) (*models.LocalUser
 // identity has logged in — closing the window where an unauthenticated caller
 // could otherwise create a local admin.
 func countIdentities(db *gorm.DB) (int64, error) {
+	db = db.WithContext(tenancy.System(db.Statement.Context)) // every tenant counts
 	var local, hub int64
 	if err := db.Model(&models.LocalUser{}).Count(&local).Error; err != nil {
 		return 0, err

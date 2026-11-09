@@ -3,11 +3,12 @@ package connector
 import (
 	"context"
 	"encoding/json"
-	"github.com/LIRYC-IHU/ecg-hub/internal/storage"
 	"log/slog"
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/LIRYC-IHU/ecg-hub/internal/storage"
 
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 	"github.com/LIRYC-IHU/ecg-hub/internal/hl7"
@@ -19,16 +20,16 @@ import (
 // dispatcherJobRepo is the subset of ConnectorJobRepo used by the Dispatcher.
 // Extracted as a local interface so callers can inject mocks in tests.
 type dispatcherJobRepo interface {
-	Insert(job *models.ConnectorJob) error
-	MarkSent(id string) error
-	MarkFailed(id string, errMsg string, nextRetryAt time.Time) error
-	Exhaust(id string, errMsg string) error
+	Insert(ctx context.Context, job *models.ConnectorJob) error
+	MarkSent(ctx context.Context, id string) error
+	MarkFailed(ctx context.Context, id string, errMsg string, nextRetryAt time.Time) error
+	Exhaust(ctx context.Context, id string, errMsg string) error
 }
 
 // AuditWriter records proxy forwarding outcomes in the audit log.
 // Implemented by repository.AuditRepository.
 type AuditWriter interface {
-	Insert(entry *models.AuditLog) error
+	Insert(ctx context.Context, entry *models.AuditLog) error
 }
 
 // ConnectorSettings bundles a Connector with its runtime parameters.
@@ -166,7 +167,7 @@ func (d *Dispatcher) dispatch(ecg *models.ECG, ecgID, quarantineID *string, unid
 			Attempts:      0,
 			MaxAttempts:   s.MaxAttempts,
 		}
-		if err := d.jobRepo.Insert(job); err != nil {
+		if err := d.jobRepo.Insert(systemCtx, job); err != nil {
 			slog.Error("connector: failed to create job",
 				"connector", s.Connector.Name(),
 				"file", ecg.OriginalFilename,
@@ -215,7 +216,7 @@ func (d *Dispatcher) forward(s ConnectorSettings, ecg *models.ECG, job *models.C
 
 	if err == nil {
 		appmetrics.ConnectorRequestsTotal.WithLabelValues(connName, "sent").Inc()
-		if markErr := d.jobRepo.MarkSent(job.ID); markErr != nil {
+		if markErr := d.jobRepo.MarkSent(systemCtx, job.ID); markErr != nil {
 			slog.Warn("connector: mark_sent failed",
 				"connector", connName, "job_id", job.ID, "error", markErr)
 		}
@@ -236,7 +237,7 @@ func (d *Dispatcher) forward(s ConnectorSettings, ecg *models.ECG, job *models.C
 
 	if nextAttempts >= s.MaxAttempts {
 		appmetrics.ConnectorRequestsTotal.WithLabelValues(connName, "exhausted").Inc()
-		if exhaustErr := d.jobRepo.Exhaust(job.ID, err.Error()); exhaustErr != nil {
+		if exhaustErr := d.jobRepo.Exhaust(systemCtx, job.ID, err.Error()); exhaustErr != nil {
 			slog.Warn("connector: exhaust update failed",
 				"connector", connName, "job_id", job.ID, "error", exhaustErr)
 		}
@@ -248,7 +249,7 @@ func (d *Dispatcher) forward(s ConnectorSettings, ecg *models.ECG, job *models.C
 	appmetrics.ConnectorRequestsTotal.WithLabelValues(connName, "failed").Inc()
 
 	nextRetryAt := time.Now().Add(s.Interval)
-	if failErr := d.jobRepo.MarkFailed(job.ID, err.Error(), nextRetryAt); failErr != nil {
+	if failErr := d.jobRepo.MarkFailed(systemCtx, job.ID, err.Error(), nextRetryAt); failErr != nil {
 		slog.Warn("connector: mark_failed update failed",
 			"connector", connName, "job_id", job.ID, "error", failErr)
 	}
@@ -302,7 +303,7 @@ func WriteProxyAudit(audit AuditWriter, action, connName string, job *models.Con
 		ResourceID: resourceID,
 		Details:    datatypes.JSON(raw),
 	}
-	if err := audit.Insert(entry); err != nil {
+	if err := audit.Insert(systemCtx, entry); err != nil {
 		slog.Warn("connector: audit write failed", "action", action, "error", err)
 	}
 }

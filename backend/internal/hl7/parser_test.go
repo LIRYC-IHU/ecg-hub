@@ -18,18 +18,18 @@ func TestExtractByPath_PIDFields(t *testing.T) {
 		path string
 		want string
 	}{
-		{"PID.5", "Dupont^Marie^J"},     // whole field (name)
-		{"PID.5.1", "Dupont"},           // last name component
-		{"PID.5.2", "Marie"},            // first name component
-		{"PID.5.3", "J"},               // middle initial
-		{"PID.7", "19800315"},          // DOB (whole field)
-		{"PID.8", "F"},                 // gender
+		{"PID.5", "Dupont^Marie^J"},                     // whole field (name)
+		{"PID.5.1", "Dupont"},                           // last name component
+		{"PID.5.2", "Marie"},                            // first name component
+		{"PID.5.3", "J"},                                // middle initial
+		{"PID.7", "19800315"},                           // DOB (whole field)
+		{"PID.8", "F"},                                  // gender
 		{"PID.11", "10 Rue de la Paix^Paris^^75001^FR"}, // address whole field
 		{"PID.11.1", "10 Rue de la Paix"},               // street
 		{"PID.11.2", "Paris"},                           // city
 		{"PID.11.4", "75001"},                           // zip
-		{"PID.13", "0612345678"},       // phone
-		{"PID.3", "P001"},             // patient ID
+		{"PID.13", "0612345678"},                        // phone
+		{"PID.3", "P001"},                               // patient ID
 	}
 
 	for _, tc := range tests {
@@ -50,11 +50,11 @@ func TestExtractByPath_MSHFields(t *testing.T) {
 		path string
 		want string
 	}{
-		{"MSH.1", "|"},        // field separator
-		{"MSH.2", "^~\\&"},   // encoding characters
-		{"MSH.3", "APP"},     // sending application
-		{"MSH.4", "FAC"},     // sending facility
-		{"MSH.5", "RECV"},    // receiving application
+		{"MSH.1", "|"},     // field separator
+		{"MSH.2", "^~\\&"}, // encoding characters
+		{"MSH.3", "APP"},   // sending application
+		{"MSH.4", "FAC"},   // sending facility
+		{"MSH.5", "RECV"},  // receiving application
 	}
 
 	for _, tc := range tests {

@@ -35,25 +35,25 @@ type stubRetryJobRepo struct {
 	exhausted    []rjExhaustedCall
 }
 
-func (s *stubRetryJobRepo) FindPendingRetry(_ int) ([]models.ConnectorJob, error) {
+func (s *stubRetryJobRepo) FindPendingRetry(_ context.Context, _ int) ([]models.ConnectorJob, error) {
 	return s.jobs, s.findErr
 }
 
-func (s *stubRetryJobRepo) FindHeldForHL7(_ int) ([]models.ConnectorJob, error) {
+func (s *stubRetryJobRepo) FindHeldForHL7(_ context.Context, _ int) ([]models.ConnectorJob, error) {
 	return s.held, s.heldErr
 }
 
-func (s *stubRetryJobRepo) MarkSent(id string) error {
+func (s *stubRetryJobRepo) MarkSent(_ context.Context, id string) error {
 	s.markedSent = append(s.markedSent, id)
 	return nil
 }
 
-func (s *stubRetryJobRepo) MarkFailed(id string, errMsg string, nextRetryAt time.Time) error {
+func (s *stubRetryJobRepo) MarkFailed(_ context.Context, id string, errMsg string, nextRetryAt time.Time) error {
 	s.markedFailed = append(s.markedFailed, rjFailedCall{id, errMsg, nextRetryAt})
 	return nil
 }
 
-func (s *stubRetryJobRepo) Exhaust(id string, errMsg string) error {
+func (s *stubRetryJobRepo) Exhaust(_ context.Context, id string, errMsg string) error {
 	s.exhausted = append(s.exhausted, rjExhaustedCall{id, errMsg})
 	return nil
 }
@@ -64,7 +64,7 @@ type stubRetryECGRepo struct {
 	findErr error
 }
 
-func (s *stubRetryECGRepo) FindByID(_ string) (*models.ECG, error) {
+func (s *stubRetryECGRepo) FindByID(_ context.Context, _ string) (*models.ECG, error) {
 	if s.findErr != nil {
 		return nil, s.findErr
 	}

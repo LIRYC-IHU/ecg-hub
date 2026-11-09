@@ -16,7 +16,7 @@ type SetupServiceHandler struct {
 	DB *gorm.DB
 }
 
-func (h *SetupServiceHandler) GetStatus(_ context.Context, _ *apiv1.GetSetupStatusRequest) (*apiv1.GetSetupStatusResponse, error) {
+func (h *SetupServiceHandler) GetStatus(ctx context.Context, _ *apiv1.GetSetupStatusRequest) (*apiv1.GetSetupStatusResponse, error) {
 	count, err := countIdentities(h.DB)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
@@ -27,7 +27,7 @@ func (h *SetupServiceHandler) GetStatus(_ context.Context, _ *apiv1.GetSetupStat
 // Initialize creates the first local admin account (system bootstrap). Public —
 // guarded by createFirstAdmin's advisory-lock + identity-count check. Maps the
 // shared setup sentinels to Connect codes.
-func (h *SetupServiceHandler) Initialize(_ context.Context, req *apiv1.InitializeRequest) (*apiv1.InitializeResponse, error) {
+func (h *SetupServiceHandler) Initialize(ctx context.Context, req *apiv1.InitializeRequest) (*apiv1.InitializeResponse, error) {
 	user, err := createFirstAdmin(h.DB, req.Username, req.Password)
 	if err != nil {
 		switch {

@@ -9,6 +9,8 @@ package events
 import (
 	"sync"
 	"time"
+
+	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 )
 
 // Event types pushed to clients.
@@ -61,6 +63,24 @@ type Event struct {
 	// DeviceMAC is set on device.* events: the hardware the event is about.
 	DeviceMAC string `json:"device_mac,omitempty"`
 	At        string `json:"at"` // RFC3339 timestamp
+	// TenantID is the tenant the event belongs to; empty means the default
+	// tenant. Never serialized: consumers use it to decide who receives the
+	// event (see For).
+	TenantID string `json:"-"`
+}
+
+// For reports whether the event may reach a consumer acting for tenantID
+// (empty: the default tenant). An event of one tenant never reaches another:
+// it names patients, files and ECGs.
+func (e Event) For(tenantID string) bool {
+	return orDefault(e.TenantID) == orDefault(tenantID)
+}
+
+func orDefault(id string) string {
+	if id == "" {
+		return models.DefaultTenantID
+	}
+	return id
 }
 
 // Publisher is the narrow interface consumed by the ingestion components so they

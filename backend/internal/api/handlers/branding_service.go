@@ -16,7 +16,7 @@ type BrandingServiceHandler struct {
 	Settings *repository.ModuleSettingsRepository
 }
 
-func (h *BrandingServiceHandler) GetBranding(_ context.Context, _ *apiv1.GetBrandingRequest) (*apiv1.GetBrandingResponse, error) {
+func (h *BrandingServiceHandler) GetBranding(ctx context.Context, _ *apiv1.GetBrandingRequest) (*apiv1.GetBrandingResponse, error) {
 	centerName, logoBase64, err := h.Settings.GetBranding()
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)

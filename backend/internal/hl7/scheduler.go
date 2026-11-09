@@ -193,7 +193,7 @@ func (s *Scheduler) Reload() error {
 	// In immediate mode, wire the enricher to the persister so new ECGs are enriched on ingest.
 	if settings.TriggerMode == "immediate" && clientJustCreated && s.wirer != nil {
 		type hl7Updater interface {
-			UpdateHL7Status(ecgID string, status string) error
+			UpdateHL7Status(ctx context.Context, ecgID string, status string) error
 		}
 		ecgUpdater, updaterOK := s.ecgRepo.(hl7Updater)
 		client, clientOK := s.client.(*Client)
@@ -298,7 +298,7 @@ func (s *Scheduler) processPending() {
 
 	appmetrics.HL7SchedulerRuns.Inc()
 
-	ecgs, err := s.ecgRepo.FindPendingHL7(50)
+	ecgs, err := s.ecgRepo.FindPendingHL7(systemCtx, 50)
 	if err != nil {
 		slog.Warn("hl7 scheduler: find pending failed", "error", err)
 		return
@@ -372,7 +372,7 @@ func (s *Scheduler) processOne(ecg models.ECG) {
 			s.exhaust(ecg, maxRetries, queryErr)
 		} else {
 			appmetrics.HL7RetryAttempts.WithLabelValues("failed").Inc()
-			if updErr := s.ecgRepo.UpdateHL7Lifecycle(ecg.ID, StatusPending, newCount); updErr != nil {
+			if updErr := s.ecgRepo.UpdateHL7Lifecycle(systemCtx, ecg.ID, StatusPending, newCount); updErr != nil {
 				slog.Warn("hl7 scheduler: retry count update failed", "ecg_id", ecg.ID, "error", updErr)
 			}
 		}
@@ -384,7 +384,7 @@ func (s *Scheduler) processOne(ecg models.ECG) {
 
 	// Record the successful attempt.
 	if s.attemptRepo != nil {
-		_ = s.attemptRepo.Insert(&models.HL7Attempt{
+		_ = s.attemptRepo.Insert(systemCtx, &models.HL7Attempt{
 			ECGID:      ecg.ID,
 			PatientID:  ecg.PatientID,
 			Status:     "success",
@@ -394,12 +394,12 @@ func (s *Scheduler) processOne(ecg models.ECG) {
 	}
 
 	if d != nil {
-		if updErr := s.patRepo.UpdateDemographics(ecg.PatientID, d); updErr != nil {
+		if updErr := s.patRepo.UpdateDemographics(systemCtx, ecg.PatientID, d); updErr != nil {
 			slog.Warn("hl7 scheduler: demographics update failed", "ecg_id", ecg.ID, "error", updErr)
 		}
 	}
 
-	if updErr := s.ecgRepo.UpdateHL7Lifecycle(ecg.ID, StatusSuccess, ecg.HL7RetryCount); updErr != nil {
+	if updErr := s.ecgRepo.UpdateHL7Lifecycle(systemCtx, ecg.ID, StatusSuccess, ecg.HL7RetryCount); updErr != nil {
 		slog.Warn("hl7 scheduler: lifecycle success update failed", "ecg_id", ecg.ID, "error", updErr)
 	}
 
@@ -433,7 +433,7 @@ func (s *Scheduler) recordAttempt(ecgID, patientID string, err error, elapsed ti
 		attempt.Error = err.Error()
 	}
 
-	_ = s.attemptRepo.Insert(attempt)
+	_ = s.attemptRepo.Insert(systemCtx, attempt)
 }
 
 // exhaust sets the ECG to hl7_exhausted, writes an audit log, and fires a webhook notification.
@@ -457,10 +457,10 @@ func (s *Scheduler) exhaust(ecg models.ECG, maxRetries int, lastErr error) {
 				exhaustAttempt.MSAMessage = msg
 			}
 		}
-		_ = s.attemptRepo.Insert(exhaustAttempt)
+		_ = s.attemptRepo.Insert(systemCtx, exhaustAttempt)
 	}
 
-	if updErr := s.ecgRepo.UpdateHL7Lifecycle(ecg.ID, StatusExhausted, maxRetries); updErr != nil {
+	if updErr := s.ecgRepo.UpdateHL7Lifecycle(systemCtx, ecg.ID, StatusExhausted, maxRetries); updErr != nil {
 		slog.Warn("hl7 scheduler: exhaustion status update failed", "ecg_id", ecg.ID, "error", updErr)
 	}
 
@@ -468,7 +468,7 @@ func (s *Scheduler) exhaust(ecg models.ECG, maxRetries int, lastErr error) {
 	if lastErr != nil {
 		errMsg = lastErr.Error()
 	}
-	_ = s.auditRepo.Insert(&models.AuditLog{
+	_ = s.auditRepo.Insert(systemCtx, &models.AuditLog{
 		UserID:     "system",
 		Action:     "hl7_exhausted",
 		ResourceID: ecg.ID,

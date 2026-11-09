@@ -30,12 +30,12 @@ type mappingProvider interface {
 
 // patientUpdater abstracts the patient repository for testability.
 type patientUpdater interface {
-	UpdateDemographics(patientID string, d *PatientDemographics) error
+	UpdateDemographics(ctx context.Context, patientID string, d *PatientDemographics) error
 }
 
 // ecgHL7Updater abstracts the ECG repository for testability.
 type ecgHL7Updater interface {
-	UpdateHL7Status(ecgID string, status string) error
+	UpdateHL7Status(ctx context.Context, ecgID string, status string) error
 }
 
 // Enricher fetches HL7 patient demographics and updates the local database.
@@ -110,7 +110,7 @@ func (e *Enricher) Enrich(ctx context.Context, ecgID string, patientID string) e
 
 	// Record the successful attempt.
 	if e.attemptRepo != nil {
-		_ = e.attemptRepo.Insert(&models.HL7Attempt{
+		_ = e.attemptRepo.Insert(ctx, &models.HL7Attempt{
 			ECGID:      ecgID,
 			PatientID:  patientID,
 			Status:     "success",
@@ -123,11 +123,11 @@ func (e *Enricher) Enrich(ctx context.Context, ecgID string, patientID string) e
 	// different identifier than the one it was asked about. It is done there
 	// rather than here because the scheduler and the retry job write
 	// demographics through the same call and need the same behaviour.
-	if err := e.patRepo.UpdateDemographics(patientID, d); err != nil {
+	if err := e.patRepo.UpdateDemographics(ctx, patientID, d); err != nil {
 		slog.Warn("hl7: patient update failed", "patient_id", patientID, "error", err)
 	}
 
-	if err := e.ecgRepo.UpdateHL7Status(ecgID, "success"); err != nil {
+	if err := e.ecgRepo.UpdateHL7Status(ctx, ecgID, "success"); err != nil {
 		slog.Warn("hl7: ecg status update failed", "ecg_id", ecgID, "error", err)
 	}
 
@@ -174,7 +174,7 @@ func (e *Enricher) recordFailedAttempt(ecgID, patientID, raw string, err error, 
 		attempt.Error = err.Error()
 	}
 
-	_ = e.attemptRepo.Insert(attempt)
+	_ = e.attemptRepo.Insert(systemCtx, attempt)
 }
 
 // enrichWithMappings attempts to use the active mapping preset to extract demographics from

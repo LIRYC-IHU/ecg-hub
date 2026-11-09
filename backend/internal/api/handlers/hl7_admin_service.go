@@ -41,7 +41,7 @@ func hl7MappingToProto(m models.HL7Mapping) *apiv1.HL7Mapping {
 	}
 }
 
-func (h *HL7AdminServiceHandler) ListPresets(_ context.Context, _ *apiv1.ListHL7PresetsRequest) (*apiv1.ListHL7PresetsResponse, error) {
+func (h *HL7AdminServiceHandler) ListPresets(ctx context.Context, _ *apiv1.ListHL7PresetsRequest) (*apiv1.ListHL7PresetsResponse, error) {
 	presets, err := h.MappingRepo.ListPresets()
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, errors.New("query failed"))
@@ -77,7 +77,7 @@ func mappingRecordsFromProto(inputs []*apiv1.HL7MappingInput) []models.HL7Mappin
 	return records
 }
 
-func (h *HL7AdminServiceHandler) CreatePreset(_ context.Context, req *apiv1.CreateHL7PresetRequest) (*apiv1.CreateHL7PresetResponse, error) {
+func (h *HL7AdminServiceHandler) CreatePreset(ctx context.Context, req *apiv1.CreateHL7PresetRequest) (*apiv1.CreateHL7PresetResponse, error) {
 	if req.Name == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("name is required"))
 	}
@@ -96,21 +96,21 @@ func (h *HL7AdminServiceHandler) CreatePreset(_ context.Context, req *apiv1.Crea
 	}}, nil
 }
 
-func (h *HL7AdminServiceHandler) ActivatePreset(_ context.Context, req *apiv1.ActivateHL7PresetRequest) (*apiv1.ActivateHL7PresetResponse, error) {
+func (h *HL7AdminServiceHandler) ActivatePreset(ctx context.Context, req *apiv1.ActivateHL7PresetRequest) (*apiv1.ActivateHL7PresetResponse, error) {
 	if err := h.MappingRepo.ActivatePreset(req.Id); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, errors.New("activate failed"))
 	}
 	return &apiv1.ActivateHL7PresetResponse{}, nil
 }
 
-func (h *HL7AdminServiceHandler) DeletePreset(_ context.Context, req *apiv1.DeleteHL7PresetRequest) (*apiv1.DeleteHL7PresetResponse, error) {
+func (h *HL7AdminServiceHandler) DeletePreset(ctx context.Context, req *apiv1.DeleteHL7PresetRequest) (*apiv1.DeleteHL7PresetResponse, error) {
 	if err := h.MappingRepo.DeletePreset(req.Id); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, errors.New("delete failed"))
 	}
 	return &apiv1.DeleteHL7PresetResponse{}, nil
 }
 
-func (h *HL7AdminServiceHandler) SavePresetMappings(_ context.Context, req *apiv1.SaveHL7PresetMappingsRequest) (*apiv1.SaveHL7PresetMappingsResponse, error) {
+func (h *HL7AdminServiceHandler) SavePresetMappings(ctx context.Context, req *apiv1.SaveHL7PresetMappingsRequest) (*apiv1.SaveHL7PresetMappingsResponse, error) {
 	records := mappingRecordsFromProto(req.Mappings)
 	if err := h.MappingRepo.SaveMappings(req.Id, records); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, errors.New("save failed"))
@@ -122,7 +122,7 @@ func (h *HL7AdminServiceHandler) SavePresetMappings(_ context.Context, req *apiv
 	return &apiv1.SaveHL7PresetMappingsResponse{Mappings: out}, nil
 }
 
-func (h *HL7AdminServiceHandler) GetActiveMappings(_ context.Context, _ *apiv1.GetActiveHL7MappingsRequest) (*apiv1.GetActiveHL7MappingsResponse, error) {
+func (h *HL7AdminServiceHandler) GetActiveMappings(ctx context.Context, _ *apiv1.GetActiveHL7MappingsRequest) (*apiv1.GetActiveHL7MappingsResponse, error) {
 	mappings, _ := h.MappingRepo.GetActiveMappings()
 	out := make([]*apiv1.HL7Mapping, len(mappings))
 	for i, m := range mappings {
@@ -206,7 +206,7 @@ func (h *HL7AdminServiceHandler) TestQuery(ctx context.Context, req *apiv1.HL7Te
 	return resp, nil
 }
 
-func (h *HL7AdminServiceHandler) Ping(_ context.Context, _ *apiv1.HL7PingRequest) (*apiv1.HL7PingResponse, error) {
+func (h *HL7AdminServiceHandler) Ping(ctx context.Context, _ *apiv1.HL7PingRequest) (*apiv1.HL7PingResponse, error) {
 	if h.SettingsRepo == nil {
 		return nil, connect.NewError(connect.CodeUnavailable, errors.New("HL7 host/port not configured"))
 	}
@@ -262,7 +262,7 @@ func hl7SettingsToProto(s *models.HL7Settings, sched HL7SchedulerStatus) *apiv1.
 	return out
 }
 
-func (h *HL7AdminServiceHandler) GetSettings(_ context.Context, _ *apiv1.GetHL7SettingsRequest) (*apiv1.GetHL7SettingsResponse, error) {
+func (h *HL7AdminServiceHandler) GetSettings(ctx context.Context, _ *apiv1.GetHL7SettingsRequest) (*apiv1.GetHL7SettingsResponse, error) {
 	if h.SettingsRepo == nil {
 		return nil, connect.NewError(connect.CodeUnavailable, errors.New("HL7 is not configured"))
 	}
@@ -380,7 +380,7 @@ func (h *HL7AdminServiceHandler) UpdateSettings(ctx context.Context, req *apiv1.
 
 // ---- Manual run + bulk retry -----------------------------------------------
 
-func (h *HL7AdminServiceHandler) ForceRun(_ context.Context, _ *apiv1.ForceHL7RunRequest) (*apiv1.ForceHL7RunResponse, error) {
+func (h *HL7AdminServiceHandler) ForceRun(ctx context.Context, _ *apiv1.ForceHL7RunRequest) (*apiv1.ForceHL7RunResponse, error) {
 	if h.Scheduler == nil {
 		return nil, connect.NewError(connect.CodeUnavailable, errors.New("HL7 scheduler is not configured"))
 	}
@@ -389,7 +389,7 @@ func (h *HL7AdminServiceHandler) ForceRun(_ context.Context, _ *apiv1.ForceHL7Ru
 }
 
 func (h *HL7AdminServiceHandler) BulkRetry(ctx context.Context, _ *apiv1.BulkRetryHL7Request) (*apiv1.BulkRetryHL7Response, error) {
-	result := h.DB.Model(&models.ECG{}).
+	result := h.DB.WithContext(ctx).Model(&models.ECG{}).
 		Where("hl7_status = ?", "hl7_exhausted").
 		Updates(map[string]any{"hl7_status": "pending", "hl7_retry_count": 0})
 	if result.Error != nil {

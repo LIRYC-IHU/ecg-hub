@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -27,9 +28,9 @@ func NewPatientRepository(db *gorm.DB) *PatientRepository {
 
 // FindByPatientID returns the patient with the given patient_id, or nil, nil if not found.
 // A nil patient means demographics are not yet available — callers must handle this gracefully.
-func (r *PatientRepository) FindByPatientID(patientID string) (*models.Patient, error) {
+func (r *PatientRepository) FindByPatientID(ctx context.Context, patientID string) (*models.Patient, error) {
 	var p models.Patient
-	if err := r.db.Where("patient_id = ?", patientID).First(&p).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("patient_id = ?", patientID).First(&p).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, nil
 		}
@@ -48,9 +49,9 @@ func (r *PatientRepository) FindByPatientID(patientID string) (*models.Patient, 
 // than in the caller because three of them write demographics through this one
 // method (the ingestion enricher, the retry job and the scheduler) and all three
 // need the same behaviour; putting it in one of them is how the other two drift.
-func (r *PatientRepository) UpdateDemographics(patientID string, d *hl7.PatientDemographics) error {
+func (r *PatientRepository) UpdateDemographics(ctx context.Context, patientID string, d *hl7.PatientDemographics) error {
 	if resolved, moved := hl7.ResolvedPatientID(patientID, d); moved {
-		count, err := r.RekeyPatient(patientID, resolved)
+		count, err := r.RekeyPatient(ctx, patientID, resolved)
 		if err != nil {
 			// Keep enriching the row where it is: demographics under the number
 			// the device recorded are recoverable, demographics under the wrong
@@ -78,7 +79,7 @@ func (r *PatientRepository) UpdateDemographics(patientID string, d *hl7.PatientD
 			updates["date_of_birth"] = &t
 		}
 	}
-	result := r.db.Model(&models.Patient{}).
+	result := r.db.WithContext(ctx).Model(&models.Patient{}).
 		Where("patient_id = ?", patientID).
 		Updates(updates)
 	if result.Error != nil {
@@ -90,7 +91,7 @@ func (r *PatientRepository) UpdateDemographics(patientID string, d *hl7.PatientD
 // UpsertWithDemographics inserts a patient row with demographics sourced from the ECG file.
 // ON CONFLICT (tenant_id, patient_id): updates first_name/last_name/gender only when hl7_source is empty,
 // so that HL7-enriched patients are never overwritten by a subsequent ECG ingestion.
-func (r *PatientRepository) UpsertWithDemographics(patientID, firstName, lastName, gender string) error {
+func (r *PatientRepository) UpsertWithDemographics(ctx context.Context, patientID, firstName, lastName, gender string) error {
 	patient := models.Patient{
 		PatientID: patientID,
 		FirstName: firstName,
@@ -98,7 +99,7 @@ func (r *PatientRepository) UpsertWithDemographics(patientID, firstName, lastNam
 		Gender:    gender,
 		Extra:     datatypes.JSON([]byte("{}")),
 	}
-	result := r.db.Clauses(clause.OnConflict{
+	result := r.db.WithContext(ctx).Clauses(clause.OnConflict{
 		Columns: []clause.Column{{Name: "tenant_id"}, {Name: "patient_id"}},
 		DoUpdates: clause.Assignments(map[string]any{
 			"first_name": gorm.Expr(`CASE WHEN patients.hl7_source = '' THEN EXCLUDED.first_name ELSE patients.first_name END`),
@@ -140,7 +141,7 @@ var ErrRekeyTargetMissing = errors.New("patient_repo: rekey target does not exis
 //
 // Returns the number of ECGs that changed hands, so the caller can log what
 // moved rather than just that something did.
-func (r *PatientRepository) RekeyPatient(oldID, newID string) (int64, error) {
+func (r *PatientRepository) RekeyPatient(ctx context.Context, oldID, newID string) (int64, error) {
 	if oldID == "" || newID == "" {
 		return 0, fmt.Errorf("patient_repo: rekey needs both identifiers")
 	}
@@ -149,7 +150,7 @@ func (r *PatientRepository) RekeyPatient(oldID, newID string) (int64, error) {
 	}
 
 	var moved int64
-	err := r.db.Transaction(func(tx *gorm.DB) error {
+	err := r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		// Lock the source row for the duration: two ECGs for the same patient can
 		// be enriched concurrently, and both would otherwise try to rekey it.
 		var old models.Patient
@@ -228,9 +229,9 @@ func (r *PatientRepository) RekeyPatient(oldID, newID string) (int64, error) {
 //
 // Returns found=false when no such patient exists, which is not an error: rows
 // here are created when an ECG arrives, not by an ADT feed.
-func (r *PatientRepository) ApplyPatientUpdate(u *hl7.PatientUpdate) (bool, error) {
+func (r *PatientRepository) ApplyPatientUpdate(ctx context.Context, u *hl7.PatientUpdate) (bool, error) {
 	var p models.Patient
-	if err := r.db.Where("patient_id = ?", u.PatientID).First(&p).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("patient_id = ?", u.PatientID).First(&p).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return false, nil
 		}
@@ -283,7 +284,7 @@ func (r *PatientRepository) ApplyPatientUpdate(u *hl7.PatientUpdate) (bool, erro
 	}
 	updates["updated_at"] = time.Now()
 
-	if err := r.db.Model(&models.Patient{}).
+	if err := r.db.WithContext(ctx).Model(&models.Patient{}).
 		Where("patient_id = ?", u.PatientID).
 		Updates(updates).Error; err != nil {
 		return false, fmt.Errorf("patient_repo: apply adt: update %s: %w", u.PatientID, err)

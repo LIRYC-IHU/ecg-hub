@@ -63,14 +63,14 @@ func hl7AttemptToProto(a *models.HL7Attempt) *apiv1.Hl7Attempt {
 // when an enricher is available (the former POST /ecgs/:id/hl7/force).
 func (h *HL7ServiceHandler) Force(ctx context.Context, req *apiv1.ForceRequest) (*apiv1.ForceResponse, error) {
 	ecgRepo := repository.NewECGRepository(h.DB)
-	ecg, err := ecgRepo.FindByID(req.EcgId)
+	ecg, err := ecgRepo.FindByID(ctx, req.EcgId)
 	if err != nil {
 		if errors.Is(err, repository.ErrECGNotFound) {
 			return nil, connect.NewError(connect.CodeNotFound, errors.New("ecg not found"))
 		}
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	if err := ecgRepo.UpdateHL7Lifecycle(req.EcgId, "pending", 0); err != nil {
+	if err := ecgRepo.UpdateHL7Lifecycle(ctx, req.EcgId, "pending", 0); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
@@ -84,8 +84,8 @@ func (h *HL7ServiceHandler) Force(ctx context.Context, req *apiv1.ForceRequest) 
 
 // GetOruStatus returns the most recent outbound ORU attempt for an ECG, or an
 // unset attempt when none (the former GET /ecgs/:id/oru-status).
-func (h *HL7ServiceHandler) GetOruStatus(_ context.Context, req *apiv1.GetOruStatusRequest) (*apiv1.GetOruStatusResponse, error) {
-	latest, err := h.ORURepo.LatestByECG(req.EcgId)
+func (h *HL7ServiceHandler) GetOruStatus(ctx context.Context, req *apiv1.GetOruStatusRequest) (*apiv1.GetOruStatusResponse, error) {
+	latest, err := h.ORURepo.LatestByECG(ctx, req.EcgId)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -125,12 +125,12 @@ func (h *HL7ServiceHandler) SendResult(ctx context.Context, req *apiv1.SendResul
 
 // ListAttempts returns a patient's inbound HL7 attempt history, most recent
 // first (the former GET /patients/:id/hl7-history).
-func (h *HL7ServiceHandler) ListAttempts(_ context.Context, req *apiv1.ListAttemptsRequest) (*apiv1.ListAttemptsResponse, error) {
+func (h *HL7ServiceHandler) ListAttempts(ctx context.Context, req *apiv1.ListAttemptsRequest) (*apiv1.ListAttemptsResponse, error) {
 	limit := int(req.Limit)
 	if limit <= 0 || limit > 100 {
 		limit = 20
 	}
-	attempts, err := h.AttemptRepo.ListByPatient(req.PatientId, limit)
+	attempts, err := h.AttemptRepo.ListByPatient(ctx, req.PatientId, limit)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}

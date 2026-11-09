@@ -64,7 +64,7 @@ func (h *ExportServiceHandler) Create(ctx context.Context, req *apiv1.CreateExpo
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("anonymize and inject are mutually exclusive"))
 	}
 
-	ecgs, err := h.ECGRepo.FindByIDs(req.EcgIds)
+	ecgs, err := h.ECGRepo.FindByIDs(ctx, req.EcgIds)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -82,10 +82,10 @@ func (h *ExportServiceHandler) Create(ctx context.Context, req *apiv1.CreateExpo
 		Anonymize: req.Anonymize,
 		Inject:    req.Inject,
 	}
-	if err := h.Creator.Create(job); err != nil {
+	if err := h.Creator.Create(ctx, job); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	if err := h.Creator.SaveECGList(job.ID, req.EcgIds); err != nil {
+	if err := h.Creator.SaveECGList(ctx, job.ID, req.EcgIds); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
@@ -96,8 +96,9 @@ func (h *ExportServiceHandler) Create(ctx context.Context, req *apiv1.CreateExpo
 		Formats:   formats,
 		Anonymize: job.Anonymize,
 		Inject:    job.Inject,
+		TenantID:  job.TenantID, // set from ctx when the job row was created
 	}) {
-		_ = h.Creator.Update(job.ID, map[string]any{"status": "failed", "error": "export queue at capacity"})
+		_ = h.Creator.Update(ctx, job.ID, map[string]any{"status": "failed", "error": "export queue at capacity"})
 		return nil, connect.NewError(connect.CodeUnavailable, errors.New("export queue is at capacity, try again later"))
 	}
 
@@ -107,7 +108,7 @@ func (h *ExportServiceHandler) Create(ctx context.Context, req *apiv1.CreateExpo
 	}
 
 	// Re-read so created_at is populated by the DB default.
-	if saved, err := h.Repo.FindByID(job.ID); err == nil && saved != nil {
+	if saved, err := h.Repo.FindByID(ctx, job.ID); err == nil && saved != nil {
 		job = saved
 	}
 	return &apiv1.CreateExportResponse{Job: exportJobToProto(job)}, nil
@@ -115,11 +116,11 @@ func (h *ExportServiceHandler) Create(ctx context.Context, req *apiv1.CreateExpo
 
 // Formats returns the union of export formats the converter can produce for the
 // vendors of the given ECGs (port of POST /exports/formats).
-func (h *ExportServiceHandler) Formats(_ context.Context, req *apiv1.ExportFormatsRequest) (*apiv1.ExportFormatsResponse, error) {
+func (h *ExportServiceHandler) Formats(ctx context.Context, req *apiv1.ExportFormatsRequest) (*apiv1.ExportFormatsResponse, error) {
 	if len(req.EcgIds) == 0 {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("ecg_ids must not be empty"))
 	}
-	ecgs, err := h.ECGRepo.FindByIDs(req.EcgIds)
+	ecgs, err := h.ECGRepo.FindByIDs(ctx, req.EcgIds)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -149,7 +150,7 @@ func (h *ExportServiceHandler) Get(ctx context.Context, req *apiv1.GetExportRequ
 	if req.Id == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("job id is required"))
 	}
-	job, err := h.Repo.FindByID(req.Id)
+	job, err := h.Repo.FindByID(ctx, req.Id)
 	if err != nil {
 		if errors.Is(err, repository.ErrExportJobNotFound) {
 			return nil, connect.NewError(connect.CodeNotFound, errors.New("export job not found"))
@@ -168,7 +169,7 @@ func (h *ExportServiceHandler) Get(ctx context.Context, req *apiv1.GetExportRequ
 func (h *ExportServiceHandler) WatchProgress(ctx context.Context, req *apiv1.WatchProgressRequest, stream *connect.ServerStream[apiv1.ExportProgress]) error {
 	// Verify the job exists and the caller owns it (or is admin). A missing job
 	// and a foreign job both return NotFound so ownership isn't leaked.
-	job, err := h.Repo.FindByID(req.JobId)
+	job, err := h.Repo.FindByID(ctx, req.JobId)
 	if err != nil {
 		if errors.Is(err, repository.ErrExportJobNotFound) {
 			return connect.NewError(connect.CodeNotFound, errors.New("export job not found"))
@@ -192,7 +193,7 @@ func (h *ExportServiceHandler) WatchProgress(ctx context.Context, req *apiv1.Wat
 		case <-ctx.Done():
 			return nil
 		case <-ticker.C:
-			j, err := h.Repo.FindByID(req.JobId)
+			j, err := h.Repo.FindByID(ctx, req.JobId)
 			if err != nil {
 				return connect.NewError(connect.CodeInternal, err)
 			}

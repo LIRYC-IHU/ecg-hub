@@ -1,6 +1,7 @@
 package hl7
 
 import (
+	"context"
 	"log/slog"
 	"strings"
 	"time"
@@ -186,7 +187,7 @@ func firstComponent(v string) string {
 type PatientMerger interface {
 	// RekeyPatient renames the record when the surviving identifier is free and
 	// merges into it when it is taken, reporting how many ECGs changed hands.
-	RekeyPatient(oldID, newID string) (int64, error)
+	RekeyPatient(ctx context.Context, oldID, newID string) (int64, error)
 }
 
 // PatientUpdateApplier applies an A08 to the stored record.
@@ -194,7 +195,7 @@ type PatientUpdateApplier interface {
 	// ApplyPatientUpdate writes the fields the message carried and clears the
 	// ones it nulled. It reports whether a patient was found; an unknown patient
 	// is not an error.
-	ApplyPatientUpdate(u *PatientUpdate) (found bool, err error)
+	ApplyPatientUpdate(ctx context.Context, u *PatientUpdate) (found bool, err error)
 }
 
 // NewPatientUpdateHandler returns the listener handler that applies A08 messages.
@@ -268,7 +269,7 @@ func newADTHandler(
 			return ack(Result{Outcome: models.InboundIgnored, PatientID: u.PatientID})
 		}
 
-		found, err := repo.ApplyPatientUpdate(u)
+		found, err := repo.ApplyPatientUpdate(systemCtx, u)
 		if err != nil {
 			slog.Error("hl7 adt: update failed",
 				"patient_id", u.PatientID, "control_id", msg.ControlID, "error", err)
@@ -319,7 +320,7 @@ func applyMerge(
 		return ack(Result{Outcome: models.InboundIgnored, PatientID: m.SurvivingID})
 	}
 
-	moved, err := merger.RekeyPatient(m.PriorID, m.SurvivingID)
+	moved, err := merger.RekeyPatient(systemCtx, m.PriorID, m.SurvivingID)
 	if err != nil {
 		slog.Error("hl7 adt: merge failed",
 			"prior", m.PriorID, "surviving", m.SurvivingID,

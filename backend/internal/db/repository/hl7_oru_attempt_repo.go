@@ -1,8 +1,11 @@
 package repository
 
 import (
-	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
+	"context"
+
 	"gorm.io/gorm"
+
+	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 )
 
 // HL7ORUAttemptRepository persists and queries outbound ORU result-send history.
@@ -16,14 +19,14 @@ func NewHL7ORUAttemptRepository(db *gorm.DB) *HL7ORUAttemptRepository {
 }
 
 // Insert persists a single outbound ORU attempt record.
-func (r *HL7ORUAttemptRepository) Insert(a *models.HL7ORUAttempt) error {
-	return r.db.Create(a).Error
+func (r *HL7ORUAttemptRepository) Insert(ctx context.Context, a *models.HL7ORUAttempt) error {
+	return r.db.WithContext(ctx).Create(a).Error
 }
 
 // ListByECG returns ORU attempts for the given ECG, most recent first.
-func (r *HL7ORUAttemptRepository) ListByECG(ecgID string, limit int) ([]models.HL7ORUAttempt, error) {
+func (r *HL7ORUAttemptRepository) ListByECG(ctx context.Context, ecgID string, limit int) ([]models.HL7ORUAttempt, error) {
 	var attempts []models.HL7ORUAttempt
-	err := r.db.
+	err := r.db.WithContext(ctx).
 		Where("ecg_id = ?", ecgID).
 		Order("created_at DESC").
 		Limit(limit).
@@ -32,9 +35,9 @@ func (r *HL7ORUAttemptRepository) ListByECG(ecgID string, limit int) ([]models.H
 }
 
 // LatestByECG returns the most recent ORU attempt for an ECG, or nil if none exist.
-func (r *HL7ORUAttemptRepository) LatestByECG(ecgID string) (*models.HL7ORUAttempt, error) {
+func (r *HL7ORUAttemptRepository) LatestByECG(ctx context.Context, ecgID string) (*models.HL7ORUAttempt, error) {
 	var attempt models.HL7ORUAttempt
-	err := r.db.
+	err := r.db.WithContext(ctx).
 		Where("ecg_id = ?", ecgID).
 		Order("created_at DESC").
 		First(&attempt).Error

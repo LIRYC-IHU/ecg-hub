@@ -1,6 +1,8 @@
 package repository
 
 import (
+	"context"
+
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -16,35 +18,35 @@ func NewTagRepository(db *gorm.DB) *TagRepository {
 	return &TagRepository{db: db}
 }
 
-func (r *TagRepository) ListTags() ([]models.Tag, error) {
+func (r *TagRepository) ListTags(ctx context.Context) ([]models.Tag, error) {
 	var tags []models.Tag
-	err := r.db.Order("name ASC").Find(&tags).Error
+	err := r.db.WithContext(ctx).Order("name ASC").Find(&tags).Error
 	return tags, err
 }
 
-func (r *TagRepository) CreateTag(name, color, createdBy string) (*models.Tag, error) {
+func (r *TagRepository) CreateTag(ctx context.Context, name, color, createdBy string) (*models.Tag, error) {
 	tag := models.Tag{Name: name, Color: color, CreatedBy: createdBy}
-	if err := r.db.Create(&tag).Error; err != nil {
+	if err := r.db.WithContext(ctx).Create(&tag).Error; err != nil {
 		return nil, err
 	}
 	return &tag, nil
 }
 
-func (r *TagRepository) UpdateTag(id, name, color string) (*models.Tag, error) {
+func (r *TagRepository) UpdateTag(ctx context.Context, id, name, color string) (*models.Tag, error) {
 	var tag models.Tag
-	if err := r.db.First(&tag, "id = ?", id).Error; err != nil {
+	if err := r.db.WithContext(ctx).First(&tag, "id = ?", id).Error; err != nil {
 		return nil, err
 	}
 	tag.Name = name
 	tag.Color = color
-	if err := r.db.Save(&tag).Error; err != nil {
+	if err := r.db.WithContext(ctx).Save(&tag).Error; err != nil {
 		return nil, err
 	}
 	return &tag, nil
 }
 
-func (r *TagRepository) DeleteTag(id string) error {
-	return r.db.Transaction(func(tx *gorm.DB) error {
+func (r *TagRepository) DeleteTag(ctx context.Context, id string) error {
+	return r.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Where("tag_id = ?", id).Delete(&models.PatientTag{}).Error; err != nil {
 			return err
 		}
@@ -55,35 +57,35 @@ func (r *TagRepository) DeleteTag(id string) error {
 	})
 }
 
-func (r *TagRepository) TagPatient(patientID, tagID string) error {
+func (r *TagRepository) TagPatient(ctx context.Context, patientID, tagID string) error {
 	pt := models.PatientTag{PatientID: patientID, TagID: tagID}
-	return r.db.Clauses(clause.OnConflict{DoNothing: true}).Create(&pt).Error
+	return r.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&pt).Error
 }
 
-func (r *TagRepository) UntagPatient(patientID, tagID string) error {
-	return r.db.Where("patient_id = ? AND tag_id = ?", patientID, tagID).
+func (r *TagRepository) UntagPatient(ctx context.Context, patientID, tagID string) error {
+	return r.db.WithContext(ctx).Where("patient_id = ? AND tag_id = ?", patientID, tagID).
 		Delete(&models.PatientTag{}).Error
 }
 
-func (r *TagRepository) ListPatientTags(patientID string) ([]models.Tag, error) {
+func (r *TagRepository) ListPatientTags(ctx context.Context, patientID string) ([]models.Tag, error) {
 	var tags []models.Tag
-	err := r.db.Joins("JOIN patient_tags ON patient_tags.tag_id = tags.id").
+	err := r.db.WithContext(ctx).Joins("JOIN patient_tags ON patient_tags.tag_id = tags.id").
 		Where("patient_tags.patient_id = ?", patientID).
 		Find(&tags).Error
 	return tags, err
 }
 
-func (r *TagRepository) TagECG(ecgID, tagID string) error {
+func (r *TagRepository) TagECG(ctx context.Context, ecgID, tagID string) error {
 	et := models.ECGTag{ECGID: ecgID, TagID: tagID}
-	return r.db.Clauses(clause.OnConflict{DoNothing: true}).Create(&et).Error
+	return r.db.WithContext(ctx).Clauses(clause.OnConflict{DoNothing: true}).Create(&et).Error
 }
 
-func (r *TagRepository) UntagECG(ecgID, tagID string) error {
-	return r.db.Where("ecg_id = ? AND tag_id = ?", ecgID, tagID).
+func (r *TagRepository) UntagECG(ctx context.Context, ecgID, tagID string) error {
+	return r.db.WithContext(ctx).Where("ecg_id = ? AND tag_id = ?", ecgID, tagID).
 		Delete(&models.ECGTag{}).Error
 }
 
-func (r *TagRepository) ListECGTags(ecgID string) ([]models.Tag, error) {
+func (r *TagRepository) ListECGTags(ctx context.Context, ecgID string) ([]models.Tag, error) {
 	// ecg_tags.ecg_id is a uuid column; an unparsable id has no tags rather
 	// than being a server error. (patient_id is a free-form business id, so
 	// ListPatientTags needs no such guard.)
@@ -91,7 +93,7 @@ func (r *TagRepository) ListECGTags(ecgID string) ([]models.Tag, error) {
 		return []models.Tag{}, nil
 	}
 	var tags []models.Tag
-	err := r.db.Joins("JOIN ecg_tags ON ecg_tags.tag_id = tags.id").
+	err := r.db.WithContext(ctx).Joins("JOIN ecg_tags ON ecg_tags.tag_id = tags.id").
 		Where("ecg_tags.ecg_id = ?", ecgID).
 		Find(&tags).Error
 	return tags, err
@@ -99,7 +101,7 @@ func (r *TagRepository) ListECGTags(ecgID string) ([]models.Tag, error) {
 
 // ListPatientTagsBatch resolves tags for many patients in a single query,
 // returned grouped by patient_id (patients with no tags are simply absent).
-func (r *TagRepository) ListPatientTagsBatch(patientIDs []string) (map[string][]models.Tag, error) {
+func (r *TagRepository) ListPatientTagsBatch(ctx context.Context, patientIDs []string) (map[string][]models.Tag, error) {
 	out := map[string][]models.Tag{}
 	if len(patientIDs) == 0 {
 		return out, nil
@@ -109,7 +111,7 @@ func (r *TagRepository) ListPatientTagsBatch(patientIDs []string) (map[string][]
 		models.Tag
 	}
 	var rows []row
-	err := r.db.Table("tags").
+	err := r.db.WithContext(ctx).Table("tags").
 		Select("patient_tags.patient_id AS patient_id, tags.*").
 		Joins("JOIN patient_tags ON patient_tags.tag_id = tags.id").
 		Where("patient_tags.patient_id IN ?", patientIDs).
@@ -126,7 +128,7 @@ func (r *TagRepository) ListPatientTagsBatch(patientIDs []string) (map[string][]
 
 // ListECGTagsBatch resolves tags for many ECGs in a single query, returned
 // grouped by ecg_id (ECGs with no tags are simply absent).
-func (r *TagRepository) ListECGTagsBatch(ecgIDs []string) (map[string][]models.Tag, error) {
+func (r *TagRepository) ListECGTagsBatch(ctx context.Context, ecgIDs []string) (map[string][]models.Tag, error) {
 	out := map[string][]models.Tag{}
 	if len(ecgIDs) == 0 {
 		return out, nil
@@ -136,7 +138,7 @@ func (r *TagRepository) ListECGTagsBatch(ecgIDs []string) (map[string][]models.T
 		models.Tag
 	}
 	var rows []row
-	err := r.db.Table("tags").
+	err := r.db.WithContext(ctx).Table("tags").
 		Select("ecg_tags.ecg_id AS ecg_id, tags.*").
 		Joins("JOIN ecg_tags ON ecg_tags.tag_id = tags.id").
 		Where("ecg_tags.ecg_id IN ?", ecgIDs).

@@ -97,7 +97,7 @@ func SearchPatientsHandler(db *gorm.DB) echo.HandlerFunc {
 		}
 		orderClause := col + " " + order
 
-		query := db.Model(&models.Patient{})
+		query := db.WithContext(c.Request().Context()).Model(&models.Patient{})
 		if params.Q != "" {
 			like := "%" + params.Q + "%"
 			query = query.Where("patients.last_name ILIKE ? OR patients.first_name ILIKE ? OR patients.patient_id ILIKE ? OR patients.nda ILIKE ?", like, like, like, like)
@@ -106,8 +106,8 @@ func SearchPatientsHandler(db *gorm.DB) echo.HandlerFunc {
 			tagIDs := strings.Split(params.Tags, ",")
 			query = query.Where(
 				"patients.patient_id IN (?) OR patients.patient_id IN (?)",
-				db.Table("patient_tags").Select("patient_id").Where("tag_id IN ?", tagIDs),
-				db.Table("ecgs").Select("DISTINCT ecgs.patient_id").
+				db.WithContext(c.Request().Context()).Table("patient_tags").Select("patient_id").Where("tag_id IN ?", tagIDs),
+				db.WithContext(c.Request().Context()).Table("ecgs").Select("DISTINCT ecgs.patient_id").
 					Joins("JOIN ecg_tags ON ecg_tags.ecg_id = ecgs.id").
 					Where("ecg_tags.tag_id IN ?", tagIDs),
 			)
@@ -115,7 +115,7 @@ func SearchPatientsHandler(db *gorm.DB) echo.HandlerFunc {
 
 		// ECG-level filters: keep only patients with at least one matching ECG.
 		if params.hasECGFilters() {
-			sub := db.Table("ecgs").Select("1").
+			sub := db.WithContext(c.Request().Context()).Table("ecgs").Select("1").
 				Where("ecgs.patient_id = patients.patient_id")
 			if params.Vendor != "" {
 				sub = sub.Where("ecgs.vendor = ?", params.Vendor)
@@ -223,9 +223,9 @@ func ListPatientECGsHandler(db *gorm.DB) echo.HandlerFunc {
 		// or the device string (patients.patient_id, e.g. "BS1339").
 		var patientID string
 		var patient models.Patient
-		if err := db.First(&patient, "patient_id = ?", id).Error; err == nil {
+		if err := db.WithContext(c.Request().Context()).First(&patient, "patient_id = ?", id).Error; err == nil {
 			patientID = patient.PatientID
-		} else if err := db.First(&patient, "id = ?", id).Error; err == nil {
+		} else if err := db.WithContext(c.Request().Context()).First(&patient, "id = ?", id).Error; err == nil {
 			patientID = patient.PatientID
 		} else {
 			return c.JSON(http.StatusOK, map[string]any{
@@ -247,7 +247,7 @@ func ListPatientECGsHandler(db *gorm.DB) echo.HandlerFunc {
 			params.PerPage = 20
 		}
 
-		q := db.Model(&models.ECG{}).Where("patient_id = ?", patientID)
+		q := db.WithContext(c.Request().Context()).Model(&models.ECG{}).Where("patient_id = ?", patientID)
 
 		// Apply optional AND filters.
 		if params.From != "" {

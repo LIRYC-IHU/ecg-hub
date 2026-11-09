@@ -7,8 +7,9 @@ import (
 
 	dicomlib "github.com/suyashkumar/dicom"
 	"github.com/suyashkumar/dicom/pkg/tag"
-	dicommod "github.com/LIRYC-IHU/ecg-hub/internal/module/dicom"
+
 	"github.com/LIRYC-IHU/ecg-hub/internal/module"
+	dicommod "github.com/LIRYC-IHU/ecg-hub/internal/module/dicom"
 )
 
 // buildMinimalDICOM creates a minimal valid DICOM byte slice with the given

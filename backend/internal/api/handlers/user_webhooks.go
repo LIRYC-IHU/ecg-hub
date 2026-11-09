@@ -160,7 +160,7 @@ func toWebhookResponse(h models.UserWebhook) webhookResponse {
 func ListUserWebhooksHandler(repo *repository.UserWebhookRepository) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		userID, _ := c.Get(mw.CtxKeyUserID).(string)
-		hooks, err := repo.ListByUser(userID)
+		hooks, err := repo.ListByUser(c.Request().Context(), userID)
 		if err != nil {
 			return c.JSON(http.StatusInternalServerError, mw.APIError("DB_ERROR", "failed to list webhooks"))
 		}
@@ -219,7 +219,7 @@ func CreateUserWebhookHandler(repo *repository.UserWebhookRepository, encKey str
 			hook.AuthHeaderEncrypted = enc
 		}
 
-		if err := repo.Create(hook); err != nil {
+		if err := repo.Create(c.Request().Context(), hook); err != nil {
 			return c.JSON(http.StatusInternalServerError, mw.APIError("DB_ERROR", "failed to create webhook"))
 		}
 		_ = mw.WriteAuditLog(c.Request().Context(), db, userID, "webhook_created", hook.ID,
@@ -244,7 +244,7 @@ func CreateUserWebhookHandler(repo *repository.UserWebhookRepository, encKey str
 func UpdateUserWebhookHandler(repo *repository.UserWebhookRepository, encKey string, db *gorm.DB) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		userID, _ := c.Get(mw.CtxKeyUserID).(string)
-		hook, err := repo.GetByUser(userID, c.Param("id"))
+		hook, err := repo.GetByUser(c.Request().Context(), userID, c.Param("id"))
 		if err != nil {
 			if errors.Is(err, repository.ErrWebhookNotFound) {
 				return c.JSON(http.StatusNotFound, mw.APIError("NOT_FOUND", "webhook not found"))
@@ -291,7 +291,7 @@ func UpdateUserWebhookHandler(repo *repository.UserWebhookRepository, encKey str
 			}
 		}
 
-		if err := repo.Update(hook); err != nil {
+		if err := repo.Update(c.Request().Context(), hook); err != nil {
 			return c.JSON(http.StatusInternalServerError, mw.APIError("DB_ERROR", "failed to update webhook"))
 		}
 		_ = mw.WriteAuditLog(c.Request().Context(), db, userID, "webhook_updated", hook.ID,
@@ -313,7 +313,7 @@ func DeleteUserWebhookHandler(repo *repository.UserWebhookRepository, db *gorm.D
 	return func(c echo.Context) error {
 		userID, _ := c.Get(mw.CtxKeyUserID).(string)
 		id := c.Param("id")
-		if err := repo.DeleteByUser(userID, id); err != nil {
+		if err := repo.DeleteByUser(c.Request().Context(), userID, id); err != nil {
 			if errors.Is(err, repository.ErrWebhookNotFound) {
 				return c.JSON(http.StatusNotFound, mw.APIError("NOT_FOUND", "webhook not found"))
 			}
@@ -339,7 +339,7 @@ func DeleteUserWebhookHandler(repo *repository.UserWebhookRepository, db *gorm.D
 func TestUserWebhookHandler(repo *repository.UserWebhookRepository, dispatcher *webhook.Dispatcher) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		userID, _ := c.Get(mw.CtxKeyUserID).(string)
-		hook, err := repo.GetByUser(userID, c.Param("id"))
+		hook, err := repo.GetByUser(c.Request().Context(), userID, c.Param("id"))
 		if err != nil {
 			if errors.Is(err, repository.ErrWebhookNotFound) {
 				return c.JSON(http.StatusNotFound, mw.APIError("NOT_FOUND", "webhook not found"))
@@ -405,7 +405,7 @@ const deliveriesPageSize = 50
 func ListWebhookDeliveriesHandler(webhookRepo *repository.UserWebhookRepository, deliveryRepo *repository.WebhookDeliveryRepository) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		userID, _ := c.Get(mw.CtxKeyUserID).(string)
-		hook, err := webhookRepo.GetByUser(userID, c.Param("id"))
+		hook, err := webhookRepo.GetByUser(c.Request().Context(), userID, c.Param("id"))
 		if err != nil {
 			if errors.Is(err, repository.ErrWebhookNotFound) {
 				return c.JSON(http.StatusNotFound, mw.APIError("NOT_FOUND", "webhook not found"))
@@ -419,7 +419,7 @@ func ListWebhookDeliveriesHandler(webhookRepo *repository.UserWebhookRepository,
 				offset = v
 			}
 		}
-		deliveries, err := deliveryRepo.ListByWebhook(hook.ID, deliveriesPageSize, offset)
+		deliveries, err := deliveryRepo.ListByWebhook(c.Request().Context(), hook.ID, deliveriesPageSize, offset)
 		if err != nil {
 			return c.JSON(http.StatusInternalServerError, mw.APIError("DB_ERROR", "failed to list deliveries"))
 		}
@@ -448,7 +448,7 @@ func ListWebhookDeliveriesHandler(webhookRepo *repository.UserWebhookRepository,
 func ResendWebhookDeliveryHandler(webhookRepo *repository.UserWebhookRepository, deliveryRepo *repository.WebhookDeliveryRepository, dispatcher *webhook.Dispatcher, db *gorm.DB) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		userID, _ := c.Get(mw.CtxKeyUserID).(string)
-		hook, err := webhookRepo.GetByUser(userID, c.Param("id"))
+		hook, err := webhookRepo.GetByUser(c.Request().Context(), userID, c.Param("id"))
 		if err != nil {
 			if errors.Is(err, repository.ErrWebhookNotFound) {
 				return c.JSON(http.StatusNotFound, mw.APIError("NOT_FOUND", "webhook not found"))
@@ -456,7 +456,7 @@ func ResendWebhookDeliveryHandler(webhookRepo *repository.UserWebhookRepository,
 			return c.JSON(http.StatusInternalServerError, mw.APIError("DB_ERROR", "failed to load webhook"))
 		}
 
-		delivery, err := deliveryRepo.Get(c.Param("deliveryId"))
+		delivery, err := deliveryRepo.Get(c.Request().Context(), c.Param("deliveryId"))
 		if err != nil {
 			return c.JSON(http.StatusNotFound, mw.APIError("NOT_FOUND", "delivery not found"))
 		}
@@ -474,9 +474,9 @@ func ResendWebhookDeliveryHandler(webhookRepo *repository.UserWebhookRepository,
 		if deliverErr != nil {
 			errMsg = deliverErr.Error()
 		}
-		_ = webhookRepo.RecordDelivery(hook.ID, status, errMsg)
+		_ = webhookRepo.RecordDelivery(c.Request().Context(), hook.ID, status, errMsg)
 
-		_ = deliveryRepo.Create(&models.WebhookDelivery{
+		_ = deliveryRepo.Create(c.Request().Context(), &models.WebhookDelivery{
 			WebhookID:   hook.ID,
 			Event:       payload.Event,
 			Payload:     delivery.Payload,

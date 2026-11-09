@@ -20,6 +20,7 @@ import (
 	"github.com/LIRYC-IHU/ecg-hub/internal/config"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
 	"github.com/LIRYC-IHU/ecg-hub/internal/module"
+	"github.com/LIRYC-IHU/ecg-hub/internal/tenancy"
 )
 
 var ECTPPort = 30003
@@ -203,7 +204,7 @@ func (m *Module) RegisterFTPFile(filename string) error {
 	if m.transferRepo == nil {
 		return nil
 	}
-	return m.transferRepo.Register(filename)
+	return m.transferRepo.Register(transferCtx, filename)
 }
 
 func (m *Module) Start(cfg *config.Config) error {
@@ -221,3 +222,7 @@ func (m *Module) Start(cfg *config.Config) error {
 	}
 	return nil
 }
+
+// transferCtx scopes the transfer bookkeeping, which belongs to no tenant's
+// view: device listeners are not tenant-aware.
+var transferCtx = tenancy.System(context.Background())

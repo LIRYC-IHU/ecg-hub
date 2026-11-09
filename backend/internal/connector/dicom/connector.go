@@ -29,7 +29,7 @@ type Converter interface {
 // PatientLookup resolves the demographics written into a converted document.
 // Implemented by repository.PatientRepository.
 type PatientLookup interface {
-	FindByPatientID(patientID string) (*models.Patient, error)
+	FindByPatientID(ctx context.Context, patientID string) (*models.Patient, error)
 }
 
 // DICOMConnector forwards ECG files to a remote PACS via DICOM C-STORE.
@@ -129,7 +129,7 @@ func (c *DICOMConnector) materializeDICOM(ctx context.Context, ecg *models.ECG, 
 	// the document carries what the device recorded, which is still worth sending.
 	var patient *models.Patient
 	if c.patients != nil {
-		p, err := c.patients.FindByPatientID(ecg.PatientID)
+		p, err := c.patients.FindByPatientID(ctx, ecg.PatientID)
 		if err != nil {
 			slog.Warn("connector: patient lookup failed, converting with the device's own demographics",
 				"connector", c.Name(), "ecg_id", ecg.ID, "patient_id", ecg.PatientID, "error", err)

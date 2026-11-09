@@ -1,6 +1,7 @@
 package hl7
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -26,7 +27,7 @@ type mergerStub struct {
 	err   error
 }
 
-func (m *mergerStub) RekeyPatient(oldID, newID string) (int64, error) {
+func (m *mergerStub) RekeyPatient(_ context.Context, oldID, newID string) (int64, error) {
 	m.calls = append(m.calls, [2]string{oldID, newID})
 	return m.moved, m.err
 }
@@ -34,7 +35,9 @@ func (m *mergerStub) RekeyPatient(oldID, newID string) (int64, error) {
 // applierNoop satisfies the A08 half of the handler without being exercised.
 type applierNoop struct{}
 
-func (applierNoop) ApplyPatientUpdate(*PatientUpdate) (bool, error) { return true, nil }
+func (applierNoop) ApplyPatientUpdate(context.Context, *PatientUpdate) (bool, error) {
+	return true, nil
+}
 
 func mergeHandle(t *testing.T, msg *InboundMessage, m PatientMerger) (string, string) {
 	t.Helper()

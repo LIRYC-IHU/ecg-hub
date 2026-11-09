@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -22,8 +23,8 @@ func NewAuditRepository(db *gorm.DB) *AuditRepository {
 }
 
 // Insert persists a new audit log entry.
-func (r *AuditRepository) Insert(entry *models.AuditLog) error {
-	if err := r.db.Create(entry).Error; err != nil {
+func (r *AuditRepository) Insert(ctx context.Context, entry *models.AuditLog) error {
+	if err := r.db.WithContext(ctx).Create(entry).Error; err != nil {
 		return fmt.Errorf("audit_repo: insert: %w", err)
 	}
 	return nil
@@ -42,8 +43,8 @@ type AuditListParams struct {
 // List returns paginated audit log entries matching the given filters.
 // All filters are optional and combined with AND logic.
 // Results are ordered by created_at DESC.
-func (r *AuditRepository) List(p AuditListParams) ([]models.AuditLog, int64, error) {
-	q := r.db.Model(&models.AuditLog{})
+func (r *AuditRepository) List(ctx context.Context, p AuditListParams) ([]models.AuditLog, int64, error) {
+	q := r.db.WithContext(ctx).Model(&models.AuditLog{})
 
 	if p.UserID != "" {
 		q = q.Where("user_id = ?", p.UserID)

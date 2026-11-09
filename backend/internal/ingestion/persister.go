@@ -55,18 +55,18 @@ type ecgORUTrigger interface {
 
 // ecgInserter is the repository interface for ECG persistence (implemented by *repository.ECGRepository).
 type ecgInserter interface {
-	Insert(ecg *models.ECG) error
-	ExistsByContentHash(hash string) (bool, error)
+	Insert(ctx context.Context, ecg *models.ECG) error
+	ExistsByContentHash(ctx context.Context, hash string) (bool, error)
 }
 
 // auditWriter is the minimal interface for writing audit log entries (implemented by *repository.AuditRepository).
 type auditWriter interface {
-	Insert(entry *models.AuditLog) error
+	Insert(ctx context.Context, entry *models.AuditLog) error
 }
 
 // patientUpserter is the repository interface for patient upsert (implemented by *repository.PatientRepository).
 type patientUpserter interface {
-	UpsertWithDemographics(patientID, firstName, lastName, gender string) error
+	UpsertWithDemographics(ctx context.Context, patientID, firstName, lastName, gender string) error
 }
 
 // Persister consumes RoutedItems from the RoutedQueue, renames and writes each
@@ -260,10 +260,11 @@ func (p *Persister) PersistRouted(ri RoutedItem) error {
 //  3. Upsert the patient row
 //  4. Insert the ECG row
 func (p *Persister) persist(ri RoutedItem) error {
+	ctx := ri.IngestItem.Context(context.Background())
 	hash := sha256.Sum256(ri.IngestItem.Data)
 	contentHash := hex.EncodeToString(hash[:])
 
-	exists, err := p.ecgRepo.ExistsByContentHash(contentHash)
+	exists, err := p.ecgRepo.ExistsByContentHash(ctx, contentHash)
 	if err != nil {
 		slog.Warn("ingestion: dedup check failed, proceeding with insert",
 			"filename", ri.IngestItem.Filename, "error", err)
@@ -276,6 +277,7 @@ func (p *Persister) persist(ri RoutedItem) error {
 		if p.publisher != nil {
 			p.publisher.Publish(events.Event{
 				Type:      events.TypeECGDuplicate,
+				TenantID:  ri.IngestItem.TenantID,
 				PatientID: ri.Meta.PatientID,
 				Vendor:    ri.Meta.VendorName,
 				DeviceMAC: ri.IngestItem.DeviceMAC,
@@ -301,7 +303,7 @@ func (p *Persister) persist(ri RoutedItem) error {
 				ResourceID: contentHash,
 				Details:    details,
 			}
-			if err := a.Insert(entry); err != nil {
+			if err := a.Insert(ctx, entry); err != nil {
 				slog.Warn("ingestion: duplicate audit log failed",
 					"filename", ri.IngestItem.Filename, "error", err)
 			}
@@ -334,7 +336,7 @@ func (p *Persister) persist(ri RoutedItem) error {
 	firstName, _ := ri.Meta.Extra["first_name"].(string)
 	lastName, _ := ri.Meta.Extra["last_name"].(string)
 	gender, _ := ri.Meta.Extra["sex"].(string) // Philips uses "sex"; HL7 normalises to "gender"
-	if err := p.patRepo.UpsertWithDemographics(ri.Meta.PatientID, firstName, lastName, gender); err != nil {
+	if err := p.patRepo.UpsertWithDemographics(ctx, ri.Meta.PatientID, firstName, lastName, gender); err != nil {
 		return fmt.Errorf("persister: upsert patient: %w", err)
 	}
 
@@ -352,7 +354,7 @@ func (p *Persister) persist(ri RoutedItem) error {
 	if !ri.Meta.RecordedAt.IsZero() {
 		ecg.RecordedAt = &ri.Meta.RecordedAt
 	}
-	if err := p.ecgRepo.Insert(ecg); err != nil {
+	if err := p.ecgRepo.Insert(ctx, ecg); err != nil {
 		return fmt.Errorf("persister: insert ecg: %w", err)
 	}
 
@@ -364,6 +366,7 @@ func (p *Persister) persist(ri RoutedItem) error {
 		}
 		p.publisher.Publish(events.Event{
 			Type:      events.TypeECGIngested,
+			TenantID:  ecg.TenantID,
 			ECGID:     ecg.ID,
 			PatientID: ecg.PatientID,
 			Vendor:    ecg.Vendor,
@@ -390,7 +393,7 @@ func (p *Persister) persist(ri RoutedItem) error {
 			ResourceID: ecg.ID,
 			Details:    details,
 		}
-		if err := a.Insert(entry); err != nil {
+		if err := a.Insert(ctx, entry); err != nil {
 			slog.Warn("ingestion: audit log failed", "ecg_id", ecg.ID, "error", err)
 		}
 	}

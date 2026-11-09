@@ -33,7 +33,7 @@ func init() {
 // Module implements module.Module for Philips SierraECG 1.03 XML files.
 type Module struct{}
 
-func (m *Module) Name() string                { return "philips" }
+func (m *Module) Name() string                 { return "philips" }
 func (m *Module) AcceptedExtensions() []string { return []string{".xml"} }
 
 // Health always returns nil — the Philips module has no external dependencies.
@@ -285,9 +285,9 @@ func applyUpdates(data []byte, fields map[string]string) ([]byte, error) {
 	var buf bytes.Buffer
 	enc := xml.NewEncoder(&buf)
 
-	var stack []string   // local names of current element ancestry
+	var stack []string        // local names of current element ancestry
 	var replaceContent string // non-empty: replace next CharData with this
-	replaceDepth := -1   // stack depth at which we entered replace mode
+	replaceDepth := -1        // stack depth at which we entered replace mode
 
 	for {
 		tok, err := dec.Token()

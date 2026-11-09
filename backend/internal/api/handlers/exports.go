@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"os"
@@ -16,19 +17,19 @@ import (
 
 // exportJobCreator is the minimal ExportJobRepository interface needed by CreateExportHandler.
 type exportJobCreator interface {
-	Create(job *models.ExportJob) error
-	SaveECGList(jobID string, ecgIDs []string) error
-	Update(id string, updates map[string]any) error
+	Create(ctx context.Context, job *models.ExportJob) error
+	SaveECGList(ctx context.Context, jobID string, ecgIDs []string) error
+	Update(ctx context.Context, id string, updates map[string]any) error
 }
 
 // exportJobFinder is the minimal ExportJobRepository interface needed by GetExportHandler.
 type exportJobFinder interface {
-	FindByID(id string) (*models.ExportJob, error)
+	FindByID(ctx context.Context, id string) (*models.ExportJob, error)
 }
 
 // ecgByIDsFinder is the minimal ECGRepository interface needed by CreateExportHandler.
 type ecgByIDsFinder interface {
-	FindByIDs(ids []string) ([]models.ECG, error)
+	FindByIDs(ctx context.Context, ids []string) ([]models.ECG, error)
 }
 
 // exportJobEnqueuer is the minimal WorkerPool interface needed by CreateExportHandler.
@@ -85,7 +86,7 @@ func DownloadExportHandler(exportRepo *repository.ExportJobRepository, adminRole
 func downloadExportHandler(exportRepo exportJobFinder, adminRole string) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		jobID := c.Param("id")
-		job, err := exportRepo.FindByID(jobID)
+		job, err := exportRepo.FindByID(c.Request().Context(), jobID)
 		if err != nil {
 			if errors.Is(err, repository.ErrExportJobNotFound) {
 				return c.JSON(http.StatusNotFound, mw.APIError("NOT_FOUND", "export job not found"))

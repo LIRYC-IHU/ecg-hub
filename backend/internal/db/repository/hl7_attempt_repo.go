@@ -1,8 +1,11 @@
 package repository
 
 import (
-	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
+	"context"
+
 	"gorm.io/gorm"
+
+	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 )
 
 // HL7AttemptRepository persists and queries HL7 attempt history records.
@@ -16,14 +19,14 @@ func NewHL7AttemptRepository(db *gorm.DB) *HL7AttemptRepository {
 }
 
 // Insert persists a single HL7 attempt record.
-func (r *HL7AttemptRepository) Insert(a *models.HL7Attempt) error {
-	return r.db.Create(a).Error
+func (r *HL7AttemptRepository) Insert(ctx context.Context, a *models.HL7Attempt) error {
+	return r.db.WithContext(ctx).Create(a).Error
 }
 
 // ListByPatient returns attempt records for the given patient, ordered by most recent first.
-func (r *HL7AttemptRepository) ListByPatient(patientID string, limit int) ([]models.HL7Attempt, error) {
+func (r *HL7AttemptRepository) ListByPatient(ctx context.Context, patientID string, limit int) ([]models.HL7Attempt, error) {
 	var attempts []models.HL7Attempt
-	err := r.db.
+	err := r.db.WithContext(ctx).
 		Where("patient_id = ?", patientID).
 		Order("created_at DESC").
 		Limit(limit).

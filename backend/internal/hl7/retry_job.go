@@ -10,25 +10,25 @@ import (
 
 	"gorm.io/datatypes"
 
-	appmetrics "github.com/LIRYC-IHU/ecg-hub/internal/metrics"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
+	appmetrics "github.com/LIRYC-IHU/ecg-hub/internal/metrics"
 )
 
 // retryECGRepo is the ECG repository interface used by RetryJob.
 type retryECGRepo interface {
-	FindPendingHL7(limit int) ([]models.ECG, error)
-	UpdateHL7Lifecycle(ecgID string, status string, retryCount int) error
+	FindPendingHL7(ctx context.Context, limit int) ([]models.ECG, error)
+	UpdateHL7Lifecycle(ctx context.Context, ecgID string, status string, retryCount int) error
 }
 
 // retryPatRepo is the patient repository interface used by RetryJob.
 // Matches the existing patientUpdater interface in enricher.go (same package, duck-typed).
 type retryPatRepo interface {
-	UpdateDemographics(patientID string, d *PatientDemographics) error
+	UpdateDemographics(ctx context.Context, patientID string, d *PatientDemographics) error
 }
 
 // retryAuditWriter is the audit repository interface used by RetryJob.
 type retryAuditWriter interface {
-	Insert(entry *models.AuditLog) error
+	Insert(ctx context.Context, entry *models.AuditLog) error
 }
 
 // retryWebhookNotifier fires webhook events on exhaustion.
@@ -110,7 +110,7 @@ func (j *RetryJob) run() {
 // processPending fetches up to 50 pending ECGs and retries each one.
 // limit=50 prevents unbounded memory use when a large backlog accumulates.
 func (j *RetryJob) processPending() {
-	ecgs, err := j.ecgRepo.FindPendingHL7(50)
+	ecgs, err := j.ecgRepo.FindPendingHL7(systemCtx, 50)
 	if err != nil {
 		slog.Warn("hl7: retry job find pending failed", "error", err)
 		return
@@ -138,19 +138,19 @@ func (j *RetryJob) processOne(ecg models.ECG) {
 			j.exhaust(ecg, err)
 		} else {
 			appmetrics.HL7RetryAttempts.WithLabelValues("failed").Inc()
-			if updErr := j.ecgRepo.UpdateHL7Lifecycle(ecg.ID, StatusPending, newCount); updErr != nil {
+			if updErr := j.ecgRepo.UpdateHL7Lifecycle(systemCtx, ecg.ID, StatusPending, newCount); updErr != nil {
 				slog.Warn("hl7: retry count update failed", "ecg_id", ecg.ID, "error", updErr)
 			}
 		}
 		return
 	}
 
-	if updErr := j.patRepo.UpdateDemographics(ecg.PatientID, d); updErr != nil {
+	if updErr := j.patRepo.UpdateDemographics(systemCtx, ecg.PatientID, d); updErr != nil {
 		slog.Warn("hl7: retry demographics update failed", "ecg_id", ecg.ID, "error", updErr)
 		// Continue to update ECG status — partial enrichment is better than no update
 	}
 
-	if updErr := j.ecgRepo.UpdateHL7Lifecycle(ecg.ID, StatusSuccess, ecg.HL7RetryCount); updErr != nil {
+	if updErr := j.ecgRepo.UpdateHL7Lifecycle(systemCtx, ecg.ID, StatusSuccess, ecg.HL7RetryCount); updErr != nil {
 		slog.Warn("hl7: retry lifecycle success update failed", "ecg_id", ecg.ID, "error", updErr)
 	}
 
@@ -177,7 +177,7 @@ func (j *RetryJob) exhaust(ecg models.ECG, lastErr error) {
 	}
 
 	appmetrics.HL7RetryAttempts.WithLabelValues(metricLabel).Inc()
-	if updErr := j.ecgRepo.UpdateHL7Lifecycle(ecg.ID, status, j.maxRetries); updErr != nil {
+	if updErr := j.ecgRepo.UpdateHL7Lifecycle(systemCtx, ecg.ID, status, j.maxRetries); updErr != nil {
 		slog.Warn("hl7: terminal status update failed", "ecg_id", ecg.ID, "status", status, "error", updErr)
 	}
 
@@ -185,7 +185,7 @@ func (j *RetryJob) exhaust(ecg models.ECG, lastErr error) {
 	if lastErr != nil {
 		errMsg = lastErr.Error()
 	}
-	_ = j.auditRepo.Insert(&models.AuditLog{
+	_ = j.auditRepo.Insert(systemCtx, &models.AuditLog{
 		UserID:     "system",
 		Action:     event,
 		ResourceID: ecg.ID,

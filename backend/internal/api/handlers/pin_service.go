@@ -25,7 +25,7 @@ type PinServiceHandler struct {
 // ListPins returns the device patient ids the caller has pinned.
 func (h *PinServiceHandler) ListPins(ctx context.Context, _ *apiv1.ListPinsRequest) (*apiv1.ListPinsResponse, error) {
 	repo := repository.NewPinRepository(h.DB)
-	pins, err := repo.ListPins(mw.UserIDFromContext(ctx))
+	pins, err := repo.ListPins(ctx, mw.UserIDFromContext(ctx))
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -40,7 +40,7 @@ func (h *PinServiceHandler) PinPatient(ctx context.Context, req *apiv1.PinPatien
 	if req.PatientId == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errPatientIDRequired)
 	}
-	if err := repository.NewPinRepository(h.DB).Pin(mw.UserIDFromContext(ctx), req.PatientId); err != nil {
+	if err := repository.NewPinRepository(h.DB).Pin(ctx, mw.UserIDFromContext(ctx), req.PatientId); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	return &apiv1.PinPatientResponse{}, nil
@@ -51,7 +51,7 @@ func (h *PinServiceHandler) UnpinPatient(ctx context.Context, req *apiv1.UnpinPa
 	if req.PatientId == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errPatientIDRequired)
 	}
-	if err := repository.NewPinRepository(h.DB).Unpin(mw.UserIDFromContext(ctx), req.PatientId); err != nil {
+	if err := repository.NewPinRepository(h.DB).Unpin(ctx, mw.UserIDFromContext(ctx), req.PatientId); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	return &apiv1.UnpinPatientResponse{}, nil

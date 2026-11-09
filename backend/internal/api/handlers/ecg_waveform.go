@@ -30,7 +30,7 @@ func ECGWaveformHandler(db *gorm.DB, volumePath string, bridge export.Converter)
 	return func(c echo.Context) error {
 		id := c.Param("id")
 		ecgRepo := repository.NewECGRepository(db)
-		ecg, err := ecgRepo.FindByID(id)
+		ecg, err := ecgRepo.FindByID(c.Request().Context(), id)
 		if err != nil {
 			return c.JSON(http.StatusNotFound, map[string]string{
 				"code":    "ECG_NOT_FOUND",
@@ -107,7 +107,7 @@ func ECGWaveformHandler(db *gorm.DB, volumePath string, bridge export.Converter)
 			// Fetch patient for enriching DICOM metadata (optional)
 			var patient *models.Patient
 			patRepo := repository.NewPatientRepository(db)
-			if p, err := patRepo.FindByPatientID(ecg.PatientID); err == nil {
+			if p, err := patRepo.FindByPatientID(c.Request().Context(), ecg.PatientID); err == nil {
 				patient = p
 			}
 

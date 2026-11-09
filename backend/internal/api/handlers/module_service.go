@@ -50,7 +50,7 @@ type ModuleServiceHandler struct {
 
 // ---- Active vendor modules -------------------------------------------------
 
-func (h *ModuleServiceHandler) ListModules(_ context.Context, _ *apiv1.ListModulesRequest) (*apiv1.ListModulesResponse, error) {
+func (h *ModuleServiceHandler) ListModules(ctx context.Context, _ *apiv1.ListModulesRequest) (*apiv1.ListModulesResponse, error) {
 	active := h.ModuleProvider.GetModules()
 	out := make([]*apiv1.ModuleInfo, 0, len(active))
 	for _, m := range active {
@@ -80,7 +80,7 @@ func (h *ModuleServiceHandler) ListModules(_ context.Context, _ *apiv1.ListModul
 
 // ---- Module runtime status + hot-control -----------------------------------
 
-func (h *ModuleServiceHandler) ListModuleStatus(_ context.Context, _ *apiv1.ListModuleStatusRequest) (*apiv1.ListModuleStatusResponse, error) {
+func (h *ModuleServiceHandler) ListModuleStatus(ctx context.Context, _ *apiv1.ListModuleStatusRequest) (*apiv1.ListModuleStatusResponse, error) {
 	statuses := h.Registry.List()
 	items := make([]*apiv1.ModuleControlStatus, 0, len(statuses))
 	for name, status := range statuses {
@@ -126,7 +126,7 @@ func (h *ModuleServiceHandler) StopModule(ctx context.Context, req *apiv1.StopMo
 
 // ---- FTP config ------------------------------------------------------------
 
-func (h *ModuleServiceHandler) GetFTPConfig(_ context.Context, _ *apiv1.GetFTPConfigRequest) (*apiv1.FTPConfig, error) {
+func (h *ModuleServiceHandler) GetFTPConfig(ctx context.Context, _ *apiv1.GetFTPConfigRequest) (*apiv1.FTPConfig, error) {
 	record, err := h.ConfigRepo.Get(ftpModuleType)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, errors.New("failed to read FTP config"))
@@ -159,7 +159,7 @@ func (h *ModuleServiceHandler) GetFTPConfig(_ context.Context, _ *apiv1.GetFTPCo
 	}, nil
 }
 
-func (h *ModuleServiceHandler) SaveFTPConfig(_ context.Context, req *apiv1.SaveFTPConfigRequest) (*apiv1.SaveModuleConfigResponse, error) {
+func (h *ModuleServiceHandler) SaveFTPConfig(ctx context.Context, req *apiv1.SaveFTPConfigRequest) (*apiv1.SaveModuleConfigResponse, error) {
 	c := req.Config
 	if c == nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("config is required"))
@@ -247,7 +247,7 @@ func validatePassivePortRange(r string) error {
 
 // ---- DICOM config ----------------------------------------------------------
 
-func (h *ModuleServiceHandler) GetDICOMConfig(_ context.Context, _ *apiv1.GetDICOMConfigRequest) (*apiv1.DICOMConfig, error) {
+func (h *ModuleServiceHandler) GetDICOMConfig(ctx context.Context, _ *apiv1.GetDICOMConfigRequest) (*apiv1.DICOMConfig, error) {
 	record, err := h.ConfigRepo.Get(dicomModuleType)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, errors.New("failed to read DICOM config"))
@@ -276,7 +276,7 @@ func (h *ModuleServiceHandler) GetDICOMConfig(_ context.Context, _ *apiv1.GetDIC
 	}, nil
 }
 
-func (h *ModuleServiceHandler) SaveDICOMConfig(_ context.Context, req *apiv1.SaveDICOMConfigRequest) (*apiv1.SaveModuleConfigResponse, error) {
+func (h *ModuleServiceHandler) SaveDICOMConfig(ctx context.Context, req *apiv1.SaveDICOMConfigRequest) (*apiv1.SaveModuleConfigResponse, error) {
 	c := req.Config
 	if c == nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("config is required"))
@@ -333,7 +333,7 @@ func (h *ModuleServiceHandler) upsertModuleConfig(moduleType string, stored any,
 
 // ---- Module activation settings --------------------------------------------
 
-func (h *ModuleServiceHandler) GetModuleSettings(_ context.Context, _ *apiv1.GetModuleSettingsRequest) (*apiv1.ModuleSettings, error) {
+func (h *ModuleServiceHandler) GetModuleSettings(ctx context.Context, _ *apiv1.GetModuleSettingsRequest) (*apiv1.ModuleSettings, error) {
 	dbActive, err := h.SettingsRepo.GetActiveModules()
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, errors.New("failed to read module settings"))
@@ -431,7 +431,7 @@ func connectorConfigFromProto(p *apiv1.ConnectorConfig) ConnectorStoredConfig {
 	}
 }
 
-func (h *ModuleServiceHandler) ListConnectorConfigs(_ context.Context, _ *apiv1.ListConnectorConfigsRequest) (*apiv1.ListConnectorConfigsResponse, error) {
+func (h *ModuleServiceHandler) ListConnectorConfigs(ctx context.Context, _ *apiv1.ListConnectorConfigsRequest) (*apiv1.ListConnectorConfigsResponse, error) {
 	all, err := h.ConfigRepo.ListAll()
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, errors.New("failed to list connector configs"))
@@ -647,7 +647,7 @@ func (h *ModuleServiceHandler) testDICOM(ctx context.Context, name string, cfg C
 	return &apiv1.TestConnectorResponse{Success: true, Latency: latency.String()}, nil
 }
 
-func (h *ModuleServiceHandler) ListConnectors(_ context.Context, _ *apiv1.ListConnectorsRequest) (*apiv1.ListConnectorsResponse, error) {
+func (h *ModuleServiceHandler) ListConnectors(ctx context.Context, _ *apiv1.ListConnectorsRequest) (*apiv1.ListConnectorsResponse, error) {
 	entries := buildConnectorEntries(h.ConnCheckers)
 	out := make([]*apiv1.ConnectorStatus, len(entries))
 	for i, e := range entries {
@@ -665,7 +665,7 @@ func (h *ModuleServiceHandler) ListConnectors(_ context.Context, _ *apiv1.ListCo
 
 // GetTLSStatus reports the installation-wide certificate the device-facing
 // servers would present.
-func (h *ModuleServiceHandler) GetTLSStatus(_ context.Context, _ *apiv1.GetTLSStatusRequest) (*apiv1.TLSStatus, error) {
+func (h *ModuleServiceHandler) GetTLSStatus(ctx context.Context, _ *apiv1.GetTLSStatusRequest) (*apiv1.TLSStatus, error) {
 	st := h.tlsStatus()
 	out := &apiv1.TLSStatus{
 		Available: st.Available,

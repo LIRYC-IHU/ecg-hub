@@ -14,7 +14,7 @@ import (
 func ListPatientTagsHandler(repo *repository.TagRepository) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		patientID := c.Param("id")
-		tags, err := repo.ListPatientTags(patientID)
+		tags, err := repo.ListPatientTags(c.Request().Context(), patientID)
 		if err != nil {
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to list patient tags"})
 		}
@@ -25,7 +25,7 @@ func ListPatientTagsHandler(repo *repository.TagRepository) echo.HandlerFunc {
 func ListECGTagsHandler(repo *repository.TagRepository) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		ecgID := c.Param("id")
-		tags, err := repo.ListECGTags(ecgID)
+		tags, err := repo.ListECGTags(c.Request().Context(), ecgID)
 		if err != nil {
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to list ecg tags"})
 		}

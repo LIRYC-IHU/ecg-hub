@@ -16,17 +16,17 @@ import (
 // captureInserter records the last inserted QuarantineEntry.
 type captureInserter struct{ last *models.QuarantineEntry }
 
-func (c *captureInserter) Insert(e *models.QuarantineEntry) error {
+func (c *captureInserter) Insert(_ context.Context, e *models.QuarantineEntry) error {
 	c.last = e
 	return nil
 }
 
 // FindByContentHash always misses — dedup behaviour is exercised separately.
-func (c *captureInserter) FindByContentHash(_ string) (*models.QuarantineEntry, error) {
+func (c *captureInserter) FindByContentHash(_ context.Context, _ string) (*models.QuarantineEntry, error) {
 	return nil, nil
 }
 
-func (c *captureInserter) TouchReceived(_, _ string) error { return nil }
+func (c *captureInserter) TouchReceived(_ context.Context, _, _ string) error { return nil }
 
 func TestQuarantineStore_Record_SetsErrorCategory(t *testing.T) {
 	cap := &captureInserter{}

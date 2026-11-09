@@ -48,7 +48,7 @@ type mockDispatchRepo struct {
 	insertIDSeq  string
 }
 
-func (m *mockDispatchRepo) Insert(job *models.ConnectorJob) error {
+func (m *mockDispatchRepo) Insert(_ context.Context, job *models.ConnectorJob) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.insertErr != nil {
@@ -59,21 +59,21 @@ func (m *mockDispatchRepo) Insert(job *models.ConnectorJob) error {
 	return nil
 }
 
-func (m *mockDispatchRepo) MarkSent(id string) error {
+func (m *mockDispatchRepo) MarkSent(_ context.Context, id string) error {
 	m.mu.Lock()
 	m.markedSent = append(m.markedSent, id)
 	m.mu.Unlock()
 	return nil
 }
 
-func (m *mockDispatchRepo) MarkFailed(id string, _ string, _ time.Time) error {
+func (m *mockDispatchRepo) MarkFailed(_ context.Context, id string, _ string, _ time.Time) error {
 	m.mu.Lock()
 	m.markedFailed = append(m.markedFailed, id)
 	m.mu.Unlock()
 	return nil
 }
 
-func (m *mockDispatchRepo) Exhaust(id string, _ string) error {
+func (m *mockDispatchRepo) Exhaust(_ context.Context, id string, _ string) error {
 	m.mu.Lock()
 	m.exhausted = append(m.exhausted, id)
 	m.mu.Unlock()

@@ -116,7 +116,7 @@ func (c *DICOMConnector) withHubIdentity(ecg *models.ECG, filePath string) (stri
 
 	var patient *models.Patient
 	if c.patients != nil {
-		if p, err := c.patients.FindByPatientID(ecg.PatientID); err == nil {
+		if p, err := c.patients.FindByPatientID(systemCtx, ecg.PatientID); err == nil {
 			patient = p
 		} else {
 			slog.Warn("connector: patient lookup failed, coercing the Patient ID only",

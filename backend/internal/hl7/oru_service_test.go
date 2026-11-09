@@ -17,11 +17,13 @@ func (f fakeSettings) Get() (*models.HL7Settings, error) { return f.s, nil }
 
 type fakeECGs struct{ e *models.ECG }
 
-func (f fakeECGs) FindByID(string) (*models.ECG, error) { return f.e, nil }
+func (f fakeECGs) FindByID(context.Context, string) (*models.ECG, error) { return f.e, nil }
 
 type fakePatients struct{ p *models.Patient }
 
-func (f fakePatients) FindByPatientID(string) (*models.Patient, error) { return f.p, nil }
+func (f fakePatients) FindByPatientID(context.Context, string) (*models.Patient, error) {
+	return f.p, nil
+}
 
 type fakePDF struct {
 	data []byte
@@ -34,7 +36,7 @@ func (f fakePDF) RenderPDF(context.Context, *models.ECG, *models.Patient) ([]byt
 
 type fakeRecorder struct{ inserted []*models.HL7ORUAttempt }
 
-func (f *fakeRecorder) Insert(a *models.HL7ORUAttempt) error {
+func (f *fakeRecorder) Insert(_ context.Context, a *models.HL7ORUAttempt) error {
 	f.inserted = append(f.inserted, a)
 	return nil
 }

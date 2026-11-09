@@ -4,7 +4,6 @@ import (
 	"archive/zip"
 	"context"
 	"fmt"
-	"github.com/LIRYC-IHU/ecg-hub/internal/storage"
 	"io"
 	"log/slog"
 	"os"
@@ -17,6 +16,8 @@ import (
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
 	appmetrics "github.com/LIRYC-IHU/ecg-hub/internal/metrics"
+	"github.com/LIRYC-IHU/ecg-hub/internal/storage"
+	"github.com/LIRYC-IHU/ecg-hub/internal/tenancy"
 )
 
 // batchConverter converts a single ECG file to the requested format.
@@ -27,7 +28,7 @@ type batchConverter interface {
 
 // patientFetcher retrieves patient demographics by patient_id for converter metadata.
 type patientFetcher interface {
-	FindByPatientID(patientID string) (*models.Patient, error)
+	FindByPatientID(ctx context.Context, patientID string) (*models.Patient, error)
 }
 
 // Job represents a batch export request to be processed by the worker pool.
@@ -42,6 +43,10 @@ type Job struct {
 	// Patient-data options for converted outputs (see ConvertOptions).
 	Anonymize bool
 	Inject    bool
+	// TenantID is the tenant of the user who asked for the export. The job
+	// reads the ECGs as that tenant, so an ECG id of another tenant exports
+	// nothing. Empty runs in system scope.
+	TenantID string
 }
 
 // WorkerPool processes batch export jobs concurrently (FR19, NFR-SC3).
@@ -140,29 +145,33 @@ func (p *WorkerPool) worker() {
 }
 
 func (p *WorkerPool) processJob(job Job) {
+	ctx := tenancy.System(p.ctx)
+	if job.TenantID != "" {
+		ctx = tenancy.With(p.ctx, job.TenantID)
+	}
 	slog.Info("export: processing job", "job_id", job.ID, "ecg_count", len(job.ECGIDs))
 	start := time.Now()
 	formatsCount := strconv.Itoa(len(job.Formats))
 
 	appmetrics.ExportJobsTotal.WithLabelValues("processing").Inc()
-	if err := p.exportRepo.Update(job.ID, map[string]any{"status": "processing"}); err != nil {
+	if err := p.exportRepo.Update(ctx, job.ID, map[string]any{"status": "processing"}); err != nil {
 		slog.Error("export: failed to mark job processing", "job_id", job.ID, "error", err)
 	}
 
-	ecgs, err := p.ecgRepo.FindByIDs(job.ECGIDs)
+	ecgs, err := p.ecgRepo.FindByIDs(ctx, job.ECGIDs)
 	if err != nil {
 		appmetrics.ExportJobsTotal.WithLabelValues("failed").Inc()
-		p.failJob(job.ID, fmt.Sprintf("failed to fetch ECG records: %v", err))
+		p.failJob(ctx, job.ID, fmt.Sprintf("failed to fetch ECG records: %v", err))
 		return
 	}
 
 	zipPath := filepath.Join(tmpExportDir(), job.ID+".zip")
-	if err := buildZIP(job, ecgs, zipPath, p.exportRepo, p.bridge, p.patFetcher); err != nil {
+	if err := buildZIP(ctx, job, ecgs, zipPath, p.exportRepo, p.bridge, p.patFetcher); err != nil {
 		appmetrics.ExportJobsTotal.WithLabelValues("failed").Inc()
 		appmetrics.ExportJobDuration.WithLabelValues(formatsCount).Observe(time.Since(start).Seconds())
 		// Remove any partial ZIP left on disk before marking the job failed.
 		os.Remove(zipPath)
-		p.failJob(job.ID, err.Error())
+		p.failJob(ctx, job.ID, err.Error())
 		return
 	}
 
@@ -176,7 +185,7 @@ func (p *WorkerPool) processJob(job Job) {
 	}
 
 	expiresAt := time.Now().Add(p.ttl)
-	if err := p.exportRepo.Update(job.ID, map[string]any{
+	if err := p.exportRepo.Update(ctx, job.ID, map[string]any{
 		"status":          "complete",
 		"file_path":       zipPath,
 		"expires_at":      expiresAt,
@@ -192,7 +201,7 @@ func (p *WorkerPool) processJob(job Job) {
 // It writes one entry per (ecg, format) pair. When job.Formats has more than
 // one entry, each format's files are grouped under a subfolder named after the
 // format. Progress is reported once per ECG (all formats done).
-func buildZIP(job Job, ecgs []models.ECG, zipPath string, exportRepo *repository.ExportJobRepository, bridge batchConverter, pf patientFetcher) error {
+func buildZIP(ctx context.Context, job Job, ecgs []models.ECG, zipPath string, exportRepo *repository.ExportJobRepository, bridge batchConverter, pf patientFetcher) error {
 	formats := job.Formats
 	if len(formats) == 0 {
 		return fmt.Errorf("export job %s has no formats", job.ID)
@@ -228,14 +237,14 @@ func buildZIP(job Job, ecgs []models.ECG, zipPath string, exportRepo *repository
 
 			var patient *models.Patient
 			if pf != nil {
-				patient, _ = pf.FindByPatientID(ecg.PatientID)
+				patient, _ = pf.FindByPatientID(ctx, ecg.PatientID)
 			}
 
-			localPath, cleanup, matErr := storage.Materialize(context.Background(), ecg.FilePath)
+			localPath, cleanup, matErr := storage.Materialize(ctx, ecg.FilePath)
 			if matErr != nil {
 				return fmt.Errorf("materialize ecg %s (%s): %w", ecg.ID, ecg.FilePath, matErr)
 			}
-			converted, convErr := bridge.Convert(context.Background(), localPath, ecg.Vendor, fmtID, patient, ConvertOptions{
+			converted, convErr := bridge.Convert(ctx, localPath, ecg.Vendor, fmtID, patient, ConvertOptions{
 				Anonymize:     job.Anonymize,
 				InjectPatient: job.Inject,
 			})
@@ -253,7 +262,7 @@ func buildZIP(job Job, ecgs []models.ECG, zipPath string, exportRepo *repository
 		}
 
 		// Update progress once per processed ECG — best-effort, do not abort on DB error.
-		_ = exportRepo.Update(job.ID, map[string]any{"processed_count": i + 1})
+		_ = exportRepo.Update(ctx, job.ID, map[string]any{"processed_count": i + 1})
 	}
 
 	return nil
@@ -326,9 +335,9 @@ func safeZIPName(originalFilename string, ecgID string, nameCount map[string]int
 	return fmt.Sprintf("%s_%s%s", base, ecgID, ext)
 }
 
-func (p *WorkerPool) failJob(jobID, reason string) {
+func (p *WorkerPool) failJob(ctx context.Context, jobID, reason string) {
 	slog.Error("export: job failed", "job_id", jobID, "error", reason)
-	if err := p.exportRepo.Update(jobID, map[string]any{
+	if err := p.exportRepo.Update(ctx, jobID, map[string]any{
 		"status": "failed",
 		"error":  reason,
 	}); err != nil {

@@ -20,10 +20,12 @@ import (
 	"gorm.io/datatypes"
 
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
+	"github.com/LIRYC-IHU/ecg-hub/internal/tenancy"
+
+	"github.com/spf13/afero"
 
 	"github.com/LIRYC-IHU/ecg-hub/internal/certs"
 	"github.com/LIRYC-IHU/ecg-hub/internal/device"
-	"github.com/spf13/afero"
 
 	appmetrics "github.com/LIRYC-IHU/ecg-hub/internal/metrics"
 )
@@ -272,7 +274,7 @@ func (s *Server) recordAuthFailure(user, addr string, count int) {
 		ResourceID: addr,
 		Details:    datatypes.JSON(details),
 	}
-	if err := s.audit.Insert(entry); err != nil {
+	if err := s.audit.Insert(tenancy.System(context.Background()), entry); err != nil {
 		slog.Warn("ftp: cannot record the failed login in the audit log",
 			"remote_host", addr, "error", err)
 	}

@@ -26,7 +26,7 @@ type stubECGFinder struct {
 	err error
 }
 
-func (s *stubECGFinder) FindByID(_ string) (*models.ECG, error) {
+func (s *stubECGFinder) FindByID(_ context.Context, _ string) (*models.ECG, error) {
 	return s.ecg, s.err
 }
 
@@ -35,7 +35,7 @@ type stubPatientFinder struct {
 	err     error
 }
 
-func (s *stubPatientFinder) FindByPatientID(_ string) (*models.Patient, error) {
+func (s *stubPatientFinder) FindByPatientID(_ context.Context, _ string) (*models.Patient, error) {
 	return s.patient, s.err
 }
 

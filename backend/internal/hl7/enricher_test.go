@@ -23,7 +23,7 @@ type stubPatientUpdater struct {
 	err         error
 }
 
-func (s *stubPatientUpdater) UpdateDemographics(patientID string, d *PatientDemographics) error {
+func (s *stubPatientUpdater) UpdateDemographics(_ context.Context, patientID string, d *PatientDemographics) error {
 	s.calls = append(s.calls, patientID)
 	s.capturedDem = d
 	return s.err
@@ -37,7 +37,7 @@ type stubECGUpdater struct {
 	err error
 }
 
-func (s *stubECGUpdater) UpdateHL7Status(ecgID string, status string) error {
+func (s *stubECGUpdater) UpdateHL7Status(_ context.Context, ecgID string, status string) error {
 	s.calls = append(s.calls, struct {
 		ecgID  string
 		status string

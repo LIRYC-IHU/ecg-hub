@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
@@ -23,8 +24,8 @@ func NewQuarantineRepository(db *gorm.DB) *QuarantineRepository {
 }
 
 // Insert creates a new quarantine entry.
-func (r *QuarantineRepository) Insert(entry *models.QuarantineEntry) error {
-	if err := r.db.Create(entry).Error; err != nil {
+func (r *QuarantineRepository) Insert(ctx context.Context, entry *models.QuarantineEntry) error {
+	if err := r.db.WithContext(ctx).Create(entry).Error; err != nil {
 		return fmt.Errorf("quarantine_repo: insert: %w", err)
 	}
 	return nil
@@ -32,9 +33,9 @@ func (r *QuarantineRepository) Insert(entry *models.QuarantineEntry) error {
 
 // FindByContentHash returns the quarantine entry holding the given SHA-256
 // digest, or ErrQuarantineNotFound. Used to deduplicate re-sent files.
-func (r *QuarantineRepository) FindByContentHash(hash string) (*models.QuarantineEntry, error) {
+func (r *QuarantineRepository) FindByContentHash(ctx context.Context, hash string) (*models.QuarantineEntry, error) {
 	var e models.QuarantineEntry
-	if err := r.db.First(&e, "content_hash = ?", hash).Error; err != nil {
+	if err := r.db.WithContext(ctx).First(&e, "content_hash = ?", hash).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrQuarantineNotFound
 		}
@@ -45,8 +46,8 @@ func (r *QuarantineRepository) FindByContentHash(hash string) (*models.Quarantin
 
 // TouchReceived refreshes ReceivedAt (now) and ErrorReason on an existing
 // entry — called when the same file is re-sent instead of inserting a duplicate.
-func (r *QuarantineRepository) TouchReceived(id, reason string) error {
-	if err := r.db.Model(&models.QuarantineEntry{}).Where("id = ?", id).
+func (r *QuarantineRepository) TouchReceived(ctx context.Context, id, reason string) error {
+	if err := r.db.WithContext(ctx).Model(&models.QuarantineEntry{}).Where("id = ?", id).
 		Updates(map[string]any{"received_at": gorm.Expr("now()"), "error_reason": reason}).Error; err != nil {
 		return fmt.Errorf("quarantine_repo: touch: %w", err)
 	}
@@ -55,14 +56,14 @@ func (r *QuarantineRepository) TouchReceived(id, reason string) error {
 
 // List returns quarantine entries ordered newest-first with pagination.
 // When category is non-empty, only entries of that category are returned.
-func (r *QuarantineRepository) List(page, perPage int, category string) ([]models.QuarantineEntry, int64, error) {
+func (r *QuarantineRepository) List(ctx context.Context, page, perPage int, category string) ([]models.QuarantineEntry, int64, error) {
 	if page < 1 {
 		page = 1
 	}
 	if perPage < 1 || perPage > 200 {
 		perPage = 50
 	}
-	q := r.db.Model(&models.QuarantineEntry{})
+	q := r.db.WithContext(ctx).Model(&models.QuarantineEntry{})
 	if category != "" {
 		q = q.Where("category = ?", category)
 	}
@@ -82,9 +83,9 @@ func (r *QuarantineRepository) List(page, perPage int, category string) ([]model
 }
 
 // FindByID returns the quarantine entry with the given primary key.
-func (r *QuarantineRepository) FindByID(id string) (*models.QuarantineEntry, error) {
+func (r *QuarantineRepository) FindByID(ctx context.Context, id string) (*models.QuarantineEntry, error) {
 	var e models.QuarantineEntry
-	if err := r.db.First(&e, "id = ?", id).Error; err != nil {
+	if err := r.db.WithContext(ctx).First(&e, "id = ?", id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrQuarantineNotFound
 		}
@@ -94,22 +95,22 @@ func (r *QuarantineRepository) FindByID(id string) (*models.QuarantineEntry, err
 }
 
 // DeleteByID removes the quarantine entry and returns its file path.
-func (r *QuarantineRepository) DeleteByID(id string) (string, error) {
-	e, err := r.FindByID(id)
+func (r *QuarantineRepository) DeleteByID(ctx context.Context, id string) (string, error) {
+	e, err := r.FindByID(ctx, id)
 	if err != nil {
 		return "", err
 	}
 	fp := e.FilePath
-	if err := r.db.Delete(e).Error; err != nil {
+	if err := r.db.WithContext(ctx).Delete(e).Error; err != nil {
 		return "", fmt.Errorf("quarantine_repo: delete: %w", err)
 	}
 	return fp, nil
 }
 
 // Count returns the total number of quarantine entries (used by the stats handler).
-func (r *QuarantineRepository) Count() (int64, error) {
+func (r *QuarantineRepository) Count(ctx context.Context) (int64, error) {
 	var n int64
-	if err := r.db.Model(&models.QuarantineEntry{}).Count(&n).Error; err != nil {
+	if err := r.db.WithContext(ctx).Model(&models.QuarantineEntry{}).Count(&n).Error; err != nil {
 		return 0, fmt.Errorf("quarantine_repo: count: %w", err)
 	}
 	return n, nil

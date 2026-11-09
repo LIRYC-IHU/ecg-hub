@@ -13,6 +13,7 @@ import (
 	"github.com/LIRYC-IHU/ecg-hub/internal/device"
 	appmetrics "github.com/LIRYC-IHU/ecg-hub/internal/metrics"
 	"github.com/LIRYC-IHU/ecg-hub/internal/module"
+	"github.com/LIRYC-IHU/ecg-hub/internal/tenancy"
 )
 
 // IngestItem represents a file received by the FTP server, ready for ingestion.
@@ -39,6 +40,20 @@ type IngestItem struct {
 	// instead of routing, and Data then holds only the head of the file that
 	// was read before the refusal, kept as evidence of what the device sent.
 	RejectReason string
+	// TenantID is the tenant the file is stored for: the uploading user's on
+	// the upload route. Empty means the default tenant — device listeners
+	// (FTP, DICOM, ECTP) are not tenant-aware.
+	TenantID string
+}
+
+// Context returns ctx scoped to the item's tenant, for every database write
+// the item causes.
+func (it IngestItem) Context(ctx context.Context) context.Context {
+	id := it.TenantID
+	if id == "" {
+		id = models.DefaultTenantID
+	}
+	return tenancy.With(ctx, id)
 }
 
 // IngestQueue carries IngestItems from the FTP receiver to the ingestion pipeline.
@@ -199,9 +214,9 @@ func (d *Dispatcher) run() {
 					if unidentified && ri.Meta != nil {
 						// Parsed OK but no patient ID: keep the file with its demographics
 						// for manual identification and later re-ingestion.
-						entry, err = d.quarantine.RecordUnidentified(d.ctx, item, ri.Meta, reason)
+						entry, err = d.quarantine.RecordUnidentified(item.Context(d.ctx), item, ri.Meta, reason)
 					} else {
-						entry, err = d.quarantine.Record(d.ctx, item.Filename, item.Data, reason)
+						entry, err = d.quarantine.Record(item.Context(d.ctx), item.Filename, item.Data, reason)
 					}
 					if err != nil {
 						slog.Error("ingestion: quarantine record failed",
@@ -292,7 +307,7 @@ func (d *Dispatcher) recordRejected(item IngestItem) {
 	if d.quarantine == nil {
 		return
 	}
-	if _, err := d.quarantine.Record(d.ctx, item.Filename, item.Data, item.RejectReason); err != nil {
+	if _, err := d.quarantine.Record(item.Context(d.ctx), item.Filename, item.Data, item.RejectReason); err != nil {
 		slog.Error("ingestion: quarantine record failed",
 			"filename", item.Filename, "error", err)
 	}
@@ -321,7 +336,7 @@ func (d *Dispatcher) quarantineItem(item IngestItem, reason string) {
 		return
 	}
 	// d.ctx is already cancelled here; use a fresh context so the write succeeds.
-	if _, err := d.quarantine.Record(context.Background(), item.Filename, item.Data, reason); err != nil {
+	if _, err := d.quarantine.Record(item.Context(context.Background()), item.Filename, item.Data, reason); err != nil {
 		slog.Error("ingestion: shutdown quarantine failed — item lost",
 			"filename", item.Filename, "reason", reason, "error", err)
 		return

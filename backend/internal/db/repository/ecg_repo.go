@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
@@ -27,14 +28,14 @@ func NewECGRepository(db *gorm.DB) *ECGRepository {
 
 // FindByID returns the ECG with the given primary key.
 // Returns ErrECGNotFound if no record matches.
-func (r *ECGRepository) FindByID(id string) (*models.ECG, error) {
+func (r *ECGRepository) FindByID(ctx context.Context, id string) (*models.ECG, error) {
 	// ecgs.id is a uuid column: a malformed id makes Postgres reject the
 	// statement, which would surface as a 500 for what is a client typo.
 	if uuid.Validate(id) != nil {
 		return nil, ErrECGNotFound
 	}
 	var ecg models.ECG
-	if err := r.db.First(&ecg, "id = ?", id).Error; err != nil {
+	if err := r.db.WithContext(ctx).First(&ecg, "id = ?", id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrECGNotFound
 		}
@@ -44,9 +45,9 @@ func (r *ECGRepository) FindByID(id string) (*models.ECG, error) {
 }
 
 // ExistsByContentHash returns true if an ECG with the given SHA-256 hash already exists.
-func (r *ECGRepository) ExistsByContentHash(hash string) (bool, error) {
+func (r *ECGRepository) ExistsByContentHash(ctx context.Context, hash string) (bool, error) {
 	var count int64
-	if err := r.db.Model(&models.ECG{}).Where("content_hash = ?", hash).Count(&count).Error; err != nil {
+	if err := r.db.WithContext(ctx).Model(&models.ECG{}).Where("content_hash = ?", hash).Count(&count).Error; err != nil {
 		return false, fmt.Errorf("ecg_repo: exists by content_hash: %w", err)
 	}
 	return count > 0, nil
@@ -54,9 +55,9 @@ func (r *ECGRepository) ExistsByContentHash(hash string) (bool, error) {
 
 // FindByContentHash returns the first ECG matching the given SHA-256 hash.
 // Returns ErrECGNotFound if no record matches.
-func (r *ECGRepository) FindByContentHash(hash string) (*models.ECG, error) {
+func (r *ECGRepository) FindByContentHash(ctx context.Context, hash string) (*models.ECG, error) {
 	var ecg models.ECG
-	if err := r.db.Where("content_hash = ?", hash).First(&ecg).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("content_hash = ?", hash).First(&ecg).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrECGNotFound
 		}
@@ -66,8 +67,8 @@ func (r *ECGRepository) FindByContentHash(hash string) (*models.ECG, error) {
 }
 
 // Insert persists a new ECG record. It is the only write operation exposed.
-func (r *ECGRepository) Insert(ecg *models.ECG) error {
-	if err := r.db.Create(ecg).Error; err != nil {
+func (r *ECGRepository) Insert(ctx context.Context, ecg *models.ECG) error {
+	if err := r.db.WithContext(ctx).Create(ecg).Error; err != nil {
 		return fmt.Errorf("ecg_repo: insert: %w", err)
 	}
 	return nil
@@ -77,8 +78,8 @@ func (r *ECGRepository) Insert(ecg *models.ECG) error {
 // This is the ONLY single-column update on hl7_status — use UpdateHL7Lifecycle when
 // also updating hl7_retry_count. Both are NFR-R4 exceptions (lifecycle metadata).
 // Valid status values: "pending", "success", "hl7_exhausted", "hl7_rejected".
-func (r *ECGRepository) UpdateHL7Status(ecgID string, status string) error {
-	result := r.db.Model(&models.ECG{}).Where("id = ?", ecgID).Update("hl7_status", status)
+func (r *ECGRepository) UpdateHL7Status(ctx context.Context, ecgID string, status string) error {
+	result := r.db.WithContext(ctx).Model(&models.ECG{}).Where("id = ?", ecgID).Update("hl7_status", status)
 	if result.Error != nil {
 		return fmt.Errorf("ecg_repo: update hl7_status: %w", result.Error)
 	}
@@ -88,8 +89,8 @@ func (r *ECGRepository) UpdateHL7Status(ecgID string, status string) error {
 // MarkViewed stamps viewed_at = now() for the given ECG, but only if it was not
 // already viewed (so the timestamp records the FIRST view). Returns the number of
 // rows updated (0 when the ECG was already viewed or does not exist).
-func (r *ECGRepository) MarkViewed(ecgID string) (int64, error) {
-	result := r.db.Model(&models.ECG{}).
+func (r *ECGRepository) MarkViewed(ctx context.Context, ecgID string) (int64, error) {
+	result := r.db.WithContext(ctx).Model(&models.ECG{}).
 		Where("id = ? AND viewed_at IS NULL", ecgID).
 		Update("viewed_at", time.Now())
 	if result.Error != nil {
@@ -100,8 +101,8 @@ func (r *ECGRepository) MarkViewed(ecgID string) (int64, error) {
 
 // MarkViewedByPatient stamps viewed_at = now() for all unviewed ECGs of a patient.
 // Returns the number of ECGs marked. Used by the "mark all as seen" action.
-func (r *ECGRepository) MarkViewedByPatient(patientID string) (int64, error) {
-	result := r.db.Model(&models.ECG{}).
+func (r *ECGRepository) MarkViewedByPatient(ctx context.Context, patientID string) (int64, error) {
+	result := r.db.WithContext(ctx).Model(&models.ECG{}).
 		Where("patient_id = ? AND viewed_at IS NULL", patientID).
 		Update("viewed_at", time.Now())
 	if result.Error != nil {
@@ -112,9 +113,9 @@ func (r *ECGRepository) MarkViewedByPatient(patientID string) (int64, error) {
 
 // FindPendingHL7 returns ECGs with hl7_status = 'pending', ordered oldest-first.
 // limit caps the batch size to prevent unbounded memory use on large backlogs.
-func (r *ECGRepository) FindPendingHL7(limit int) ([]models.ECG, error) {
+func (r *ECGRepository) FindPendingHL7(ctx context.Context, limit int) ([]models.ECG, error) {
 	var ecgs []models.ECG
-	if err := r.db.Where("hl7_status = ?", "pending").
+	if err := r.db.WithContext(ctx).Where("hl7_status = ?", "pending").
 		Order("ingested_at ASC").
 		Limit(limit).
 		Find(&ecgs).Error; err != nil {
@@ -125,19 +126,19 @@ func (r *ECGRepository) FindPendingHL7(limit int) ([]models.ECG, error) {
 
 // DeleteByID removes the ECG record and returns the file path for physical deletion.
 // This is an admin/writer-only operation (NFR-R4 explicit administrator exception).
-func (r *ECGRepository) DeleteByID(id string) (string, error) {
+func (r *ECGRepository) DeleteByID(ctx context.Context, id string) (string, error) {
 	if uuid.Validate(id) != nil {
 		return "", ErrECGNotFound
 	}
 	var ecg models.ECG
-	if err := r.db.First(&ecg, "id = ?", id).Error; err != nil {
+	if err := r.db.WithContext(ctx).First(&ecg, "id = ?", id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return "", ErrECGNotFound
 		}
 		return "", fmt.Errorf("ecg_repo: delete: find: %w", err)
 	}
 	filePath := ecg.FilePath
-	if err := r.db.Delete(&ecg).Error; err != nil {
+	if err := r.db.WithContext(ctx).Delete(&ecg).Error; err != nil {
 		return "", fmt.Errorf("ecg_repo: delete: %w", err)
 	}
 	return filePath, nil
@@ -146,12 +147,12 @@ func (r *ECGRepository) DeleteByID(id string) (string, error) {
 // UpdateMetadata updates the extra JSONB field and optionally recorded_at.
 // 3rd permitted UPDATE on ecgs after UpdateHL7Status (NFR-R4 exception — editable metadata).
 // recordedAt nil means "do not change the recorded_at column".
-func (r *ECGRepository) UpdateMetadata(ecgID string, extra map[string]any, recordedAt *time.Time) error {
+func (r *ECGRepository) UpdateMetadata(ctx context.Context, ecgID string, extra map[string]any, recordedAt *time.Time) error {
 	updates := map[string]any{"extra": extra}
 	if recordedAt != nil {
 		updates["recorded_at"] = recordedAt
 	}
-	result := r.db.Model(&models.ECG{}).Where("id = ?", ecgID).Updates(updates)
+	result := r.db.WithContext(ctx).Model(&models.ECG{}).Where("id = ?", ecgID).Updates(updates)
 	if result.Error != nil {
 		return fmt.Errorf("ecg_repo: update_metadata: %w", result.Error)
 	}
@@ -166,20 +167,20 @@ func (r *ECGRepository) UpdateMetadata(ecgID string, extra map[string]any, recor
 // 4th permitted UPDATE on ecgs (NFR-R4 exception). It is not optional: the hash
 // is verified on every download, so a patched file with its old hash reads as
 // tampered with for the rest of its life.
-func (r *ECGRepository) UpdateContentHash(ecgID, hash string) error {
-	result := r.db.Model(&models.ECG{}).Where("id = ?", ecgID).Update("content_hash", hash)
+func (r *ECGRepository) UpdateContentHash(ctx context.Context, ecgID, hash string) error {
+	result := r.db.WithContext(ctx).Model(&models.ECG{}).Where("id = ?", ecgID).Update("content_hash", hash)
 	if result.Error != nil {
 		return fmt.Errorf("ecg_repo: update_content_hash: %w", result.Error)
 	}
 	return nil
 }
 
-func (r *ECGRepository) FindByIDs(ids []string) ([]models.ECG, error) {
+func (r *ECGRepository) FindByIDs(ctx context.Context, ids []string) ([]models.ECG, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
 	var ecgs []models.ECG
-	if err := r.db.Where("id IN ?", ids).Find(&ecgs).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("id IN ?", ids).Find(&ecgs).Error; err != nil {
 		return nil, fmt.Errorf("ecg_repo: find by ids: %w", err)
 	}
 	return ecgs, nil
@@ -188,8 +189,8 @@ func (r *ECGRepository) FindByIDs(ids []string) ([]models.ECG, error) {
 // UpdateHL7Lifecycle atomically updates both hl7_status and hl7_retry_count.
 // 2nd permitted UPDATE on ecgs after UpdateHL7Status (NFR-R4 exception — lifecycle metadata).
 // Uses Updates(map) — NOT Updates(struct) — to correctly handle retryCount=0 (zero-value safe).
-func (r *ECGRepository) UpdateHL7Lifecycle(ecgID string, status string, retryCount int) error {
-	result := r.db.Model(&models.ECG{}).Where("id = ?", ecgID).
+func (r *ECGRepository) UpdateHL7Lifecycle(ctx context.Context, ecgID string, status string, retryCount int) error {
+	result := r.db.WithContext(ctx).Model(&models.ECG{}).Where("id = ?", ecgID).
 		Updates(map[string]any{
 			"hl7_status":      status,
 			"hl7_retry_count": retryCount,

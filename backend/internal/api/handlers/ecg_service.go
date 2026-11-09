@@ -59,12 +59,12 @@ type ECGServiceHandler struct {
 
 // GetFilters returns the distinct filter facets for the ECG search UI (the
 // former REST GET /api/v1/ecgs/filters).
-func (h *ECGServiceHandler) GetFilters(_ context.Context, _ *apiv1.GetFiltersRequest) (*apiv1.GetFiltersResponse, error) {
+func (h *ECGServiceHandler) GetFilters(ctx context.Context, _ *apiv1.GetFiltersRequest) (*apiv1.GetFiltersResponse, error) {
 	var vendors []string
-	h.DB.Model(&models.ECG{}).Distinct("vendor").Where("vendor != ''").Order("vendor").Pluck("vendor", &vendors)
+	h.DB.WithContext(ctx).Model(&models.ECG{}).Distinct("vendor").Where("vendor != ''").Order("vendor").Pluck("vendor", &vendors)
 
 	var deviceModels []string
-	h.DB.Model(&models.ECG{}).
+	h.DB.WithContext(ctx).Model(&models.ECG{}).
 		Where("extra->>'device_model' IS NOT NULL AND extra->>'device_model' != ''").
 		Distinct("extra->>'device_model'").
 		Order("extra->>'device_model'").
@@ -73,7 +73,7 @@ func (h *ECGServiceHandler) GetFilters(_ context.Context, _ *apiv1.GetFiltersReq
 	// The devices that actually sent something, not the whole inventory: a
 	// filter offering a device with no ECGs behind it is a dead end.
 	var devices []*apiv1.DeviceOption
-	h.DB.Model(&models.ECG{}).
+	h.DB.WithContext(ctx).Model(&models.ECG{}).
 		Joins("JOIN devices ON devices.mac = ecgs.device_mac").
 		Where("ecgs.device_mac != ''").
 		Distinct("devices.mac", "devices.label").
@@ -82,7 +82,7 @@ func (h *ECGServiceHandler) GetFilters(_ context.Context, _ *apiv1.GetFiltersReq
 		Scan(&devices)
 
 	var fileFormats []string
-	h.DB.Model(&models.ECG{}).
+	h.DB.WithContext(ctx).Model(&models.ECG{}).
 		Where("original_filename LIKE '%.%'").
 		Distinct("LOWER(substring(original_filename from '\\.([^.]+)$'))").
 		Order("LOWER(substring(original_filename from '\\.([^.]+)$'))").
@@ -159,7 +159,7 @@ func (h *ECGServiceHandler) ListAll(ctx context.Context, req *apiv1.ListAllReque
 	}
 
 	buildQ := func() *gorm.DB {
-		q := h.DB.Model(&models.ECG{}).
+		q := h.DB.WithContext(ctx).Model(&models.ECG{}).
 			Joins("LEFT JOIN patients ON patients.patient_id = ecgs.patient_id").
 			// LEFT: an ECG keeps its row when its device was deleted from the
 			// inventory, or when none was ever identified.
@@ -255,9 +255,9 @@ func fieldsToProto() []*apiv1.EcgField {
 
 // GetMetadata returns the editable field definitions and current values for one
 // ECG (the former REST GET /api/v1/ecgs/:id/metadata).
-func (h *ECGServiceHandler) GetMetadata(_ context.Context, req *apiv1.GetMetadataRequest) (*apiv1.GetMetadataResponse, error) {
+func (h *ECGServiceHandler) GetMetadata(ctx context.Context, req *apiv1.GetMetadataRequest) (*apiv1.GetMetadataResponse, error) {
 	repo := repository.NewECGRepository(h.DB)
-	ecg, err := repo.FindByID(req.Id)
+	ecg, err := repo.FindByID(ctx, req.Id)
 	if err != nil {
 		if errors.Is(err, repository.ErrECGNotFound) {
 			return nil, connect.NewError(connect.CodeNotFound, errors.New("ECG not found"))
@@ -287,7 +287,7 @@ func (h *ECGServiceHandler) UpdateMetadata(ctx context.Context, req *apiv1.Updat
 	}
 
 	repo := repository.NewECGRepository(h.DB)
-	ecg, err := repo.FindByID(req.Id)
+	ecg, err := repo.FindByID(ctx, req.Id)
 	if err != nil {
 		if errors.Is(err, repository.ErrECGNotFound) {
 			return nil, connect.NewError(connect.CodeNotFound, errors.New("ECG not found"))
@@ -347,7 +347,7 @@ func (h *ECGServiceHandler) UpdateMetadata(ctx context.Context, req *apiv1.Updat
 		}
 	}
 
-	if err := repo.UpdateMetadata(ecg.ID, ecg.Extra, newRecordedAt); err != nil {
+	if err := repo.UpdateMetadata(ctx, ecg.ID, ecg.Extra, newRecordedAt); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
@@ -374,9 +374,9 @@ func (h *ECGServiceHandler) UpdateMetadata(ctx context.Context, req *apiv1.Updat
 
 // MarkViewed stamps viewed_at on first view (clears the "new" indicator).
 // Idempotent — re-marking an already-viewed ECG is a no-op success.
-func (h *ECGServiceHandler) MarkViewed(_ context.Context, req *apiv1.MarkViewedRequest) (*apiv1.MarkViewedResponse, error) {
+func (h *ECGServiceHandler) MarkViewed(ctx context.Context, req *apiv1.MarkViewedRequest) (*apiv1.MarkViewedResponse, error) {
 	repo := repository.NewECGRepository(h.DB)
-	if _, err := repo.MarkViewed(req.Id); err != nil {
+	if _, err := repo.MarkViewed(ctx, req.Id); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	return &apiv1.MarkViewedResponse{Id: req.Id, Viewed: true}, nil
@@ -416,5 +416,5 @@ func (h *ECGServiceHandler) patchSourceFile(ctx context.Context, ecg *models.ECG
 	if hash == ecg.ContentHash {
 		return nil
 	}
-	return repository.NewECGRepository(h.DB).UpdateContentHash(ecg.ID, hash)
+	return repository.NewECGRepository(h.DB).UpdateContentHash(ctx, ecg.ID, hash)
 }

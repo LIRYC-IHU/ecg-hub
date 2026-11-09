@@ -11,6 +11,7 @@ import (
 
 	mw "github.com/LIRYC-IHU/ecg-hub/internal/api/middleware"
 	"github.com/LIRYC-IHU/ecg-hub/internal/ingestion"
+	"github.com/LIRYC-IHU/ecg-hub/internal/tenancy"
 )
 
 // uploadFileResult describes the outcome of queueing one uploaded file.
@@ -98,6 +99,8 @@ func UploadECGsHandler(queue ingestion.IngestQueue, db *gorm.DB, maxBytes int64)
 			}
 
 			item := ingestion.IngestItem{Filename: name, Data: data, Source: "upload"}
+			// Stored for the uploader's tenant (empty with multi-tenant mode off).
+			item.TenantID, _ = tenancy.ID(c.Request().Context())
 			// Blocking send (unlike FTP's drop-on-full): the client is waiting for a
 			// per-file outcome, so we never silently drop. Abort if the client goes away.
 			select {

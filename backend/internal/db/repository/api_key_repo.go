@@ -25,14 +25,14 @@ func NewAPIKeyRepository(db *gorm.DB) *APIKeyRepository {
 }
 
 // Create inserts a new API key record.
-func (r *APIKeyRepository) Create(key *models.APIKey) error {
-	return r.db.Create(key).Error
+func (r *APIKeyRepository) Create(ctx context.Context, key *models.APIKey) error {
+	return r.db.WithContext(ctx).Create(key).Error
 }
 
 // ListByUser returns the user's API keys, newest first.
-func (r *APIKeyRepository) ListByUser(userID string) ([]models.APIKey, error) {
+func (r *APIKeyRepository) ListByUser(ctx context.Context, userID string) ([]models.APIKey, error) {
 	var keys []models.APIKey
-	err := r.db.Where("user_id = ?", userID).
+	err := r.db.WithContext(ctx).Where("user_id = ?", userID).
 		Order("created_at DESC").
 		Find(&keys).Error
 	return keys, err
@@ -40,8 +40,8 @@ func (r *APIKeyRepository) ListByUser(userID string) ([]models.APIKey, error) {
 
 // DeleteByUserAndID removes a key owned by userID. It returns true when a row
 // was deleted, false when no key matched (wrong owner or unknown id).
-func (r *APIKeyRepository) DeleteByUserAndID(userID, id string) (bool, error) {
-	res := r.db.Where("user_id = ? AND id = ?", userID, id).
+func (r *APIKeyRepository) DeleteByUserAndID(ctx context.Context, userID, id string) (bool, error) {
+	res := r.db.WithContext(ctx).Where("user_id = ? AND id = ?", userID, id).
 		Delete(&models.APIKey{})
 	if res.Error != nil {
 		return false, res.Error
@@ -52,9 +52,9 @@ func (r *APIKeyRepository) DeleteByUserAndID(userID, id string) (bool, error) {
 // GetByHash looks up an active key by its SHA-256 hash. Intended for the future
 // API-key authentication middleware (e.g. Swagger). Returns gorm.ErrRecordNotFound
 // when no key matches.
-func (r *APIKeyRepository) GetByHash(hash string) (*models.APIKey, error) {
+func (r *APIKeyRepository) GetByHash(ctx context.Context, hash string) (*models.APIKey, error) {
 	var key models.APIKey
-	if err := r.db.Where("key_hash = ?", hash).First(&key).Error; err != nil {
+	if err := r.db.WithContext(ctx).Where("key_hash = ?", hash).First(&key).Error; err != nil {
 		return nil, err
 	}
 	return &key, nil
@@ -80,9 +80,9 @@ func (r *APIKeyRepository) ResolveAPIKey(ctx context.Context, plaintext string) 
 }
 
 // TouchLastUsed records the most recent use of a key (best-effort, for the UI).
-func (r *APIKeyRepository) TouchLastUsed(id string) error {
+func (r *APIKeyRepository) TouchLastUsed(ctx context.Context, id string) error {
 	now := time.Now()
-	return r.db.Model(&models.APIKey{}).
+	return r.db.WithContext(ctx).Model(&models.APIKey{}).
 		Where("id = ?", id).
 		Update("last_used_at", now).Error
 }

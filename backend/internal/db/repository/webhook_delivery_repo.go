@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"errors"
 	"time"
 
@@ -22,14 +23,14 @@ func NewWebhookDeliveryRepository(db *gorm.DB) *WebhookDeliveryRepository {
 }
 
 // Create inserts a delivery log row.
-func (r *WebhookDeliveryRepository) Create(d *models.WebhookDelivery) error {
-	return r.db.Create(d).Error
+func (r *WebhookDeliveryRepository) Create(ctx context.Context, d *models.WebhookDelivery) error {
+	return r.db.WithContext(ctx).Create(d).Error
 }
 
 // ListByWebhook returns the delivery history for one webhook, newest first.
-func (r *WebhookDeliveryRepository) ListByWebhook(webhookID string, limit, offset int) ([]models.WebhookDelivery, error) {
+func (r *WebhookDeliveryRepository) ListByWebhook(ctx context.Context, webhookID string, limit, offset int) ([]models.WebhookDelivery, error) {
 	var out []models.WebhookDelivery
-	err := r.db.Where("webhook_id = ?", webhookID).
+	err := r.db.WithContext(ctx).Where("webhook_id = ?", webhookID).
 		Order("delivered_at DESC").
 		Limit(limit).Offset(offset).
 		Find(&out).Error
@@ -40,16 +41,16 @@ func (r *WebhookDeliveryRepository) ListByWebhook(webhookID string, limit, offse
 // rows were dropped. Called by the dispatcher's retention loop: the history is
 // operational feedback, not a clinical record, and each row stores the full
 // payload — including patient identifiers — so it must not accumulate forever.
-func (r *WebhookDeliveryRepository) DeleteOlderThan(cutoff time.Time) (int64, error) {
-	res := r.db.Where("delivered_at < ?", cutoff).Delete(&models.WebhookDelivery{})
+func (r *WebhookDeliveryRepository) DeleteOlderThan(ctx context.Context, cutoff time.Time) (int64, error) {
+	res := r.db.WithContext(ctx).Where("delivered_at < ?", cutoff).Delete(&models.WebhookDelivery{})
 	return res.RowsAffected, res.Error
 }
 
 // Get returns one delivery by ID. Ownership is enforced by the caller
 // (via the parent webhook's owner), not scoped here.
-func (r *WebhookDeliveryRepository) Get(id string) (*models.WebhookDelivery, error) {
+func (r *WebhookDeliveryRepository) Get(ctx context.Context, id string) (*models.WebhookDelivery, error) {
 	var d models.WebhookDelivery
-	err := r.db.Where("id = ?", id).First(&d).Error
+	err := r.db.WithContext(ctx).Where("id = ?", id).First(&d).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, ErrDeliveryNotFound
 	}

@@ -41,6 +41,10 @@ func Open(cfg *config.Config) (*gorm.DB, error) {
 		sqlDB.Close()
 		return nil, fmt.Errorf("db: open: %w", err)
 	}
+	if err := registerTenantCallbacks(gormDB); err != nil {
+		sqlDB.Close()
+		return nil, fmt.Errorf("db: tenant callbacks: %w", err)
+	}
 
 	maxOpen := cfg.Database.MaxOpenConns
 	if maxOpen == 0 {

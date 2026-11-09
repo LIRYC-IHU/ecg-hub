@@ -16,6 +16,7 @@ import (
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
 	"github.com/LIRYC-IHU/ecg-hub/internal/export"
 	stor "github.com/LIRYC-IHU/ecg-hub/internal/storage"
+	"github.com/LIRYC-IHU/ecg-hub/internal/tenancy"
 )
 
 // Service locations. CARD TF-2 §4.6.4.1.2 requires them to be
@@ -160,7 +161,7 @@ func RetrieveSummaryInfo(d Deps) echo.HandlerFunc {
 		}
 
 		var patient models.Patient
-		if err := d.DB.Where("patient_id = ?", cx.ID).First(&patient).Error; err != nil {
+		if err := d.hospitalDB(c).Where("patient_id = ?", cx.ID).First(&patient).Error; err != nil {
 			if !errors.Is(err, gorm.ErrRecordNotFound) {
 				slog.Error("ihe: patient lookup failed", "patient_id", cx.ID, "error", err)
 				return fail(c, http.StatusInternalServerError, "patient lookup failed")
@@ -168,7 +169,7 @@ func RetrieveSummaryInfo(d Deps) echo.HandlerFunc {
 			return fail(c, http.StatusNotFound, "Patient ID not found")
 		}
 
-		q := d.DB.Model(&models.ECG{}).Where("patient_id = ?", cx.ID)
+		q := d.hospitalDB(c).Model(&models.ECG{}).Where("patient_id = ?", cx.ID)
 		if t, _, ok := parseXSDateTime(c.QueryParam("lowerDateTime"), d.Location()); ok {
 			q = q.Where("COALESCE(recorded_at, ingested_at) >= ?", t)
 		}
@@ -286,7 +287,7 @@ func RetrieveDocument(d Deps) echo.HandlerFunc {
 		}
 
 		var ecg models.ECG
-		if err := d.DB.Where("id = ?", uid).First(&ecg).Error; err != nil {
+		if err := d.hospitalDB(c).Where("id = ?", uid).First(&ecg).Error; err != nil {
 			if !errors.Is(err, gorm.ErrRecordNotFound) {
 				slog.Error("ihe: document lookup failed", "document_uid", uid, "error", err)
 				return fail(c, http.StatusInternalServerError, "document lookup failed")
@@ -299,7 +300,7 @@ func RetrieveDocument(d Deps) echo.HandlerFunc {
 		// So the demographics are fetched and injected, never stripped.
 		var patient models.Patient
 		patPtr := &patient
-		if err := d.DB.Where("patient_id = ?", ecg.PatientID).First(&patient).Error; err != nil {
+		if err := d.hospitalDB(c).Where("patient_id = ?", ecg.PatientID).First(&patient).Error; err != nil {
 			slog.Warn("ihe: patient lookup failed for document",
 				"document_uid", uid, "patient_id", ecg.PatientID, "error", err)
 			patPtr = nil
@@ -389,4 +390,10 @@ func anonymousDocumentReason(ecg *models.ECG, patient *models.Patient) string {
 		return "the patient record has no name — enrich it from the HIS first"
 	}
 	return ""
+}
+
+// hospitalDB scopes the gateway's queries to the default tenant: the IHE
+// gateway serves the establishment's own systems, which are not a practice.
+func (d Deps) hospitalDB(c echo.Context) *gorm.DB {
+	return d.DB.WithContext(tenancy.With(c.Request().Context(), models.DefaultTenantID))
 }

@@ -1,6 +1,7 @@
 package device
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"sync"
@@ -14,7 +15,7 @@ import (
 // AuditWriter records refused connections in the audit log.
 // Implemented by repository.AuditRepository.
 type AuditWriter interface {
-	Insert(entry *models.AuditLog) error
+	Insert(ctx context.Context, entry *models.AuditLog) error
 }
 
 // ActionDeviceRefused is the audit action for a connection the whitelist turned
@@ -76,7 +77,7 @@ func (a *refusalAudit) record(id Identity, reason string) {
 		ResourceID: resource,
 		Details:    datatypes.JSON(details),
 	}
-	if err := a.writer.Insert(entry); err != nil {
+	if err := a.writer.Insert(systemCtx, entry); err != nil {
 		slog.Warn("device: cannot record a refusal in the audit log",
 			"mac", id.MAC, "ip", id.IP, "source", id.Source, "error", err)
 	}

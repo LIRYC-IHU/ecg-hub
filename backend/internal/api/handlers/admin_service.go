@@ -4,10 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/LIRYC-IHU/ecg-hub/internal/storage"
 	"log/slog"
 	"strings"
 	"time"
+
+	"github.com/LIRYC-IHU/ecg-hub/internal/storage"
 
 	"connectrpc.com/connect"
 	"gorm.io/gorm"
@@ -42,13 +43,13 @@ type AdminServiceHandler struct {
 
 // ---- System stats ----------------------------------------------------------
 
-func (h *AdminServiceHandler) GetStats(_ context.Context, _ *apiv1.GetStatsRequest) (*apiv1.GetStatsResponse, error) {
+func (h *AdminServiceHandler) GetStats(ctx context.Context, _ *apiv1.GetStatsRequest) (*apiv1.GetStatsResponse, error) {
 	type row struct {
 		Status string
 		Count  int64
 	}
 	var rows []row
-	if err := h.DB.Model(&models.ECG{}).
+	if err := h.DB.WithContext(ctx).Model(&models.ECG{}).
 		Select("hl7_status as status, count(*) as count").
 		Group("hl7_status").
 		Scan(&rows).Error; err != nil {
@@ -68,11 +69,11 @@ func (h *AdminServiceHandler) GetStats(_ context.Context, _ *apiv1.GetStatsReque
 		resp.TotalEcgs += r.Count
 	}
 
-	if err := h.DB.Model(&models.Patient{}).Count(&resp.TotalPatients).Error; err != nil {
+	if err := h.DB.WithContext(ctx).Model(&models.Patient{}).Count(&resp.TotalPatients).Error; err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 	// Non-fatal: quarantine table may not exist on older deployments.
-	_ = h.DB.Table("quarantine_entries").Count(&resp.QuarantineCount)
+	_ = h.DB.WithContext(ctx).Table("quarantine_entries").Count(&resp.QuarantineCount)
 
 	return resp, nil
 }
@@ -118,7 +119,7 @@ func (h *AdminServiceHandler) GetStorageMetrics(ctx context.Context, _ *apiv1.Ge
 
 // ---- Recent errors ---------------------------------------------------------
 
-func (h *AdminServiceHandler) GetRecentErrors(_ context.Context, req *apiv1.GetRecentErrorsRequest) (*apiv1.GetRecentErrorsResponse, error) {
+func (h *AdminServiceHandler) GetRecentErrors(ctx context.Context, req *apiv1.GetRecentErrorsRequest) (*apiv1.GetRecentErrorsResponse, error) {
 	limit := int(req.Limit)
 	if limit <= 0 {
 		limit = 20
@@ -159,7 +160,7 @@ func (h *AdminServiceHandler) ListAuditLogs(ctx context.Context, req *apiv1.List
 	}
 
 	repo := repository.NewAuditRepository(h.DB)
-	entries, total, err := repo.List(repository.AuditListParams{
+	entries, total, err := repo.List(ctx, repository.AuditListParams{
 		UserID:  req.UserId,
 		Action:  req.Action,
 		From:    req.From,
@@ -214,7 +215,7 @@ func (h *AdminServiceHandler) ListAuditLogs(ctx context.Context, req *apiv1.List
 
 // ---- Global user defaults --------------------------------------------------
 
-func (h *AdminServiceHandler) GetUserDefaults(_ context.Context, _ *apiv1.GetUserDefaultsRequest) (*apiv1.GetUserDefaultsResponse, error) {
+func (h *AdminServiceHandler) GetUserDefaults(ctx context.Context, _ *apiv1.GetUserDefaultsRequest) (*apiv1.GetUserDefaultsResponse, error) {
 	role, err := h.SettingsRepo.GetDefaultRole()
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
@@ -222,7 +223,7 @@ func (h *AdminServiceHandler) GetUserDefaults(_ context.Context, _ *apiv1.GetUse
 	return &apiv1.GetUserDefaultsResponse{DefaultRole: role}, nil
 }
 
-func (h *AdminServiceHandler) SetUserDefaults(_ context.Context, req *apiv1.SetUserDefaultsRequest) (*apiv1.SetUserDefaultsResponse, error) {
+func (h *AdminServiceHandler) SetUserDefaults(ctx context.Context, req *apiv1.SetUserDefaultsRequest) (*apiv1.SetUserDefaultsResponse, error) {
 	if req.DefaultRole == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("default_role is required"))
 	}
@@ -485,7 +486,7 @@ func quarantineToProto(e models.QuarantineEntry) *apiv1.QuarantineEntry {
 	return out
 }
 
-func (h *AdminServiceHandler) ListQuarantine(_ context.Context, req *apiv1.ListQuarantineRequest) (*apiv1.ListQuarantineResponse, error) {
+func (h *AdminServiceHandler) ListQuarantine(ctx context.Context, req *apiv1.ListQuarantineRequest) (*apiv1.ListQuarantineResponse, error) {
 	page := int(req.Page)
 	if page < 1 {
 		page = 1
@@ -495,7 +496,7 @@ func (h *AdminServiceHandler) ListQuarantine(_ context.Context, req *apiv1.ListQ
 		perPage = 50
 	}
 	repo := repository.NewQuarantineRepository(h.DB)
-	entries, total, err := repo.List(page, perPage, req.Category)
+	entries, total, err := repo.List(ctx, page, perPage, req.Category)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -513,7 +514,7 @@ func (h *AdminServiceHandler) ListQuarantine(_ context.Context, req *apiv1.ListQ
 
 func (h *AdminServiceHandler) DeleteQuarantine(ctx context.Context, req *apiv1.DeleteQuarantineRequest) (*apiv1.DeleteQuarantineResponse, error) {
 	repo := repository.NewQuarantineRepository(h.DB)
-	filePath, err := repo.DeleteByID(req.Id)
+	filePath, err := repo.DeleteByID(ctx, req.Id)
 	if err != nil {
 		if errors.Is(err, repository.ErrQuarantineNotFound) {
 			return nil, connect.NewError(connect.CodeNotFound, errors.New("quarantine entry not found"))
@@ -540,7 +541,7 @@ func (h *AdminServiceHandler) AssignQuarantine(ctx context.Context, req *apiv1.A
 	// explicitly opts in via create_new (new HIS id, enriched via HL7 on re-ingest).
 	var patient models.Patient
 	patientExists := true
-	if err := h.DB.Where("patient_id = ?", patientID).First(&patient).Error; err != nil {
+	if err := h.DB.WithContext(ctx).Where("patient_id = ?", patientID).First(&patient).Error; err != nil {
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, connect.NewError(connect.CodeInternal, errors.New("patient lookup failed"))
 		}
@@ -552,7 +553,7 @@ func (h *AdminServiceHandler) AssignQuarantine(ctx context.Context, req *apiv1.A
 	}
 
 	repo := repository.NewQuarantineRepository(h.DB)
-	entry, err := repo.FindByID(req.Id)
+	entry, err := repo.FindByID(ctx, req.Id)
 	if err != nil {
 		if errors.Is(err, repository.ErrQuarantineNotFound) {
 			return nil, connect.NewError(connect.CodeNotFound, errors.New("quarantine entry not found"))
@@ -589,6 +590,7 @@ func (h *AdminServiceHandler) AssignQuarantine(ctx context.Context, req *apiv1.A
 			Filename: entry.Filename,
 			Data:     data,
 			Source:   "manual_assign",
+			TenantID: entry.TenantID, // stays in the tenant that received it
 		},
 		Meta:       meta,
 		ModuleName: meta.VendorName,
@@ -598,7 +600,7 @@ func (h *AdminServiceHandler) AssignQuarantine(ctx context.Context, req *apiv1.A
 	}
 
 	// Re-ingestion succeeded — remove the quarantine entry and its raw file.
-	if filePath, delErr := repo.DeleteByID(req.Id); delErr == nil && filePath != "" {
+	if filePath, delErr := repo.DeleteByID(ctx, req.Id); delErr == nil && filePath != "" {
 		removeQuarantineFile(ctx, filePath)
 	}
 

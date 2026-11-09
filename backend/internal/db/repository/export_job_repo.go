@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
@@ -24,8 +25,8 @@ func NewExportJobRepository(db *gorm.DB) *ExportJobRepository {
 }
 
 // Create persists a new ExportJob record.
-func (r *ExportJobRepository) Create(job *models.ExportJob) error {
-	if err := r.db.Create(job).Error; err != nil {
+func (r *ExportJobRepository) Create(ctx context.Context, job *models.ExportJob) error {
+	if err := r.db.WithContext(ctx).Create(job).Error; err != nil {
 		return fmt.Errorf("export_job_repo: create: %w", err)
 	}
 	return nil
@@ -33,13 +34,13 @@ func (r *ExportJobRepository) Create(job *models.ExportJob) error {
 
 // FindByID returns the ExportJob with the given primary key.
 // Returns ErrExportJobNotFound if no record matches.
-func (r *ExportJobRepository) FindByID(id string) (*models.ExportJob, error) {
+func (r *ExportJobRepository) FindByID(ctx context.Context, id string) (*models.ExportJob, error) {
 	// export_jobs.id is a uuid column — see ECGRepository.FindByID.
 	if uuid.Validate(id) != nil {
 		return nil, ErrExportJobNotFound
 	}
 	var job models.ExportJob
-	if err := r.db.First(&job, "id = ?", id).Error; err != nil {
+	if err := r.db.WithContext(ctx).First(&job, "id = ?", id).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, ErrExportJobNotFound
 		}
@@ -51,8 +52,8 @@ func (r *ExportJobRepository) FindByID(id string) (*models.ExportJob, error) {
 // Update applies the given column updates to the ExportJob identified by id.
 // Use map[string]any to safely handle zero-value fields (e.g., processed_count = 0).
 // Returns ErrExportJobNotFound when no row matches (prevents silent no-op updates).
-func (r *ExportJobRepository) Update(id string, updates map[string]any) error {
-	result := r.db.Model(&models.ExportJob{}).Where("id = ?", id).Updates(updates)
+func (r *ExportJobRepository) Update(ctx context.Context, id string, updates map[string]any) error {
+	result := r.db.WithContext(ctx).Model(&models.ExportJob{}).Where("id = ?", id).Updates(updates)
 	if result.Error != nil {
 		return fmt.Errorf("export_job_repo: update: %w", result.Error)
 	}
@@ -63,7 +64,7 @@ func (r *ExportJobRepository) Update(id string, updates map[string]any) error {
 }
 
 // SaveECGList bulk-inserts the list of ECG IDs associated with an export job.
-func (r *ExportJobRepository) SaveECGList(jobID string, ecgIDs []string) error {
+func (r *ExportJobRepository) SaveECGList(ctx context.Context, jobID string, ecgIDs []string) error {
 	if len(ecgIDs) == 0 {
 		return nil
 	}
@@ -75,16 +76,16 @@ func (r *ExportJobRepository) SaveECGList(jobID string, ecgIDs []string) error {
 	for i, id := range ecgIDs {
 		rows[i] = row{ExportJobID: jobID, ECGID: id}
 	}
-	if err := r.db.Table("export_job_ecgs").CreateInBatches(rows, 500).Error; err != nil {
+	if err := r.db.WithContext(ctx).Table("export_job_ecgs").CreateInBatches(rows, 500).Error; err != nil {
 		return fmt.Errorf("export_job_repo: save ecg list: %w", err)
 	}
 	return nil
 }
 
 // GetECGIDs returns the ordered list of ECG IDs associated with an export job.
-func (r *ExportJobRepository) GetECGIDs(jobID string) ([]string, error) {
+func (r *ExportJobRepository) GetECGIDs(ctx context.Context, jobID string) ([]string, error) {
 	var ids []string
-	if err := r.db.Table("export_job_ecgs").
+	if err := r.db.WithContext(ctx).Table("export_job_ecgs").
 		Select("ecg_id").
 		Where("export_job_id = ?", jobID).
 		Order("ecg_id ASC").

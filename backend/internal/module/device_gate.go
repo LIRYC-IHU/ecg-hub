@@ -30,7 +30,7 @@ var (
 
 // AuditWriter records audit entries. Implemented by repository.AuditRepository.
 type AuditWriter interface {
-	Insert(entry *models.AuditLog) error
+	Insert(ctx context.Context, entry *models.AuditLog) error
 }
 
 var (

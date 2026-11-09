@@ -13,6 +13,7 @@ import (
 	"gorm.io/gorm"
 
 	appmetrics "github.com/LIRYC-IHU/ecg-hub/internal/metrics"
+	"github.com/LIRYC-IHU/ecg-hub/internal/tenancy"
 )
 
 // The spool.
@@ -88,6 +89,8 @@ func (u *Uploader) WithInterval(d time.Duration) *Uploader {
 // Run drains the spool until ctx is cancelled.
 func (u *Uploader) Run(ctx context.Context) {
 	slog.Info("storage: upload worker started", "interval", u.interval)
+	// The spool spans every tenant.
+	ctx = tenancy.System(ctx)
 	// Drain once immediately: after a restart the backlog is whatever the last
 	// outage left behind, and it should not wait for the first tick.
 	u.drain(ctx)
@@ -232,6 +235,7 @@ func objectKey(root, path string) string {
 // The admin screen needs it for the same reason the metrics do — a spool that
 // stops draining is invisible until the volume fills and ingestion stops.
 func SpoolStats(ctx context.Context, db *gorm.DB) (pending int64, oldestSeconds int64) {
+	ctx = tenancy.System(ctx) // the spool spans every tenant
 	for _, src := range []spoolSource{
 		{table: "ecgs", orderCol: "ingested_at"},
 		{table: "quarantine_entries", orderCol: "received_at"},
