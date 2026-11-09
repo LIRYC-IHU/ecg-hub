@@ -1,0 +1,54 @@
+syntax = "proto3";
+package grpc.api.v1;
+
+// Tenants of a multi-tenant deployment (docs/MULTI_TENANT_DESIGN.md).
+// Requires tenant.manage, a platform permission: only users of the default
+// tenant (the platform operator) ever hold it.
+
+message Tenant {
+  string id = 1;
+  // Equal to the identity provider's organization alias: a login whose
+  // organization claim names it lands in this tenant.
+  string slug = 2;
+  string name = 3;
+  string created_at = 4; // RFC3339
+  int64 user_count = 5;
+  int64 ecg_count = 6;
+  bool is_default = 7; // the platform's own tenant; cannot be deleted
+}
+
+message ListTenantsRequest {}
+
+message ListTenantsResponse {
+  repeated Tenant tenants = 1;
+}
+
+message CreateTenantRequest {
+  string slug = 1; // lowercase letters, digits and hyphens
+  string name = 2;
+}
+
+message CreateTenantResponse {
+  Tenant tenant = 1;
+}
+
+message DeleteTenantRequest {
+  string id = 1;
+  // Must repeat the tenant's slug. Deletion removes every patient, ECG, file,
+  // user, tag, webhook and API key of the tenant, with no undo.
+  string confirm_slug = 2;
+}
+
+message DeleteTenantResponse {
+  int64 ecgs_deleted = 1;
+  int64 files_removed = 2;
+  // Files the database no longer references but that could not be removed
+  // (logged with their path for manual cleanup).
+  int64 files_failed = 3;
+}
+
+service TenantService {
+  rpc ListTenants(ListTenantsRequest) returns (ListTenantsResponse) {}
+  rpc CreateTenant(CreateTenantRequest) returns (CreateTenantResponse) {}
+  rpc DeleteTenant(DeleteTenantRequest) returns (DeleteTenantResponse) {}
+}

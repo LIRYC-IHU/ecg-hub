@@ -7,6 +7,9 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+
+	"github.com/LIRYC-IHU/ecg-hub/internal/db/models"
+	"github.com/LIRYC-IHU/ecg-hub/internal/tenancy"
 )
 
 // Permission constants — the complete set of ECG Hub permissions.
@@ -37,6 +40,7 @@ const (
 	PermAPIKeyManage     = "apikey.manage"  // create and manage personal API keys
 	PermDeviceRead       = "device.read"    // see the enrolled devices and the pairing queue
 	PermDeviceManage     = "device.manage"  // approve, revoke and delete devices; open the pairing window
+	PermTenantManage     = "tenant.manage"  // create, list and delete tenants (multi-tenant mode)
 )
 
 // AllPermissions is the ordered list of every permission string in the application.
@@ -67,6 +71,36 @@ var AllPermissions = []string{
 	PermAPIKeyManage,
 	PermDeviceRead,
 	PermDeviceManage,
+	PermTenantManage,
+}
+
+// PlatformPermissions act on the whole deployment rather than on one tenant's
+// data: global configuration, roles, devices, the HL7 link to the hospital,
+// tenants themselves. In multi-tenant mode they only take effect for users of
+// the default tenant (the platform operator); a practice's users never hold
+// them, whatever their role says. See HasPermission.
+var PlatformPermissions = []string{
+	PermECGForceHL7, PermECGSendResult, PermHL7Config, PermHL7BulkRetry,
+	PermAdminRoles, PermAdminBranding, PermAdminSystem, PermAdminAuthConfig,
+	PermDeviceRead, PermDeviceManage, PermTenantManage,
+}
+
+var platformPermSet = func() map[string]bool {
+	m := make(map[string]bool, len(PlatformPermissions))
+	for _, p := range PlatformPermissions {
+		m[p] = true
+	}
+	return m
+}()
+
+// practiceScope reports whether ctx runs for a tenant other than the default
+// one in multi-tenant mode: a practice, which platform permissions never reach.
+func practiceScope(ctx context.Context) bool {
+	if !tenancy.Enabled() {
+		return false
+	}
+	id, ok := tenancy.ID(ctx)
+	return ok && id != models.DefaultTenantID
 }
 
 // DevicePermissions gate the device whitelist. They only mean something when
@@ -150,14 +184,21 @@ func (p *PermissionChecker) AdminRole() string { return p.adminRole }
 // (see db.iniRole), so it still holds everything — the difference is that the
 // screen is now telling the truth.
 func (p *PermissionChecker) HasPermission(ctx context.Context, role, permission string) bool {
+	if platformPermSet[permission] && practiceScope(ctx) {
+		return false
+	}
 	return p.load(ctx, role)[permission]
 }
 
 // GetPermissions returns all permissions held by role, as stored in the database.
 func (p *PermissionChecker) GetPermissions(ctx context.Context, role string) []string {
 	m := p.load(ctx, role)
+	practice := practiceScope(ctx)
 	out := make([]string, 0, len(m))
 	for perm := range m {
+		if practice && platformPermSet[perm] {
+			continue
+		}
 		out = append(out, perm)
 	}
 	return out

@@ -23,6 +23,19 @@ All notable changes to this project are documented here. Versions follow
 
 ### Added
 
+- Multi-tenant mode (`tenancy.enabled` in config.yaml, off by default): one
+  deployment serves several practices, each seeing only its own patients,
+  ECGs, quarantine, tags, users, webhooks and audit trail. Postgres Row Level
+  Security enforces the isolation; startup refuses the mode when the database
+  role bypasses it. A user's practice comes from the `organization` claim of
+  the OIDC login (Keycloak 26 Organizations), whose alias must equal a
+  tenant's slug. Uploads, exports, realtime events and webhooks follow the
+  tenant. Platform permissions (roles, system and auth configuration,
+  branding, HL7, devices, tenants) only apply to users of the default tenant.
+  A new TenantService (`tenant.manage`) lists, creates and deletes tenants;
+  deleting one removes its rows and files and keeps its audit entries. See
+  `docs/MULTI_TENANT_DESIGN.md`.
+
 - The ECG viewer says why it cannot draw a waveform. An Ambulatory recording,
   a partial General ECG or a hemodynamic, respiratory or audio object is stored
   and forwarded like any other, but the viewer is built for the 12 standard

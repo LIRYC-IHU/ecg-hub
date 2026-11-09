@@ -181,10 +181,12 @@ func migrateTenants(db *gorm.DB) error {
 		return fmt.Errorf("db: migrate tenants: %w", err)
 	}
 	if err := db.Exec(
-		`INSERT INTO tenants (id, slug, name) VALUES (?, 'default', 'Default') ON CONFLICT (id) DO NOTHING`,
+		`INSERT INTO tenants (id, slug, name, created_at) VALUES (?, 'default', 'Default', now()) ON CONFLICT (id) DO NOTHING`,
 		appmodels.DefaultTenantID).Error; err != nil {
 		return fmt.Errorf("db: create default tenant: %w", err)
 	}
+	// The first release seeded the default tenant without a creation time.
+	db.Exec(`UPDATE tenants SET created_at = now() WHERE id = ? AND created_at < '1900-01-01'`, appmodels.DefaultTenantID)
 	return nil
 }
 

@@ -471,6 +471,7 @@
         "admin_audit": "Voir les audits",
         "admin_system": "État système & contrôle des modules",
         "admin_auth_config": "Configurer les fournisseurs d'auth",
+        "tenant_manage": "Gérer les tenants (mode multi-tenant)",
         "webhook_manage": "Configurer ses webhooks",
         "apikey_manage": "Créer et gérer ses clés API",
         "device_read": "Voir les appareils et la file d'appairage",

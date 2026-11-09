@@ -719,6 +719,7 @@ export const ALL_PERMISSIONS = [
   "admin.audit",
   "admin.system",
   "admin.auth_config",
+  "tenant.manage",
 ] as const;
 
 export type Permission = (typeof ALL_PERMISSIONS)[number];

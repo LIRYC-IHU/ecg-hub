@@ -471,6 +471,7 @@
         "admin_audit": "View audit logs",
         "admin_system": "System status & module control",
         "admin_auth_config": "Configure auth providers",
+        "tenant_manage": "Manage tenants (multi-tenant mode)",
         "webhook_manage": "Configure personal webhooks",
         "apikey_manage": "Create and manage API keys",
         "device_read": "View devices and the pairing queue",

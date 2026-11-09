@@ -355,6 +355,22 @@ func (r *RouterConfig) RegisterRoutes() {
 	)
 	mountConnect(r.e, tagPath, tagHandler)
 
+	// TenantService — tenants of a multi-tenant deployment. tenant.manage is a
+	// platform permission: practice users never hold it (auth.PlatformPermissions).
+	tenantPath, tenantHandler := apiv1connect.NewTenantServiceHandler(
+		&handlers.TenantServiceHandler{DB: r.gormDB},
+		connect.WithInterceptors(metricsInterceptor,
+			validateInterceptor,
+			mw.ConnectRequireAuth(r.authProvider, r.userRepo, apiKeyRepo),
+			mw.ConnectRequirePermission(r.checker, map[string]string{
+				apiv1connect.TenantServiceListTenantsProcedure:  auth.PermTenantManage,
+				apiv1connect.TenantServiceCreateTenantProcedure: auth.PermTenantManage,
+				apiv1connect.TenantServiceDeleteTenantProcedure: auth.PermTenantManage,
+			}),
+		),
+	)
+	mountConnect(r.e, tenantPath, tenantHandler)
+
 	// Pin service — protected. Per-user pinned patients (patient.read); the
 	// caller's identity comes from the auth interceptor, never the request.
 	pinPath, pinHandler := apiv1connect.NewPinServiceHandler(
