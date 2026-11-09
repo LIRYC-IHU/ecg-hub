@@ -14,6 +14,7 @@ import (
 // UserRecord is the GORM model for ecg_hub_users.
 type UserRecord struct {
 	ID         string `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
+	TenantID   string `gorm:"type:uuid;not null;default:'00000000-0000-0000-0000-000000000001';index" json:"-"`
 	ExternalID string `gorm:"type:text;not null;uniqueIndex"`
 	Provider   string `gorm:"not null;default:'oidc'"`
 	// ProviderUID is the identity provider's immutable unique id (e.g. LDAP

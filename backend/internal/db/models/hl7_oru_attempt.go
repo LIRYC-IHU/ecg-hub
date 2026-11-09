@@ -12,6 +12,7 @@ import "time"
 //   - "failed"    — transport/build error; no usable MSA was received.
 type HL7ORUAttempt struct {
 	ID          string    `gorm:"type:uuid;default:gen_random_uuid();primaryKey" json:"id"`
+	TenantID    string    `gorm:"type:uuid;not null;default:'00000000-0000-0000-0000-000000000001';index" json:"-"`
 	ECGID       string    `gorm:"type:uuid;not null;index:idx_oru_ecg_date" json:"ecg_id"`
 	PatientID   string    `gorm:"type:text;not null;index" json:"patient_id"`
 	Status      string    `gorm:"type:text;not null" json:"status"`       // "success", "rejected", "failed"

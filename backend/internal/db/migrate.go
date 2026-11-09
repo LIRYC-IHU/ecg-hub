@@ -18,6 +18,11 @@ import (
 // removed. There is no upgrade path from an older schema — recreate the DB
 // (see createDATABAE.sh).
 func RunMigrations(db *gorm.DB) error {
+	if err := migrateTenants(db); err != nil {
+		return err
+	}
+	dropGlobalKeys(db)
+
 	models := []any{
 		&appmodels.Patient{},
 		&appmodels.ECG{},
@@ -62,12 +67,19 @@ func RunMigrations(db *gorm.DB) error {
 	// navigation field (both reference the business key patients.patient_id),
 	// and the per-user tables key on ecg_hub_users.id with no navigation field.
 	// Idempotent: skipped when the constraint already exists.
+	//
+	// Patients are keyed on (tenant_id, patient_id). ecgs uses NO ACTION rather
+	// than RESTRICT: a patient with ECGs still cannot be deleted, but deleting a
+	// tenant removes its patients and ECGs in one statement, and RESTRICT would
+	// check before the cascade reaches the ECGs.
 	type fkFix struct{ table, name, ddl string }
-	for _, fk := range []fkFix{
-		{"user_pins", "fk_user_pins_patient",
-			`ALTER TABLE user_pins ADD CONSTRAINT fk_user_pins_patient FOREIGN KEY (patient_id) REFERENCES patients(patient_id) ON UPDATE CASCADE ON DELETE CASCADE`},
-		{"patient_tags", "fk_patient_tags_patient",
-			`ALTER TABLE patient_tags ADD CONSTRAINT fk_patient_tags_patient FOREIGN KEY (patient_id) REFERENCES patients(patient_id) ON UPDATE CASCADE ON DELETE CASCADE`},
+	fks := []fkFix{
+		{"ecgs", "fk_ecgs_patient",
+			`ALTER TABLE ecgs ADD CONSTRAINT fk_ecgs_patient FOREIGN KEY (tenant_id, patient_id) REFERENCES patients(tenant_id, patient_id) ON UPDATE CASCADE ON DELETE NO ACTION`},
+		{"user_pins", "fk_user_pins_tenant_patient",
+			`ALTER TABLE user_pins ADD CONSTRAINT fk_user_pins_tenant_patient FOREIGN KEY (tenant_id, patient_id) REFERENCES patients(tenant_id, patient_id) ON UPDATE CASCADE ON DELETE CASCADE`},
+		{"patient_tags", "fk_patient_tags_tenant_patient",
+			`ALTER TABLE patient_tags ADD CONSTRAINT fk_patient_tags_tenant_patient FOREIGN KEY (tenant_id, patient_id) REFERENCES patients(tenant_id, patient_id) ON UPDATE CASCADE ON DELETE CASCADE`},
 		{"connector_jobs", "fk_connector_jobs_quarantine",
 			`ALTER TABLE connector_jobs ADD CONSTRAINT fk_connector_jobs_quarantine FOREIGN KEY (quarantine_id) REFERENCES quarantine_entries(id) ON DELETE CASCADE`},
 		{"webhook_deliveries", "fk_webhook_deliveries_webhook",
@@ -82,7 +94,15 @@ func RunMigrations(db *gorm.DB) error {
 			`ALTER TABLE user_pins ADD CONSTRAINT fk_user_pins_user FOREIGN KEY (user_id) REFERENCES ecg_hub_users(id) ON DELETE CASCADE`},
 		{"export_jobs", "fk_export_jobs_user",
 			`ALTER TABLE export_jobs ADD CONSTRAINT fk_export_jobs_user FOREIGN KEY (user_id) REFERENCES ecg_hub_users(id) ON DELETE CASCADE`},
-	} {
+	}
+	// Removing a tenant removes every row it owns. audit_logs is left out on
+	// purpose: traceability outlives the tenant.
+	for _, table := range tenantTables {
+		name := "fk_" + table + "_tenant"
+		fks = append(fks, fkFix{table, name, fmt.Sprintf(
+			`ALTER TABLE %s ADD CONSTRAINT %s FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE`, table, name)})
+	}
+	for _, fk := range fks {
 		if db.Migrator().HasTable(fk.table) && !db.Migrator().HasConstraint(fk.table, fk.name) {
 			if err := db.Exec(fk.ddl).Error; err != nil {
 				slog.Warn("db: add foreign key", "constraint", fk.name, "error", err)
@@ -143,6 +163,58 @@ func RunMigrations(db *gorm.DB) error {
 	}
 
 	return nil
+}
+
+// tenantTables are the tables whose rows belong to a tenant and go with it.
+// audit_logs carries tenant_id too, without the foreign key.
+var tenantTables = []string{
+	"patients", "ecgs", "quarantine_entries", "ecg_buffer", "tags",
+	"patient_tags", "ecg_tags", "user_pins", "ecg_hub_users", "api_keys",
+	"user_webhooks", "webhook_deliveries", "export_jobs", "export_job_ecgs",
+	"connector_jobs", "hl7_attempts", "hl7_oru_attempts", "nihon_kohden_transfers",
+}
+
+// migrateTenants creates the tenants table and the default tenant, which must
+// exist before any tenant_id column refers to it.
+func migrateTenants(db *gorm.DB) error {
+	if err := db.AutoMigrate(&appmodels.Tenant{}); err != nil {
+		return fmt.Errorf("db: migrate tenants: %w", err)
+	}
+	if err := db.Exec(
+		`INSERT INTO tenants (id, slug, name) VALUES (?, 'default', 'Default') ON CONFLICT (id) DO NOTHING`,
+		appmodels.DefaultTenantID).Error; err != nil {
+		return fmt.Errorf("db: create default tenant: %w", err)
+	}
+	return nil
+}
+
+// dropGlobalKeys removes the deployment-wide unique keys that became
+// per-tenant: patients(patient_id) and ecgs(content_hash). It runs before
+// AutoMigrate, which would otherwise try to drop the patients constraint
+// itself and fail on the foreign keys that depend on it. CASCADE takes those
+// foreign keys with it; the composite ones replace them below. A no-op on a
+// fresh or already migrated database.
+func dropGlobalKeys(db *gorm.DB) {
+	for _, ddl := range []string{
+		`DO $$
+DECLARE r record;
+BEGIN
+  FOR r IN
+    SELECT c.conname
+    FROM pg_constraint c
+    JOIN pg_attribute a ON a.attrelid = c.conrelid AND a.attname = 'patient_id'
+    WHERE c.conrelid = to_regclass(quote_ident(current_schema()) || '.patients') AND c.contype = 'u' AND c.conkey = ARRAY[a.attnum]
+  LOOP
+    EXECUTE format('ALTER TABLE patients DROP CONSTRAINT %I CASCADE', r.conname);
+  END LOOP;
+END $$`,
+		`DROP INDEX IF EXISTS idx_ecgs_content_hash`,
+		`DROP INDEX IF EXISTS idx_quarantine_entries_content_hash`,
+	} {
+		if err := db.Exec(ddl).Error; err != nil {
+			slog.Warn("db: drop global unique key", "error", err)
+		}
+	}
 }
 
 // Create Role admin | reader | writer

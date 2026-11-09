@@ -8,6 +8,7 @@ import "time"
 // Rows are rotated automatically — only the last MaxTransferRows are kept.
 type NihonKohdenTransfer struct {
 	ID          string    `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
+	TenantID    string    `gorm:"type:uuid;not null;default:'00000000-0000-0000-0000-000000000001';index" json:"-"`
 	RecvName    string    `gorm:"column:recv_name;not null;uniqueIndex"` // filename from FTP STOR
 	StorageName string    `gorm:"column:storage_name"`                   // persisted filename on disk (set after ingestion)
 	Status      string    `gorm:"column:status;not null;default:'processing'"`

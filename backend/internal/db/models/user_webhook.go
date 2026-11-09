@@ -35,11 +35,12 @@ var AllWebhookEvents = []string{
 // header value are AES-256-GCM encrypted at rest (AUTH_ENCRYPTION_KEY) and
 // never returned by the API after creation.
 type UserWebhook struct {
-	ID      string `gorm:"type:uuid;default:gen_random_uuid();primaryKey" json:"id"`
-	UserID  string `gorm:"type:uuid;not null;index" json:"-"` // ecg_hub_users.id — FK CASCADE added in migrate.go
-	Name    string `gorm:"type:text;not null" json:"name"`
-	URL     string `gorm:"type:text;not null" json:"url"`
-	Enabled bool   `gorm:"not null;default:true" json:"enabled"`
+	ID       string `gorm:"type:uuid;default:gen_random_uuid();primaryKey" json:"id"`
+	TenantID string `gorm:"type:uuid;not null;default:'00000000-0000-0000-0000-000000000001';index" json:"-"`
+	UserID   string `gorm:"type:uuid;not null;index" json:"-"` // ecg_hub_users.id — FK CASCADE added in migrate.go
+	Name     string `gorm:"type:text;not null" json:"name"`
+	URL      string `gorm:"type:text;not null" json:"url"`
+	Enabled  bool   `gorm:"not null;default:true" json:"enabled"`
 
 	// InsecureSkipVerify disables TLS certificate verification for this
 	// endpoint (self-signed certs on internal networks). HTTPS endpoints only.

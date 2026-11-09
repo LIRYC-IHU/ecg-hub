@@ -88,7 +88,7 @@ func (r *PatientRepository) UpdateDemographics(patientID string, d *hl7.PatientD
 }
 
 // UpsertWithDemographics inserts a patient row with demographics sourced from the ECG file.
-// ON CONFLICT (patient_id): updates first_name/last_name/gender only when hl7_source is empty,
+// ON CONFLICT (tenant_id, patient_id): updates first_name/last_name/gender only when hl7_source is empty,
 // so that HL7-enriched patients are never overwritten by a subsequent ECG ingestion.
 func (r *PatientRepository) UpsertWithDemographics(patientID, firstName, lastName, gender string) error {
 	patient := models.Patient{
@@ -99,7 +99,7 @@ func (r *PatientRepository) UpsertWithDemographics(patientID, firstName, lastNam
 		Extra:     datatypes.JSON([]byte("{}")),
 	}
 	result := r.db.Clauses(clause.OnConflict{
-		Columns: []clause.Column{{Name: "patient_id"}},
+		Columns: []clause.Column{{Name: "tenant_id"}, {Name: "patient_id"}},
 		DoUpdates: clause.Assignments(map[string]any{
 			"first_name": gorm.Expr(`CASE WHEN patients.hl7_source = '' THEN EXCLUDED.first_name ELSE patients.first_name END`),
 			"last_name":  gorm.Expr(`CASE WHEN patients.hl7_source = '' THEN EXCLUDED.last_name  ELSE patients.last_name  END`),

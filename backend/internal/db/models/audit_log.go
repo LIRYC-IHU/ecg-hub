@@ -38,6 +38,7 @@ import (
 // (patient list/search is deliberately not audited — too noisy.)
 type AuditLog struct {
 	ID        string    `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
+	TenantID  string    `gorm:"type:uuid;not null;default:'00000000-0000-0000-0000-000000000001';index" json:"-"`
 	CreatedAt time.Time `gorm:"index"`
 	// No UpdatedAt — audit logs are append-only. UpdatedAt is intentionally absent.
 	UserID     string         `gorm:"not null;index"`

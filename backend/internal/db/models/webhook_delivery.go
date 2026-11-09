@@ -11,6 +11,7 @@ import (
 // can inspect delivery history and manually resend a failed payload.
 type WebhookDelivery struct {
 	ID        string         `gorm:"type:uuid;default:gen_random_uuid();primaryKey" json:"id"`
+	TenantID  string         `gorm:"type:uuid;not null;default:'00000000-0000-0000-0000-000000000001';index" json:"-"`
 	WebhookID string         `gorm:"type:uuid;not null;index" json:"webhook_id"` // FK CASCADE added in migrate.go
 	Event     string         `gorm:"type:text;not null" json:"event"`
 	Payload   datatypes.JSON `gorm:"type:jsonb;not null" json:"payload"` // exact body sent — replayed as-is on resend

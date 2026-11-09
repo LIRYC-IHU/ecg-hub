@@ -20,6 +20,7 @@ import "time"
 // at which point the job is exhausted.
 type ConnectorJob struct {
 	ID            string     `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
+	TenantID      string     `gorm:"type:uuid;not null;default:'00000000-0000-0000-0000-000000000001';index" json:"-"`
 	ECGID         *string    `gorm:"type:uuid;index:idx_connector_status_retry"`
 	QuarantineID  *string    `gorm:"type:uuid;index"` // set for files forwarded despite failed ingestion
 	ConnectorName string     `gorm:"not null;size:64"`

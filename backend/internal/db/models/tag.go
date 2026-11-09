@@ -4,6 +4,7 @@ import "time"
 
 type Tag struct {
 	ID        string    `gorm:"type:uuid;default:gen_random_uuid();primaryKey" json:"id"`
+	TenantID  string    `gorm:"type:uuid;not null;default:'00000000-0000-0000-0000-000000000001';index" json:"-"`
 	Name      string    `gorm:"type:text;not null" json:"name"`
 	Color     string    `gorm:"type:text;not null;default:'#6b7280'" json:"color"`
 	CreatedBy string    `gorm:"type:text;not null;index" json:"created_by"`
@@ -17,6 +18,7 @@ func (Tag) TableName() string {
 
 type PatientTag struct {
 	ID        string    `gorm:"type:uuid;default:gen_random_uuid();primaryKey" json:"id"`
+	TenantID  string    `gorm:"type:uuid;not null;default:'00000000-0000-0000-0000-000000000001';index" json:"-"`
 	PatientID string    `gorm:"type:text;not null;uniqueIndex:idx_patient_tag" json:"patient_id"`
 	TagID     string    `gorm:"type:uuid;not null;uniqueIndex:idx_patient_tag;index;constraint:OnDelete:CASCADE" json:"tag_id"`
 	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
@@ -29,6 +31,7 @@ func (PatientTag) TableName() string {
 
 type ECGTag struct {
 	ID        string    `gorm:"type:uuid;default:gen_random_uuid();primaryKey" json:"id"`
+	TenantID  string    `gorm:"type:uuid;not null;default:'00000000-0000-0000-0000-000000000001';index" json:"-"`
 	ECGID     string    `gorm:"type:uuid;not null;uniqueIndex:idx_ecg_tag" json:"ecg_id"`
 	TagID     string    `gorm:"type:uuid;not null;uniqueIndex:idx_ecg_tag;index" json:"tag_id"`
 	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`

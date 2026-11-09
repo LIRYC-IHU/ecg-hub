@@ -10,6 +10,7 @@ import "time"
 type ECG struct {
 	// No CreatedAt/UpdatedAt — ECGs use IngestedAt as their canonical timestamp.
 	ID        string `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
+	TenantID  string `gorm:"type:uuid;not null;default:'00000000-0000-0000-0000-000000000001';index;uniqueIndex:idx_ecgs_tenant_content_hash,priority:1" json:"-"`
 	PatientID string `gorm:"type:text;not null;index:idx_ecg_patient_date"`
 	Vendor    string `gorm:"not null;index"`
 	// DeviceMAC is the hardware that sent this file, when the ingestion source
@@ -21,7 +22,7 @@ type ECG struct {
 	DeviceMAC        string         `gorm:"column:device_mac;type:text;not null;default:'';index"`
 	FilePath         string         `gorm:"not null"`
 	OriginalFilename string         `gorm:"not null"`
-	ContentHash      string         `gorm:"type:varchar(64);uniqueIndex"` // SHA-256 hex digest for deduplication
+	ContentHash      string         `gorm:"type:varchar(64);uniqueIndex:idx_ecgs_tenant_content_hash,priority:2"` // SHA-256 hex digest, deduplication within a tenant
 	IngestedAt       time.Time      `gorm:"not null;autoCreateTime;index:idx_ecg_patient_date,sort:desc"`
 	RecordedAt       *time.Time     `gorm:"index"`                            // acquisition timestamp from device file; nil for legacy records
 	HL7Status        string         `gorm:"not null;default:'pending';index"` // "pending"|"success"|"hl7_exhausted"|"hl7_rejected"

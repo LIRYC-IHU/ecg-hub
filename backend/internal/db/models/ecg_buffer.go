@@ -11,6 +11,7 @@ import (
 // and deleted — INSERT + DELETE only, never UPDATE.
 type ECGBuffer struct {
 	ID         string `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
+	TenantID   string `gorm:"type:uuid;not null;default:'00000000-0000-0000-0000-000000000001';index" json:"-"`
 	CreatedAt  time.Time
 	ReceivedAt time.Time      `gorm:"not null"`
 	RawData    datatypes.JSON `gorm:"type:jsonb;not null"`

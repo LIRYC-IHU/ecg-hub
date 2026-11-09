@@ -25,9 +25,10 @@ const (
 //   - unidentified: parsed OK but no patient ID — kept with its extracted demographics
 //     (Metadata) so an operator can assign a patient ID and trigger re-ingestion.
 type QuarantineEntry struct {
-	ID         string `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
-	Filename   string `gorm:"not null"`
-	FilePath   string `gorm:"not null"` // path under config.StorageConfig.QuarantinePath
+	ID         string    `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
+	TenantID   string    `gorm:"type:uuid;not null;default:'00000000-0000-0000-0000-000000000001';index:idx_quarantine_tenant_content_hash,priority:1" json:"-"`
+	Filename   string    `gorm:"not null"`
+	FilePath   string    `gorm:"not null"` // path under config.StorageConfig.QuarantinePath
 	ReceivedAt time.Time `gorm:"not null;autoCreateTime"`
 	// ErrorReason explains why the file was quarantined.
 	// "no_adapter" | "parse_error: <details>" | "unidentified: <details>"
@@ -36,7 +37,7 @@ type QuarantineEntry struct {
 	// ContentHash is the SHA-256 hex digest of the raw file — used to deduplicate
 	// re-sent files: instead of stacking a new entry per send, the existing entry
 	// is refreshed (ReceivedAt/ErrorReason). Empty on rows that predate the column.
-	ContentHash string `gorm:"type:varchar(64);index"`
+	ContentHash string `gorm:"type:varchar(64);index:idx_quarantine_tenant_content_hash,priority:2"`
 
 	// Category classifies the entry — see QuarantineCategory* constants.
 	// Existing rows default to "error" (they predate the unidentified workflow).

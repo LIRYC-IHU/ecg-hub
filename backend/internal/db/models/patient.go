@@ -14,6 +14,7 @@ import (
 
 type Patient struct {
 	ID        string `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
+	TenantID  string `gorm:"type:uuid;not null;default:'00000000-0000-0000-0000-000000000001';index;uniqueIndex:idx_patients_tenant_patient,priority:1" json:"-"`
 	CreatedAt time.Time
 	UpdatedAt time.Time
 
@@ -22,16 +23,16 @@ type Patient struct {
 	// system matches on name, date of birth or sex.
 	//
 	// DEPLOYMENT PREREQUISITE: this identifier must be unique across the whole
-	// deployment, not merely within one site. The unique constraint below is
-	// global, so if two sites of a multi-site installation can issue the same
-	// number for different people, their records silently become one patient
+	// tenant, not merely within one site. The unique constraint below is
+	// (tenant_id, patient_id), so if two sites sharing one tenant can issue the
+	// same number for different people, their records silently become one patient
 	// and their ECGs are mixed. There is no assigning-authority column to tell
 	// them apart.
 	//
 	// This is a property of the installation, not something the software can
 	// check: connect it to one identifier domain, or run one instance per
 	// domain. See docs/deploy-prod.md.
-	PatientID string `gorm:"not null;unique"`
+	PatientID string `gorm:"not null;uniqueIndex:idx_patients_tenant_patient,priority:2"`
 
 	FirstName   string
 	LastName    string `gorm:"index"`
@@ -49,7 +50,9 @@ type Patient struct {
 	LastADTAt *time.Time
 	Extra     datatypes.JSON
 
-	ECGS []ECG `gorm:"foreignKey:PatientID;references:PatientID;constraint:OnUpdate:CASCADE,OnDelete:RESTRICT;"`
+	// No ECGS navigation field: ecgs reference patients on (tenant_id,
+	// patient_id), a composite key GORM does not generate. The foreign key is
+	// added in migrate.go.
 }
 
 func (Patient) TableName() string {

@@ -12,6 +12,14 @@ All notable changes to this project are documented here. Versions follow
   are gone, and Admin > Roles no longer offers them. They stay stored on the
   roles, and saving a role keeps them: setting `DEVICE_WHITELIST=true` again
   brings them back as they were.
+- The schema is ready for several tenants, with no change in behaviour. A
+  `tenants` table holds a built-in default tenant, and patients, ECGs,
+  quarantine entries, tags, users and their dependent rows carry a
+  `tenant_id` that defaults to it. A patient identifier and an ECG file hash
+  are now unique within a tenant rather than across the deployment, and an ECG
+  can only belong to a patient of its own tenant. An existing database is
+  migrated on the next start: every row moves to the default tenant. See
+  `docs/MULTI_TENANT_DESIGN.md` (to be merged separately).
 
 ### Added
 
