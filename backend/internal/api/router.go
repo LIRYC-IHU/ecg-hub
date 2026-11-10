@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"connectrpc.com/connect"
@@ -709,8 +710,12 @@ func (r *RouterConfig) RegisterRoutes() {
 	}
 
 	// Logout — public (user may have expired/no token); clears cookie + redirects.
+	logoutOrigin := ""
+	if v := os.Getenv("HOST_URL"); strings.TrimSpace(v) != "" {
+		logoutOrigin = config.PublicOrigin(v)
+	}
 	publicV1.GET("/auth/logout", handlers.LogoutHandler(r.authProvider, auth.GetOIDCFlow(r.authProvider),
-		repository.NewAuthConfigRepository(r.gormDB), r.authEncKey, r.cfg.JWTSecret, r.userRepo))
+		repository.NewAuthConfigRepository(r.gormDB), r.authEncKey, r.cfg.JWTSecret, logoutOrigin, r.userRepo))
 
 	// === Protected API group ===
 	apiV1 := r.e.Group("/api/v1", mw.AuthMiddleware(r.authProvider, r.userRepo, apiKeyRepo))

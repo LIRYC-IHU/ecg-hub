@@ -55,12 +55,14 @@ func (subjectProvider) ValidateToken(_ context.Context, token string) (*auth.Cla
 // used. The cookie goes in every case.
 func TestLogout_EndsTheOIDCSessionOnlyForOIDCUsers(t *testing.T) {
 	users := logoutUsers{"dr-a": "oidc", "ops": "local"}
-	h := LogoutHandler(subjectProvider{}, logoutFlow{}, nil, "", "", users)
+	// The request arrives over plain http, as it does behind a TLS-terminating
+	// proxy: the return address must still be the public one.
+	h := LogoutHandler(subjectProvider{}, logoutFlow{}, nil, "", "", "https://ecg.example", users)
 
 	cases := []struct {
 		name, token, wantLocation string
 	}{
-		{"oidc user", "dr-a", "https://idp.example/logout?post_logout_redirect_uri=http://example.com/"},
+		{"oidc user", "dr-a", "https://idp.example/logout?post_logout_redirect_uri=https://ecg.example/"},
 		{"local user", "ops", "/"},
 		{"expired token", "expired", "/"},
 		{"no session", "", "/"},

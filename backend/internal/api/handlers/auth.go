@@ -154,7 +154,13 @@ type permissionResolver interface {
 //	@Tags			auth
 //	@Success		302	"Redirect to logout URL"
 //	@Router			/api/v1/auth/logout [get]
-func LogoutHandler(provider auth.Provider, staticFlow auth.OIDCFlow, repo *repository.AuthConfigRepository, encKey, jwtSecret string, users sessionUsers) echo.HandlerFunc {
+//
+// publicOrigin is the deployment's public URL (HOST_URL), where the identity
+// provider sends the browser back. It is not derived from the request: behind
+// a TLS-terminating proxy the backend sees plain http, and the provider
+// refuses a return address it has not been given. Empty falls back to the
+// request, for a deployment reached directly.
+func LogoutHandler(provider auth.Provider, staticFlow auth.OIDCFlow, repo *repository.AuthConfigRepository, encKey, jwtSecret, publicOrigin string, users sessionUsers) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		// Read the session before the cookie goes: it says whether there is an
 		// identity-provider session to end as well.
@@ -167,8 +173,11 @@ func LogoutHandler(provider auth.Provider, staticFlow auth.OIDCFlow, repo *repos
 			// open, so the next "SSO" click signed the user back in unasked.
 			if flow, err := oidcFlowFromDB(c, staticFlow, repo, encKey, jwtSecret, nil); err == nil {
 				if l, ok := flow.(auth.OIDCLogout); ok {
-					redirectURI := c.Scheme() + "://" + c.Request().Host + "/"
-					return c.Redirect(http.StatusFound, l.LogoutURL(redirectURI))
+					origin := publicOrigin
+					if origin == "" {
+						origin = c.Scheme() + "://" + c.Request().Host
+					}
+					return c.Redirect(http.StatusFound, l.LogoutURL(origin+"/"))
 				}
 			}
 		}
