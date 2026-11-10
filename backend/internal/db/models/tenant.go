@@ -22,9 +22,10 @@ const DefaultTenantID = "00000000-0000-0000-0000-000000000001"
 type Tenant struct {
 	ID string `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
 	// Slug matches the identity provider's organization alias.
-	Slug      string    `gorm:"type:text;not null;uniqueIndex"`
-	Name      string    `gorm:"type:text;not null"`
-	CreatedAt time.Time `gorm:"autoCreateTime"`
+	Slug string `gorm:"type:text;not null;uniqueIndex"`
+	Name string `gorm:"type:text;not null"`
+	// default:now() so a row inserted by plain SQL is dated too.
+	CreatedAt time.Time `gorm:"autoCreateTime;default:now()"`
 }
 
 func (Tenant) TableName() string { return "tenants" }

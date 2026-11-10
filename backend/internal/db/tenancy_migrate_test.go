@@ -176,3 +176,23 @@ func TestTenancySchema_UpgradesLegacyDatabase(t *testing.T) {
 		t.Fatalf("legacy hash still unique across tenants: %v", err)
 	}
 }
+
+// A tenant is dated however it is inserted, and a tenant left undated by an
+// earlier version gets a date on the next start.
+func TestTenancySchema_TenantsAreDated(t *testing.T) {
+	db := openSchema(t)
+	if err := RunMigrations(db); err != nil {
+		t.Fatalf("RunMigrations: %v", err)
+	}
+	mustExec(t, db, `INSERT INTO tenants (slug, name) VALUES ('by-sql', 'Inserted by SQL')`)
+	if n := count(t, db, `SELECT count(*) FROM tenants WHERE created_at IS NULL OR created_at < '1900-01-01'`); n != 0 {
+		t.Fatalf("%d tenant(s) without a creation time after a plain insert", n)
+	}
+	mustExec(t, db, `UPDATE tenants SET created_at = NULL`)
+	if err := RunMigrations(db); err != nil {
+		t.Fatalf("RunMigrations, second start: %v", err)
+	}
+	if n := count(t, db, `SELECT count(*) FROM tenants WHERE created_at IS NULL`); n != 0 {
+		t.Fatalf("%d undated tenant(s) left after a restart", n)
+	}
+}

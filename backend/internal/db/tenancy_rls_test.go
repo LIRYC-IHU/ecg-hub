@@ -19,6 +19,8 @@ import (
 // openAsAppRole connects as a fresh non-superuser role owning a fresh schema,
 // as the application does in production: a superuser bypasses Row Level
 // Security and would make these tests pass for the wrong reason.
+// (internal/db/dbtest offers the same to other packages; this package cannot
+// import it without a cycle.)
 func openAsAppRole(t *testing.T) (app, admin *gorm.DB) {
 	t.Helper()
 	dsn := os.Getenv("TEST_DATABASE_URL")
@@ -30,7 +32,9 @@ func openAsAppRole(t *testing.T) (app, admin *gorm.DB) {
 		t.Fatalf("Open: %v", err)
 	}
 	name := fmt.Sprintf("ecghub_rls_%d", time.Now().UnixNano())
-	if err := admin.Exec(`CREATE ROLE ` + name + ` LOGIN NOSUPERUSER NOBYPASSRLS`).Error; err != nil {
+	// A password, so the role can connect on a server that does not trust
+	// local connections (CI). The name is unique and only digits vary.
+	if err := admin.Exec(`CREATE ROLE ` + name + ` LOGIN NOSUPERUSER NOBYPASSRLS PASSWORD '` + name + `'`).Error; err != nil {
 		t.Skipf("cannot create a test role (%v) — skipping", err)
 	}
 	var dbName string
@@ -47,7 +51,7 @@ func openAsAppRole(t *testing.T) (app, admin *gorm.DB) {
 	if err != nil {
 		t.Fatalf("parse dsn: %v", err)
 	}
-	u.User = url.User(name) // the test server trusts local connections
+	u.User = url.UserPassword(name, name)
 	q := u.Query()
 	q.Set("search_path", name+",public")
 	u.RawQuery = q.Encode()

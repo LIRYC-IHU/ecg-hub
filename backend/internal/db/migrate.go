@@ -95,6 +95,28 @@ func RunMigrations(db *gorm.DB) error {
 		{"export_jobs", "fk_export_jobs_user",
 			`ALTER TABLE export_jobs ADD CONSTRAINT fk_export_jobs_user FOREIGN KEY (user_id) REFERENCES ecg_hub_users(id) ON DELETE CASCADE`},
 	}
+	// A tag link can only join rows of its own tenant. The plain foreign keys
+	// on ecg_id and tag_id are checked without Row Level Security, so alone
+	// they would let a tenant link its tag to another tenant's ECG by id, and
+	// learn from the outcome whether that id exists. The composite keys need a
+	// unique (tenant_id, id) on the referenced side.
+	for _, ddl := range []string{
+		`CREATE UNIQUE INDEX IF NOT EXISTS uq_ecgs_tenant_row ON ecgs (tenant_id, id)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS uq_tags_tenant_row ON tags (tenant_id, id)`,
+	} {
+		if err := db.Exec(ddl).Error; err != nil {
+			slog.Warn("db: create tenant key index", "error", err)
+		}
+	}
+	fks = append(fks,
+		fkFix{"ecg_tags", "fk_ecg_tags_tenant_ecg",
+			`ALTER TABLE ecg_tags ADD CONSTRAINT fk_ecg_tags_tenant_ecg FOREIGN KEY (tenant_id, ecg_id) REFERENCES ecgs(tenant_id, id) ON DELETE CASCADE`},
+		fkFix{"ecg_tags", "fk_ecg_tags_tenant_tag",
+			`ALTER TABLE ecg_tags ADD CONSTRAINT fk_ecg_tags_tenant_tag FOREIGN KEY (tenant_id, tag_id) REFERENCES tags(tenant_id, id) ON DELETE CASCADE`},
+		fkFix{"patient_tags", "fk_patient_tags_tenant_tag",
+			`ALTER TABLE patient_tags ADD CONSTRAINT fk_patient_tags_tenant_tag FOREIGN KEY (tenant_id, tag_id) REFERENCES tags(tenant_id, id) ON DELETE CASCADE`},
+	)
+
 	// Removing a tenant removes every row it owns. audit_logs is left out on
 	// purpose: traceability outlives the tenant.
 	for _, table := range tenantTables {
@@ -185,8 +207,9 @@ func migrateTenants(db *gorm.DB) error {
 		appmodels.DefaultTenantID).Error; err != nil {
 		return fmt.Errorf("db: create default tenant: %w", err)
 	}
-	// The first release seeded the default tenant without a creation time.
-	db.Exec(`UPDATE tenants SET created_at = now() WHERE id = ? AND created_at < '1900-01-01'`, appmodels.DefaultTenantID)
+	// Tenants inserted by plain SQL (the first seed of the default tenant, or
+	// an operator) had no creation time: the column had no default then.
+	db.Exec(`UPDATE tenants SET created_at = now() WHERE created_at IS NULL OR created_at < '1900-01-01'`)
 	return nil
 }
 
