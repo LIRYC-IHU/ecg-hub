@@ -13,6 +13,7 @@ import (
 	mw "github.com/LIRYC-IHU/ecg-hub/internal/api/middleware"
 	"github.com/LIRYC-IHU/ecg-hub/internal/auth"
 	"github.com/LIRYC-IHU/ecg-hub/internal/db/repository"
+	"github.com/LIRYC-IHU/ecg-hub/internal/tenancy"
 )
 
 // loginThrottle guards the login endpoint against brute force: after 10 consecutive
@@ -149,17 +150,60 @@ type permissionResolver interface {
 // Public — no valid JWT required (the user may have an expired or missing token).
 //
 //	@Summary		Logout
-//	@Description	Clears the JWT cookie and redirects to the identity provider's logout URL (OIDC) or the frontend root (LDAP).
+//	@Description	Clears the JWT cookie, then ends the identity provider's session when the caller signed in through OIDC; otherwise returns to the frontend root.
 //	@Tags			auth
 //	@Success		302	"Redirect to logout URL"
 //	@Router			/api/v1/auth/logout [get]
-func LogoutHandler(provider auth.Provider) echo.HandlerFunc {
+func LogoutHandler(provider auth.Provider, staticFlow auth.OIDCFlow, repo *repository.AuthConfigRepository, encKey, jwtSecret string, users sessionUsers) echo.HandlerFunc {
 	return func(c echo.Context) error {
+		// Read the session before the cookie goes: it says whether there is an
+		// identity-provider session to end as well.
+		viaOIDC := sessionIsOIDC(c, provider, users)
 		clearJWTCookie(c)
-		redirectURI := c.Scheme() + "://" + c.Request().Host + "/"
-		if logoutURL := auth.GetLogoutURL(provider, redirectURI); logoutURL != "" {
-			return c.Redirect(http.StatusFound, logoutURL)
+		if viaOIDC {
+			// Built from the database like the login: OIDC configured in
+			// Admin > Authentication is unknown to the static provider, and
+			// logging out through it left the identity provider's session
+			// open, so the next "SSO" click signed the user back in unasked.
+			if flow, err := oidcFlowFromDB(c, staticFlow, repo, encKey, jwtSecret, nil); err == nil {
+				if l, ok := flow.(auth.OIDCLogout); ok {
+					redirectURI := c.Scheme() + "://" + c.Request().Host + "/"
+					return c.Redirect(http.StatusFound, l.LogoutURL(redirectURI))
+				}
+			}
 		}
 		return c.Redirect(http.StatusFound, "/")
 	}
+}
+
+// sessionUsers is what the logout needs to tell how the caller signed in.
+type sessionUsers interface {
+	ResolveIdentity(ctx context.Context, externalID string) (string, string, error)
+	GetByID(ctx context.Context, id string) (*repository.UserRecord, error)
+}
+
+// sessionIsOIDC reports whether the caller's session came from the OIDC
+// provider. A local or LDAP account has no session there to end, and sending
+// it to the provider's logout page would only show a confusing prompt. An
+// absent or expired token counts as not OIDC: there is nothing to identify.
+func sessionIsOIDC(c echo.Context, provider auth.Provider, users sessionUsers) bool {
+	if users == nil {
+		return false
+	}
+	cookie, err := c.Cookie("jwt")
+	if err != nil || cookie.Value == "" {
+		return false
+	}
+	ctx := c.Request().Context()
+	claims, err := provider.ValidateToken(ctx, cookie.Value)
+	if err != nil {
+		return false
+	}
+	id, _, err := users.ResolveIdentity(ctx, claims.Sub)
+	if err != nil || id == "" {
+		return false
+	}
+	// System scope: the route is public, so the request carries no tenant.
+	rec, err := users.GetByID(tenancy.System(ctx), id)
+	return err == nil && rec.Provider == "oidc"
 }

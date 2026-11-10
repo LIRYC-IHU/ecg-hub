@@ -709,7 +709,8 @@ func (r *RouterConfig) RegisterRoutes() {
 	}
 
 	// Logout — public (user may have expired/no token); clears cookie + redirects.
-	publicV1.GET("/auth/logout", handlers.LogoutHandler(r.authProvider))
+	publicV1.GET("/auth/logout", handlers.LogoutHandler(r.authProvider, auth.GetOIDCFlow(r.authProvider),
+		repository.NewAuthConfigRepository(r.gormDB), r.authEncKey, r.cfg.JWTSecret, r.userRepo))
 
 	// === Protected API group ===
 	apiV1 := r.e.Group("/api/v1", mw.AuthMiddleware(r.authProvider, r.userRepo, apiKeyRepo))
