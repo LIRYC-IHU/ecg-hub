@@ -128,6 +128,7 @@ function VendorBadge({ vendor }: { vendor: string }) {
     ge: "text-emerald-400 bg-emerald-500/10",
     muse: "text-teal-400 bg-teal-500/10",
     mindray: "text-cyan-400 bg-cyan-500/10",
+    fukuda: "text-orange-400 bg-orange-500/10",
     dicom: "text-amber-400 bg-amber-500/10",
   };
   return (

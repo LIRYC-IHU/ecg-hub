@@ -7,6 +7,12 @@ All notable changes to this project are documented here. Versions follow
 
 ### Added
 
+- Fukuda Denshi `.ECG` files (FX-8322) are ingested by a new `fukuda` module.
+  Patient identity, acquisition time and the device measurements are read by
+  the `fukuda-to-fda` converter, and the ECG exports to FDA aECG, DICOM and
+  PDF like the other vendors. The device's network protocol is not known yet:
+  files arrive through the upload page or the FTP drop.
+
 - The ECG viewer says why it cannot draw a waveform. An Ambulatory recording,
   a partial General ECG or a hemodynamic, respiratory or audio object is stored
   and forwarded like any other, but the viewer is built for the 12 standard

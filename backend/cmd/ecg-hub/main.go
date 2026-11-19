@@ -57,6 +57,7 @@ import (
 	"github.com/LIRYC-IHU/ecg-hub/internal/module"
 	_ "github.com/LIRYC-IHU/ecg-hub/internal/module/dicom"
 	_ "github.com/LIRYC-IHU/ecg-hub/internal/module/fda"
+	_ "github.com/LIRYC-IHU/ecg-hub/internal/module/fukuda"
 	_ "github.com/LIRYC-IHU/ecg-hub/internal/module/mindray"
 	_ "github.com/LIRYC-IHU/ecg-hub/internal/module/muse"
 	_ "github.com/LIRYC-IHU/ecg-hub/internal/module/nihon-kohden"
@@ -200,6 +201,8 @@ func main() {
 		"dicom:xmlfda":        bridgeutil.ResolveBin("BRIDGE_DICOM_TO_FDA", "dicom-to-fda"),
 		"nihon-kohden:xmlfda": bridgeutil.ResolveBin("BRIDGE_NK_TO_FDA", "nk-to-fda"),
 		"nihon-kohden:dicom":  bridgeutil.ResolveBin("BRIDGE_NK_TO_DICOM", "nk-to-dicom"),
+		"fukuda:xmlfda":       bridgeutil.ResolveBin("BRIDGE_FUKUDA_TO_FDA", "fukuda-to-fda"),
+		"fukuda:dicom":        bridgeutil.ResolveBin("BRIDGE_FUKUDA_TO_DICOM", "fukuda-to-dicom"),
 		"mindray:xmlfda":      bridgeutil.ResolveBin("BRIDGE_MINDRAY_TO_FDA", "mindray-to-fda"),
 		"mindray:dicom":       bridgeutil.ResolveBin("BRIDGE_MINDRAY_TO_DICOM", "mindray-to-dicom"),
 		"muse:xmlfda":         bridgeutil.ResolveBin("BRIDGE_MUSE_TO_FDA", "muse-to-fda"),
