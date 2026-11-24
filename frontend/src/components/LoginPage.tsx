@@ -89,6 +89,17 @@ export function LoginPage() {
     fetchAuthProviders().then(setProviders);
   }, []);
 
+  // The login page renders in place of whatever was asked for, so the address
+  // bar still holds the link the operator opened (a patient, an ECG). The
+  // credential form keeps it by reloading; the SSO round-trip leaves the site,
+  // so the server has to be told where to come back to. The root and the auth
+  // pages are not worth remembering.
+  const { pathname, search } = window.location;
+  const ssoHref =
+    (pathname === "/" && !search) || pathname === "/login" || pathname === "/setup"
+      ? "/api/v1/auth/oidc/login"
+      : `/api/v1/auth/oidc/login?return_to=${encodeURIComponent(pathname + search)}`;
+
   const hasOIDC = providers.includes("oidc");
   const hasLDAP = providers.includes("ldap");
   const hasLocal = providers.includes("local");
@@ -313,7 +324,7 @@ export function LoginPage() {
 
           {hasOIDC && (
             <a
-              href="/api/v1/auth/oidc/login"
+              href={ssoHref}
               className="reveal group flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-sm font-medium text-primary-foreground shadow-sm transition-all duration-300 hover:shadow-lg hover:shadow-primary/25 hover:brightness-110 active:scale-[0.98]"
             >
               <ShieldCheck className="h-4 w-4" />

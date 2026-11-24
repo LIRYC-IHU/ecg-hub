@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"net/url"
+	"strings"
 
 	"github.com/labstack/echo/v4"
 
@@ -40,6 +42,89 @@ func clearOIDCVerifierCookie(c echo.Context) {
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   -1,
 	})
+}
+
+// oidcReturnToCookie holds the page the browser was on when the operator chose
+// the SSO login, so the callback can land there instead of on the patient list.
+// A link to a patient or an ECG opened without a session would otherwise be
+// lost at the identity provider, which is exactly when such a link is used: it
+// arrives from somewhere else (an email, the HIS, a printed report).
+const oidcReturnToCookie = "oidc_return_to"
+
+// maxReturnToLen bounds what a login request can make the server store in a
+// cookie. The application's own links are a path and two identifiers.
+const maxReturnToLen = 1024
+
+// safeReturnPath returns raw when it is a path on this server that the login
+// may redirect to, and "" otherwise. The value comes from a query string anyone
+// can write, so anything that could leave the origin is refused: a scheme, a
+// host, a scheme-relative "//host", and backslashes, which browsers read as
+// slashes ("/\host" is "//host" to them). url.Parse refuses control characters,
+// which would otherwise let a value split the Location header. Paths under
+// /api/ are refused too: the application never produces them, and a login
+// should not end on an endpoint.
+func safeReturnPath(raw string) string {
+	if raw == "" || len(raw) > maxReturnToLen {
+		return ""
+	}
+	if raw[0] != '/' || strings.HasPrefix(raw, "//") || strings.ContainsRune(raw, '\\') {
+		return ""
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "" || u.Host != "" || u.User != nil || u.Opaque != "" {
+		return ""
+	}
+	if u.Path == "/api" || strings.HasPrefix(u.Path, "/api/") {
+		return ""
+	}
+	return raw
+}
+
+// setOIDCReturnToCookie remembers where to land after the callback. The value is
+// query-escaped because a path may carry bytes a cookie value cannot (a
+// semicolon, a double quote, non-ASCII), and net/http drops those silently
+// rather than failing.
+func setOIDCReturnToCookie(c echo.Context, path string) {
+	c.SetCookie(&http.Cookie{
+		Name:     oidcReturnToCookie,
+		Value:    url.QueryEscape(path),
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   c.Scheme() == "https",
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   300, // same lifetime as the PKCE verifier it travels with
+	})
+}
+
+// clearOIDCReturnToCookie removes the remembered destination.
+func clearOIDCReturnToCookie(c echo.Context) {
+	c.SetCookie(&http.Cookie{
+		Name:     oidcReturnToCookie,
+		Value:    "",
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   c.Scheme() == "https",
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   -1,
+	})
+}
+
+// oidcLandingPath is where the callback sends the browser: the remembered page
+// when there is one, the root otherwise. The cookie is ours and HttpOnly, but it
+// is checked again because a cookie can still be planted by a sibling subdomain.
+func oidcLandingPath(c echo.Context) string {
+	ck, err := c.Cookie(oidcReturnToCookie)
+	if err != nil || ck.Value == "" {
+		return "/"
+	}
+	raw, err := url.QueryUnescape(ck.Value)
+	if err != nil {
+		return "/"
+	}
+	if p := safeReturnPath(raw); p != "" {
+		return p
+	}
+	return "/"
 }
 
 // startOIDCAuth generates the signed state and a PKCE verifier, stores the verifier
@@ -145,11 +230,18 @@ func OIDCLoginHandlerDynamic(staticFlow auth.OIDCFlow, repo *repository.AuthConf
 		if err != nil {
 			return err
 		}
-		url, err := startOIDCAuth(c, flow)
+		authURL, err := startOIDCAuth(c, flow)
 		if err != nil {
 			return err
 		}
-		return c.Redirect(http.StatusFound, url)
+		// A login started without a destination clears any left by an abandoned
+		// one, which would otherwise send this login to that older page.
+		if p := safeReturnPath(c.QueryParam("return_to")); p != "" {
+			setOIDCReturnToCookie(c, p)
+		} else {
+			clearOIDCReturnToCookie(c)
+		}
+		return c.Redirect(http.StatusFound, authURL)
 	}
 }
 
@@ -165,6 +257,8 @@ func OIDCCallbackHandlerDynamic(staticFlow auth.OIDCFlow, repo *repository.AuthC
 			return err
 		}
 		setJWTCookie(c, jwtToken)
-		return c.Redirect(http.StatusFound, "/")
+		landing := oidcLandingPath(c)
+		clearOIDCReturnToCookie(c)
+		return c.Redirect(http.StatusFound, landing)
 	}
 }
