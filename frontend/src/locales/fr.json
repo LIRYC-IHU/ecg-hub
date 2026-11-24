@@ -39,7 +39,10 @@
     "name": "Nom",
     "sortRecent": "Récent",
     "sortOldest": "Ancien",
-    "selectAll": "Tout sélectionner"
+    "selectAll": "Tout sélectionner",
+    "copyLink": "Copier le lien",
+    "linkCopied": "Lien vers ce patient copié",
+    "linkNotFound": "Ce lien désigne un patient qui n'existe pas ou auquel vous n'avez pas accès."
   },
   "ecg": {
     "download": "Télécharger",
@@ -927,6 +930,13 @@
         "non_electrical_unit": "Ce tracé contient un signal qui n'est pas une tension (pression, respiration, son…) et ne peut pas être lu sur une grille ECG en mm/mV.",
         "other": "Ce type de tracé ne peut pas être affiché par le visualiseur 12 dérivations."
       }
+    },
+    "copyLink": "Lien",
+    "copyLinkHint": "Copier un lien qui ouvre cet ECG",
+    "linkCopied": "Lien vers cet ECG copié",
+    "notThisPatient": {
+      "title": "Cet ECG n'est pas classé sous ce patient",
+      "detail": "Le lien associe un patient à un ECG qui appartient à quelqu'un d'autre, la trace n'est donc pas affichée sous ce nom. Ouvrez l'ECG depuis le patient sous lequel il est classé."
     }
   },
   "empty": {

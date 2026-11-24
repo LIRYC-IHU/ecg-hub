@@ -38,6 +38,19 @@ func ECGWaveformHandler(db *gorm.DB, volumePath string, bridge export.Converter)
 			})
 		}
 
+		// The viewer prints the identity of the patient it was opened from above
+		// the trace, and since #129 that patient and this ECG both come from the
+		// URL. A link pairing a patient with an ECG filed under somebody else
+		// would put one person's name on another's recording. The caller says
+		// which patient it will show; the record has the last word, and nothing
+		// is read from storage for a pairing it contradicts.
+		if want := c.QueryParam("patient"); want != "" && want != ecg.PatientID {
+			return c.JSON(http.StatusConflict, map[string]string{
+				"code":    "ECG_PATIENT_MISMATCH",
+				"message": "ECG is not filed under this patient",
+			})
+		}
+
 		// Resolve file path. Legacy rows hold a path relative to the volume; a
 		// ref on object storage is neither absolute nor relative to it, and
 		// joining one to the volume root yields a local path that cannot exist.

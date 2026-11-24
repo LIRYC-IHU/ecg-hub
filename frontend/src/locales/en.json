@@ -39,7 +39,10 @@
     "name": "Name",
     "sortRecent": "Recent",
     "sortOldest": "Oldest",
-    "selectAll": "Select all"
+    "selectAll": "Select all",
+    "copyLink": "Copy link",
+    "linkCopied": "Link to this patient copied",
+    "linkNotFound": "This link names a patient who does not exist or whom you cannot see."
   },
   "ecg": {
     "download": "Download",
@@ -926,6 +929,13 @@
         "non_electrical_unit": "This waveform holds a signal that is not a voltage (pressure, respiration, audio…) and cannot be read on an mm/mV ECG grid.",
         "other": "This kind of waveform cannot be displayed by the 12-lead viewer."
       }
+    },
+    "copyLink": "Link",
+    "copyLinkHint": "Copy a link that opens this ECG",
+    "linkCopied": "Link to this ECG copied",
+    "notThisPatient": {
+      "title": "This ECG is not filed under this patient",
+      "detail": "The link pairs a patient with an ECG that belongs to someone else, so the trace is not shown under this name. Open the ECG from the patient it is filed under."
     }
   },
   "empty": {

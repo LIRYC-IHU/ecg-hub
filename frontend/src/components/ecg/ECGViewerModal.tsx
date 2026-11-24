@@ -1,12 +1,14 @@
 import { useRef, useState, useEffect } from "react";
 import { useTranslation } from "react-i18next";
-import { X, Download, Maximize2, Settings } from "lucide-react";
+import { X, Download, Maximize2, Settings, Link2 } from "lucide-react";
 import { ECGViewer } from "../../ecg-viewer/ECGViewer";
 import { IntendedUse } from "../IntendedUse";
 import type { ECGViewerHandle } from "../../ecg-viewer/ECGViewer";
 import type { EcgRecord } from "../../ecg-viewer/ecgTypes";
 import type { Patient } from "../../types";
 import { formatPatientName } from "../../lib/patient";
+import { ecgLink } from "../../lib/links";
+import { useNotification } from "../../context/NotificationContext";
 import "../../ecg-viewer/ECGViewer.css";
 
 const BASE_URL = (import.meta.env as Record<string, string>).VITE_API_URL ?? "";
@@ -68,9 +70,13 @@ interface Props {
 
 export function ECGViewerModal({ ecgId, filename, patient, onClose }: Props) {
   const { t } = useTranslation();
+  const { notify } = useNotification();
   const viewerRef = useRef<ECGViewerHandle>(null);
   const [record, setRecord] = useState<EcgRecord | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // The server refused to serve this ECG under this patient: the URL paired
+  // them, the record does not. Nothing is drawn, and no link is offered.
+  const [notThisPatient, setNotThisPatient] = useState(false);
   // A waveform the 12-lead viewer cannot draw (#130 D-13): not a failure, the
   // file is stored and forwarded — so it gets its own, non-alarming message.
   const [notDisplayable, setNotDisplayable] = useState<{ sopClass: string; reason: string; detail: string } | null>(null);
@@ -102,12 +108,20 @@ export function ECGViewerModal({ ecgId, filename, patient, onClose }: Props) {
     setLoading(true);
     setError(null);
     setNotDisplayable(null);
-    fetch(`${BASE_URL}/api/v1/ecgs/${ecgId}/waveform`)
+    setNotThisPatient(false);
+    // Naming the patient lets the server check the pairing: the header below
+    // prints this patient's identity over whatever trace comes back.
+    const query = new URLSearchParams({ patient: patient.patient_id });
+    fetch(`${BASE_URL}/api/v1/ecgs/${ecgId}/waveform?${query}`)
       .then((res) => {
         if (!res.ok) {
           return res.json().then((e) => {
             if (e.code === "NOT_DISPLAYABLE") {
               setNotDisplayable({ sopClass: e.sop_class ?? "", reason: e.reason ?? "", detail: e.detail ?? "" });
+              return null;
+            }
+            if (e.code === "ECG_PATIENT_MISMATCH") {
+              setNotThisPatient(true);
               return null;
             }
             throw new Error(e.message ?? "Failed to load waveform");
@@ -118,7 +132,7 @@ export function ECGViewerModal({ ecgId, filename, patient, onClose }: Props) {
       .then((buf) => { if (buf) setRecord(decodeWireFormat(buf)); })
       .catch((e) => setError(e.message ?? "Failed to load ECG"))
       .finally(() => setLoading(false));
-  }, [ecgId]);
+  }, [ecgId, patient.patient_id]);
 
   // Refresh WebGL after record loads
   useEffect(() => {
@@ -185,6 +199,18 @@ export function ECGViewerModal({ ecgId, filename, patient, onClose }: Props) {
           >
             <Download className="w-3.5 h-3.5" />
             PNG
+          </button>
+          <button
+            onClick={() => {
+              void navigator.clipboard.writeText(ecgLink(patient.patient_id, ecgId));
+              notify("success", t("viewer.linkCopied"));
+            }}
+            disabled={notThisPatient}
+            title={t("viewer.copyLinkHint")}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs border border-border text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-30"
+          >
+            <Link2 className="w-3.5 h-3.5" />
+            {t("viewer.copyLink")}
           </button>
           <button
             onClick={() => viewerRef.current?.toggleFullscreen()}
@@ -276,6 +302,14 @@ export function ECGViewerModal({ ecgId, filename, patient, onClose }: Props) {
               {notDisplayable.detail && (
                 <p className="text-xs font-mono opacity-70">{notDisplayable.detail}</p>
               )}
+            </div>
+          </div>
+        )}
+        {notThisPatient && (
+          <div className="flex-1 flex items-center justify-center p-8">
+            <div className="text-sm text-muted-foreground text-center max-w-md space-y-2">
+              <p className="font-medium text-destructive">{t("viewer.notThisPatient.title")}</p>
+              <p>{t("viewer.notThisPatient.detail")}</p>
             </div>
           </div>
         )}

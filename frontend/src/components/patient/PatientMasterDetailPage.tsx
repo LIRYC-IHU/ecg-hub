@@ -19,6 +19,7 @@ import {
   CalendarClock,
   CheckCircle2,
   Hourglass,
+  Link2,
 } from "lucide-react";
 import { gsap } from "gsap";
 import { useGSAP } from "@gsap/react";
@@ -48,10 +49,12 @@ import {
   fetchActiveHL7Mappings,
   fetchHL7Settings,
   fetchHL7History,
+  fetchPatients,
   type TagDTO,
   type ECGFilters,
 } from "../../lib/api";
 import { formatPatientName } from "../../lib/patient";
+import { patientLink } from "../../lib/links";
 import { ExamDate } from "../ecg/ExamDate";
 import { useTranslation } from "react-i18next";
 import { useAuth } from "../../hooks/useAuth";
@@ -896,6 +899,16 @@ function PatientDetail({
               >
                 <Copy className="w-3 h-3" />
               </button>
+              <button
+                onClick={() => {
+                  void navigator.clipboard.writeText(patientLink(patient.patient_id));
+                  notify("success", t("patient.linkCopied"));
+                }}
+                className="p-0.5 rounded text-muted-foreground hover:text-foreground transition-colors"
+                title={t("patient.copyLink")}
+              >
+                <Link2 className="w-3 h-3" />
+              </button>
             </span>
             <PatientHL7Status
               pending={pendingCount}
@@ -1537,15 +1550,57 @@ export function PatientMasterDetailPage({
   // detail panel underneath the operator.
   const [searchParams, setSearchParams] = useSearchParams();
   const urlPatientId = searchParams.get("patient");
+
+  // The loaded page of the list only holds the most recent patients (or
+  // whatever the filters keep), but a shared link can name anyone. When the
+  // page does not have them, the patient is looked up on their own. Search
+  // matches patient_id as a substring, so the exact one is picked out of the
+  // results; a short identifier that is part of more than a hundred others
+  // could still be missed.
+  const urlPatientOnPage =
+    !!urlPatientId && patients.some((p) => p.patient_id === urlPatientId);
+  const { data: linkedPatient, isFetched: linkedPatientFetched } = useQuery({
+    queryKey: ["patient-by-id", urlPatientId],
+    queryFn: async () => {
+      const res = await fetchPatients({ q: urlPatientId ?? "", per_page: 100 });
+      return res.data.find((p) => p.patient_id === urlPatientId) ?? null;
+    },
+    enabled:
+      !!urlPatientId &&
+      !isLoading &&
+      !urlPatientOnPage &&
+      selectedPatient?.patient_id !== urlPatientId,
+  });
+
   useEffect(() => {
     if (!urlPatientId) {
       setSelectedPatient(null);
       return;
     }
     if (selectedPatient?.patient_id === urlPatientId) return;
-    const match = patients.find((p) => p.patient_id === urlPatientId);
+    const match =
+      patients.find((p) => p.patient_id === urlPatientId) ??
+      (linkedPatient?.patient_id === urlPatientId ? linkedPatient : undefined);
     if (match) setSelectedPatient(match);
-  }, [urlPatientId, patients]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [urlPatientId, patients, linkedPatient]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Nobody by that identifier, or nobody this user may see: say so and drop
+  // the parameter in place, instead of leaving a link that silently opens the
+  // bare list.
+  useEffect(() => {
+    if (!urlPatientId || !linkedPatientFetched || linkedPatient !== null) return;
+    if (urlPatientOnPage || selectedPatient?.patient_id === urlPatientId) return;
+    notify("warn", t("patient.linkNotFound"));
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("patient");
+        next.delete("ecg");
+        return next;
+      },
+      { replace: true },
+    );
+  }, [urlPatientId, linkedPatientFetched, linkedPatient]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Pushes rather than replaces: each selection earns a history entry to come
   // back to. Switching or closing a patient drops ?ecg= with it, so a stale id

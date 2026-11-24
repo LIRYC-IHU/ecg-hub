@@ -177,7 +177,10 @@ export const API_SECTIONS: ApiSection[] = [
         summary: "Waveform samples",
         description: "The binary wire format the built-in viewer consumes. Non-DICOM sources are converted on the fly and cached.",
         permission: "ecg.read",
-        params: [{ name: "id", in: "path", type: "uuid", required: true, description: "ECG id." }],
+        params: [
+          { name: "id", in: "path", type: "uuid", required: true, description: "ECG id." },
+          { name: "patient", in: "query", type: "string", description: "Business patient identifier the caller will display the trace under. When given and the ECG is filed under someone else, the call fails with 409 ECG_PATIENT_MISMATCH instead of serving it." },
+        ],
         responseNote: "Binary body — leads, sampling rate and calibration in a compact header. Use /download?format=dicom for a standard file instead.",
       },
       {
